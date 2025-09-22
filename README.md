@@ -2,7 +2,7 @@
 
 Generate C4 (Context → Container → Component) analyses, YAML definitions, and PlantUML diagrams from short system briefs using single- or multi-agent workflows. Includes structural checks (abstraction, cross-level consistency, completeness), PlantUML compilation tests, and LLM-as-a-Judge evaluations.
 
-> This repo accompanies the HICSS paper in `paper/Final_HICSS_Paper.pdf`. (soon to be published)
+> This repo accompanies the HICSS paper (soon to be published).
 
 ---
 
