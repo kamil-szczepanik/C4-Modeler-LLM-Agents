@@ -5,7 +5,7 @@ import copy
 import functools
 import re
 from collections import deque
-from typing import Annotated, Dict, List, Optional, Sequence, TypedDict
+from typing import Annotated, Dict, List, Optional, Sequence, TypedDict, Any
 
 import yaml
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -38,16 +38,48 @@ from .prompts import (
 )
 
 # ============================================================================
-# Helpers to build teams from roles (uses unchanged persona texts)
+# Helpers to build teams from roles (enhanced for experiments)
 # ============================================================================
 
-def build_context_team() -> List[Agent]:
+def build_experimental_team(level: str, experiment_condition: Dict[str, Any]) -> List[Agent]:
+    """Build team using experimental configuration."""
+    try:
+        from .agent_factory import ExperimentalAgentFactory
+        factory = ExperimentalAgentFactory()
+        return factory.create_team_for_experiment(experiment_condition, level)
+    except ImportError:
+        print("⚠️ ExperimentalAgentFactory not available, falling back to default teams")
+        # Fallback to default teams
+        if level == "context":
+            return build_context_team()
+        elif level == "container":
+            return build_container_team()
+        else:
+            return build_component_team()
+
+def build_context_team(experiment_condition: Optional[Dict] = None) -> List[Agent]:
+    """Build context team with optional experimental configuration."""
+    if experiment_condition:
+        from .agent_factory import ExperimentalAgentFactory
+        factory = ExperimentalAgentFactory()
+        return factory.create_team_for_experiment(experiment_condition, "context")
     return [Agent(name=role, persona=PERSONA_BY_ROLE[role]) for role in CONTEXT_TEAM_ROLES]
 
-def build_container_team() -> List[Agent]:
+def build_container_team(experiment_condition: Optional[Dict] = None) -> List[Agent]:
+    """Build container team with optional experimental configuration."""
+    if experiment_condition:
+        from .agent_factory import ExperimentalAgentFactory
+        factory = ExperimentalAgentFactory()
+        return factory.create_team_for_experiment(experiment_condition, "containers")
     return [Agent(name=role, persona=PERSONA_BY_ROLE[role]) for role in CONTAINER_TEAM_ROLES]
 
-def build_component_team() -> List[Agent]:
+def build_component_team(experiment_condition: Optional[Dict] = None) -> List[Agent]:
+    """Build component team with optional experimental configuration."""
+    if experiment_condition:
+        from .agent_factory import ExperimentalAgentFactory
+        factory = ExperimentalAgentFactory()
+        return factory.create_team_for_experiment(experiment_condition, "components")
+    
     def persona_for(role: str) -> str:
         # Prefer L3-specific when present
         return (
@@ -72,6 +104,7 @@ class CollaborativeAnalysisState(TypedDict):
 
 def agent_node(state: CollaborativeAnalysisState, agent: Agent, llm: BaseChatModel) -> Dict:
     print(f"--- 🗣️  Turn: {agent.name} on C4 Level: '{state['level']}' ---")
+    
     system_prompt = (
         "You are a member of an expert team collaboratively creating the analysis for a C4 model diagram.\n"
         f"Your current task is to analyze the provided system brief for the **C4 {state['level']} level**.\n"
@@ -106,6 +139,7 @@ def report_generator_node(state: CollaborativeAnalysisState, llm: BaseChatModel)
 
 def collaboration_router(state: CollaborativeAnalysisState) -> str:
     """Routes based on rounds completed."""
+    import re
     active_team = state["team"]
     num_ai_turns = len(state["messages"]) - 1  # minus initial human
     rounds_completed = num_ai_turns // len(active_team)
@@ -113,7 +147,10 @@ def collaboration_router(state: CollaborativeAnalysisState) -> str:
         print(f"--- ✅ Collaboration Complete: Max rounds ({state['max_rounds']}) reached. ---")
         return "generate_report"
     else:
-        return active_team[0].name  # loop back
+        # Return sanitized name that matches the node name
+        first_agent_name = active_team[0].name
+        sanitized_name = re.sub(r"[^a-zA-Z0-9_-]", "_", first_agent_name)
+        return sanitized_name
 
 def create_collaboration_graph(llm: BaseChatModel, team: List[Agent], max_rounds: int = 2):
     """Builds and returns a compiled collaborative analysis subgraph for the GIVEN TEAM."""
@@ -172,7 +209,7 @@ def analysis_agent_node(state: State, llm: BaseChatModel) -> Dict:
         print("--- ✍️ Generating Container Level Analysis ---")
         context_blob = f"**Context Level Analysis (for context):**\n{c4_model['context']['analysis']}"
     else:
-        component_queue: deque[str] = state.get("component_queue", deque())
+        component_queue = state.get("component_queue")  # Don't default to deque()!
         if component_queue:
             component_target = component_queue[0]
             level = "component"
@@ -227,7 +264,7 @@ def yaml_structure_node(state: State, llm: BaseChatModel) -> Dict:
         template = CONTAINER_YAML_TEMPLATE
         ctx = f"Context Level YAML (for reference):\n{c4_model['context']['yaml_definition']}"
     else:
-        component_queue: deque[str] = state.get("component_queue", deque())
+        component_queue = state.get("component_queue")  # Don't default to deque()!
         if component_queue:
             component_target = component_queue[0]
             if c4_model.get("components", {}).get(component_target, {}).get("analysis") and not c4_model.get("components", {}).get(component_target, {}).get("yaml_definition"):
@@ -284,7 +321,7 @@ def plantuml_diagram_node(state: State, llm: BaseChatModel) -> Dict:
         analysis = c4_model["containers"]["analysis"]
         yaml_def = c4_model["containers"]["yaml_definition"]
     else:
-        component_queue: deque[str] = state.get("component_queue", deque())
+        component_queue = state.get("component_queue")  # Don't default to deque()!
         if component_queue:
             component_target = component_queue[0]
             comp = c4_model.get("components", {}).get(component_target, {})
@@ -330,23 +367,69 @@ def plantuml_diagram_node(state: State, llm: BaseChatModel) -> Dict:
 def populate_component_queue_node(state: State) -> Dict:
     """
     Parses the container YAML to find container names and adds them to the queue.
+    Enhanced version with robust YAML parsing and multiple extraction strategies.
     """
-    print("--- ⚙️ Populating Component Queue ---")
-    container_yaml = state["c4_model"]["containers"]["yaml_definition"]
+    print("--- Populating Component Queue ---")
+    
     try:
+        container_yaml = state["c4_model"]["containers"]["yaml_definition"]
+        print(f"Container YAML length: {len(container_yaml)} chars")
+        
         data = yaml.safe_load(container_yaml) or {}
-        names = [e["name"] for e in data.get("elements", []) if e.get("type") == "container"]
-        print(f"Found containers to process: {names}")
-        return {"component_queue": deque(names)}
+        print(f"Parsed YAML keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+        
+        names = []
+        
+        # Strategy 1: elements array with type=container (ACTUAL STRUCTURE!)
+        if isinstance(data, dict) and 'elements' in data:
+            elements = data['elements']
+            if isinstance(elements, list):
+                # Filter for elements with type="container"
+                containers = [e for e in elements if isinstance(e, dict) and e.get("type") == "container"]
+                names = [c.get("name") for c in containers if c.get("name")]
+                print(f"Strategy 1 (elements with type=container): Found {len(names)} containers: {names}")
+        
+        # Strategy 2: direct containers array/dict (fallback)
+        elif isinstance(data, dict) and 'containers' in data:
+            containers = data['containers']
+            if isinstance(containers, list):
+                names = [c.get("name", str(c)) for c in containers if c]
+            elif isinstance(containers, dict):
+                names = list(containers.keys())
+            print(f"Strategy 2 (containers): Found {len(names)} containers: {names}")
+        
+        # Strategy 3: assume top-level keys are containers (fallback)
+        elif isinstance(data, dict) and data:
+            # Filter out metadata keys that aren't containers
+            metadata_keys = {'name', 'description', 'version', 'type', 'technology_stack', 'overview', 'level', 'scope', 'system'}
+            potential_containers = {}
+            for k, v in data.items():
+                if k not in metadata_keys and isinstance(v, dict):
+                    potential_containers[k] = v
+            names = list(potential_containers.keys())
+            print(f"Strategy 3 (top-level): Found {len(names)} containers: {names}")
+        
+        if names:
+            print(f"Successfully found {len(names)} containers to process: {names}")
+            return {"component_queue": deque(names)}
+        else:
+            print("No containers found in YAML - skipping component generation")
+            print(f"Container YAML preview: {container_yaml[:500]}...")
+            return {"component_queue": deque()}  # Empty queue to prevent crash
+            
     except yaml.YAMLError as e:
-        print(f"Error parsing YAML: {e}")
-        return {}
+        print(f"YAML parsing error: {e}")
+        print(f"Raw YAML: {container_yaml[:300]}...")
+        return {"component_queue": deque()}
+    except Exception as e:
+        print(f"Unexpected error in component queue population: {e}")
+        return {"component_queue": deque()}
 
 def complete_component_node(state: State) -> Dict:
     """
     Pops the completed component from the front of the queue.
     """
-    print("--- ✅ Completing Component Task ---")
+    print("--- Completing Component Task ---")
     queue = state["component_queue"]
     if queue:
         finished = queue.popleft()
@@ -357,7 +440,7 @@ def should_process_components(state: State) -> str:
     """
     Router that checks the component queue to decide whether to continue or end.
     """
-    print("--- 🤔 Checking Component Queue ---")
+    print("--- Checking Component Queue ---")
     if state["component_queue"]:
         print("Queue is not empty. Processing next component.")
         return "process_component"
@@ -368,22 +451,48 @@ def should_process_components(state: State) -> str:
 def post_diagram_router(state: State) -> str:
     """
     Decide next step after any diagram is generated.
+    Fixed to handle both None and empty deque for component_queue.
     """
     model = state["c4_model"]
+    component_queue = state.get("component_queue")
+    
+    # After context diagram -> continue to containers
     if model.get("context", {}).get("diagram") and not model.get("containers"):
+        print("Router: Context done -> Continue to Container analysis")
         return "analysis"
-    elif model.get("containers", {}).get("diagram") and state.get("component_queue") is None:
+    
+    # After container diagram -> populate component queue (if not done yet)
+    # Check if queue is None (not yet populated) - don't check if it's just empty!
+    elif model.get("containers", {}).get("diagram") and component_queue is None:
+        print("Router: Container done -> Populate component queue")
+        print(f"DEBUG: component_queue value = {component_queue}, type = {type(component_queue)}")
         return "populate_queue"
+    
+    # After component diagram -> complete current component (which will check queue and route appropriately)
     else:
+        print("Router: Component diagram done -> Complete current component")
+        print(f"DEBUG: component_queue value = {component_queue}, type = {type(component_queue)}")
         return "complete_component"
     
 
-def collaborative_analysis_node(state: State, llm: BaseChatModel, collab_rounds: int = 2) -> Dict:
+def collaborative_analysis_node(
+    state: State, 
+    llm: BaseChatModel, 
+    collab_rounds: int = 2,
+    experiment_condition: Optional[Dict[str, Any]] = None,
+    memory_config: Optional[Dict[str, Any]] = None
+) -> Dict:
     """
     This node acts as a smart orchestrator. It determines the C4 level,
     selects the correct expert team, and invokes the appropriate subgraph.
+    Enhanced with experimental configuration support.
     """
     print("--- 🚀 Orchestrating Collaborative Analysis ---")
+    
+    if experiment_condition:
+        print(f"🧪 Using experimental condition: {experiment_condition}")
+    if memory_config:
+        print(f"🧠 Memory configuration: {memory_config}")
 
     # 1. Determine the current C4 level and select the appropriate team
     level = ""
@@ -392,15 +501,27 @@ def collaborative_analysis_node(state: State, llm: BaseChatModel, collab_rounds:
 
     if not state["c4_model"].get("context"):
         level = "context"
-        active_team = build_context_team()
+        if experiment_condition:
+            # Use experimental team configuration
+            active_team = build_experimental_team(level, experiment_condition)
+        else:
+            active_team = build_context_team()
         print("--- Selecting Team: Context Level ---")
     elif not state["c4_model"].get("containers"):
         level = "container"
-        active_team = build_container_team()
+        if experiment_condition:
+            # Use experimental team configuration
+            active_team = build_experimental_team(level, experiment_condition)
+        else:
+            active_team = build_container_team()
         print("--- Selecting Team: Container Level ---")
     else:
         level = "component"
-        active_team = build_component_team()
+        if experiment_condition:
+            # Use experimental team configuration
+            active_team = build_experimental_team(level, experiment_condition)
+        else:
+            active_team = build_component_team()
         if state.get("component_queue"):
             component_target = state["component_queue"][0]
         print(f"--- Selecting Team: Component Level for '{component_target}' ---")

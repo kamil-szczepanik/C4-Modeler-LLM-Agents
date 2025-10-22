@@ -89,7 +89,7 @@ def run_all_experiments(
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         brief_name_slug = re.sub(r'[^a-zA-Z0-9-]', '', brief_name.replace(" ", "-").lower())
         current_thread_id = f"{timestamp}-{brief_name_slug}-{uuid.uuid4().hex[:8]}"
-        config = {"configurable": {"thread_id": current_thread_id}, "recursion_limit": 200}
+        config = {"configurable": {"thread_id": current_thread_id}, "recursion_limit": 400}
 
         print(f"\n--- LangGraph Thread ID: {current_thread_id} ---")
 
@@ -145,7 +145,7 @@ def run_all_evaluations(
     run_full_evaluation_func=run_full_evaluation,
     save_all_evaluation_reports_func=save_all_evaluation_reports,
     format_evaluation_report_func=format_evaluation_report,
-    judge_model_name: str = "gemini-2.5-flash-preview-05-20",
+    judge_model_name: str = "gemini-2.5-pro",
 ) -> Dict[str, Any]:
     """
     Loops over one experiment’s runs, saves artifacts, evaluates, aggregates, and returns a summary.
@@ -231,5 +231,389 @@ try:
     format_evaluation_report  # noqa: F401
 except NameError:  # pragma: no cover
     format_evaluation_report = _fallback_format_evaluation_report
+
+
+# ==============================================================================
+# ENHANCED EXPERIMENTS FOR JOURNAL EXTENSION
+# ==============================================================================
+
+import yaml
+from .evaluation import run_enhanced_evaluation_only
+from .integration import (
+    create_experimental_pipeline,
+    extract_c4_model_from_result,
+    validate_experiment_condition,
+    create_memory_config_from_condition
+)
+
+def load_experiment_config(config_path: str = "experiment_configs.yaml") -> Dict[str, Any]:
+    """Load the experiment configuration from YAML file."""
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            return yaml.safe_load(f)
+    except FileNotFoundError:
+        print(f"⚠️ Experiment config not found: {config_path}")
+        return {}
+
+class EnhancedExperimentRunner:
+    """
+    Runner for the enhanced experiments defined in the journal extension.
+    Handles role ablation, interaction order, specialization, memory, and diversity studies.
+    """
+    
+    def __init__(self, config_path: str = "experiment_configs.yaml"):
+        self.config = load_experiment_config(config_path)
+        self.briefs = {}
+        self.results = {}
+    
+    def load_system_briefs(self, briefs_dir: str = "data/briefs"):
+        """Load all system briefs for experiments."""
+        self.briefs = load_briefs_from_dir(briefs_dir)
+        print(f"📚 Loaded {len(self.briefs)} system briefs: {list(self.briefs.keys())}")
+    
+    def run_experiment(self, experiment_name: str, model_name: str = "gpt-4o-mini") -> Dict[str, Any]:
+        """
+        Run a specific enhanced experiment by name.
+        
+        Args:
+            experiment_name: Name of experiment from config (e.g., 'role_ablation')
+            model_name: LLM model to use for generation and evaluation
+        
+        Returns:
+            Dictionary containing experiment results and analysis
+        """
+        if experiment_name not in self.config.get("experiments", {}):
+            raise ValueError(f"Experiment '{experiment_name}' not found in config")
+        
+        experiment_config = self.config["experiments"][experiment_name]
+        protocol = self.config.get("protocol", {})
+        
+        print(f"\n🧪 Starting Enhanced Experiment: {experiment_config['name']}")
+        print(f"📋 Description: {experiment_config['description']}")
+        print(f"🎯 Purpose: {experiment_config['purpose']}")
+        
+        results = {
+            "experiment_metadata": {
+                "name": experiment_config["name"],
+                "description": experiment_config["description"],
+                "purpose": experiment_config["purpose"],
+                "timestamp": datetime.now().isoformat(),
+                "model_name": model_name
+            },
+            "conditions": {},
+            "aggregate_results": {},
+            "statistical_analysis": {}
+        }
+        
+        # Run each experimental condition
+        for condition in experiment_config["conditions"]:
+            condition_id = condition["id"]
+            print(f"\n🔬 Running condition: {condition['name']}")
+            
+            condition_results = self._run_condition(
+                condition, 
+                experiment_config,
+                protocol,
+                model_name
+            )
+            
+            results["conditions"][condition_id] = condition_results
+        
+        # Perform aggregate analysis
+        results["aggregate_results"] = self._analyze_experiment_results(
+            results["conditions"],
+            experiment_config["metrics_focus"]
+        )
+        
+        # Save results
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        results_file = f"data/results/enhanced_experiments/{experiment_name}_{timestamp}.json"
+        
+        # Ensure directory exists
+        Path(results_file).parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(results_file, 'w', encoding='utf-8') as f:
+            json.dump(results, f, indent=2)
+        
+        print(f"💾 Experiment results saved to: {results_file}")
+        
+        return results
+    
+    def _run_condition(self, condition: Dict[str, Any], experiment_config: Dict[str, Any], 
+                      protocol: Dict[str, Any], model_name: str) -> Dict[str, Any]:
+        """Run a single experimental condition across all briefs and rounds."""
+        
+        condition_results = {
+            "condition_metadata": condition,
+            "brief_results": {},
+            "condition_summary": {}
+        }
+        
+        datasets = protocol.get("datasets", list(self.briefs.keys()))
+        rounds = protocol.get("rounds_per_condition", 3)
+        
+        for brief_name in datasets:
+            if brief_name not in self.briefs:
+                print(f"⚠️ Brief '{brief_name}' not found, skipping")
+                continue
+            
+            brief_results = []
+            
+            for round_num in range(1, rounds + 1):
+                print(f"  📝 {brief_name} - Round {round_num}")
+                
+                # Generate C4 model with condition-specific configuration
+                c4_model = self._generate_c4_with_condition(
+                    self.briefs[brief_name],
+                    condition,
+                    model_name
+                )
+                
+                # Evaluate using enhanced metrics
+                evaluation = run_enhanced_evaluation_only(
+                    self.briefs[brief_name],
+                    c4_model
+                )
+                
+                round_result = {
+                    "round": round_num,
+                    "brief_name": brief_name,
+                    "condition_id": condition["id"],
+                    "c4_model": c4_model,
+                    "evaluation": evaluation,
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                brief_results.append(round_result)
+            
+            condition_results["brief_results"][brief_name] = brief_results
+        
+        # Calculate condition summary
+        condition_results["condition_summary"] = self._summarize_condition(
+            condition_results["brief_results"],
+            experiment_config["metrics_focus"]
+        )
+        
+        return condition_results
+    
+    def _generate_c4_with_condition(self, system_brief: str, condition: Dict[str, Any], 
+                                   model_name: str) -> Dict[str, Any]:
+        """
+        Generate C4 model with condition-specific agent configuration.
+        Uses the integration utilities for clean pipeline execution.
+        """
+        
+        # Validate the condition first
+        validation_errors = validate_experiment_condition(condition)
+        if validation_errors:
+            print(f"    ⚠️ Condition validation errors: {validation_errors}")
+            return self._create_error_model(f"Validation failed: {validation_errors}")
+        
+        # Extract condition parameters
+        roles = condition.get("roles", ["Architect"])
+        speaking_order = condition.get("speaking_order", roles)
+        memory_type = condition.get("memory_type", "none")
+        role_specificity = condition.get("role_specificity", "generic")
+        
+        print(f"    🤖 Generating with roles: {roles}")
+        print(f"    🗣️ Speaking order: {speaking_order}")
+        print(f"    🧠 Memory type: {memory_type}")
+        print(f"    🎭 Role specificity: {role_specificity}")
+        
+        # Create experimental configuration
+        experiment_condition = {
+            "roles": roles,
+            "speaking_order": speaking_order,
+            "memory_type": memory_type,
+            "role_specificity": role_specificity
+        }
+        
+        # Create memory configuration
+        memory_config = create_memory_config_from_condition(condition)
+        
+        # Run the experimental pipeline
+        try:
+            result = create_experimental_pipeline(
+                system_brief=system_brief,
+                model_name=model_name,
+                experiment_condition=experiment_condition,
+                memory_config=memory_config
+            )
+            
+            # Extract C4 model from the result
+            if "error" in result:
+                return self._create_error_model(result["error"])
+            
+            c4_model = extract_c4_model_from_result(result)
+            return c4_model
+            
+        except Exception as e:
+            print(f"    ❌ Error generating C4 model: {str(e)}")
+            return self._create_error_model(str(e))
+    
+    def _create_error_model(self, error_message: str) -> Dict[str, Any]:
+        """Create a minimal error model structure."""
+        return {
+            "context": {
+                "yaml_definition": f"# Error: {error_message}",
+                "diagram": f"# Error: {error_message}"
+            },
+            "containers": {
+                "yaml_definition": f"# Error: {error_message}",
+                "diagram": f"# Error: {error_message}"
+            },
+            "components": {}
+        }
+    
+    def _summarize_condition(self, brief_results: Dict[str, List[Dict]], 
+                           metrics_focus: List[str]) -> Dict[str, Any]:
+        """Calculate summary statistics for a condition across all briefs and rounds."""
+        
+        summary = {
+            "total_runs": 0,
+            "metrics": {},
+            "averages": {},
+            "std_deviations": {}
+        }
+        
+        # Collect all metric values
+        metric_values = {}
+        
+        for brief_name, rounds in brief_results.items():
+            for round_result in rounds:
+                summary["total_runs"] += 1
+                evaluation = round_result["evaluation"]
+                
+                # Extract ISO 25010 scores
+                iso_scores = evaluation.get("iso25010Attributes", {}).get("scores", {})
+                for attr, score in iso_scores.items():
+                    metric_key = f"iso_{attr}"
+                    if metric_key not in metric_values:
+                        metric_values[metric_key] = []
+                    metric_values[metric_key].append(score)
+                
+                # Extract ATAM scores
+                atam_data = evaluation.get("atamScenarios", {})
+                overall_resp = atam_data.get("overall_responsiveness", 0)
+                metric_values.setdefault("atam_responsiveness", []).append(overall_resp)
+                
+                # Extract soundness metrics
+                soundness = evaluation.get("architecturalSoundness", {})
+                for metric in ["coupling_density", "abstraction_coherence", "semantic_completeness"]:
+                    value = soundness.get(metric, 0)
+                    metric_values.setdefault(f"soundness_{metric}", []).append(value)
+        
+        # Calculate statistics
+        import statistics
+        for metric, values in metric_values.items():
+            if values:
+                summary["averages"][metric] = round(statistics.mean(values), 3)
+                if len(values) > 1:
+                    summary["std_deviations"][metric] = round(statistics.stdev(values), 3)
+                else:
+                    summary["std_deviations"][metric] = 0.0
+        
+        summary["metrics"] = metric_values
+        
+        return summary
+    
+    def _analyze_experiment_results(self, conditions: Dict[str, Any], 
+                                  metrics_focus: List[str]) -> Dict[str, Any]:
+        """Perform statistical analysis across experimental conditions."""
+        
+        analysis = {
+            "condition_comparison": {},
+            "effect_sizes": {},
+            "statistical_tests": {},
+            "key_findings": []
+        }
+        
+        # Compare conditions on focused metrics
+        condition_names = list(conditions.keys())
+        
+        for metric in metrics_focus:
+            metric_comparison = {}
+            
+            for condition_id, condition_data in conditions.items():
+                summary = condition_data["condition_summary"]
+                
+                # Map metric focus to actual metric names
+                actual_metric = self._map_focus_metric_to_actual(metric)
+                
+                if actual_metric in summary["averages"]:
+                    metric_comparison[condition_id] = {
+                        "mean": summary["averages"][actual_metric],
+                        "std": summary["std_deviations"].get(actual_metric, 0),
+                        "n": summary["total_runs"]
+                    }
+            
+            analysis["condition_comparison"][metric] = metric_comparison
+            
+            # Calculate effect sizes (simplified)
+            if len(metric_comparison) >= 2:
+                conditions_list = list(metric_comparison.items())
+                baseline = conditions_list[0][1]["mean"]
+                
+                for condition_id, stats in conditions_list[1:]:
+                    effect_size = abs(stats["mean"] - baseline) / max(stats["std"], 0.1)
+                    analysis["effect_sizes"][f"{metric}_{condition_id}_vs_baseline"] = round(effect_size, 3)
+        
+        return analysis
+    
+    def _map_focus_metric_to_actual(self, focus_metric: str) -> str:
+        """Map experiment focus metrics to actual evaluation metric names."""
+        mapping = {
+            "ISO_Functional_Suitability": "iso_functional_suitability",
+            "ISO_Security": "iso_security", 
+            "ISO_Maintainability": "iso_maintainability",
+            "ATAM_Scenario_Responsiveness": "atam_responsiveness",
+            "Coupling_Density": "soundness_coupling_density",
+            "Semantic_Completeness": "soundness_semantic_completeness",
+            "Abstraction_Coherence": "soundness_abstraction_coherence"
+        }
+        return mapping.get(focus_metric, focus_metric.lower())
+    
+    def run_all_experiments(self, model_name: str = "gpt-4o-mini") -> Dict[str, Any]:
+        """Run all defined experiments."""
+        
+        print("🚀 Starting All Enhanced Experiments")
+        
+        if not self.briefs:
+            self.load_system_briefs()
+        
+        all_results = {
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "model_name": model_name,
+                "total_experiments": len(self.config.get("experiments", {}))
+            },
+            "experiments": {}
+        }
+        
+        for exp_name in self.config.get("experiments", {}):
+            print(f"\n{'='*60}")
+            print(f"Starting Experiment: {exp_name}")
+            print(f"{'='*60}")
+            
+            try:
+                result = self.run_experiment(exp_name, model_name)
+                all_results["experiments"][exp_name] = result
+                print(f"✅ Completed: {exp_name}")
+            except Exception as e:
+                print(f"❌ Failed: {exp_name} - {str(e)}")
+                all_results["experiments"][exp_name] = {"error": str(e)}
+        
+        # Save comprehensive results
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        results_file = f"data/results/enhanced_experiments/all_experiments_{timestamp}.json"
+        
+        Path(results_file).parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(results_file, 'w', encoding='utf-8') as f:
+            json.dump(all_results, f, indent=2)
+        
+        print(f"\n🎉 All experiments completed! Results saved to: {results_file}")
+        
+        return all_results
 
 

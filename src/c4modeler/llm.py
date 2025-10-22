@@ -12,10 +12,13 @@ MODEL_PROVIDER_MAP = {
     "gemini-1.5-flash-latest": ChatGoogleGenerativeAI,
     "gemini-1.5-pro-latest": ChatGoogleGenerativeAI,
     "gemini-2.5-flash-preview-05-20": ChatGoogleGenerativeAI,
+    "gemini-2.5-flash": ChatGoogleGenerativeAI,
+    "gemini-2.5-flash-lite": ChatGoogleGenerativeAI,
     "gemini-2.5-pro-preview-05-20": ChatGoogleGenerativeAI,
     "gemini-2.5-pro-preview-06-05": ChatGoogleGenerativeAI,
     "gpt-4o": ChatOpenAI,
     "gpt-4o-mini": ChatOpenAI,
+    "gpt-5-nano-2025-08-07": ChatOpenAI,
     "deepseek-chat": ChatDeepSeek,
     "grok-beta": ChatXAI,
     "grok-3-latest": ChatXAI,
@@ -23,8 +26,8 @@ MODEL_PROVIDER_MAP = {
 
 ModelName = Literal[
     "gemini-1.5-flash-latest", "gemini-1.5-pro-latest",
-    "gemini-2.5-flash-preview-05-20", "gemini-2.5-pro-preview-05-20", "gemini-2.5-pro-preview-06-05",
-    "gpt-4o", "gpt-4o-mini",
+    "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash-preview-05-20", "gemini-2.5-pro-preview-05-20", "gemini-2.5-pro-preview-06-05",
+    "gpt-4o", "gpt-4o-mini", "gpt-5-nano-2025-08-07"
     "deepseek-chat",
     "grok-beta", "grok-3-latest"
 ]

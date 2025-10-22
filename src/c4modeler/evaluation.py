@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import math
 from collections import Counter, deque
 from datetime import datetime
 from pathlib import Path
@@ -754,18 +755,438 @@ def check_c4_completeness(c4_model: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 # ==============================================================================
-# 11) Full evaluation runner (your layering; unchanged prompts and flow)
+# NEW LAYER A: ISO/IEC 25010 Quality Attribute Mapping
+# ==============================================================================
+
+def evaluate_iso_25010_attributes(
+    system_brief: str,
+    c4_model: Dict[str, Any],
+    legacy_results: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Maps existing evaluation signals to ISO/IEC 25010 quality attributes (0-5 scale).
+    Combines structural, semantic, and LLM judge scores into standardized quality metrics.
+    """
+    print("🌟 Evaluating ISO/IEC 25010 Quality Attributes...")
+    
+    iso_scores = {}
+    
+    # 1. Functional Suitability: Requirements coverage + completeness
+    completeness_score = legacy_results.get("missingInformation", {}).get("score", 0) / 100.0
+    semantic_score = 0
+    if "contextEvaluation" in legacy_results:
+        semantic_raw = legacy_results["contextEvaluation"].get("semanticConsistency", {}).get("score", 0)
+        semantic_score = semantic_raw / 100.0
+    
+    functional_suitability = (completeness_score + semantic_score) / 2 * 5
+    iso_scores["functional_suitability"] = min(5, max(0, round(functional_suitability, 2)))
+    
+    # 2. Reliability: Compilation success + abstraction adherence
+    compilation_score = legacy_results.get("compilationSuccess", {}).get("score", 0) / 100.0
+    abstraction_score = legacy_results.get("abstractionAdherence", {}).get("score", 0) / 100.0
+    
+    reliability = (compilation_score + abstraction_score) / 2 * 5
+    iso_scores["reliability"] = min(5, max(0, round(reliability, 2)))
+    
+    # 3. Performance Efficiency: Token usage metrics (if available)
+    # For now, use a baseline score based on diagram complexity
+    total_elements = 0
+    for level_data in [c4_model.get("context", {}), c4_model.get("containers", {})] + list(c4_model.get("components", {}).values()):
+        yaml_data = _parse_yaml_safe(level_data.get("yaml_definition", ""))
+        total_elements += len(yaml_data.get("elements", []))
+    
+    # Normalize based on reasonable complexity bounds (5-50 elements)
+    performance_efficiency = max(1, 5 - (total_elements - 5) / 10) if total_elements > 5 else 5
+    iso_scores["performance_efficiency"] = min(5, max(1, round(performance_efficiency, 2)))
+    
+    # 4. Maintainability: Naming consistency + definitional consistency
+    naming_score = legacy_results.get("emergentNamingConsistency", {}).get("score", 0) / 100.0
+    
+    # Average definitional consistency across levels
+    def_consistency_scores = []
+    for level_eval in ["containerEvaluation", "componentEvaluations"]:
+        if level_eval in legacy_results:
+            level_data = legacy_results[level_eval]
+            if isinstance(level_data, dict):
+                if level_eval == "componentEvaluations":
+                    for comp_data in level_data.values():
+                        def_score = comp_data.get("definitionalConsistency", {}).get("score", 0)
+                        def_consistency_scores.append(def_score / 100.0)
+                else:
+                    def_score = level_data.get("definitionalConsistency", {}).get("score", 0)
+                    def_consistency_scores.append(def_score / 100.0)
+    
+    avg_def_consistency = sum(def_consistency_scores) / len(def_consistency_scores) if def_consistency_scores else 0.5
+    maintainability = (naming_score * 0.4 + avg_def_consistency * 0.6) * 5
+    iso_scores["maintainability"] = min(5, max(0, round(maintainability, 2)))
+    
+    # 5. Security: Inverted security risk score
+    security_risks = legacy_results.get("securityAssessment", {}).get("riskCount", 5)  # Default moderate risk
+    # Convert risk count (0-10+) to quality score (5-1): fewer risks = higher score
+    security_quality = max(1, 5 - (security_risks * 0.5))
+    iso_scores["security"] = min(5, max(1, round(security_quality, 2)))
+    
+    # 6. Usability: LLM clarity scores
+    clarity_scores = []
+    for level_key in ["contextEvaluation", "containerEvaluation"]:
+        if level_key in legacy_results:
+            clarity_raw = legacy_results[level_key].get("qualitativeRubric", {}).get("clarity", 0)
+            clarity_scores.append(clarity_raw / 10.0)  # Assuming 0-10 scale from LLM
+    
+    # Add component clarity scores
+    if "componentEvaluations" in legacy_results:
+        for comp_data in legacy_results["componentEvaluations"].values():
+            clarity_raw = comp_data.get("qualitativeRubric", {}).get("clarity", 0)
+            clarity_scores.append(clarity_raw / 10.0)
+    
+    avg_clarity = sum(clarity_scores) / len(clarity_scores) if clarity_scores else 0.5
+    usability = avg_clarity * 5
+    iso_scores["usability"] = min(5, max(0, round(usability, 2)))
+    
+    # 7. Compatibility/Portability: Cross-level consistency (if available from legacy)
+    # Use abstraction adherence as proxy for now
+    compatibility = abstraction_score * 5
+    iso_scores["compatibility"] = min(5, max(0, round(compatibility, 2)))
+    
+    return {
+        "metric": "ISO/IEC 25010 Quality Attributes",
+        "scores": iso_scores,
+        "overall_score": round(sum(iso_scores.values()) / len(iso_scores), 2)
+    }
+
+# ==============================================================================
+# NEW LAYER B: ATAM-Inspired Scenario Evaluation
+# ==============================================================================
+
+def generate_quality_scenarios(system_brief: str) -> List[Dict[str, Any]]:
+    """
+    Generate quality attribute scenarios based on system brief.
+    Returns scenarios for Performance, Modifiability, and Security.
+    """
+    brief_data = _parse_yaml_safe(system_brief) if isinstance(system_brief, str) else system_brief
+    
+    scenarios = [
+        {
+            "id": "PERF-01",
+            "quality_attribute": "Performance",
+            "scenario": f"Under normal load, {brief_data.get('title', 'the system')} must respond to user requests within acceptable time limits",
+            "stimulus": "Normal operational load",
+            "response": "System maintains response times"
+        },
+        {
+            "id": "MOD-01", 
+            "quality_attribute": "Modifiability",
+            "scenario": f"A developer needs to replace the database engine in {brief_data.get('title', 'the system')}",
+            "stimulus": "Database technology change",
+            "response": "Minimal impact on other components"
+        },
+        {
+            "id": "SEC-01",
+            "quality_attribute": "Security", 
+            "scenario": f"An attacker attempts unauthorized access to {brief_data.get('title', 'the system')}",
+            "stimulus": "Security threat",
+            "response": "System prevents unauthorized access"
+        }
+    ]
+    
+    return scenarios
+
+def evaluate_atam_scenarios(
+    system_brief: str,
+    c4_model: Dict[str, Any],
+    scenarios: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
+    """
+    Evaluate architecture responsiveness to quality attribute scenarios.
+    Computes Coverage Score (CS), Impact Size (IS), and Responsiveness Index (RI).
+    """
+    print("🎯 Evaluating ATAM-Style Scenario Responsiveness...")
+    
+    if scenarios is None:
+        scenarios = generate_quality_scenarios(system_brief)
+    
+    scenario_results = []
+    
+    for scenario in scenarios:
+        # Extract components from containers and components levels
+        components = []
+        
+        # Container level components
+        container_yaml = _parse_yaml_safe(c4_model.get("containers", {}).get("yaml_definition", ""))
+        components.extend(container_yaml.get("elements", []))
+        
+        # Component level components
+        for comp_name, comp_data in c4_model.get("components", {}).items():
+            comp_yaml = _parse_yaml_safe(comp_data.get("yaml_definition", ""))
+            components.extend(comp_yaml.get("elements", []))
+        
+        total_components = len(components)
+        
+        if total_components == 0:
+            scenario_results.append({
+                "scenario_id": scenario["id"],
+                "quality_attribute": scenario["quality_attribute"],
+                "coverage_score": 0.0,
+                "impact_size": 1.0,
+                "responsiveness_index": 0.0
+            })
+            continue
+        
+        # Simulate scenario analysis based on component types and descriptions
+        relevant_components = 0
+        
+        if scenario["quality_attribute"] == "Performance":
+            # Performance scenarios typically affect databases, caches, APIs
+            for comp in components:
+                comp_name = comp.get("name", "").lower()
+                comp_desc = comp.get("description", "").lower()
+                if any(keyword in comp_name + " " + comp_desc for keyword in 
+                      ["database", "cache", "api", "gateway", "service", "queue"]):
+                    relevant_components += 1
+        
+        elif scenario["quality_attribute"] == "Modifiability":
+            # Database changes affect data-related components
+            for comp in components:
+                comp_name = comp.get("name", "").lower()
+                comp_desc = comp.get("description", "").lower()
+                if any(keyword in comp_name + " " + comp_desc for keyword in 
+                      ["database", "data", "storage", "repository", "model"]):
+                    relevant_components += 1
+        
+        elif scenario["quality_attribute"] == "Security":
+            # Security affects authentication, authorization, APIs
+            for comp in components:
+                comp_name = comp.get("name", "").lower()
+                comp_desc = comp.get("description", "").lower()
+                if any(keyword in comp_name + " " + comp_desc for keyword in 
+                      ["auth", "security", "login", "api", "gateway", "firewall"]):
+                    relevant_components += 1
+        
+        # Calculate metrics
+        coverage_score = relevant_components / total_components if total_components > 0 else 0
+        impact_size = relevant_components / total_components if total_components > 0 else 1
+        responsiveness_index = coverage_score * (1 - impact_size)
+        
+        scenario_results.append({
+            "scenario_id": scenario["id"],
+            "quality_attribute": scenario["quality_attribute"],
+            "coverage_score": round(coverage_score, 3),
+            "impact_size": round(impact_size, 3),
+            "responsiveness_index": round(responsiveness_index, 3)
+        })
+    
+    # Calculate overall responsiveness
+    overall_responsiveness = sum(result["responsiveness_index"] for result in scenario_results) / len(scenario_results)
+    
+    return {
+        "metric": "ATAM Scenario Responsiveness",
+        "scenarios": scenario_results,
+        "overall_responsiveness": round(overall_responsiveness, 3)
+    }
+
+# ==============================================================================
+# NEW LAYER C: Quantitative Architectural Soundness Metrics
+# ==============================================================================
+
+def extract_components_and_relationships(c4_model: Dict[str, Any]) -> Tuple[List[Dict], List[Dict]]:
+    """Extract all components and relationships from the C4 model."""
+    components = []
+    relationships = []
+    
+    # Extract from all levels
+    for level_key in ["context", "containers"] + list(c4_model.get("components", {}).keys()):
+        if level_key == "context":
+            level_data = c4_model.get("context", {})
+        elif level_key == "containers":
+            level_data = c4_model.get("containers", {})
+        else:
+            level_data = c4_model.get("components", {}).get(level_key, {})
+        
+        yaml_data = _parse_yaml_safe(level_data.get("yaml_definition", ""))
+        
+        # Add level context to components
+        for element in yaml_data.get("elements", []):
+            element_with_level = element.copy()
+            element_with_level["level"] = level_key
+            components.append(element_with_level)
+        
+        # Add relationships
+        for rel in yaml_data.get("relationships", []):
+            rel_with_level = rel.copy()
+            rel_with_level["level"] = level_key
+            relationships.append(rel_with_level)
+    
+    return components, relationships
+
+def evaluate_architectural_soundness(c4_model: Dict[str, Any], system_brief: str = "") -> Dict[str, Any]:
+    """
+    Compute quantitative architectural soundness metrics:
+    - Coupling Density
+    - Abstraction Coherence
+    - Layering Violations
+    - Semantic Completeness
+    """
+    print("🏗️ Evaluating Architectural Soundness Metrics...")
+    
+    components, relationships = extract_components_and_relationships(c4_model)
+    
+    # 1. Coupling Density (CD = edges / components²)
+    num_components = len(components)
+    num_relationships = len(relationships)
+    
+    coupling_density = num_relationships / (num_components ** 2) if num_components > 0 else 0
+    
+    # 2. Abstraction Coherence (valid cross-level references)
+    # Check if container elements are referenced in component levels
+    container_elements = set()
+    component_elements = set()
+    
+    for comp in components:
+        if comp.get("level") == "containers":
+            container_elements.add(comp.get("name", ""))
+        elif comp.get("level") not in ["context", "containers"]:
+            component_elements.add(comp.get("name", ""))
+    
+    # Simple coherence check: do component relationships reference container elements?
+    valid_references = 0
+    total_references = 0
+    
+    for rel in relationships:
+        if rel.get("level") not in ["context", "containers"]:  # Component level relationship
+            total_references += 1
+            source = rel.get("source", "")
+            dest = rel.get("destination", "")
+            # Check if references are coherent (simplified check)
+            if source in component_elements and dest in component_elements:
+                valid_references += 1
+    
+    abstraction_coherence = valid_references / total_references if total_references > 0 else 1.0
+    
+    # 3. Layering Violations (simplified: count upward dependencies)
+    # For C4: Context -> Container -> Component should be the flow
+    layering_violations = 0
+    
+    for rel in relationships:
+        source_level = rel.get("level", "")
+        # In a well-layered architecture, component-level should not reference context directly
+        # This is a simplified check
+        if source_level not in ["context", "containers"] and "context" in rel.get("destination", "").lower():
+            layering_violations += 1
+    
+    # 4. Semantic Completeness (requirements coverage)
+    requirement_coverage = calculate_requirement_coverage(system_brief, c4_model)
+    
+    return {
+        "metric": "Architectural Soundness",
+        "coupling_density": round(coupling_density, 4),
+        "abstraction_coherence": round(abstraction_coherence, 3),
+        "layering_violations": layering_violations,
+        "semantic_completeness": round(requirement_coverage, 3),
+        "total_components": num_components,
+        "total_relationships": num_relationships
+    }
+
+def calculate_requirement_coverage(system_brief: str, c4_model: Dict[str, Any]) -> float:
+    """Calculate what percentage of requirements are covered by the architecture."""
+    
+    # Extract requirements from system brief
+    brief_data = _parse_yaml_safe(system_brief) if isinstance(system_brief, str) else system_brief
+    
+    functional_reqs = brief_data.get("functional_requirements", [])
+    nonfunctional_reqs = brief_data.get("nonfunctional_requirements", [])
+    all_requirements = functional_reqs + nonfunctional_reqs
+    
+    if not all_requirements:
+        return 1.0  # No requirements to cover
+    
+    # Extract all text from components and descriptions
+    architecture_text = ""
+    
+    for level_key in ["context", "containers"] + list(c4_model.get("components", {}).keys()):
+        if level_key == "context":
+            level_data = c4_model.get("context", {})
+        elif level_key == "containers":
+            level_data = c4_model.get("containers", {})
+        else:
+            level_data = c4_model.get("components", {}).get(level_key, {})
+        
+        yaml_data = _parse_yaml_safe(level_data.get("yaml_definition", ""))
+        
+        # Collect descriptions and names
+        for element in yaml_data.get("elements", []):
+            architecture_text += " " + element.get("name", "")
+            architecture_text += " " + element.get("description", "")
+    
+    architecture_text = architecture_text.lower()
+    
+    # Check requirement coverage using simple keyword matching
+    covered_requirements = 0
+    
+    for req in all_requirements:
+        req_desc = req.get("desc", "").lower()
+        req_id = req.get("id", "").lower()
+        
+        # Check if requirement ID or key terms appear in architecture
+        if req_id in architecture_text:
+            covered_requirements += 1
+            continue
+            
+        # Extract key terms from requirement description
+        key_terms = extract_key_terms_from_requirement(req_desc)
+        
+        # Check if any key terms are covered
+        if any(term in architecture_text for term in key_terms):
+            covered_requirements += 1
+    
+    return covered_requirements / len(all_requirements)
+
+def extract_key_terms_from_requirement(req_desc: str) -> List[str]:
+    """Extract key technical terms from a requirement description."""
+    
+    # Common technical terms that should appear in architecture
+    key_patterns = [
+        r'\b(patient|user|admin|staff)\b',
+        r'\b(registration|scheduling|appointment|billing|record)\b', 
+        r'\b(authentication|authorization|login|auth)\b',
+        r'\b(database|storage|data)\b',
+        r'\b(api|service|interface)\b',
+        r'\b(security|encryption|audit)\b',
+        r'\b(availability|performance|scalability)\b',
+        r'\b(notification|alert|report)\b'
+    ]
+    
+    key_terms = []
+    for pattern in key_patterns:
+        matches = re.findall(pattern, req_desc.lower())
+        key_terms.extend(matches)
+    
+    # Also extract any specific terms that look technical
+    technical_words = re.findall(r'\b[a-z]+(?:ing|tion|ment|ity|ing|ed)\b', req_desc.lower())
+    key_terms.extend([word for word in technical_words if len(word) > 3])
+    
+    return list(set(key_terms))
+
+# ==============================================================================
+# Enhanced Full Evaluation Runner (with new layers)
 # ==============================================================================
 
 def run_full_evaluation(
     system_brief: str,
     c4_model: Dict[str, Any],
     judge_model_name: Any,   # keep Any to align with your original usage
-    temperature: float = 0.0
+    temperature: float = 0.0,
+    include_enhanced_metrics: bool = True
 ) -> Dict[str, Any]:
     """
     Runs a structured, level-aware evaluation of a C4 model, providing the
     correct context and source of truth to each metric.
+    
+    Args:
+        system_brief: The original system brief (YAML string or dict)
+        c4_model: Generated C4 model data
+        judge_model_name: LLM model for judge evaluations
+        temperature: Temperature for LLM judge
+        include_enhanced_metrics: Whether to include new ISO/ATAM/Soundness layers
     """
     print("\n" + "="*50)
     print(f"🏁 STARTING FULL C4 MODEL EVALUATION (Judge: {judge_model_name}) 🏁")
@@ -776,19 +1197,20 @@ def run_full_evaluation(
         "evaluationMetadata": {
             "judgeModel": judge_model_name,
             "judgeModelTemperature": temperature,
-            "evaluationTimestamp": datetime.now().isoformat()
+            "evaluationTimestamp": datetime.now().isoformat(),
+            "enhancedMetricsEnabled": include_enhanced_metrics
         }
     }
 
-    # Layer 1: Holistic structural checks
-    print("--- Running Holistic Structural Checks ---")
+    # LEGACY LAYER 1: Holistic structural checks
+    print("--- Running Legacy Structural Checks ---")
     report["compilationSuccess"] = evaluate_compilation_success(c4_model)
     report["abstractionAdherence"] = evaluate_abstraction_adherence(c4_model)
     report["missingInformation"] = check_c4_completeness(c4_model)
     report["emergentNamingConsistency"] = evaluate_emergent_naming_consistency(c4_model)
 
-    # Layer 2: Level-specific semantic & qualitative
-    print("\n--- Running Level-Specific Evaluations ---")
+    # LEGACY LAYER 2: Level-specific semantic & qualitative
+    print("\n--- Running Legacy Level-Specific Evaluations ---")
 
     if "context" in c4_model:
         print("  - Evaluating Context Level...")
@@ -822,14 +1244,69 @@ def run_full_evaluation(
                 }
         report["componentEvaluations"] = component_evals
 
-    # Layer 3: Holistic critiques
-    print("\n--- Running Holistic Expert Critiques ---")
+    # LEGACY LAYER 3: Holistic critiques
+    print("\n--- Running Legacy Expert Critiques ---")
     report["architectCritique"] = evaluate_architect_critique(system_brief, c4_model, judge_llm)
     report["securityAssessment"] = evaluate_security_assessment(system_brief, c4_model, judge_llm)
 
+    # NEW ENHANCED LAYERS (if enabled)
+    if include_enhanced_metrics:
+        print("\n" + "="*50)
+        print("🌟 RUNNING ENHANCED EVALUATION LAYERS 🌟")
+        print("="*50 + "\n")
+        
+        # NEW LAYER A: ISO/IEC 25010 Quality Attributes
+        print("--- Layer A: ISO/IEC 25010 Quality Attributes ---")
+        report["iso25010Attributes"] = evaluate_iso_25010_attributes(system_brief, c4_model, report)
+        
+        # NEW LAYER B: ATAM-Style Scenario Evaluation
+        print("\n--- Layer B: ATAM Scenario Responsiveness ---")
+        report["atamScenarios"] = evaluate_atam_scenarios(system_brief, c4_model)
+        
+        # NEW LAYER C: Architectural Soundness Metrics
+        print("\n--- Layer C: Architectural Soundness Metrics ---")
+        report["architecturalSoundness"] = evaluate_architectural_soundness(c4_model, system_brief)
+
     print("\n\n" + "="*50)
     print(f"📋 FINAL EVALUATION REPORT (Judge: {judge_model_name}) 📋")
+    if include_enhanced_metrics:
+        print("✨ Enhanced metrics included")
     print("="*50 + "\n")
     print(json.dumps(report, indent=2))
 
+    return report
+
+def run_enhanced_evaluation_only(
+    system_brief: str,
+    c4_model: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Run only the new enhanced evaluation layers (ISO/ATAM/Soundness).
+    Useful for experiments that only need the new metrics.
+    """
+    print("\n🚀 Running Enhanced Evaluation Layers Only...")
+    
+    report = {
+        "evaluationMetadata": {
+            "evaluationTimestamp": datetime.now().isoformat(),
+            "evaluationType": "enhanced_only"
+        }
+    }
+    
+    # Layer A: ISO/IEC 25010 (with minimal legacy data)
+    minimal_legacy = {
+        "missingInformation": {"score": 100},  # Assume complete for now
+        "compilationSuccess": {"score": 100},   # Assume successful
+        "abstractionAdherence": {"score": 100}, # Assume adherent
+        "emergentNamingConsistency": {"score": 80}, # Reasonable default
+        "securityAssessment": {"riskCount": 2},     # Moderate security
+        "contextEvaluation": {"semanticConsistency": {"score": 85}, "qualitativeRubric": {"clarity": 8}},
+        "containerEvaluation": {"definitionalConsistency": {"score": 90}, "qualitativeRubric": {"clarity": 7}},
+        "componentEvaluations": {}
+    }
+    
+    report["iso25010Attributes"] = evaluate_iso_25010_attributes(system_brief, c4_model, minimal_legacy)
+    report["atamScenarios"] = evaluate_atam_scenarios(system_brief, c4_model)
+    report["architecturalSoundness"] = evaluate_architectural_soundness(c4_model, system_brief)
+    
     return report

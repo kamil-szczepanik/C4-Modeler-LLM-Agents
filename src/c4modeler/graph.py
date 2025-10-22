@@ -1,7 +1,7 @@
 # src/graph.py
 from __future__ import annotations
 
-from typing import Literal, Type, List
+from typing import Literal, Type, List, Optional, Dict, Any
 from collections import deque
 import copy
 import functools
@@ -29,15 +29,31 @@ from .agents import (
 )
 
 def create_c4_modeler_graph(
-    checkpointer,
-    model_name: ModelName = "gemini-1.5-flash-latest",
+    checkpointer=None,
+    model_name: ModelName = "gemini-2.5-flash",
     analysis_method: Literal["simple", "collaborative"] = "collaborative",
     collab_rounds: int = 2,
+    experiment_condition: Optional[Dict[str, Any]] = None,
+    memory_config: Optional[Dict[str, Any]] = None,
 ) -> Type[StateGraph]:
     """
-    Factory function to build the C4 Modeler workflow.
+    Factory function to build the C4 Modeler workflow with experimental support.
+    
+    Args:
+        checkpointer: LangGraph checkpointer (optional)
+        model_name: LLM model to use
+        analysis_method: Simple or collaborative analysis
+        collab_rounds: Number of collaboration rounds
+        experiment_condition: Experimental condition configuration
+        memory_config: Memory system configuration
     """
     print(f"--- 🏗️ Building graph with model: '{model_name}' and analysis: '{analysis_method}' ---")
+    
+    if experiment_condition:
+        print(f"🧪 Experimental condition: {experiment_condition.get('name', 'Unknown')}")
+    
+    if memory_config:
+        print(f"🧠 Memory configuration: {memory_config.get('type', 'none')}")
 
     llm = get_llm(model_name=model_name)
 
@@ -47,8 +63,16 @@ def create_c4_modeler_graph(
         bound_analysis_agent_node = functools.partial(analysis_agent_node, llm=llm)
         workflow.add_node("analysis", bound_analysis_agent_node)
     else:
-        workflow.add_node("analysis", 
-                          lambda s: collaborative_analysis_node(s, llm=llm, collab_rounds=collab_rounds))
+        # Enhanced collaborative analysis with experimental support
+        def experimental_collaborative_analysis(state):
+            return collaborative_analysis_node(
+                state, 
+                llm=llm, 
+                collab_rounds=collab_rounds,
+                experiment_condition=experiment_condition,
+                memory_config=memory_config
+            )
+        workflow.add_node("analysis", experimental_collaborative_analysis)
 
     # --- Remaining nodes & edges (unchanged) ---
     bound_yaml_structure_node = functools.partial(yaml_structure_node, llm=llm)
@@ -78,5 +102,8 @@ def create_c4_modeler_graph(
     )
 
     app = workflow.compile(checkpointer=checkpointer)
-    print("✅ LangGraph C4 Modeler compiled successfully with checkpointer!")
+    if checkpointer:
+        print("✅ LangGraph C4 Modeler compiled successfully with checkpointer!")
+    else:
+        print("✅ LangGraph C4 Modeler compiled successfully without checkpointer!")
     return app

@@ -18,13 +18,13 @@ def _initial_state(brief_str: str) -> State:
         "messages": [],
         "system_brief": brief_str,
         "c4_model": _empty_c4_model(),
-        "component_queue": None,  # was: deque()
+        "component_queue": None,  # This is correct - None triggers population after containers
     }
 
 
 def generate_c4_for_brief(
     brief: Dict[str, Any] | str,
-    model_name: ModelName = "gemini-1.5-flash-latest",
+    model_name: ModelName = "gemini-2.5-flash",
     analysis_method: str = "collaborative",
     collab_rounds: int = 2,
     results_dir: str | Path = "data/results",
@@ -53,7 +53,7 @@ def generate_c4_for_brief(
     )
 
     state: State = _initial_state(brief_str)
-    config = {"recursion_limit": 200}
+    config = {"recursion_limit": 400}
     final_state: State = app.invoke(state, config)
 
     c4_model: C4Model = final_state["c4_model"]
@@ -62,7 +62,7 @@ def generate_c4_for_brief(
 
 def generate_c4_for_briefs_dir(
     briefs_dir: str | Path,
-    model_name: ModelName = "gemini-1.5-flash-latest",
+    model_name: ModelName = "gemini-2.5-flash",
     analysis_method: str = "collaborative",
     collab_rounds: int = 2,
     results_dir: str | Path = "data/results",
