@@ -38,6 +38,40 @@ from .prompts import (
 )
 
 # ============================================================================
+# Utility functions for output cleaning
+# ============================================================================
+
+def strip_markdown_code_fences(text: str) -> str:
+    """
+    Remove markdown code fences from LLM output.
+    
+    Many LLMs (especially Gemini) wrap their output in markdown code fences like:
+    ```yaml
+    content here
+    ```
+    
+    This function strips those fences to get the raw content.
+    """
+    if not text:
+        return text
+    
+    text = text.strip()
+    
+    # Check for code fence at start
+    if text.startswith("```"):
+        lines = text.split("\n")
+        # Remove first line (```yaml, ```plantuml, etc.)
+        lines = lines[1:]
+        
+        # Remove last line if it's ```
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        
+        text = "\n".join(lines)
+    
+    return text.strip()
+
+# ============================================================================
 # Helpers to build teams from roles (enhanced for experiments)
 # ============================================================================
 
@@ -105,12 +139,13 @@ class CollaborativeAnalysisState(TypedDict):
 def agent_node(state: CollaborativeAnalysisState, agent: Agent, llm: BaseChatModel) -> Dict:
     print(f"--- 🗣️  Turn: {agent.name} on C4 Level: '{state['level']}' ---")
     
+    # Use template variables to avoid parsing issues with curly braces in content
     system_prompt = (
         "You are a member of an expert team collaboratively creating the analysis for a C4 model diagram.\n"
-        f"Your current task is to analyze the provided system brief for the **C4 {state['level']} level**.\n"
-        f"{state['context']}\n"
+        "Your current task is to analyze the provided system brief for the **C4 {level} level**.\n"
+        "{context}\n"
         "Your specific role is as follows:\n---\n"
-        f"{agent.persona}\n---\n"
+        "{persona}\n---\n"
         "Read the conversation history and add your next insight based on your specific role. "
         "Provide your analysis directly and concisely."
     )
@@ -119,7 +154,12 @@ def agent_node(state: CollaborativeAnalysisState, agent: Agent, llm: BaseChatMod
         MessagesPlaceholder(variable_name="messages"),
     ])
     chain = prompt_template | llm
-    response = chain.invoke({"messages": state["messages"]})
+    response = chain.invoke({
+        "messages": state["messages"],
+        "level": state["level"],
+        "context": state["context"],
+        "persona": agent.persona
+    })
     sanitized_name = re.sub(r"[^a-zA-Z0-9_-]", "_", agent.name)
     named_message = AIMessage(content=response.content, name=sanitized_name)
     return {"messages": [named_message]}
@@ -289,6 +329,9 @@ def yaml_structure_node(state: State, llm: BaseChatModel) -> Dict:
         "template": template,
         "context": ctx,
     })
+    
+    # Clean markdown code fences that LLMs (especially Gemini) often add
+    yaml_output = strip_markdown_code_fences(yaml_output)
 
     updated_model = copy.deepcopy(c4_model)
     if level == "context":
@@ -346,6 +389,9 @@ def plantuml_diagram_node(state: State, llm: BaseChatModel) -> Dict:
         "yaml_def": yaml_def,
         "analysis": analysis,
     })
+    
+    # Clean markdown code fences that LLMs (especially Gemini) often add
+    diagram_code = strip_markdown_code_fences(diagram_code)
 
     updated_model = copy.deepcopy(c4_model)
     if level == "context":
