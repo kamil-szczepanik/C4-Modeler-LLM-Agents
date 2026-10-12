@@ -89,12 +89,13 @@ class GeminiClient(LLMClient):
     """Gemini API via REST with retries and exponential backoff.
 
     `system_as_user` puts the system prompt at the top of the user message, for
-    models without system-instruction support (e.g. Gemma).
+    models without system-instruction support (e.g. Gemma); `supports_schema`
+    controls whether a JSON response schema is sent.
     """
 
     def __init__(self, model: str, api_key: str, call_log: CallLog, *, max_retries: int = 6,
                  timeout_s: float = 180.0, system_as_user: Optional[bool] = None,
-                 extra_generation_config: Optional[dict] = None,
+                 supports_schema: Optional[bool] = None, extra_generation_config: Optional[dict] = None,
                  opener: Optional[Callable] = None, sleep: Callable[[float], None] = time.sleep):
         self.model = model
         self._api_key = api_key
@@ -102,13 +103,15 @@ class GeminiClient(LLMClient):
         self.max_retries = max_retries
         self.timeout_s = timeout_s
         self.system_as_user = model.startswith("gemma") if system_as_user is None else system_as_user
+        # Gemma models get the JSON format only through the prompt; callers parse leniently
+        self.supports_schema = (not model.startswith("gemma")) if supports_schema is None else supports_schema
         self.extra_generation_config = extra_generation_config or {}
         self._open = opener or urllib.request.urlopen
         self._sleep = sleep
 
     def _body(self, system: str, user: str, temperature: float, json_schema: Optional[dict]) -> dict:
         generation_config = {"temperature": temperature, **self.extra_generation_config}
-        if json_schema is not None:
+        if json_schema is not None and self.supports_schema:
             generation_config["responseMimeType"] = "application/json"
             generation_config["responseSchema"] = json_schema
         if self.system_as_user:
