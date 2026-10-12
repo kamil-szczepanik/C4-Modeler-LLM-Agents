@@ -99,3 +99,14 @@ def test_plan_is_randomized_but_reproducible():
     a = plan_runs(conds, ["b1", "b2"], reps=3, seed=7)
     assert a == plan_runs(conds, ["b1", "b2"], reps=3, seed=7) and len(a) == 11 * 2 * 3
     assert a != sorted(a, key=lambda s: (s.condition_id, s.brief_id, s.rep))
+
+
+
+def test_daily_quota_is_not_retried():
+    body = {"error": {"message": "You exceeded your current quota", "details": [
+        {"violations": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier", "quotaValue": "20"}]}]}}
+    http = FakeHTTP(urllib.error.HTTPError("url", 429, "quota", {}, io.BytesIO(json.dumps(body).encode())))
+    client = GeminiClient("gemini-3.8-flash", "KEY", CallLog(), opener=http, sleep=lambda s: None)
+    with pytest.raises(LLMError, match="daily quota exhausted"):
+        client.generate(system="s", user="u", temperature=0, purpose="judge_iso")
+    assert len(http.requests) == 1

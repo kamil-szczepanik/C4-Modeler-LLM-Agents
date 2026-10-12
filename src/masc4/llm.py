@@ -147,10 +147,15 @@ class GeminiClient(LLMClient):
                 return response
             except urllib.error.HTTPError as err:
                 try:
-                    message = json.load(err).get("error", {}).get("message", "")
+                    error = json.load(err).get("error", {})
                 except Exception:
-                    message = ""
+                    error = {}
+                message = error.get("message", "")
+                quotas = [v.get("quotaId", "") for d in error.get("details", []) or []
+                          for v in d.get("violations", []) or []]
                 last_error = f"HTTP {err.code}: {message[:300]}"
+                if any("PerDay" in q for q in quotas):  # daily quota: retrying within minutes cannot help
+                    raise LLMError(f"daily quota exhausted ({', '.join(quotas)}): {message[:200]}") from None
                 if err.code not in RETRYABLE_HTTP:
                     raise LLMError(last_error) from None
             except (urllib.error.URLError, TimeoutError, ConnectionError, LLMError) as err:
