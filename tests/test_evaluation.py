@@ -152,3 +152,23 @@ def test_every_brief_has_complete_scenarios_and_parsable_requirements():
                                           "response_measure")), (brief.name, s.get("id"))
         assert {s["quality_attribute"] for s in scenarios} == {"Performance", "Availability", "Modifiability",
                                                                "Security"}
+
+
+
+def test_judge_keeps_successful_tasks_and_repeats_only_failed_ones():
+    good, _ = judge_answers()
+    state = {"fail": True}
+
+    def flaky(purpose, system, user):
+        if purpose.startswith("judge_requirements") and state["fail"]:
+            raise J.JudgeError("simulated overload")
+        return good.responder(purpose, system, user)
+
+    llm = FakeLLM(flaky, model="judge-fake")
+    first = J.judge_run(llm, BRIEF, model(), SCENARIOS)
+    assert "iso" in first and "atam" in first and set(first["errors"]) == {"requirements"}
+    state["fail"] = False
+    n_before = len(llm.calls)
+    second = J.judge_run(llm, BRIEF, model(), SCENARIOS, previous=first)
+    assert "errors" not in second and second["iso"] == first["iso"]
+    assert [c["purpose"] for c in llm.calls[n_before:]] == ["judge_requirements|attempt1"]

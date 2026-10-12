@@ -41,9 +41,14 @@ def judge_file(run_dir: Path, model: str) -> Path:
     return run_dir / f"judge_{model}.json"
 
 
-def needs_judge(run_dir: Path, model: str) -> bool:
+def load_judge(run_dir: Path, model: str):
     path = judge_file(run_dir, model)
-    return not path.exists() or "error" in json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+def needs_judge(run_dir: Path, model: str) -> bool:
+    data = load_judge(run_dir, model)
+    return data is None or "error" in data or bool(data.get("errors"))
 
 
 def evaluate_run(run_dir: Path, meta: dict, briefs: dict, scenarios_dir: Path, jar: Path, judge_model, api_key,
@@ -55,10 +60,11 @@ def evaluate_run(run_dir: Path, meta: dict, briefs: dict, scenarios_dir: Path, j
         return "ok"
     log = CallLog(run_dir / f"judge_calls_{judge_model}.jsonl")
     llm = GeminiClient(judge_model, api_key, log)
+    previous = load_judge(run_dir, judge_model)
     try:
         scenarios = load_scenarios(scenarios_dir / f"{meta['brief']}.yaml")
-        result = judge_run(llm, briefs[meta["brief"]], c4, scenarios)
-        status = "ok"
+        result = judge_run(llm, briefs[meta["brief"]], c4, scenarios, previous=previous)
+        status = f"judge error: {sorted(result['errors'])}" if result.get("errors") else "ok"
     except (JudgeError, LLMError, FileNotFoundError, KeyError) as err:
         result, status = {"model": judge_model, "error": f"{type(err).__name__}: {err}"}, "judge error"
     judge_file(run_dir, judge_model).write_text(json.dumps(result, indent=1, ensure_ascii=False), encoding="utf-8")
@@ -86,14 +92,16 @@ def row_for(run_dir: Path, meta: dict, studies: dict) -> dict:
     for j_path in sorted(run_dir.glob("judge_*.json")):
         j = json.loads(j_path.read_text(encoding="utf-8"))
         tag = j_path.stem.replace("judge_", "")
-        if "error" in j:
-            row[f"{tag}__error"] = j["error"]
-            continue
-        row[f"{tag}__iso_mean"] = j["iso"]["mean"]
-        row.update({f"{tag}__iso_{k}": j["iso"]["scores"][k] for k in ISO_CHARACTERISTICS})
-        row[f"{tag}__atam_ri"] = j["atam"]["responsiveness_index"]
-        row.update({f"{tag}__atam_{k.lower()}": v for k, v in j["atam"]["by_quality_attribute"].items()})
-        row[f"{tag}__req_coverage"] = j["requirements"]["coverage"]
+        if "error" in j or j.get("errors"):
+            row[f"{tag}__error"] = j.get("error") or json.dumps(j["errors"])
+        if "iso" in j:
+            row[f"{tag}__iso_mean"] = j["iso"]["mean"]
+            row.update({f"{tag}__iso_{k}": j["iso"]["scores"][k] for k in ISO_CHARACTERISTICS})
+        if "atam" in j:
+            row[f"{tag}__atam_ri"] = j["atam"]["responsiveness_index"]
+            row.update({f"{tag}__atam_{k.lower()}": v for k, v in j["atam"]["by_quality_attribute"].items()})
+        if "requirements" in j:
+            row[f"{tag}__req_coverage"] = j["requirements"]["coverage"]
     return row
 
 

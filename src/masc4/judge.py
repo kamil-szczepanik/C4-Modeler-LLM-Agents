@@ -238,6 +238,28 @@ def judge_requirements(llm: LLMClient, brief: str, c4: dict) -> Dict:
             "details": {x["id"]: x for x in data["requirements"]}}
 
 
-def judge_run(llm: LLMClient, brief: str, c4: dict, scenarios: List[Dict[str, str]]) -> Dict:
-    return {"model": llm.model, "iso": judge_iso(llm, brief, c4), "atam": judge_atam(llm, brief, c4, scenarios),
-            "requirements": judge_requirements(llm, brief, c4)}
+JUDGE_TASKS = ("iso", "atam", "requirements")
+
+
+def judge_run(llm: LLMClient, brief: str, c4: dict, scenarios: List[Dict[str, str]],
+              previous: Optional[Dict] = None) -> Dict:
+    """Run the three judge tasks, keeping results of tasks that already succeeded in `previous`.
+
+    A failed task is stored under "errors" and the others are kept, so a later call
+    repeats only what is missing.
+    """
+    result = {"model": llm.model}
+    result.update({t: previous[t] for t in JUDGE_TASKS if previous and t in previous})
+    tasks = {"iso": lambda: judge_iso(llm, brief, c4), "atam": lambda: judge_atam(llm, brief, c4, scenarios),
+             "requirements": lambda: judge_requirements(llm, brief, c4)}
+    errors = {}
+    for name in JUDGE_TASKS:
+        if name in result:
+            continue
+        try:
+            result[name] = tasks[name]()
+        except Exception as err:  # JudgeError or LLMError after all retries
+            errors[name] = f"{type(err).__name__}: {err}"
+    if errors:
+        result["errors"] = errors
+    return result

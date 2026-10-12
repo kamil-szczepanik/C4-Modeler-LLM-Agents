@@ -93,7 +93,7 @@ class GeminiClient(LLMClient):
     controls whether a JSON response schema is sent.
     """
 
-    def __init__(self, model: str, api_key: str, call_log: CallLog, *, max_retries: int = 6,
+    def __init__(self, model: str, api_key: str, call_log: CallLog, *, max_retries: int = 10,
                  timeout_s: float = 180.0, system_as_user: Optional[bool] = None,
                  supports_schema: Optional[bool] = None, extra_generation_config: Optional[dict] = None,
                  opener: Optional[Callable] = None, sleep: Callable[[float], None] = time.sleep):
@@ -156,7 +156,7 @@ class GeminiClient(LLMClient):
             except (urllib.error.URLError, TimeoutError, ConnectionError, LLMError) as err:
                 last_error = f"{type(err).__name__}: {err}"
             if attempt < self.max_retries:
-                self._sleep(min(60.0, 2.0 ** attempt) * (0.5 + random.random()))
+                self._sleep(min(90.0, 2.0 ** attempt) * (0.5 + random.random()))  # up to ~10 min in total
         raise LLMError(f"{purpose}: failed after {self.max_retries} attempts ({last_error})")
 
 
