@@ -4,8 +4,10 @@ from __future__ import annotations
 import json
 import re
 import uuid
+import time
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -14,8 +16,9 @@ from .types import State
 from .utils import (
     save_c4_artifacts,
     save_all_evaluation_reports,
-    format_evaluation_report,   # if you don’t have this yet, a minimal fallback is below
+    format_evaluation_report,   # if you don't have this yet, a minimal fallback is below
     zip_folder_with_increment,
+    load_c4_model_from_artifacts,  # For recovery from saved artifacts
 )
 from .evaluation import run_full_evaluation
 
@@ -119,10 +122,17 @@ def run_all_experiments(
 def build_app_from_config(
     model_name: str,
     analysis_method: str,
-    collab_rounds: int | None
+    collab_rounds: int | None,
+    temperature: float = 0.5
 ):
     """
     Builds a LangGraph app exactly like your notebook did, using your graph factory.
+    
+    Args:
+        model_name: LLM model to use
+        analysis_method: "simple" | "collaborative"
+        collab_rounds: Number of collaboration rounds (default 2 if None)
+        temperature: LLM temperature for controlling randomness (default 0.5)
     """
     checkpointer = InMemorySaver()
     app = create_c4_modeler_graph(
@@ -130,6 +140,7 @@ def build_app_from_config(
         model_name=model_name,
         analysis_method=analysis_method,       # "simple" | "collaborative"
         collab_rounds=collab_rounds or 2,      # default when None
+        temperature=temperature,
     )
     return app
 
@@ -271,13 +282,62 @@ class EnhancedExperimentRunner:
         self.briefs = load_briefs_from_dir(briefs_dir)
         print(f"📚 Loaded {len(self.briefs)} system briefs: {list(self.briefs.keys())}")
     
-    def run_experiment(self, experiment_name: str, model_name: str = "gpt-4o-mini") -> Dict[str, Any]:
+    def recover_artifacts_from_run(self, run_id: str, experiment_name: str) -> Dict[str, Any]:
+        """
+        Recover C4 model artifacts from a previously saved run.
+        
+        Args:
+            run_id: The unique run identifier
+            experiment_name: Name of the experiment
+        
+        Returns:
+            Recovered C4 model or None if not found
+        """
+        artifact_dir = Path(f"data/results/enhanced_experiments/{experiment_name}/c4_artifacts/{run_id}")
+        
+        if not artifact_dir.exists():
+            print(f"⚠️ Artifact directory not found: {artifact_dir}")
+            return None
+        
+        try:
+            c4_model = load_c4_model_from_artifacts(artifact_dir)
+            print(f"✅ Recovered C4 model from: {artifact_dir}")
+            return c4_model
+        except Exception as e:
+            print(f"❌ Failed to recover artifacts: {str(e)}")
+            return None
+    
+    def list_available_artifacts(self, experiment_name: str) -> List[str]:
+        """
+        List all available artifact directories for an experiment.
+        
+        Args:
+            experiment_name: Name of the experiment
+        
+        Returns:
+            List of run IDs with saved artifacts
+        """
+        artifacts_base = Path(f"data/results/enhanced_experiments/{experiment_name}/c4_artifacts")
+        
+        if not artifacts_base.exists():
+            print(f"ℹ️ No artifacts directory found for experiment: {experiment_name}")
+            return []
+        
+        run_ids = [d.name for d in artifacts_base.iterdir() if d.is_dir()]
+        print(f"📂 Found {len(run_ids)} saved artifact sets for {experiment_name}")
+        
+        return run_ids
+    
+    def run_experiment(self, experiment_name: str, model_name: str = "gpt-4o-mini", 
+                      max_workers: int = 2, temperature: float = 0.5) -> Dict[str, Any]:
         """
         Run a specific enhanced experiment by name.
         
         Args:
             experiment_name: Name of experiment from config (e.g., 'role_ablation')
             model_name: LLM model to use for generation and evaluation
+            max_workers: Maximum number of conditions to run in parallel (default: 2)
+            temperature: LLM temperature for controlling randomness (default: 0.5)
         
         Returns:
             Dictionary containing experiment results and analysis
@@ -291,6 +351,7 @@ class EnhancedExperimentRunner:
         print(f"\n🧪 Starting Enhanced Experiment: {experiment_config['name']}")
         print(f"📋 Description: {experiment_config['description']}")
         print(f"🎯 Purpose: {experiment_config['purpose']}")
+        print(f"⚙️ Parallel conditions: {max_workers}")
         
         results = {
             "experiment_metadata": {
@@ -298,26 +359,68 @@ class EnhancedExperimentRunner:
                 "description": experiment_config["description"],
                 "purpose": experiment_config["purpose"],
                 "timestamp": datetime.now().isoformat(),
-                "model_name": model_name
+                "model_name": model_name,
+                "temperature": temperature,
+                "max_parallel_conditions": max_workers
             },
             "conditions": {},
             "aggregate_results": {},
             "statistical_analysis": {}
         }
         
-        # Run each experimental condition
-        for condition in experiment_config["conditions"]:
-            condition_id = condition["id"]
-            print(f"\n🔬 Running condition: {condition['name']}")
+        # Run experimental conditions in parallel using ThreadPoolExecutor
+        conditions_list = experiment_config["conditions"]
+        total_conditions = len(conditions_list)
+        
+        print(f"\n� Running {total_conditions} conditions with max {max_workers} parallel workers")
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all condition tasks
+            future_to_condition = {
+                executor.submit(
+                    self._run_condition,
+                    condition,
+                    experiment_config,
+                    protocol,
+                    model_name,
+                    temperature
+                ): (idx, condition)
+                for idx, condition in enumerate(conditions_list, 1)
+            }
             
-            condition_results = self._run_condition(
-                condition, 
-                experiment_config,
-                protocol,
-                model_name
-            )
-            
-            results["conditions"][condition_id] = condition_results
+            # Process results as they complete
+            completed_count = 0
+            for future in as_completed(future_to_condition):
+                condition_idx, condition = future_to_condition[future]
+                condition_id = condition["id"]
+                completed_count += 1
+                
+                try:
+                    condition_results = future.result()
+                    results["conditions"][condition_id] = condition_results
+                    
+                    print(f"\n✅ [{completed_count}/{total_conditions}] Completed condition: {condition['name']}")
+                    
+                    # 💾 SAVE INTERMEDIATE RESULTS after each condition completes
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    intermediate_file = f"data/results/enhanced_experiments/{experiment_name}_progress_condition_{completed_count}_{timestamp}.json"
+                    
+                    Path(intermediate_file).parent.mkdir(parents=True, exist_ok=True)
+                    
+                    with open(intermediate_file, 'w', encoding='utf-8') as f:
+                        json.dump(results, f, indent=2, ensure_ascii=False)
+                    
+                    print(f"    💾 Progress checkpoint saved: {Path(intermediate_file).name}")
+                    
+                except Exception as e:
+                    print(f"\n❌ [{completed_count}/{total_conditions}] Failed condition {condition['name']}: {str(e)}")
+                    results["conditions"][condition_id] = {
+                        "condition_metadata": condition,
+                        "error": str(e),
+                        "status": "failed"
+                    }
+        
+        print(f"\n🎯 All {total_conditions} conditions completed!")
         
         # Perform aggregate analysis
         results["aggregate_results"] = self._analyze_experiment_results(
@@ -325,32 +428,62 @@ class EnhancedExperimentRunner:
             experiment_config["metrics_focus"]
         )
         
-        # Save results
+        # Save final results
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        results_file = f"data/results/enhanced_experiments/{experiment_name}_{timestamp}.json"
+        results_file = f"data/results/enhanced_experiments/{experiment_name}_final_{timestamp}.json"
         
         # Ensure directory exists
         Path(results_file).parent.mkdir(parents=True, exist_ok=True)
         
         with open(results_file, 'w', encoding='utf-8') as f:
-            json.dump(results, f, indent=2)
+            json.dump(results, f, indent=2, ensure_ascii=False)
         
-        print(f"💾 Experiment results saved to: {results_file}")
+        print(f"\n✅ Experiment complete! Final results saved to: {results_file}")
         
         return results
     
     def _run_condition(self, condition: Dict[str, Any], experiment_config: Dict[str, Any], 
-                      protocol: Dict[str, Any], model_name: str) -> Dict[str, Any]:
-        """Run a single experimental condition across all briefs and rounds."""
+                      protocol: Dict[str, Any], model_name: str, temperature: float = 0.5) -> Dict[str, Any]:
+        """
+        Run a single experimental condition across all briefs and rounds.
+        
+        Args:
+            condition: Experimental condition configuration
+            experiment_config: Overall experiment configuration
+            protocol: Experimental protocol (datasets, rounds, etc.)
+            model_name: LLM model to use
+            temperature: LLM temperature for controlling randomness (default 0.5)
+        """
         
         condition_results = {
             "condition_metadata": condition,
             "brief_results": {},
-            "condition_summary": {}
+            "condition_summary": {},
+            "artifact_locations": {}  # Track where artifacts are saved
         }
         
         datasets = protocol.get("datasets", list(self.briefs.keys()))
         rounds = protocol.get("rounds_per_condition", 3)
+        
+        # Create base directory for this condition's artifacts
+        experiment_name = experiment_config.get("name", "unknown_experiment").replace(" ", "_")
+        condition_id = condition.get("id", "unknown_condition")
+        
+        # Pre-scan to see what exists (for user visibility)
+        total_runs = len(datasets) * rounds
+        existing_runs = 0
+        
+        print(f"\n🔍 Checking for existing artifacts...")
+        for brief_name in datasets:
+            for round_num in range(1, rounds + 1):
+                if self._find_existing_artifact(experiment_name, brief_name, condition_id, round_num):
+                    existing_runs += 1
+        
+        if existing_runs > 0:
+            print(f"   ✅ Found {existing_runs}/{total_runs} completed runs")
+            print(f"   🔄 Will run {total_runs - existing_runs} new runs")
+        else:
+            print(f"   🆕 No existing runs found, will run all {total_runs} runs")
         
         for brief_name in datasets:
             if brief_name not in self.briefs:
@@ -362,12 +495,74 @@ class EnhancedExperimentRunner:
             for round_num in range(1, rounds + 1):
                 print(f"  📝 {brief_name} - Round {round_num}")
                 
+                # Check if this run already exists (for resume capability)
+                existing_artifact = self._find_existing_artifact(
+                    experiment_name, brief_name, condition_id, round_num
+                )
+                
+                if existing_artifact:
+                    print(f"    ✅ Found existing artifacts, loading from: {existing_artifact}")
+                    
+                    try:
+                        # Load C4 model from existing artifacts
+                        c4_model = load_c4_model_from_artifacts(existing_artifact)
+                        
+                        # Check if it's an error model (contains "# Error:" in definitions)
+                        is_error = any("# Error:" in str(v) for v in c4_model.get("context", {}).values())
+                        
+                        if is_error:
+                            print(f"    ⚠️ Existing artifacts contain errors, re-running...")
+                        else:
+                            # Valid existing run - use it and skip generation
+                            evaluation = run_enhanced_evaluation_only(
+                                self.briefs[brief_name],
+                                c4_model
+                            )
+                            
+                            round_result = {
+                                "round": round_num,
+                                "brief_name": brief_name,
+                                "condition_id": condition["id"],
+                                "run_id": Path(existing_artifact).name,
+                                "artifact_path": existing_artifact,
+                                "c4_model": c4_model,
+                                "evaluation": evaluation,
+                                "timestamp": datetime.now().isoformat(),
+                                "resumed_from_artifacts": True
+                            }
+                            
+                            brief_results.append(round_result)
+                            condition_results["artifact_locations"][Path(existing_artifact).name] = existing_artifact
+                            
+                            print(f"    ⏭️ Skipped (already completed)")
+                            continue  # Skip to next round
+                            
+                    except Exception as e:
+                        print(f"    ⚠️ Failed to load existing artifacts: {str(e)}, re-running...")
+                
+                # Generate new C4 model (either no existing artifacts or they were invalid)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                run_id = f"{brief_name}_{condition_id}_r{round_num}_{timestamp}"
+                artifact_dir = Path(f"data/results/enhanced_experiments/{experiment_name}/c4_artifacts/{run_id}")
+                
                 # Generate C4 model with condition-specific configuration
                 c4_model = self._generate_c4_with_condition(
                     self.briefs[brief_name],
                     condition,
-                    model_name
+                    model_name,
+                    temperature
                 )
+                
+                # ✨ SAVE C4 ARTIFACTS IMMEDIATELY after generation
+                try:
+                    artifact_dir.mkdir(parents=True, exist_ok=True)
+                    save_c4_artifacts(artifact_dir, c4_model)
+                    # Use string representation to avoid Path.relative_to() issues with mixed path types
+                    print(f"    💾 Saved C4 artifacts to: {artifact_dir}")
+                    artifact_path = str(artifact_dir.absolute())
+                except Exception as e:
+                    print(f"    ⚠️ Failed to save C4 artifacts: {str(e)}")
+                    artifact_path = None
                 
                 # Evaluate using enhanced metrics
                 evaluation = run_enhanced_evaluation_only(
@@ -379,12 +574,18 @@ class EnhancedExperimentRunner:
                     "round": round_num,
                     "brief_name": brief_name,
                     "condition_id": condition["id"],
+                    "run_id": run_id,
+                    "artifact_path": artifact_path,  # Store location for recovery
                     "c4_model": c4_model,
                     "evaluation": evaluation,
                     "timestamp": datetime.now().isoformat()
                 }
                 
                 brief_results.append(round_result)
+                
+                # Track artifact location
+                if artifact_path:
+                    condition_results["artifact_locations"][run_id] = artifact_path
             
             condition_results["brief_results"][brief_name] = brief_results
         
@@ -397,10 +598,16 @@ class EnhancedExperimentRunner:
         return condition_results
     
     def _generate_c4_with_condition(self, system_brief: str, condition: Dict[str, Any], 
-                                   model_name: str) -> Dict[str, Any]:
+                                   model_name: str, temperature: float = 0.5) -> Dict[str, Any]:
         """
         Generate C4 model with condition-specific agent configuration.
         Uses the integration utilities for clean pipeline execution.
+        
+        Args:
+            system_brief: The system description to model
+            condition: Experimental condition configuration
+            model_name: LLM model to use
+            temperature: LLM temperature for controlling randomness (default 0.5)
         """
         
         # Validate the condition first
@@ -431,25 +638,98 @@ class EnhancedExperimentRunner:
         # Create memory configuration
         memory_config = create_memory_config_from_condition(condition)
         
-        # Run the experimental pipeline
-        try:
-            result = create_experimental_pipeline(
-                system_brief=system_brief,
-                model_name=model_name,
-                experiment_condition=experiment_condition,
-                memory_config=memory_config
-            )
+        # Run the experimental pipeline with retry logic for transient API errors
+        max_retries = 3
+        retry_delay = 5  # seconds
+        
+        for attempt in range(1, max_retries + 1):
+            try:
+                result = create_experimental_pipeline(
+                    system_brief=system_brief,
+                    model_name=model_name,
+                    experiment_condition=experiment_condition,
+                    memory_config=memory_config,
+                    temperature=temperature
+                )
+                
+                # Extract C4 model from the result
+                if "error" in result:
+                    # Check if it's a retryable error (500 Internal Server Error)
+                    error_msg = result["error"]
+                    if "500" in str(error_msg) or "Internal" in str(error_msg):
+                        if attempt < max_retries:
+                            wait_time = retry_delay * attempt  # Exponential backoff
+                            print(f"    ⚠️ Transient API error (attempt {attempt}/{max_retries}), retrying in {wait_time}s...")
+                            time.sleep(wait_time)
+                            continue
+                    return self._create_error_model(result["error"])
+                
+                c4_model = extract_c4_model_from_result(result)
+                
+                # Success! Log if this was a retry
+                if attempt > 1:
+                    print(f"    ✅ Succeeded on retry attempt {attempt}")
+                
+                return c4_model
+                
+            except Exception as e:
+                error_str = str(e)
+                # Check if it's a retryable error (Google API 500, rate limits, etc.)
+                is_retryable = any(keyword in error_str for keyword in [
+                    "500", "Internal", "internal error", 
+                    "rate limit", "quota", "temporarily unavailable"
+                ])
+                
+                if is_retryable and attempt < max_retries:
+                    wait_time = retry_delay * attempt  # Exponential backoff
+                    print(f"    ⚠️ Transient error (attempt {attempt}/{max_retries}): {error_str[:100]}")
+                    print(f"    🔄 Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    print(f"    ❌ Error generating C4 model (attempt {attempt}): {error_str}")
+                    return self._create_error_model(error_str)
+        
+        # If we exhausted all retries
+        return self._create_error_model(f"Failed after {max_retries} attempts")
+    
+    def _find_existing_artifact(self, experiment_name: str, brief_name: str, 
+                               condition_id: str, round_num: int) -> Optional[str]:
+        """
+        Find existing artifact directory for a specific run.
+        Returns the directory path if found, None otherwise.
+        
+        Args:
+            experiment_name: Name of the experiment (e.g., "Role_Ablation_Study")
+            brief_name: Name of the brief (e.g., "clinic-management-system")
+            condition_id: Condition ID (e.g., "baseline", "architect_only")
+            round_num: Round number (1, 2, 3, etc.)
+        """
+        # Look for artifact directories matching this run
+        artifact_base = Path(f"data/results/enhanced_experiments/{experiment_name}/c4_artifacts")
+        
+        if not artifact_base.exists():
+            return None
+        
+        # Pattern: {brief_name}_{condition_id}_r{round_num}_*
+        pattern = f"{brief_name}_{condition_id}_r{round_num}_*"
+        
+        matching_dirs = list(artifact_base.glob(pattern))
+        
+        if matching_dirs:
+            # Return the most recent one (sorted by name, which includes timestamp)
+            most_recent = sorted(matching_dirs)[-1]
             
-            # Extract C4 model from the result
-            if "error" in result:
-                return self._create_error_model(result["error"])
+            # Verify it has the required files
+            required_files = [
+                "1_context_definition.yaml",
+                "2_container_definition.yaml"
+            ]
             
-            c4_model = extract_c4_model_from_result(result)
-            return c4_model
-            
-        except Exception as e:
-            print(f"    ❌ Error generating C4 model: {str(e)}")
-            return self._create_error_model(str(e))
+            if all((most_recent / f).exists() for f in required_files):
+                return str(most_recent.absolute())
+        
+        return None
     
     def _create_error_model(self, error_message: str) -> Dict[str, Any]:
         """Create a minimal error model structure."""

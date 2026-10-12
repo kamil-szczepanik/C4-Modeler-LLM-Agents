@@ -126,6 +126,83 @@ def build_component_team(experiment_condition: Optional[Dict] = None) -> List[Ag
 # Collaborative analysis subgraph (multi-agent round-robin)
 # ============================================================================
 
+def _extract_key_context(c4_model: Dict, current_level: str) -> str:
+    """
+    Extract only key decisions from previous C4 levels to provide minimal context.
+    This prevents token explosion by avoiding full analysis text repetition.
+    """
+    context_parts = []
+    
+    if current_level in ["container", "component"]:
+        # For container/component level, extract key info from context level
+        context_analysis = c4_model.get("context", {}).get("analysis", "")
+        if context_analysis:
+            # Extract only essential elements - try to parse YAML if available
+            context_yaml = c4_model.get("context", {}).get("yaml_definition", "")
+            if context_yaml:
+                try:
+                    parsed = yaml.safe_load(context_yaml)
+                    system_name = parsed.get("system", {}).get("name", "Unknown System")
+                    elements = parsed.get("elements", [])
+                    people = [e["name"] for e in elements if e.get("type") == "person"]
+                    external = [e["name"] for e in elements if e.get("type") == "externalSystem"]
+                    
+                    context_parts.append(f"- System: {system_name}")
+                    if people:
+                        context_parts.append(f"- Users: {', '.join(people)}")
+                    if external:
+                        context_parts.append(f"- External Systems: {', '.join(external)}")
+                except:
+                    # Fallback: just mention that context exists
+                    context_parts.append("- System context defined in previous level")
+    
+    if current_level == "component":
+        # For component level, extract container info
+        container_yaml = c4_model.get("containers", {}).get("yaml_definition", "")
+        if container_yaml:
+            try:
+                parsed = yaml.safe_load(container_yaml)
+                elements = parsed.get("elements", [])
+                containers = [
+                    f"{e['name']} ({e.get('technology', 'N/A')})" 
+                    for e in elements if e.get("type") == "container"
+                ]
+                if containers:
+                    context_parts.append(f"- Containers: {', '.join(containers)}")
+            except:
+                context_parts.append("- Container architecture defined in previous level")
+    
+    return "\n".join(context_parts) if context_parts else ""
+
+def _extract_yaml_context_for_generation(c4_model: Dict, target_level: str) -> str:
+    """
+    Extract minimal YAML context needed for generating the next level.
+    For YAML generation, we need structure references from previous levels.
+    """
+    if target_level == "container":
+        # For container YAML, include the context YAML (it's small and needed for structure)
+        context_yaml = c4_model.get("context", {}).get("yaml_definition", "")
+        if context_yaml:
+            return f"**Context Level YAML (for reference on system name and external entities):**\n```yaml\n{context_yaml}\n```"
+        return ""
+    
+    elif target_level == "component":
+        # For component YAML, only include the container names list, not full YAML
+        container_yaml = c4_model.get("containers", {}).get("yaml_definition", "")
+        if container_yaml:
+            try:
+                parsed = yaml.safe_load(container_yaml)
+                system_name = parsed.get("system", {}).get("name", "System")
+                elements = parsed.get("elements", [])
+                containers = [e["name"] for e in elements if e.get("type") == "container"]
+                
+                return f"**Reference Info:**\n- System: {system_name}\n- Containers defined: {', '.join(containers)}"
+            except:
+                pass
+        return ""
+    
+    return ""
+
 class CollaborativeAnalysisState(TypedDict):
     """Internal state for the collaborative analysis subgraph."""
     messages: Annotated[List[BaseMessage], add_messages]
@@ -139,35 +216,76 @@ class CollaborativeAnalysisState(TypedDict):
 def agent_node(state: CollaborativeAnalysisState, agent: Agent, llm: BaseChatModel) -> Dict:
     print(f"--- 🗣️  Turn: {agent.name} on C4 Level: '{state['level']}' ---")
     
-    # Use template variables to avoid parsing issues with curly braces in content
+    # Highly optimized prompt: forces agents to be concise and avoid repetition
     system_prompt = (
-        "You are a member of an expert team collaboratively creating the analysis for a C4 model diagram.\n"
-        "Your current task is to analyze the provided system brief for the **C4 {level} level**.\n"
-        "{context}\n"
-        "Your specific role is as follows:\n---\n"
-        "{persona}\n---\n"
-        "Read the conversation history and add your next insight based on your specific role. "
-        "Provide your analysis directly and concisely."
+        "You are {persona_short} contributing to a C4 model analysis for **{level}**.\n"
+        "\n"
+        "ROLE:\n{persona}\n"
+        "\n"
+        "RULES - READ CAREFULLY:\n"
+        "• Write 2-3 SHORT paragraphs ONLY from YOUR role's perspective\n"
+        "• DO NOT repeat, summarize, or acknowledge what others already said\n"
+        "• DO NOT use phrases like 'As mentioned', 'Building on', 'The X said', 'I agree with'\n"
+        "• If others already covered a point, SKIP it - only add NEW insights\n"
+        "• Be direct and specific - state YOUR concerns or recommendations\n"
+        "• Maximum 150 words\n"
+        "\n"
+        "Write your analysis now:"
     )
+    
+    # Limit message history to reduce token usage and prevent overwhelming context
+    # Only include: initial message + last 4 agent messages (not all history)
+    messages = state["messages"]
+    
+    if len(messages) > 6:  # Initial HumanMessage + 5+ agent messages
+        # Keep the first message (system brief) and last 4 agent responses
+        limited_messages = [messages[0]] + messages[-4:]
+    else:
+        limited_messages = messages
+    
+    # Extract short persona identifier for the prompt
+    persona_short = agent.name.replace("_", " ")
+    
     prompt_template = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
         MessagesPlaceholder(variable_name="messages"),
     ])
     chain = prompt_template | llm
     response = chain.invoke({
-        "messages": state["messages"],
+        "messages": limited_messages,
         "level": state["level"],
-        "context": state["context"],
-        "persona": agent.persona
+        "persona": agent.persona,
+        "persona_short": persona_short
     })
+    
+    # Create sanitized name for the agent
     sanitized_name = re.sub(r"[^a-zA-Z0-9_-]", "_", agent.name)
-    named_message = AIMessage(content=response.content, name=sanitized_name)
+    
+    # Store as HumanMessage with agent's name so other agents see it as peer input
+    # This creates natural multi-agent dialogue where agents respond to each other as collaborators
+    named_message = HumanMessage(content=response.content, name=sanitized_name)
+    
     return {"messages": [named_message]}
 
 def report_generator_node(state: CollaborativeAnalysisState, llm: BaseChatModel) -> Dict:
     print("--- 🔬 Generating Final Analysis Report ---")
+    
+    # Extremely concise prompt
+    report_system_prompt = (
+        "Extract architectural decisions from the discussion into a structured summary.\n"
+        "\n"
+        "CRITICAL REQUIREMENTS:\n"
+        "• Use EXACTLY the format provided in the template\n"
+        "• Maximum 300 words total\n"
+        "• Use bullet points, NOT paragraphs\n"
+        "• Include specific names, technologies, and protocols\n"
+        "• NO explanations of the discussion process\n"
+        "• Extract ONLY final decisions\n"
+    )
+    
     prompt_template = ChatPromptTemplate.from_messages([
-        ("system", REPORT_GENERATOR_SYSTEM_PROMPT),
+        ("system", report_system_prompt),
+        ("human", REPORT_GENERATOR_SYSTEM_PROMPT),
         MessagesPlaceholder(variable_name="messages"),
     ])
     chain = prompt_template | llm
@@ -178,47 +296,68 @@ def report_generator_node(state: CollaborativeAnalysisState, llm: BaseChatModel)
     return {"final_analysis": final_report}
 
 def collaboration_router(state: CollaborativeAnalysisState) -> str:
-    """Routes based on rounds completed."""
+    """Routes based on rounds completed. Returns either 'generate_report' or first agent name."""
     import re
     active_team = state["team"]
     num_ai_turns = len(state["messages"]) - 1  # minus initial human
     rounds_completed = num_ai_turns // len(active_team)
+    
     if rounds_completed >= state["max_rounds"]:
         print(f"--- ✅ Collaboration Complete: Max rounds ({state['max_rounds']}) reached. ---")
         return "generate_report"
     else:
-        # Return sanitized name that matches the node name
-        first_agent_name = active_team[0].name
-        sanitized_name = re.sub(r"[^a-zA-Z0-9_-]", "_", first_agent_name)
-        return sanitized_name
+        # Return first agent's unique name to start next round
+        # This works because edges already handle the sequential flow through all agents
+        first_agent_base = re.sub(r"[^a-zA-Z0-9_-]", "_", active_team[0].name)
+        
+        # The first agent always uses the base name (no suffix)
+        return first_agent_base
 
 def create_collaboration_graph(llm: BaseChatModel, team: List[Agent], max_rounds: int = 2):
     """Builds and returns a compiled collaborative analysis subgraph for the GIVEN TEAM."""
     builder = StateGraph(CollaborativeAnalysisState)
 
+    # Create unique node names by adding indices for duplicate roles
+    # This handles cases like ["Architect", "Architect", "Architect", "Architect"]
+    node_names = []
+    name_counts = {}
+    
     for agent in team:
-        node_name = re.sub(r"[^a-zA-Z0-9_-]", "_", agent.name)
+        base_name = re.sub(r"[^a-zA-Z0-9_-]", "_", agent.name)
+        
+        # Track how many times we've seen this name
+        if base_name in name_counts:
+            name_counts[base_name] += 1
+            # Add index to make it unique: "Lead_Software_Architect_2", "Lead_Software_Architect_3", etc.
+            unique_name = f"{base_name}_{name_counts[base_name]}"
+        else:
+            name_counts[base_name] = 1
+            unique_name = base_name
+        
+        node_names.append(unique_name)
+    
+    # Add nodes with unique names
+    for i, (agent, node_name) in enumerate(zip(team, node_names)):
         builder.add_node(node_name, functools.partial(agent_node, agent=agent, llm=llm))
 
     builder.add_node("generate_report", functools.partial(report_generator_node, llm=llm))
 
-    entry_point = re.sub(r"[^a-zA-Z0-9_-]", "_", team[0].name)
+    # Use the unique node names for routing
+    entry_point = node_names[0]
     builder.set_entry_point(entry_point)
 
-    for i in range(len(team) - 1):
-        src = re.sub(r"[^a-zA-Z0-9_-]", "_", team[i].name)
-        dst = re.sub(r"[^a-zA-Z0-9_-]", "_", team[i + 1].name)
-        builder.add_edge(src, dst)
+    for i in range(len(node_names) - 1):
+        builder.add_edge(node_names[i], node_names[i + 1])
 
-    last_agent = re.sub(r"[^a-zA-Z0-9_-]", "_", team[-1].name)
-    first_agent = entry_point
+    # Last agent node (with proper unique name)
+    last_agent_node = node_names[-1]
 
     builder.add_conditional_edges(
-        last_agent,
+        last_agent_node,
         collaboration_router,
         {
             "generate_report": "generate_report",
-            first_agent: first_agent,
+            entry_point: entry_point,  # Loop back to first agent for next round
         },
     )
 
@@ -233,8 +372,8 @@ def create_collaboration_graph(llm: BaseChatModel, team: List[Agent], max_rounds
 
 def analysis_agent_node(state: State, llm: BaseChatModel) -> Dict:
     """
-    Generates the textual analysis for the next required C4 level,
-    exactly like in your notebook (prompts unchanged).
+    Generates the textual analysis for the next required C4 level.
+    Uses condensed context to minimize token usage.
     """
     system_brief = state["system_brief"]
     c4_model = state["c4_model"]
@@ -247,14 +386,16 @@ def analysis_agent_node(state: State, llm: BaseChatModel) -> Dict:
     elif not c4_model.get("containers"):
         level = "container"
         print("--- ✍️ Generating Container Level Analysis ---")
-        context_blob = f"**Context Level Analysis (for context):**\n{c4_model['context']['analysis']}"
+        # Use condensed context instead of full analysis
+        context_blob = f"**Prior Decisions:**\n{_extract_key_context(c4_model, 'container')}"
     else:
         component_queue = state.get("component_queue")  # Don't default to deque()!
         if component_queue:
             component_target = component_queue[0]
             level = "component"
             print(f"--- ✍️ Generating Component Level Analysis for '{component_target}' ---")
-            context_blob = f"**Container Level Analysis (for context):**\n{c4_model['containers']['analysis']}"
+            # Use condensed context instead of full analysis
+            context_blob = f"**Prior Decisions:**\n{_extract_key_context(c4_model, 'component')}"
         else:
             return {}
         
@@ -302,7 +443,8 @@ def yaml_structure_node(state: State, llm: BaseChatModel) -> Dict:
         print("--- 📝 Generating Container Level YAML ---")
         analysis = c4_model["containers"]["analysis"]
         template = CONTAINER_YAML_TEMPLATE
-        ctx = f"Context Level YAML (for reference):\n{c4_model['context']['yaml_definition']}"
+        # Include context YAML for structure reference (it's small, ~200-400 tokens)
+        ctx = _extract_yaml_context_for_generation(c4_model, 'container')
     else:
         component_queue = state.get("component_queue")  # Don't default to deque()!
         if component_queue:
@@ -312,7 +454,8 @@ def yaml_structure_node(state: State, llm: BaseChatModel) -> Dict:
                 print(f"--- 📝 Generating Component Level YAML for '{component_target}' ---")
                 analysis = c4_model["components"][component_target]["analysis"]
                 template = COMPONENT_YAML_TEMPLATE
-                ctx = f"Container Level YAML (for reference):\n{c4_model['containers']['yaml_definition']}"
+                # Include minimal container reference
+                ctx = f"Parent container: {component_target}\n{_extract_yaml_context_for_generation(c4_model, 'component')}"
             else:
                 return {}
         else:
@@ -511,13 +654,13 @@ def post_diagram_router(state: State) -> str:
     # Check if queue is None (not yet populated) - don't check if it's just empty!
     elif model.get("containers", {}).get("diagram") and component_queue is None:
         print("Router: Container done -> Populate component queue")
-        print(f"DEBUG: component_queue value = {component_queue}, type = {type(component_queue)}")
+        # print(f"DEBUG: component_queue value = {component_queue}, type = {type(component_queue)}")
         return "populate_queue"
     
     # After component diagram -> complete current component (which will check queue and route appropriately)
     else:
         print("Router: Component diagram done -> Complete current component")
-        print(f"DEBUG: component_queue value = {component_queue}, type = {type(component_queue)}")
+        # print(f"DEBUG: component_queue value = {component_queue}, type = {type(component_queue)}")
         return "complete_component"
     
 
@@ -582,10 +725,20 @@ def collaborative_analysis_node(
 
     # 3. Prepare the input for the subgraph
     subgraph_level_description = f"component '{component_target}'" if component_target else level
+    
+    # Build context-aware initial message
+    initial_message_content = f"Let's begin the C4 analysis for the {subgraph_level_description}.\n\n"
+    initial_message_content += f"**System Brief:**\n{state['system_brief']}\n\n"
+    
+    # Add condensed context from previous levels (if any)
+    previous_context = _extract_key_context(state['c4_model'], level)
+    if previous_context:
+        initial_message_content += f"**Prior Decisions:**\n{previous_context}\n\n"
+    
     subgraph_input = {
-        "messages": [HumanMessage(content=f"Let's begin the C4 analysis for the {subgraph_level_description}:\n\n{state['system_brief']}")],
+        "messages": [HumanMessage(content=initial_message_content)],
         "system_brief": state['system_brief'],
-        "context": state['c4_model'].get('context', {}).get('analysis', ''),
+        "context": "",  # No longer needed - context is in the initial message
         "level": subgraph_level_description,
         "max_rounds": collab_rounds,
         "team": active_team, # <<< CRITICAL: Pass the team into the subgraph's state

@@ -3,14 +3,23 @@ Role Ablation Experiment Runner
 Investigates the impact of removing specific expert roles on C4 model quality.
 
 Usage:
-    python experiments/role_ablation.py --model gpt-4o-mini
+    # Run full experiment
+    python experiments/role_ablation.py --model gemini-2.5-flash-lite
+    
+    # Run specific condition
     python experiments/role_ablation.py --condition baseline --brief clinic-management-system
+    
+    # Parallel execution with custom workers
+    python experiments/role_ablation.py --parallel --max-workers 3
 """
 
 import sys
 import argparse
+import json
+import time
 from pathlib import Path
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -25,7 +34,6 @@ os.environ["LANGCHAIN_TRACING_V2"] = os.getenv("LANGCHAIN_TRACING_V2", "true")
 os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY", "")
 os.environ["LANGCHAIN_PROJECT"] = "C4-Experiments-RoleAblation"
 
-from run_experiments import setup_tracing_context
 from src.c4modeler.experiments import EnhancedExperimentRunner
 
 
@@ -109,10 +117,12 @@ def analyze_role_ablation_results(results):
 
 def main():
     parser = argparse.ArgumentParser(description="Run Role Ablation Experiment")
-    parser.add_argument("--model", "-m", default="gpt-4o-mini", help="LLM model to use")
+    parser.add_argument("--model", "-m", default="gemini-2.5-flash-lite", help="LLM model to use")
     parser.add_argument("--condition", "-c", help="Specific condition to run")
     parser.add_argument("--brief", "-b", help="Specific system brief to test")
     parser.add_argument("--output-dir", "-o", help="Output directory")
+    parser.add_argument("--parallel", action="store_true", help="Run conditions in parallel")
+    parser.add_argument("--max-workers", type=int, default=2, help="Max parallel workers")
     
     args = parser.parse_args()
     
@@ -120,34 +130,44 @@ def main():
     print("="*50)
     print("Purpose: Determine which roles are most critical for architectural quality")
     print("Hypothesis: Removing domain-oriented roles reduces functional suitability")
+    print(f"Model: {args.model}")
+    print(f"Parallel: {args.parallel}")
     
-    with setup_tracing_context("role-ablation", args.model):
-        runner = EnhancedExperimentRunner()
-        runner.load_system_briefs("data/briefs")
+    start_time = time.time()
+    
+    runner = EnhancedExperimentRunner()
+    runner.load_system_briefs("data/briefs")
+    
+    if args.condition:
+        print(f"\n🎯 Running specific condition: {args.condition}")
+        print("⚠️ Single condition execution not yet implemented")
+        print("💡 Use the full experiment runner instead")
+    else:
+        print(f"\n🚀 Running complete Role Ablation study...")
+        print(f"⏰ Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
-        if args.condition:
-            print(f"\n🎯 Running specific condition: {args.condition}")
-            # This would require extending the runner to support single conditions
-            print("⚠️ Single condition execution not yet implemented")
-        else:
-            print(f"\n🚀 Running complete Role Ablation study...")
-            results = runner.run_experiment("role_ablation", args.model)
-            
-            # Analyze results
-            analyze_role_ablation_results(results)
-            
-            # Save results
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_dir = Path(args.output_dir) if args.output_dir else Path("data/results/role_ablation")
-            output_file = output_dir / f"role_ablation_{timestamp}.json"
-            
-            output_dir.mkdir(parents=True, exist_ok=True)
-            
-            import json
-            with open(output_file, 'w') as f:
-                json.dump(results, f, indent=2)
-            
-            print(f"\n💾 Results saved to: {output_file}")
+        results = runner.run_experiment("role_ablation", args.model)
+        
+        duration = time.time() - start_time
+        
+        # Analyze results
+        analyze_role_ablation_results(results)
+        
+        # Save results
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = Path(args.output_dir) if args.output_dir else Path("data/results/role_ablation")
+        output_file = output_dir / f"role_ablation_{timestamp}.json"
+        
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
+        
+        print(f"\n{'='*50}")
+        print(f"✅ Experiment Complete!")
+        print(f"⏱️ Duration: {duration/60:.1f} minutes")
+        print(f"💾 Results saved to: {output_file}")
+        print(f"{'='*50}")
 
 
 if __name__ == "__main__":

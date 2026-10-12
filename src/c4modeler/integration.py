@@ -19,7 +19,8 @@ def create_experimental_pipeline(
     model_name: str,
     experiment_condition: Dict[str, Any],
     memory_config: Optional[Dict[str, Any]] = None,
-    output_dir: Optional[str] = None
+    output_dir: Optional[str] = None,
+    temperature: float = 0.5
 ) -> Dict[str, Any]:
     """
     Create and run the complete experimental pipeline.
@@ -30,6 +31,7 @@ def create_experimental_pipeline(
         experiment_condition: Configuration for the experimental condition
         memory_config: Optional memory system configuration
         output_dir: Optional output directory for results
+        temperature: LLM temperature for controlling randomness (default 0.5)
     
     Returns:
         Dictionary containing the generated C4 model and metadata
@@ -39,12 +41,14 @@ def create_experimental_pipeline(
     print(f"   Model: {model_name}")
     print(f"   Roles: {experiment_condition.get('roles', [])}")
     print(f"   Memory: {memory_config.get('type', 'none') if memory_config else 'none'}")
+    print(f"   Temperature: {temperature}")
     
     # Create the experimental graph
     app = create_c4_modeler_graph(
         model_name=model_name,
         experiment_condition=experiment_condition,
-        memory_config=memory_config
+        memory_config=memory_config,
+        temperature=temperature
     )
     
     # Run the pipeline

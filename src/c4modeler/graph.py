@@ -35,6 +35,7 @@ def create_c4_modeler_graph(
     collab_rounds: int = 2,
     experiment_condition: Optional[Dict[str, Any]] = None,
     memory_config: Optional[Dict[str, Any]] = None,
+    temperature: float = 0.5,
 ) -> Type[StateGraph]:
     """
     Factory function to build the C4 Modeler workflow with experimental support.
@@ -46,6 +47,7 @@ def create_c4_modeler_graph(
         collab_rounds: Number of collaboration rounds
         experiment_condition: Experimental condition configuration
         memory_config: Memory system configuration
+        temperature: LLM temperature (0.0 = deterministic, 1.0 = creative)
     """
     print(f"--- 🏗️ Building graph with model: '{model_name}' and analysis: '{analysis_method}' ---")
     
@@ -55,7 +57,7 @@ def create_c4_modeler_graph(
     if memory_config:
         print(f"🧠 Memory configuration: {memory_config.get('type', 'none')}")
 
-    llm = get_llm(model_name=model_name)
+    llm = get_llm(model_name=model_name, temperature=temperature)
 
     workflow = StateGraph(State)
 

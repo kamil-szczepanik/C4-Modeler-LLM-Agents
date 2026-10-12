@@ -32,9 +32,14 @@ ModelName = Literal[
     "grok-beta", "grok-3-latest"
 ]
 
-def get_llm(model_name: ModelName, temperature: float = 0.0) -> BaseChatModel:
+def get_llm(model_name: ModelName, temperature: float = 0.5) -> BaseChatModel:
     """
     Instantiates and returns a language model based on a direct mapping.
+    
+    Args:
+        model_name: The name of the model to instantiate
+        temperature: Controls randomness (0.0 = deterministic, 1.0 = maximum randomness)
+                    Default 0.5 provides good balance for architectural discussions
     """
     print(f"--- ⚙️  Instantiating model: {model_name} ---")
     model_class = MODEL_PROVIDER_MAP.get(model_name)
@@ -43,4 +48,15 @@ def get_llm(model_name: ModelName, temperature: float = 0.0) -> BaseChatModel:
             f"Model '{model_name}' is not available. "
             f"Check if its provider library (e.g., langchain_xai) is installed."
         )
-    return model_class(model=model_name, temperature=temperature)
+    
+    # Configure model with enhanced retry parameters for better reliability
+    # Google Gemini models benefit from more aggressive retry settings due to rate limits
+    if model_class == ChatGoogleGenerativeAI:
+        return model_class(
+            model=model_name, 
+            temperature=temperature,
+            max_retries=5,  # Increase from default 2 to 5 retries
+            timeout=120.0,  # 2 minute timeout per request
+        )
+    else:
+        return model_class(model=model_name, temperature=temperature)
