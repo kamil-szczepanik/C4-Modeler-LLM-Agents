@@ -91,6 +91,14 @@ def java_works(java: str = "java") -> bool:
     return _JAVA_OK[java]
 
 
+JAVA_CANDIDATES = ("java", "/opt/homebrew/opt/openjdk/bin/java", "/usr/local/opt/openjdk/bin/java")
+
+
+def find_java() -> str:
+    """First Java command that actually runs (Homebrew's keg-only openjdk included); "java" if none."""
+    return next((j for j in JAVA_CANDIDATES if java_works(j)), "java")
+
+
 def compile_plantuml(code: str, jar: Path, java: str = "java", timeout: int = 120) -> Tuple[Optional[bool], str]:
     """(True/False, log) after compiling with PlantUML; (None, reason) if it cannot be run."""
     if not java_works(java):

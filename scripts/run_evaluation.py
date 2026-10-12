@@ -28,7 +28,7 @@ sys.path.insert(0, str(REPO / "src"))
 from masc4.conditions import load_conditions  # noqa: E402
 from masc4.judge import ISO_CHARACTERISTICS, JudgeError, judge_run, load_scenarios  # noqa: E402
 from masc4.llm import CallLog, GeminiClient, LLMError, load_api_key  # noqa: E402
-from masc4.structural import evaluate_structure  # noqa: E402
+from masc4.structural import evaluate_structure, find_java  # noqa: E402
 
 
 def completed_runs(results: Path):
@@ -47,10 +47,10 @@ def needs_judge(run_dir: Path, model: str) -> bool:
 
 
 def evaluate_run(run_dir: Path, meta: dict, briefs: dict, scenarios_dir: Path, jar: Path, judge_model, api_key,
-                 force_structural: bool) -> str:
+                 force_structural: bool, java: str = "java") -> str:
     c4 = json.loads((run_dir / "c4_model.json").read_text(encoding="utf-8"))
     if force_structural or not (run_dir / "structural.json").exists():
-        (run_dir / "structural.json").write_text(json.dumps(evaluate_structure(c4, jar), indent=1), encoding="utf-8")
+        (run_dir / "structural.json").write_text(json.dumps(evaluate_structure(c4, jar, java), indent=1), encoding="utf-8")
     if not judge_model or not needs_judge(run_dir, judge_model):
         return "ok"
     log = CallLog(run_dir / f"judge_calls_{judge_model}.jsonl")
@@ -122,13 +122,15 @@ def main() -> None:
         sys.exit("give --judge-model or --no-judge")
     api_key = load_api_key(Path(args.env_file) if args.env_file else None) if judge_model else None
 
+    java = find_java()
+    print(f"PlantUML compilation with: {java}")
     runs = [(d, m) for d, m in completed_runs(results) if m["status"] == "completed"]
     todo = [(d, m) for d, m in runs if not args.sample_rep or m["rep"] == args.sample_rep]
     print(f"{len(runs)} completed runs; evaluating {len(todo)}" + (f" with judge {judge_model}" if judge_model else ""))
     counts, lock = {}, threading.Lock()
     with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
         futures = {pool.submit(evaluate_run, d, m, briefs, Path(args.scenarios_dir), Path(args.jar), judge_model,
-                               api_key, args.force_structural): d for d, m in todo}
+                               api_key, args.force_structural, java): d for d, m in todo}
         for i, fut in enumerate(as_completed(futures), 1):
             status = fut.result()
             with lock:
