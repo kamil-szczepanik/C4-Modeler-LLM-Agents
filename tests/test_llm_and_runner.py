@@ -97,5 +97,5 @@ def test_run_plan_is_resumable_and_records_failures(tmp_path):
 def test_plan_is_randomized_but_reproducible():
     _, conds = load_conditions(ROOT / "configs/conditions_v2.yaml")
     a = plan_runs(conds, ["b1", "b2"], reps=3, seed=7)
-    assert a == plan_runs(conds, ["b1", "b2"], reps=3, seed=7) and len(a) == 14 * 2 * 3
+    assert a == plan_runs(conds, ["b1", "b2"], reps=3, seed=7) and len(a) == 11 * 2 * 3
     assert a != sorted(a, key=lambda s: (s.condition_id, s.brief_id, s.rep))

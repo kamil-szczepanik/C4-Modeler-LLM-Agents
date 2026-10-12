@@ -18,12 +18,9 @@ EXPECTED_TEAMS = {
     "C5_single_architect": ["software_architect"],
     "C6_four_architects": ["software_architect"] * 4,
     "C7_architect_first": ["software_architect", "devops", "security", "product_owner"],
-    "C8_devops_first": ["devops", "security", "product_owner", "software_architect"],
     "C9_security_first": ["security", "product_owner", "software_architect", "devops"],
     "C10_generic_team": ["generic_engineer"] * 4,
-    "C11_mixed_team": ["product_owner", "software_architect", "generic_engineer", "generic_engineer"],
     "C12_glossary_memory": ["product_owner", "software_architect", "devops", "security"],
-    "C13_reduced_diversity": ["software_architect", "software_architect", "product_owner", "security"],
 }
 
 
@@ -40,7 +37,7 @@ def test_order_conditions_are_rotations_of_the_baseline():
     _, conditions = load_conditions(CONFIG)
     base = {c.id: c.team_keys for c in conditions}["C0_baseline"]
     rotations = [base[i:] + base[:i] for i in range(len(base))]
-    for cid in ("C7_architect_first", "C8_devops_first", "C9_security_first"):
+    for cid in ("C7_architect_first", "C9_security_first"):
         assert {c.id: c.team_keys for c in conditions}[cid] in rotations
 
 
