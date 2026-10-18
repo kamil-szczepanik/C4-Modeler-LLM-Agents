@@ -1,4 +1,4 @@
-"""Show the progress of a generation/evaluation batch.
+"""Show the progress of a generation batch and of its evaluation (structural metrics and each judge).
 
   .venv/bin/python scripts/progress.py results/smoke            # one snapshot
   .venv/bin/python scripts/progress.py results/v2 --watch 15    # refresh every 15 s (Ctrl+C to stop)
@@ -34,6 +34,48 @@ def fmt_duration(seconds: float) -> str:
     return f"{seconds // 3600}h{seconds % 3600 // 60:02d}m" if seconds >= 3600 else f"{seconds // 60}m{seconds % 60:02d}s"
 
 
+def cost_of(calls) -> float:
+    total = 0.0
+    for c in calls:
+        price_in, price_out = PRICES.get(c["model"], (0.0, 0.0))
+        total += (c["input_tokens"] * price_in + (c["output_tokens"] + c["thought_tokens"]) * price_out) / 1e6
+    return total
+
+
+def judge_progress(results: Path) -> list:
+    """Per judge model: runs fully judged, judged with errors, in progress; plus structural metrics."""
+    completed_runs = [p.parent for p in results.glob("*/*/rep*/run.json")
+                      if (json.loads(p.read_text(encoding="utf-8")) or {}).get("status") == "completed"]
+    if not completed_runs:
+        return []
+    models = sorted({p.stem[len("judge_calls_"):] for p in results.glob("*/*/rep*/judge_calls_*.jsonl")} |
+                    {p.stem[len("judge_"):] for p in results.glob("*/*/rep*/judge_*.json")})
+    lines = [f"evaluation: structural metrics {sum((d / 'structural.json').exists() for d in completed_runs)}"
+             f"/{len(completed_runs)} completed runs"]
+    for model in models:
+        done = errors = in_progress = 0
+        calls = []
+        for d in completed_runs:
+            calls += read_jsonl(d / f"judge_calls_{model}.jsonl")
+            path = d / f"judge_{model}.json"
+            if path.exists():
+                try:
+                    j = json.loads(path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    continue
+                if "error" in j or j.get("errors"):
+                    errors += 1
+                else:
+                    done += 1
+            elif (d / f"judge_calls_{model}.jsonl").exists():
+                in_progress += 1
+        retries = sum(c["attempts"] - 1 for c in calls)
+        lines.append(f"  judge {model}: {done} done, {in_progress} in progress, {errors} with errors "
+                     f"(of {len(completed_runs)} completed runs)  |  {len(calls)} calls, {retries} retries, "
+                     f"cost ${cost_of(calls):.2f}")
+    return lines
+
+
 def snapshot(results: Path, planned: int = 0) -> str:
     status = {"completed": 0, "failed": 0, "running": 0}
     running, durations, calls = [], [], []
@@ -46,8 +88,6 @@ def snapshot(results: Path, planned: int = 0) -> str:
         status[meta["status"]] = status.get(meta["status"], 0) + 1
         run_calls = read_jsonl(run_dir / "llm_calls.jsonl")
         calls += run_calls
-        for judge_log in run_dir.glob("judge_calls_*.jsonl"):
-            calls += read_jsonl(judge_log)
         started = datetime.fromisoformat(meta["started"]).timestamp()
         if meta["status"] == "running":
             now = run_calls[-1]["purpose"].rsplit("|attempt", 1)[0] if run_calls else "starting"
@@ -56,10 +96,7 @@ def snapshot(results: Path, planned: int = 0) -> str:
         elif meta.get("finished"):
             durations.append(datetime.fromisoformat(meta["finished"]).timestamp() - started)
 
-    cost = 0.0
-    for c in calls:
-        price_in, price_out = PRICES.get(c["model"], (0.0, 0.0))
-        cost += (c["input_tokens"] * price_in + (c["output_tokens"] + c["thought_tokens"]) * price_out) / 1e6
+    cost = cost_of(calls)
     done = status["completed"] + status["failed"]
     lines = [f"{results}  (updated {time.strftime('%H:%M:%S')})",
              f"runs: {status['completed']} completed, {status['failed']} failed, {status['running']} running"
@@ -69,13 +106,14 @@ def snapshot(results: Path, planned: int = 0) -> str:
         left = (planned - done) * avg / max(1, status["running"])
         lines.append(f"average run {fmt_duration(avg)}; estimated time left ~{fmt_duration(left)}")
     lines += running
-    lines.append(f"API calls: {len(calls)} ({sum(c['attempts'] - 1 for c in calls)} retries)  |  tokens in "
+    lines.append(f"generation API calls: {len(calls)} ({sum(c['attempts'] - 1 for c in calls)} retries)  |  tokens in "
                  f"{sum(c['input_tokens'] for c in calls) / 1e3:.1f}k, out {sum(c['output_tokens'] for c in calls) / 1e3:.1f}k, "
                  f"thinking {sum(c['thought_tokens'] for c in calls) / 1e3:.1f}k  |  estimated cost ${cost:.2f}")
     failed = [p.parent for p in results.glob("*/*/rep*/run.json")
               if json.loads(p.read_text(encoding="utf-8")).get("status") == "failed"]
     for f in failed[:5]:
         lines.append(f"  failed   {f.relative_to(results)}: {json.loads((f / 'run.json').read_text())['error'][:120]}")
+    lines += judge_progress(results)
     return "\n".join(lines)
 
 
