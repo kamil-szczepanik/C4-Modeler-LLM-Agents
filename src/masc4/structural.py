@@ -9,9 +9,10 @@ Metrics
 - yaml_validity: share of YAML definitions with the structure required for their level
 - abstraction_adherence: share of diagrams passing the v1 regular-expression rules
 - compilation: share of diagrams that PlantUML compiles (None if Java is unavailable)
-- reference_validity: share of relationships whose source and destination are defined
-  in the same YAML definition (elements, the system at L1/L2, the parent container at
-  L3), pooled over all diagrams of the run; c4_sc = 5 * reference_validity
+- reference_validity: share of relationships whose source and destination resolve along
+  the C4 scope chain (same diagram, then the Container and Context levels), pooled over
+  all diagrams of the run; c4_sc = 5 * reference_validity; strict_score counts only
+  endpoints defined in the same diagram
 - cross_level: L1->L2 agreement of people and external systems (Jaccard) and the share
   of L3 diagrams whose parent container and non-component references exist at L2
 - size: numbers of elements and relationships per level
@@ -168,26 +169,47 @@ def _defined_names(data: dict, level: str) -> set:
 
 
 def reference_validity(c4: dict) -> Dict:
-    per_level = {"context": [0, 0], "container": [0, 0], "component": [0, 0]}
-    invalid = []
+    """Share of relationships whose endpoints resolve along the C4 scope chain.
+
+    An endpoint resolves if it is defined in the same YAML definition or, for Container
+    diagrams, at the Context level and, for Component diagrams, at the Container or Context
+    level (C4 component diagrams legitimately show neighbouring containers and actors).
+    `strict_score` counts only endpoints defined in the same YAML; references that resolve
+    only through a higher level are reported as cross_level_references, and endpoints that
+    resolve nowhere as dangling.
+    """
+    ctx = parse_yaml_definition((c4.get("context") or {}).get("yaml_definition", ""), "context")
+    cont = parse_yaml_definition((c4.get("containers") or {}).get("yaml_definition", ""), "container")
+    l1 = _defined_names(ctx, "context") if ctx else set()
+    l2 = _defined_names(cont, "container") if cont else set()
+    counts = {lvl: {"chain": 0, "strict": 0, "total": 0} for lvl in ("context", "container", "component")}
+    dangling = []
     for lvl, name, art in diagrams_of(c4):
         data = parse_yaml_definition(art.get("yaml_definition", ""), lvl)
         if data is None:
             continue
-        defined = _defined_names(data, lvl)
+        local = _defined_names(data, lvl)
+        chain = local | (l1 if lvl in ("container", "component") else set()) | (l2 if lvl == "component" else set())
         for rel in data.get("relationships") or []:
             if not isinstance(rel, dict):
                 continue
-            per_level[lvl][1] += 1
-            if rel.get("source") in defined and rel.get("destination") in defined:
-                per_level[lvl][0] += 1
+            ends = (rel.get("source"), rel.get("destination"))
+            c = counts[lvl]
+            c["total"] += 1
+            c["strict"] += all(e in local for e in ends)
+            if all(e in chain for e in ends):
+                c["chain"] += 1
             else:
-                invalid.append(f"{lvl}:{name}: {rel.get('source')} -> {rel.get('destination')}")
-    valid = sum(v for v, _ in per_level.values())
-    total = sum(t for _, t in per_level.values())
-    score = _ratio(valid, total)
-    return {"score": score, "c4_sc": None if score is None else 5 * score, "valid": valid, "total": total,
-            "per_level": {k: _ratio(v, t) for k, (v, t) in per_level.items()}, "invalid": invalid[:50]}
+                dangling.append(f"{lvl}:{name}: {ends[0]} -> {ends[1]}")
+    total = sum(c["total"] for c in counts.values())
+    chain_ok = sum(c["chain"] for c in counts.values())
+    strict_ok = sum(c["strict"] for c in counts.values())
+    score = _ratio(chain_ok, total)
+    return {"score": score, "c4_sc": None if score is None else 5 * score, "strict_score": _ratio(strict_ok, total),
+            "valid": chain_ok, "total": total, "cross_level_references": chain_ok - strict_ok,
+            "per_level": {k: _ratio(c["chain"], c["total"]) for k, c in counts.items()},
+            "per_level_strict": {k: _ratio(c["strict"], c["total"]) for k, c in counts.items()},
+            "dangling": dangling[:50]}
 
 
 def cross_level(c4: dict) -> Dict:

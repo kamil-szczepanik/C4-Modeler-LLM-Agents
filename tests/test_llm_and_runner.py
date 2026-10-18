@@ -91,7 +91,10 @@ def test_run_plan_is_resumable_and_records_failures(tmp_path):
     assert meta["status"] == "completed" and meta["memory"] == "glossary" and meta["n_containers"] == 2
     assert meta["team"] == ["Product Owner", "Software Architect", "DevOps Specialist", "Security Specialist"]
     assert meta["model_versions_served"] == ["fake-model"] and meta["prompt_hashes"]
-    assert list((RunSpec("C12_glossary_memory", "b1", 1).directory(tmp_path)).glob("llm_calls.failed-*.jsonl"))
+    run_dir = RunSpec("C12_glossary_memory", "b1", 1).directory(tmp_path)
+    archived = list(run_dir.glob("previous_attempts/*/run.json"))      # the failed attempt is kept aside
+    assert len(archived) == 1 and json.loads(archived[0].read_text())["status"] == "failed"
+    assert (run_dir / "llm_calls.jsonl").exists() and not list(run_dir.glob("llm_calls.failed-*"))
 
 
 def test_plan_is_randomized_but_reproducible():
@@ -130,3 +133,54 @@ def test_batch_stops_when_the_daily_quota_is_exhausted(tmp_path):
     assert counts.get("quota") == 1 and counts["completed"] == 0
     assert any("stopped" in m for m in messages)
     assert len(list(tmp_path.glob("*/*/rep*/run.json"))) == 1   # no further runs were started
+
+
+
+def test_models_are_never_mixed_in_one_results_directory(tmp_path):
+    settings, conds = load_conditions(ROOT / "configs/conditions_v2.yaml")
+    conds = {c.id: c for c in conds if c.id == "C0_baseline"}
+    plan = plan_runs(list(conds.values()), ["b1"], reps=1, seed=1)
+    working = lambda model, log: make_fake_llm(call_log=log)  # noqa: E731
+    run_plan(plan, conds, {"b1": "title: T\n"}, settings, working, tmp_path, ROOT, log=lambda m: None)
+    other = type(settings)(model="gemini-3.1-flash-lite", temperature=0.5, rounds=2)
+    with pytest.raises(RuntimeError, match="already contains runs"):
+        run_plan(plan, conds, {"b1": "title: T\n"}, other, working, tmp_path, ROOT, log=lambda m: None)
+
+
+def test_batch_lock_blocks_a_second_process_but_not_a_stale_lock(tmp_path):
+    from masc4.fsutil import BatchLock
+    with BatchLock(tmp_path):
+        (tmp_path / ".batch.lock").write_text("1 now")         # pid 1 (launchd/init) is always alive
+        with pytest.raises(RuntimeError, match="already working"):
+            BatchLock(tmp_path).__enter__()
+    (tmp_path / ".batch.lock").write_text("999999 old")         # a process that does not exist
+    with BatchLock(tmp_path):
+        pass
+    assert not (tmp_path / ".batch.lock").exists()
+
+
+def test_ctrl_c_stops_new_runs_and_keeps_completed_ones(tmp_path, monkeypatch):
+    import masc4.runner as runner
+    settings, conds = load_conditions(ROOT / "configs/conditions_v2.yaml")
+    conds = {c.id: c for c in conds}
+    plan = plan_runs(list(conds.values()), ["b1"], reps=1, seed=5)
+    real = runner.as_completed
+    state = {"calls": 0}
+
+    def interrupting(fs):
+        state["calls"] += 1
+        if state["calls"] == 2:              # user presses Ctrl+C after the first finished run
+            raise KeyboardInterrupt
+        return real(fs)
+
+    monkeypatch.setattr(runner, "as_completed", interrupting)
+    messages = []
+    working = lambda model, log: make_fake_llm(call_log=log)  # noqa: E731
+    counts = run_plan(plan, conds, {"b1": "title: T\n"}, settings, working, tmp_path, ROOT, workers=1,
+                      log=messages.append)
+    started = len(list(tmp_path.glob("*/*/rep*/run.json")))
+    assert counts["completed"] == started and started < len(plan)
+    assert any("Interrupted" in m for m in messages) and any("Stopped by the user" in m for m in messages)
+    monkeypatch.setattr(runner, "as_completed", real)     # resuming finishes only the remaining runs
+    counts = run_plan(plan, conds, {"b1": "title: T\n"}, settings, working, tmp_path, ROOT, log=lambda m: None)
+    assert counts["completed"] == len(plan) - started

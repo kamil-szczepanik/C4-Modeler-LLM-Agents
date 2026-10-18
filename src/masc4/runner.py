@@ -19,6 +19,7 @@ from typing import Callable, Dict, List, Optional
 
 from . import prompts as P
 from .conditions import Condition, GenerationSettings
+from .fsutil import BatchLock, write_json_atomic
 from .llm import CallLog, LLMClient
 from .pipeline import C4Generator, PipelineError, RunRecord, save_record
 
@@ -49,24 +50,39 @@ def code_version(repo: Path) -> Dict[str, object]:
     return {"commit": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain", "--", "src", "configs"))}
 
 
-def is_completed(run_dir: Path) -> bool:
-    meta = run_dir / "run.json"
-    if not meta.exists():
-        return False
+def read_meta(run_dir: Path) -> Optional[dict]:
     try:
-        return json.loads(meta.read_text(encoding="utf-8")).get("status") == "completed"
-    except json.JSONDecodeError:
-        return False
+        return json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+def is_completed(run_dir: Path) -> bool:
+    meta = read_meta(run_dir)
+    return bool(meta) and meta.get("status") == "completed"
+
+
+def archive_previous_attempt(run_dir: Path) -> None:
+    """Move files of an unfinished earlier attempt aside, so attempts are never mixed (kept for auditing)."""
+    leftovers = [p for p in run_dir.iterdir() if p.name != "previous_attempts"]
+    if not leftovers:
+        return
+    target = run_dir / "previous_attempts" / time.strftime("%Y%m%d-%H%M%S")
+    suffix = 1
+    while target.exists():
+        target = target.with_name(f"{target.name}-{suffix}")
+        suffix += 1
+    target.mkdir(parents=True)
+    for p in leftovers:
+        p.rename(target / p.name)
 
 
 def execute_run(spec: RunSpec, condition: Condition, brief_text: str, settings: GenerationSettings,
                 make_llm: Callable[[str, CallLog], LLMClient], out_root: Path, code: Dict[str, object]) -> str:
     run_dir = spec.directory(out_root)
     run_dir.mkdir(parents=True, exist_ok=True)
-    calls_path = run_dir / "llm_calls.jsonl"
-    if calls_path.exists():  # previous failed attempt: keep its log for auditing
-        calls_path.rename(run_dir / f"llm_calls.failed-{int(time.time())}.jsonl")
-    call_log = CallLog(calls_path)
+    archive_previous_attempt(run_dir)
+    call_log = CallLog(run_dir / "llm_calls.jsonl")
     llm = make_llm(settings.model, call_log)
     meta = {
         "condition": condition.id, "brief": spec.brief_id, "rep": spec.rep,
@@ -75,7 +91,7 @@ def execute_run(spec: RunSpec, condition: Condition, brief_text: str, settings: 
         "rounds": settings.rounds, "code": code, "prompt_hashes": P.prompt_hashes(),
         "started": time.strftime("%Y-%m-%dT%H:%M:%S"), "status": "running",
     }
-    (run_dir / "run.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    write_json_atomic(run_dir / "run.json", meta)
     record = RunRecord()
     try:
         C4Generator(llm, condition, temperature=settings.temperature, rounds=settings.rounds).generate(brief_text, record)
@@ -93,7 +109,7 @@ def execute_run(spec: RunSpec, condition: Condition, brief_text: str, settings: 
         "n_containers": len(record.c4_model.get("components") or {}),
         "tokens": {k: sum(r[k] for r in call_log.records) for k in ("input_tokens", "output_tokens", "thought_tokens")},
     })
-    (run_dir / "run.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    write_json_atomic(run_dir / "run.json", meta)
     if meta["status"] == "failed" and "daily quota exhausted" in meta.get("error", ""):
         return "quota"
     return meta["status"]
@@ -102,7 +118,17 @@ def execute_run(spec: RunSpec, condition: Condition, brief_text: str, settings: 
 def run_plan(plan: List[RunSpec], conditions: Dict[str, Condition], briefs: Dict[str, str],
              settings: GenerationSettings, make_llm: Callable[[str, CallLog], LLMClient], out_root: Path,
              repo: Path, workers: int = 1, log: Callable[[str], None] = print) -> Dict[str, int]:
+    with BatchLock(out_root):
+        return _run_plan_locked(plan, conditions, briefs, settings, make_llm, out_root, repo, workers, log)
+
+
+def _run_plan_locked(plan, conditions, briefs, settings, make_llm, out_root, repo, workers, log) -> Dict[str, int]:
     code = code_version(repo)
+    other_models = sorted({m["model_requested"] for s in plan for m in [read_meta(s.directory(out_root))]
+                           if m and m.get("model_requested") != settings.model})
+    if other_models:
+        raise RuntimeError(f"{out_root} already contains runs of {other_models}; use a different --out for "
+                           f"{settings.model} so that models are never mixed")
     todo = [s for s in plan if not is_completed(s.directory(out_root))]
     log(f"{len(plan)} runs planned, {len(plan) - len(todo)} already completed, {len(todo)} to do "
         f"(code {str(code['commit'])[:8]}{' DIRTY' if code['dirty'] else ''})")
@@ -119,15 +145,35 @@ def run_plan(plan: List[RunSpec], conditions: Dict[str, Condition], briefs: Dict
             stop.set()
         return status
 
+    interrupted = False
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         futures = {pool.submit(guarded, s): s for s in todo}
-        for i, fut in enumerate(as_completed(futures), 1):
+        pending = set(futures)
+        while pending:
+            try:
+                fut = next(as_completed(pending))
+            except KeyboardInterrupt:
+                if interrupted:
+                    raise
+                interrupted = True
+                stop.set()
+                for f in pending:
+                    f.cancel()
+                log("Interrupted: no new runs will start; waiting for the runs in progress to finish "
+                    "(press Ctrl+C again to abandon them - they will simply be repeated next time).")
+                continue
+            pending.discard(fut)
+            if fut.cancelled():
+                continue
             spec, status = futures[fut], fut.result()
             with lock:
                 counts[status] = counts.get(status, 0) + 1
             if status != "skipped":
-                log(f"[{i}/{len(todo)}] {spec.condition_id} {spec.brief_id} rep{spec.rep:02d}: {status}")
-    if stop.is_set():
+                done = sum(v for k, v in counts.items() if k != "skipped")
+                log(f"[{done}/{len(todo)}] {spec.condition_id} {spec.brief_id} rep{spec.rep:02d}: {status}")
+    if interrupted:
+        log("Stopped by the user. Run the same command again to continue; completed runs are kept.")
+    elif stop.is_set():
         log(f"Daily API quota exhausted: stopped ({counts.get('skipped', 0)} runs not started). Run the same "
             "command again after the quota resets; only unfinished runs are repeated.")
     return counts

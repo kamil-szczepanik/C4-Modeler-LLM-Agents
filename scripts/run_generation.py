@@ -19,11 +19,13 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 from masc4.conditions import load_conditions  # noqa: E402
+from masc4.signals import install_stop_handlers  # noqa: E402
 from masc4.llm import GeminiClient, load_api_key  # noqa: E402
 from masc4.runner import plan_runs, run_plan  # noqa: E402
 
 
 def main() -> None:
+    install_stop_handlers()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config", default=str(REPO / "configs/conditions_v2.yaml"))
     ap.add_argument("--briefs-dir", default=str(REPO / "data/briefs"))

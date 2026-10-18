@@ -27,7 +27,9 @@ sys.path.insert(0, str(REPO / "src"))
 
 from masc4.conditions import load_conditions  # noqa: E402
 from masc4.judge import ISO_CHARACTERISTICS, JudgeError, judge_run, load_scenarios  # noqa: E402
+from masc4.signals import install_stop_handlers  # noqa: E402
 from masc4.llm import CallLog, GeminiClient, LLMError, load_api_key  # noqa: E402
+from masc4.fsutil import BatchLock, write_json_atomic  # noqa: E402
 from masc4.structural import evaluate_structure, find_java  # noqa: E402
 
 
@@ -42,8 +44,10 @@ def judge_file(run_dir: Path, model: str) -> Path:
 
 
 def load_judge(run_dir: Path, model: str):
-    path = judge_file(run_dir, model)
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+    try:
+        return json.loads(judge_file(run_dir, model).read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
 
 
 def needs_judge(run_dir: Path, model: str) -> bool:
@@ -55,7 +59,7 @@ def evaluate_run(run_dir: Path, meta: dict, briefs: dict, scenarios_dir: Path, j
                  force_structural: bool, java: str = "java") -> str:
     c4 = json.loads((run_dir / "c4_model.json").read_text(encoding="utf-8"))
     if force_structural or not (run_dir / "structural.json").exists():
-        (run_dir / "structural.json").write_text(json.dumps(evaluate_structure(c4, jar, java), indent=1), encoding="utf-8")
+        write_json_atomic(run_dir / "structural.json", evaluate_structure(c4, jar, java))
     if not judge_model or not needs_judge(run_dir, judge_model):
         return "ok"
     log = CallLog(run_dir / f"judge_calls_{judge_model}.jsonl")
@@ -67,7 +71,7 @@ def evaluate_run(run_dir: Path, meta: dict, briefs: dict, scenarios_dir: Path, j
         status = f"judge error: {sorted(result['errors'])}" if result.get("errors") else "ok"
     except (JudgeError, LLMError, FileNotFoundError, KeyError) as err:
         result, status = {"model": judge_model, "error": f"{type(err).__name__}: {err}"}, "judge error"
-    judge_file(run_dir, judge_model).write_text(json.dumps(result, indent=1, ensure_ascii=False), encoding="utf-8")
+    write_json_atomic(judge_file(run_dir, judge_model), result)
     return status
 
 
@@ -84,6 +88,7 @@ def row_for(run_dir: Path, meta: dict, studies: dict) -> dict:
         row.update({"completeness": s["completeness"]["score"], "yaml_validity": s["yaml_validity"]["score"],
                     "abstraction_adherence": s["abstraction_adherence"]["score"],
                     "compilation": s["compilation"]["score"], "reference_validity": rv["score"], "c4_sc": rv["c4_sc"],
+                    "reference_validity_strict": rv["strict_score"], "cross_level_references": rv["cross_level_references"],
                     **{f"reference_validity_{k}": v for k, v in rv["per_level"].items()},
                     "l1_l2_jaccard": s["cross_level"]["l1_l2_jaccard"],
                     "l2_l3_consistency": s["cross_level"]["l2_l3_consistency"],
@@ -106,6 +111,7 @@ def row_for(run_dir: Path, meta: dict, studies: dict) -> dict:
 
 
 def main() -> None:
+    install_stop_handlers()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--results", required=True)
     ap.add_argument("--config", default=str(REPO / "configs/conditions_v2.yaml"))
@@ -136,15 +142,22 @@ def main() -> None:
     todo = [(d, m) for d, m in runs if not args.sample_rep or m["rep"] == args.sample_rep]
     print(f"{len(runs)} completed runs; evaluating {len(todo)}" + (f" with judge {judge_model}" if judge_model else ""))
     counts, lock = {}, threading.Lock()
-    with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
+    with BatchLock(results, ".evaluation.lock"), ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
         futures = {pool.submit(evaluate_run, d, m, briefs, Path(args.scenarios_dir), Path(args.jar), judge_model,
                                api_key, args.force_structural, java): d for d, m in todo}
-        for i, fut in enumerate(as_completed(futures), 1):
-            status = fut.result()
-            with lock:
-                counts[status] = counts.get(status, 0) + 1
-            if status != "ok":
-                print(f"  {futures[fut].relative_to(results)}: {status}")
+        try:
+            for fut in as_completed(futures):
+                status = fut.result()
+                with lock:
+                    counts[status] = counts.get(status, 0) + 1
+                if status != "ok":
+                    print(f"  {futures[fut].relative_to(results)}: {status}")
+        except KeyboardInterrupt:
+            for f in futures:
+                f.cancel()
+            print("Interrupted: waiting for evaluations in progress; finished results are kept. "
+                  "Run the same command again to continue.")
+            raise
     print("evaluation:", counts)
 
     if args.csv:

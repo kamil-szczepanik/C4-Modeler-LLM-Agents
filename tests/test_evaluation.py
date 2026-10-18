@@ -56,7 +56,19 @@ def test_missing_component_diagram_and_dangling_reference_are_counted():
     assert comp["score"] == pytest.approx(9 / 12) and "component 'Database':diagram" in comp["missing"]
     dangling = CONTAINER_YAML.replace('destination: "Database"', 'destination: "Cache"')
     rv = reference_validity(model(container=dangling))
-    assert rv["valid"] == rv["total"] - 1 and any("Cache" in i for i in rv["invalid"])
+    assert rv["valid"] == rv["total"] - 1 and any("Cache" in i for i in rv["dangling"])
+
+
+def test_reference_to_a_container_from_a_component_diagram_is_valid_but_not_strict():
+    c4 = model()
+    c4["components"]["Web App"]["yaml_definition"] += (
+        '  - source: "Web App Service"\n    destination: "Database"\n    description: "Reads"\n')
+    rv = reference_validity(c4)
+    assert rv["score"] == 1.0 and rv["cross_level_references"] == 1 and rv["strict_score"] == pytest.approx(5 / 6)
+    c4["components"]["Web App"]["yaml_definition"] += (
+        '  - source: "Web App Service"\n    destination: "Payroll Service"\n    description: "x"\n')
+    rv = reference_validity(c4)
+    assert rv["dangling"] == ["component:Web App: Web App Service -> Payroll Service"]
 
 
 def test_no_relationships_gives_none_not_a_perfect_score():
