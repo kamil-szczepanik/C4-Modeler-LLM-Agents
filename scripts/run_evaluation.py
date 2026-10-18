@@ -145,7 +145,8 @@ def main() -> None:
         todo = todo[:args.limit]
     print(f"{len(runs)} completed runs; evaluating {len(todo)}" + (f" with judge {judge_model}" if judge_model else ""))
     counts, lock = {}, threading.Lock()
-    with BatchLock(results, ".evaluation.lock"), ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
+    lock_name = f".evaluation-{judge_model or 'structural'}.lock"   # different judges may run side by side
+    with BatchLock(results, lock_name), ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
         futures = {pool.submit(evaluate_run, d, m, briefs, Path(args.scenarios_dir), Path(args.jar), judge_model,
                                api_key, args.force_structural, java): d for d, m in todo}
         try:

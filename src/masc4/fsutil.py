@@ -42,7 +42,11 @@ class BatchLock:
                 raise RuntimeError(f"another process (pid {pid}) is already working on {self.path.parent}; "
                                    f"wait for it or stop it first")
             self.path.unlink()  # stale lock of a process that no longer exists
-        fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        try:
+            fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:  # another process created the lock at the same moment
+            raise RuntimeError(f"another process is already working on {self.path.parent}; "
+                               f"wait for it or stop it first") from None
         os.write(fd, f"{os.getpid()} {time.strftime('%Y-%m-%dT%H:%M:%S')}\n".encode())
         os.close(fd)
         return self
