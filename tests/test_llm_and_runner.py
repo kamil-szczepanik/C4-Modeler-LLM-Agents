@@ -128,5 +128,5 @@ def test_batch_stops_when_the_daily_quota_is_exhausted(tmp_path):
     counts = run_plan(plan, conds, {"b1": "title: T\n"}, settings, quota_llm, tmp_path, ROOT, workers=1,
                       log=messages.append)
     assert counts.get("quota") == 1 and counts["completed"] == 0
-    assert any("stopping" in m for m in messages)
+    assert any("stopped" in m for m in messages)
     assert len(list(tmp_path.glob("*/*/rep*/run.json"))) == 1   # no further runs were started
