@@ -110,3 +110,23 @@ def test_daily_quota_is_not_retried():
     with pytest.raises(LLMError, match="daily quota exhausted"):
         client.generate(system="s", user="u", temperature=0, purpose="judge_iso")
     assert len(http.requests) == 1
+
+
+
+def test_batch_stops_when_the_daily_quota_is_exhausted(tmp_path):
+    from masc4.llm import LLMError
+    settings, conds = load_conditions(ROOT / "configs/conditions_v2.yaml")
+    conds = {c.id: c for c in conds}
+    plan = plan_runs(list(conds.values()), ["b1"], reps=1, seed=3)
+
+    def quota_llm(model, log):
+        llm = make_fake_llm(call_log=log)
+        llm.responder = lambda p, s, u: (_ for _ in ()).throw(LLMError("daily quota exhausted (X-PerDay)"))
+        return llm
+
+    messages = []
+    counts = run_plan(plan, conds, {"b1": "title: T\n"}, settings, quota_llm, tmp_path, ROOT, workers=1,
+                      log=messages.append)
+    assert counts.get("quota") == 1 and counts["completed"] == 0
+    assert any("stopping" in m for m in messages)
+    assert len(list(tmp_path.glob("*/*/rep*/run.json"))) == 1   # no further runs were started

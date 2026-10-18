@@ -94,6 +94,8 @@ def execute_run(spec: RunSpec, condition: Condition, brief_text: str, settings: 
         "tokens": {k: sum(r[k] for r in call_log.records) for k in ("input_tokens", "output_tokens", "thought_tokens")},
     })
     (run_dir / "run.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    if meta["status"] == "failed" and "daily quota exhausted" in meta.get("error", ""):
+        return "quota"
     return meta["status"]
 
 
@@ -106,13 +108,21 @@ def run_plan(plan: List[RunSpec], conditions: Dict[str, Condition], briefs: Dict
         f"(code {str(code['commit'])[:8]}{' DIRTY' if code['dirty'] else ''})")
     counts = {"completed": 0, "failed": 0}
     lock = threading.Lock()
+    stopped = False
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         futures = {pool.submit(execute_run, s, conditions[s.condition_id], briefs[s.brief_id], settings,
                                make_llm, out_root, code): s for s in todo}
         for i, fut in enumerate(as_completed(futures), 1):
+            if fut.cancelled():
+                continue
             spec = futures[fut]
             status = fut.result()
             with lock:
                 counts[status] = counts.get(status, 0) + 1
             log(f"[{i}/{len(todo)}] {spec.condition_id} {spec.brief_id} rep{spec.rep:02d}: {status}")
+            if status == "quota" and not stopped:
+                stopped = True
+                cancelled = sum(f.cancel() for f in futures)
+                log(f"Daily API quota exhausted: stopping ({cancelled} runs not started). "
+                    "Run the same command again after the quota resets; only unfinished runs are repeated.")
     return counts
