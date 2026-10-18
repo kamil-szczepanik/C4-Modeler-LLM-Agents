@@ -121,6 +121,7 @@ def main() -> None:
     ap.add_argument("--judge-model", help="model id; omit together with --no-judge for structural metrics only")
     ap.add_argument("--no-judge", action="store_true")
     ap.add_argument("--sample-rep", type=int, help="judge only this repetition (e.g. 1 for the control judge)")
+    ap.add_argument("--limit", type=int, help="evaluate at most this many runs (e.g. a quick check of a slow judge)")
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--env-file")
     ap.add_argument("--force-structural", action="store_true")
@@ -140,6 +141,8 @@ def main() -> None:
     print(f"PlantUML compilation with: {java}")
     runs = [(d, m) for d, m in completed_runs(results) if m["status"] == "completed"]
     todo = [(d, m) for d, m in runs if not args.sample_rep or m["rep"] == args.sample_rep]
+    if args.limit:
+        todo = todo[:args.limit]
     print(f"{len(runs)} completed runs; evaluating {len(todo)}" + (f" with judge {judge_model}" if judge_model else ""))
     counts, lock = {}, threading.Lock()
     with BatchLock(results, ".evaluation.lock"), ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
