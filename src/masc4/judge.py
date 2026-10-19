@@ -188,9 +188,26 @@ def _score_ok(value) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= 5
 
 
+def format_characteristics() -> str:
+    """The characteristic definitions as inserted into ISO_TASK_PROMPT."""
+    return "\n".join(f"- {k}: {v}" for k, v in ISO_CHARACTERISTICS.items())
+
+
+def format_scenarios(scenarios: List[Dict[str, str]]) -> str:
+    """The scenarios as inserted into ATAM_TASK_PROMPT."""
+    fields = ("quality_attribute", "stimulus", "environment", "response", "response_measure")
+    return "\n".join(f"- {s['id']}: " + "; ".join(f"{f.replace('_', ' ')}: {s[f]}" for f in fields if s.get(f))
+                     for s in scenarios)
+
+
+def format_requirements(reqs: List[Dict[str, str]]) -> str:
+    """The requirements as inserted into REQUIREMENTS_TASK_PROMPT."""
+    return "\n".join(f"- {r['id']}: {r['text']}" for r in reqs)
+
+
 def judge_iso(llm: LLMClient, brief: str, c4: dict) -> Dict:
-    chars = "\n".join(f"- {k}: {v}" for k, v in ISO_CHARACTERISTICS.items())
-    user = ISO_TASK_PROMPT.format(brief=brief.strip(), architecture=render_architecture(c4), characteristics=chars)
+    user = ISO_TASK_PROMPT.format(brief=brief.strip(), architecture=render_architecture(c4),
+                                  characteristics=format_characteristics())
 
     def validate(d):
         bad = [k for k in ISO_CHARACTERISTICS if not (isinstance(d.get(k), dict) and _score_ok(d[k].get("score")))]
@@ -203,10 +220,8 @@ def judge_iso(llm: LLMClient, brief: str, c4: dict) -> Dict:
 
 
 def judge_atam(llm: LLMClient, brief: str, c4: dict, scenarios: List[Dict[str, str]]) -> Dict:
-    fields = ("quality_attribute", "stimulus", "environment", "response", "response_measure")
-    text = "\n".join(f"- {s['id']}: " + "; ".join(f"{f.replace('_', ' ')}: {s[f]}" for f in fields if s.get(f))
-                     for s in scenarios)
-    user = ATAM_TASK_PROMPT.format(brief=brief.strip(), architecture=render_architecture(c4), scenarios=text)
+    user = ATAM_TASK_PROMPT.format(brief=brief.strip(), architecture=render_architecture(c4),
+                                   scenarios=format_scenarios(scenarios))
     expected = {s["id"] for s in scenarios}
 
     def validate(d):
@@ -229,7 +244,7 @@ def judge_atam(llm: LLMClient, brief: str, c4: dict, scenarios: List[Dict[str, s
 def judge_requirements(llm: LLMClient, brief: str, c4: dict) -> Dict:
     reqs = brief_requirements(brief)
     user = REQUIREMENTS_TASK_PROMPT.format(brief=brief.strip(), architecture=render_architecture(c4),
-                                           requirements="\n".join(f"- {r['id']}: {r['text']}" for r in reqs))
+                                           requirements=format_requirements(reqs))
     expected = {r["id"] for r in reqs}
 
     def validate(d):
