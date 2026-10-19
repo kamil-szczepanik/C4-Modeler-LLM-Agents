@@ -74,24 +74,24 @@ def test_gemma_gets_system_prompt_inside_the_user_message():
 
 def test_run_plan_is_resumable_and_records_failures(tmp_path):
     settings, conds = load_conditions(ROOT / "configs/conditions_v2.yaml")
-    conds = {c.id: c for c in conds if c.id in ("C0_baseline", "C12_glossary_memory")}
+    conds = {c.id: c for c in conds if c.id in ("C0_baseline", "C10_glossary_memory")}
     briefs = {"b1": "title: Test System\n"}
     plan = plan_runs(list(conds.values()), ["b1"], reps=1, seed=1)
     failing = lambda model, log: make_fake_llm(call_log=log, fail_on="glossary")  # noqa: E731
     counts = run_plan(plan, conds, briefs, settings, failing, tmp_path, ROOT, log=lambda m: None)
     assert counts == {"completed": 1, "failed": 1}
-    failed = json.loads((RunSpec("C12_glossary_memory", "b1", 1).directory(tmp_path) / "run.json").read_text())
+    failed = json.loads((RunSpec("C10_glossary_memory", "b1", 1).directory(tmp_path) / "run.json").read_text())
     assert failed["status"] == "failed" and "simulated API failure" in failed["error"]
-    assert (RunSpec("C12_glossary_memory", "b1", 1).directory(tmp_path) / "1_context_definition.yaml").exists()
+    assert (RunSpec("C10_glossary_memory", "b1", 1).directory(tmp_path) / "1_context_definition.yaml").exists()
 
     working = lambda model, log: make_fake_llm(call_log=log)  # noqa: E731
     counts = run_plan(plan, conds, briefs, settings, working, tmp_path, ROOT, log=lambda m: None)
     assert counts == {"completed": 1, "failed": 0}           # only the failed run is repeated
-    meta = json.loads((RunSpec("C12_glossary_memory", "b1", 1).directory(tmp_path) / "run.json").read_text())
+    meta = json.loads((RunSpec("C10_glossary_memory", "b1", 1).directory(tmp_path) / "run.json").read_text())
     assert meta["status"] == "completed" and meta["memory"] == "glossary" and meta["n_containers"] == 2
     assert meta["team"] == ["Product Owner", "Software Architect", "DevOps Specialist", "Security Specialist"]
     assert meta["model_versions_served"] == ["fake-model"] and meta["prompt_hashes"]
-    run_dir = RunSpec("C12_glossary_memory", "b1", 1).directory(tmp_path)
+    run_dir = RunSpec("C10_glossary_memory", "b1", 1).directory(tmp_path)
     archived = list(run_dir.glob("previous_attempts/*/run.json"))      # the failed attempt is kept aside
     assert len(archived) == 1 and json.loads(archived[0].read_text())["status"] == "failed"
     assert (run_dir / "llm_calls.jsonl").exists() and not list(run_dir.glob("llm_calls.failed-*"))

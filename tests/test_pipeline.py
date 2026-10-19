@@ -42,7 +42,7 @@ def test_baseline_produces_all_levels_with_round_robin_turns():
 
 
 def test_turn_prompt_carries_role_and_persona_and_full_history():
-    record, llm = generate("C10_generic_team")
+    record, llm = generate("C9_generic_team")
     turns = [c for c in llm.calls if c["purpose"].startswith("turn|context")]
     assert all(P.GENERIC_SOFTWARE_ENGINEER_PERSONA in c["system"] for c in turns)
     assert "You are Software Engineer contributing" in turns[0]["system"]
@@ -61,7 +61,7 @@ def test_component_level_gets_parent_container_definition():
 
 
 def test_glossary_memory_is_built_after_L1_and_L2_and_injected_into_L2_and_L3():
-    record, llm = generate("C12_glossary_memory")
+    record, llm = generate("C10_glossary_memory")
     assert [c["purpose"] for c in openings(llm, "glossary")] == ["glossary|context|attempt1",
                                                                   "glossary|container|attempt1"]
     assert set(record.glossary_snapshots) == {"after_L1", "after_L2"}
@@ -95,7 +95,7 @@ def test_invalid_yaml_is_retried_once_then_fails():
 
 
 def test_save_record_writes_artifacts_and_transcript(tmp_path):
-    record, _ = generate("C12_glossary_memory")
+    record, _ = generate("C10_glossary_memory")
     save_record(record, tmp_path)
     for name in ["1_context_definition.yaml", "2_container_diagram.puml", "3_components/web_app_analysis.md",
                  "transcript.jsonl", "c4_model.json", "glossary_after_L2.json"]:

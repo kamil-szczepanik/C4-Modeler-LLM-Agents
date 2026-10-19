@@ -18,9 +18,9 @@ EXPECTED_TEAMS = {
     "C5_single_architect": ["software_architect"],
     "C6_four_architects": ["software_architect"] * 4,
     "C7_architect_first": ["software_architect", "devops", "security", "product_owner"],
-    "C9_security_first": ["security", "product_owner", "software_architect", "devops"],
-    "C10_generic_team": ["generic_engineer"] * 4,
-    "C12_glossary_memory": ["product_owner", "software_architect", "devops", "security"],
+    "C8_security_first": ["security", "product_owner", "software_architect", "devops"],
+    "C9_generic_team": ["generic_engineer"] * 4,
+    "C10_glossary_memory": ["product_owner", "software_architect", "devops", "security"],
 }
 
 
@@ -28,7 +28,7 @@ def test_every_condition_has_the_intended_team_and_memory():
     settings, conditions = load_conditions(CONFIG)
     assert settings.model == "gemini-3.5-flash-lite" and settings.rounds == 2
     assert {c.id: c.team_keys for c in conditions} == EXPECTED_TEAMS
-    assert {c.id for c in conditions if c.memory == "glossary"} == {"C12_glossary_memory"}
+    assert {c.id for c in conditions if c.memory == "glossary"} == {"C10_glossary_memory"}
     for c in conditions:
         assert all(a.persona.strip() for a in c.team), f"{c.id} has an agent without persona text"
 
@@ -37,7 +37,7 @@ def test_order_conditions_are_rotations_of_the_baseline():
     _, conditions = load_conditions(CONFIG)
     base = {c.id: c.team_keys for c in conditions}["C0_baseline"]
     rotations = [base[i:] + base[:i] for i in range(len(base))]
-    for cid in ("C7_architect_first", "C9_security_first"):
+    for cid in ("C7_architect_first", "C8_security_first"):
         assert {c.id: c.team_keys for c in conditions}[cid] in rotations
 
 
