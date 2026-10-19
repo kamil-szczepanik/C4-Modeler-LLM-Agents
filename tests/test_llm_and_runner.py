@@ -184,3 +184,14 @@ def test_ctrl_c_stops_new_runs_and_keeps_completed_ones(tmp_path, monkeypatch):
     monkeypatch.setattr(runner, "as_completed", real)     # resuming finishes only the remaining runs
     counts = run_plan(plan, conds, {"b1": "title: T\n"}, settings, working, tmp_path, ROOT, log=lambda m: None)
     assert counts["completed"] == len(plan) - started
+
+
+
+def test_read_timeouts_and_dropped_connections_are_retried():
+    import http.client
+    import socket
+    http = FakeHTTP(socket.timeout("The read operation timed out"), http.client.RemoteDisconnected("closed"),
+                    ok_payload("fine"))
+    client = GeminiClient("gemini-3.5-flash-lite", "KEY", CallLog(), opener=http, sleep=lambda s: None)
+    resp = client.generate(system="s", user="u", temperature=0.5, purpose="turn|x|A")
+    assert resp.text == "fine" and resp.attempts == 3

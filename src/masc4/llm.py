@@ -6,6 +6,7 @@ token counts and latency, so runs can be audited and costed afterwards.
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import random
 import threading
@@ -158,7 +159,9 @@ class GeminiClient(LLMClient):
                     raise LLMError(f"daily quota exhausted ({', '.join(quotas)}): {message[:200]}") from None
                 if err.code not in RETRYABLE_HTTP:
                     raise LLMError(last_error) from None
-            except (urllib.error.URLError, TimeoutError, ConnectionError, LLMError) as err:
+            except (OSError, http.client.HTTPException, ValueError, LLMError) as err:
+                # OSError covers URLError, connection resets and socket.timeout (which on Python 3.9 is
+                # not a TimeoutError); HTTPException covers dropped connections; ValueError a garbled body
                 last_error = f"{type(err).__name__}: {err}"
             if attempt < self.max_retries:
                 self._sleep(min(90.0, 2.0 ** attempt) * (0.5 + random.random()))  # up to ~10 min in total
