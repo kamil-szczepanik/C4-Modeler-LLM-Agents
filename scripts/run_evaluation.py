@@ -7,7 +7,9 @@ Examples:
   .venv/bin/python scripts/run_evaluation.py --results results/v2 --judge-model gemini-3.8-flash \\
       --env-file "../../../.env" --workers 4 --csv results/v2/runs.csv
   # control judge on the first repetition of every condition and brief
-  .venv/bin/python scripts/run_evaluation.py --results results/v2 --judge-model gemma-4-26b-a4b-it --sample-rep 1 ...
+  .venv/bin/python scripts/run_evaluation.py --results results/v2 --judge-model gemini-3.6-flash --sample-rep 1 ...
+  # test-retest: the main judge again on a random sample of 20 runs, stored separately
+  .venv/bin/python scripts/run_evaluation.py --results results/v2 --judge-model gemini-3.8-flash --sample 20 --tag retest ...
 
 Results are cached per run (structural.json, judge_<model>.json); a judge file that
 contains an error is retried on the next invocation.
