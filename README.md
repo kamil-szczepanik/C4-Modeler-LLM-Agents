@@ -14,9 +14,8 @@ specialization and a shared memory, and evaluates the models with deterministic 
 and an LLM judge (ISO/IEC 25010, ATAM scenarios, requirement coverage).
 
 This repository contains the code, prompts, briefs, scenarios, configurations and analysis scripts
-of the study. The raw outputs of all runs (transcripts, reports, YAML models, diagrams, scores and
-the judge's justifications) are archived on Zenodo together with a snapshot of this repository:
-DOI to be added.
+of the study, and in `results/` the raw outputs of all runs (transcripts, reports, YAML models,
+diagrams, scores and the judge's justifications). Each release is archived on Zenodo: DOI to be added.
 
 ## Contents
 
@@ -106,8 +105,8 @@ briefs, judge rubrics and scenarios from the code into the article.
 
 ## License
 
-The code is released under the MIT License (`LICENSE`). The data in the Zenodo archive are released
-under the Creative Commons Attribution 4.0 International License (CC BY 4.0).
+The code is released under the MIT License (`LICENSE`). The data in `results/` are released under the
+Creative Commons Attribution 4.0 International License (CC BY 4.0).
 
 ## Citation
 
