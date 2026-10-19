@@ -70,7 +70,7 @@ def judge_progress(results: Path) -> list:
 
 
 def snapshot(results: Path, planned: int = 0) -> str:
-    status = {"completed": 0, "failed": 0, "running": 0}
+    status = {"completed": 0, "invalid_output": 0, "failed": 0, "running": 0}
     running, durations, calls = [], [], []
     for meta_path in sorted(results.glob("*/*/rep*/run.json")):
         run_dir = meta_path.parent
@@ -90,9 +90,10 @@ def snapshot(results: Path, planned: int = 0) -> str:
             durations.append(datetime.fromisoformat(meta["finished"]).timestamp() - started)
 
     cost = cost_of(calls)
-    done = status["completed"] + status["failed"]
+    done = status["completed"] + status["invalid_output"]
     lines = [f"{results}  (updated {time.strftime('%H:%M:%S')})",
-             f"runs: {status['completed']} completed, {status['failed']} failed, {status['running']} running"
+             f"runs: {status['completed']} completed, {status['invalid_output']} invalid output (final), "
+             f"{status['failed']} failed (will be repeated), {status['running']} running"
              + (f"  |  {done}/{planned} = {100 * done / planned:.0f}%" if planned else "")]
     if planned and durations and status["running"]:
         avg = sum(durations) / len(durations)

@@ -2,7 +2,10 @@
 
 Layout: <out>/<condition_id>/<brief_id>/rep<NN>/ with run.json (metadata and status),
 transcript.jsonl, llm_calls.jsonl, c4_model.json and the C4 artifacts.
-A run whose run.json says "completed" is skipped, so an interrupted batch can be restarted.
+A run whose run.json says "completed" or "invalid_output" is final and skipped, so an interrupted
+batch can be restarted. "invalid_output" means the team produced no usable artifact (no valid YAML
+after the allowed retry, or no valid glossary): this is an outcome of the condition and is reported,
+not repeated. "failed" means an infrastructure error (API, network) and is repeated on the next start.
 """
 from __future__ import annotations
 
@@ -59,9 +62,13 @@ def read_meta(run_dir: Path) -> Optional[dict]:
         return None
 
 
+FINAL_STATUSES = ("completed", "invalid_output")
+
+
 def is_completed(run_dir: Path) -> bool:
+    """True if the run is final: completed, or ended with an invalid output of the team (not repeated)."""
     meta = read_meta(run_dir)
-    return bool(meta) and meta.get("status") == "completed"
+    return bool(meta) and meta.get("status") in FINAL_STATUSES
 
 
 def archive_previous_attempt(run_dir: Path) -> None:
@@ -100,8 +107,8 @@ def execute_run(spec: RunSpec, condition: Condition, brief_text: str, settings: 
     try:
         C4Generator(llm, condition, temperature=settings.temperature, rounds=settings.rounds).generate(brief_text, record)
         meta["status"] = "completed"
-    except PipelineError as err:
-        meta["status"], meta["error"] = "failed", str(err)
+    except PipelineError as err:  # the team's output is unusable: a final outcome of this condition
+        meta["status"], meta["error"] = "invalid_output", str(err)
     except Exception as err:  # API failure after retries or a bug: record it, never hide it
         meta["status"], meta["error"] = "failed", f"{type(err).__name__}: {err}"
         meta["traceback"] = traceback.format_exc(limit=5)
@@ -139,7 +146,7 @@ def _run_plan_locked(plan, conditions, briefs, settings, make_llm, out_root, rep
         raise RuntimeError(f"{out_root} already contains runs of {other_models}; use a different --out for "
                            f"{settings.model} so that models are never mixed")
     todo = [s for s in plan if not is_completed(s.directory(out_root))]
-    log(f"{len(plan)} runs planned, {len(plan) - len(todo)} already completed, {len(todo)} to do "
+    log(f"{len(plan)} runs planned, {len(plan) - len(todo)} already final, {len(todo)} to do "
         f"(code {str(code['commit'])[:8]}{' DIRTY' if code['dirty'] else ''})")
     counts = {"completed": 0, "failed": 0}
     lock = threading.Lock()

@@ -228,3 +228,27 @@ def test_cost_limit_stops_new_runs_and_resumes_with_a_higher_limit(tmp_path):
     counts = run_plan(plan, conds, {"b1": "title: T\n"}, settings, priced, tmp_path, ROOT, workers=1,
                       log=lambda m: None, max_cost_usd=100.0)
     assert counts["completed"] == 2
+
+
+
+def test_invalid_team_output_is_final_but_infrastructure_errors_are_repeated(tmp_path):
+    settings, conds = load_conditions(ROOT / "configs/conditions_v2.yaml")
+    conds = {c.id: c for c in conds if c.id in ("C0_baseline", "C3_no_devops")}
+    plan = sorted(plan_runs(list(conds.values()), ["b1"], reps=1, seed=1), key=lambda s: s.condition_id)
+
+    def flaky(model, log):
+        llm = make_fake_llm(call_log=log, invalid_yaml_first=set())
+        inner, seen = llm.responder, {"devops": False}
+        def responder(p, s, u):
+            if p.startswith("writer|context"):
+                seen["devops"] = "[DevOps Specialist]:" in u
+            if p.startswith("yaml|context") and not seen["devops"]:
+                return "not: [valid"            # the team without DevOps (C3) never yields a valid context YAML
+            return inner(p, s, u)
+        llm.responder = responder
+        return llm
+
+    counts = run_plan(plan, conds, {"b1": "title: T\n"}, settings, flaky, tmp_path, ROOT, log=lambda m: None)
+    assert counts.get("invalid_output") == 1 and counts["completed"] == 1
+    again = run_plan(plan, conds, {"b1": "title: T\n"}, settings, flaky, tmp_path, ROOT, log=lambda m: None)
+    assert again["completed"] == 0 and not again.get("invalid_output")      # final: not repeated
