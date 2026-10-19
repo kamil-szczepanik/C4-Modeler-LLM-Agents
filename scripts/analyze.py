@@ -37,6 +37,7 @@ def load_plan(path: Path) -> dict:
     plan["secondary_metrics"] = [sub(m) for m in plan["secondary_metrics"]]
     for h in plan["targeted_hypotheses"]:
         h["metric"] = sub(h["metric"])
+    plan["sesoi"] = {sub(m): v for m, v in (plan.get("sesoi") or {}).items()}
     plan["comparison_list"] = [(study, c) for study, conds in plan["comparisons"].items() for c in conds]
     return plan
 
@@ -128,7 +129,8 @@ def main() -> None:
     write_csv(out / "runs_accounting.csv", acc)
 
     # 2. descriptives -----------------------------------------------------------------------------
-    metrics = list(dict.fromkeys(plan["primary_metrics"] + plan["secondary_metrics"] + [plan["size_covariate"]]))
+    metrics = list(dict.fromkeys(plan["primary_metrics"] + plan["secondary_metrics"] + [plan["size_covariate"]]
+                                 + plan.get("descriptive_extras", [])))
     desc = []
     for c in conditions:
         d = {"condition": c}
@@ -151,11 +153,15 @@ def main() -> None:
             r["significant"] = "yes" if p_adj < alpha else "no"
             r["ci"] = f"[{fmt(r['ci_low'])}, {fmt(r['ci_high'])}]"
             r["delta_txt"] = f"{fmt(r['cliffs_delta'], 2)} ({r['magnitude']})"
+            bound = plan["sesoi"].get(m)
+            r["negligible"] = ("–" if bound is None or math.isnan(r["ci_low"])
+                               else "yes" if -bound < r["ci_low"] and r["ci_high"] < bound else "no")
         primary += res
-        report += [f"**{m}**\n", table(res, ["study", "condition", "n", "mean", "mean_ref", "effect", "ci", "delta_txt",
-                                             "p", "p_holm", "significant"],
-                                       ["Study", "Condition", "n", "Mean", f"Mean {ref}", "Effect", "95% CI",
-                                        "Cliff's δ", "p", "p (Holm)", "Significant"]), ""]
+        report += [f"**{m}** (negligible = 95% CI within ±{fmt(plan['sesoi'].get(m), 2)})\n",
+                   table(res, ["study", "condition", "n", "mean", "mean_ref", "effect", "ci", "delta_txt",
+                               "p", "p_holm", "significant", "negligible"],
+                         ["Study", "Condition", "n", "Mean", f"Mean {ref}", "Effect", "95% CI",
+                          "Cliff's δ", "p", "p (Holm)", "Significant", "Negligible"]), ""]
     write_csv(out / "confirmatory_primary.csv", primary)
 
     # 4. confirmatory, targeted hypotheses --------------------------------------------------------------
