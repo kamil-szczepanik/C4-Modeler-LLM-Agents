@@ -32,7 +32,7 @@ from .pipeline import parse_yaml_definition
 C4_INCLUDE = re.compile(r"!include\s+https://raw\.githubusercontent\.com/plantuml-stdlib/C4-PlantUML/[^/\s]+/(C4_\w+)\.puml")
 
 
-# --- abstraction rules (as in v1, src/c4modeler/evaluation.py) ---------------
+# --- abstraction rules (as in v1: src/c4modeler/evaluation.py at tag journal-v1-as-run)
 def check_context_rules(code: str) -> Tuple[bool, str]:
     if re.search(r"Container\s*\(", code, re.IGNORECASE):
         return False, "Illegal 'Container' element found in a Context diagram."

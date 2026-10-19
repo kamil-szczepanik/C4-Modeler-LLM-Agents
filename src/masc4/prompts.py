@@ -2,7 +2,7 @@
 
 Texts marked "as in v1" are copied verbatim from the code used for the original
 runs (tag journal-v1-as-run: src/c4modeler/prompts.py and src/c4modeler/agents.py);
-tests/test_prompts.py checks that they still match. New or changed texts are
+tests/test_conditions_and_prompts.py checks that they still match. New or changed texts are
 marked "v2" and listed in the paper's appendix.
 """
 from __future__ import annotations

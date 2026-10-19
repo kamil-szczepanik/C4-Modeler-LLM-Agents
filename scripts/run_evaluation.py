@@ -5,7 +5,7 @@ Examples:
   .venv/bin/python scripts/run_evaluation.py --results results/pilot --no-judge --csv results/pilot/runs.csv
   # main judge on all completed runs
   .venv/bin/python scripts/run_evaluation.py --results results/v2 --judge-model gemini-3.8-flash \\
-      --env-file "../../../.env" --workers 4 --csv results/v2/runs.csv
+      --env-file .env --workers 4 --csv results/v2/runs.csv
   # control judge on the first repetition of every condition and brief
   .venv/bin/python scripts/run_evaluation.py --results results/v2 --judge-model gemini-3.6-flash --sample-rep 1 ...
   # test-retest: the main judge again on a random sample of 20 runs, stored separately

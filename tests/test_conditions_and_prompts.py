@@ -1,4 +1,4 @@
-import importlib.util
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -8,6 +8,16 @@ from masc4.conditions import build_team, load_conditions
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs/conditions_v2.yaml"
+V1_TAG = "journal-v1-as-run"      # the original implementation, kept in the git history
+
+
+def v1_source(path: str) -> str:
+    """Source of a file of the original implementation, read from the git tag."""
+    try:
+        out = subprocess.run(["git", "show", f"{V1_TAG}:{path}"], cwd=ROOT, capture_output=True, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        pytest.skip(f"needs the git history with tag {V1_TAG}")
+    return out.stdout.decode("utf-8")
 
 EXPECTED_TEAMS = {
     "C0_baseline": ["product_owner", "software_architect", "devops", "security"],
@@ -58,17 +68,16 @@ def test_unknown_persona_and_unknown_field_are_rejected(tmp_path):
 
 
 def test_v1_prompt_texts_are_copied_verbatim():
-    spec = importlib.util.spec_from_file_location("v1_prompts", ROOT / "src/c4modeler/prompts.py")
-    v1 = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(v1)
+    v1: dict = {}
+    exec(compile(v1_source("src/c4modeler/prompts.py"), "v1_prompts.py", "exec"), v1)
     same = ["PRODUCT_OWNER_PERSONA", "DEVOPS_SPECIALIST_PERSONA", "SECURITY_SPECIALIST_PERSONA",
             "GENERIC_SOFTWARE_ENGINEER_PERSONA", "YAML_PERSONA_PROMPT", "YAML_HUMAN_MESSAGE_PROMPT",
             "CONTEXT_YAML_TEMPLATE", "CONTAINER_YAML_TEMPLATE", "COMPONENT_YAML_TEMPLATE",
             "PLANTUML_PERSONA_PROMPT", "PLANTUML_HUMAN_MESSAGE_PROMPT", "PLANTUML_SYNTAX_GUIDE",
             "GLOSSARY_AGENT_PERSONA"]
     for name in same:
-        assert getattr(P, name) == getattr(v1, name), name
-    assert P.WRITER_TASK_PROMPT == v1.REPORT_GENERATOR_SYSTEM_PROMPT
+        assert getattr(P, name) == v1[name], name
+    assert P.WRITER_TASK_PROMPT == v1["REPORT_GENERATOR_SYSTEM_PROMPT"]
 
 
 def test_v2_turn_prompt_makes_agents_engage_with_earlier_contributions():
@@ -79,7 +88,7 @@ def test_v2_turn_prompt_makes_agents_engage_with_earlier_contributions():
 
 
 def test_turn_v1_and_writer_prompts_match_v1_agents_source():
-    source = (ROOT / "src/c4modeler/agents.py").read_text(encoding="utf-8")
+    source = v1_source("src/c4modeler/agents.py")
     for prompt in (P.TURN_SYSTEM_PROMPT_V1, P.WRITER_SYSTEM_PROMPT):
         for line in prompt.split("\n"):
             if line.strip():

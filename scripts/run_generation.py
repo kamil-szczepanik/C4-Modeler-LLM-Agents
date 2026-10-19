@@ -5,7 +5,7 @@ Examples:
   .venv/bin/python scripts/run_generation.py --reps 6 --dry-run
   # pilot: all conditions, two briefs, two repetitions, on the Gemini API
   .venv/bin/python scripts/run_generation.py --briefs clinic-management-system online-bookstore \\
-      --reps 2 --out results/pilot --env-file "../../../.env"
+      --reps 2 --out results/pilot --env-file .env
   # offline smoke test of the whole pipeline with a scripted fake model
   .venv/bin/python scripts/run_generation.py --fake --reps 1 --out results/fake
 """
