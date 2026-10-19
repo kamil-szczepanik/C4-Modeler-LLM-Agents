@@ -97,6 +97,11 @@ def row_for(run_dir: Path, meta: dict, studies: dict) -> dict:
            "team": " -> ".join(meta["team"]), "model_versions": " ".join(meta.get("model_versions_served", [])),
            "n_llm_calls": meta.get("n_llm_calls"), "yaml_retries": meta.get("yaml_retries"),
            **{f"tokens_{k}": v for k, v in (meta.get("tokens") or {}).items()}}
+    transcript = run_dir / "transcript.jsonl"
+    if transcript.exists():   # discussion length, a covariate (fewer agents means a shorter discussion)
+        turns = [json.loads(line) for line in transcript.read_text(encoding="utf-8").splitlines() if line.strip()]
+        row["n_turns"] = len(turns)
+        row["discussion_words"] = sum(len(t["text"].split()) for t in turns)
     s_path = run_dir / "structural.json"
     if s_path.exists():
         s = json.loads(s_path.read_text(encoding="utf-8"))
