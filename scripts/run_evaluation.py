@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import sys
 import threading
@@ -26,7 +27,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 from masc4.conditions import load_conditions  # noqa: E402
-from masc4.judge import ISO_CHARACTERISTICS, JudgeError, judge_run, load_scenarios  # noqa: E402
+from masc4.judge import ISO_CHARACTERISTICS, JudgeError, judge_prompt_hashes, judge_run, load_scenarios  # noqa: E402
 from masc4.signals import install_stop_handlers  # noqa: E402
 from masc4.llm import CallLog, GeminiClient, LLMError, load_api_key  # noqa: E402
 from masc4.fsutil import BatchLock, write_json_atomic  # noqa: E402
@@ -39,39 +40,52 @@ def completed_runs(results: Path):
         yield meta_path.parent, meta
 
 
-def judge_file(run_dir: Path, model: str) -> Path:
-    return run_dir / f"judge_{model}.json"
+def judge_name(model: str, tag: str = "") -> str:
+    return f"{model}__{tag}" if tag else model
 
 
-def load_judge(run_dir: Path, model: str):
+def judge_file(run_dir: Path, model: str, tag: str = "") -> Path:
+    return run_dir / f"judge_{judge_name(model, tag)}.json"
+
+
+def load_judge(run_dir: Path, model: str, tag: str = ""):
     try:
-        return json.loads(judge_file(run_dir, model).read_text(encoding="utf-8"))
+        return json.loads(judge_file(run_dir, model, tag).read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError):
         return None
 
 
-def needs_judge(run_dir: Path, model: str) -> bool:
-    data = load_judge(run_dir, model)
+def needs_judge(run_dir: Path, model: str, tag: str = "") -> bool:
+    data = load_judge(run_dir, model, tag)
     return data is None or "error" in data or bool(data.get("errors"))
 
 
 def evaluate_run(run_dir: Path, meta: dict, briefs: dict, scenarios_dir: Path, jar: Path, judge_model, api_key,
-                 force_structural: bool, java: str = "java") -> str:
+                 force_structural: bool, java: str = "java", tag: str = "") -> str:
     c4 = json.loads((run_dir / "c4_model.json").read_text(encoding="utf-8"))
     if force_structural or not (run_dir / "structural.json").exists():
         write_json_atomic(run_dir / "structural.json", evaluate_structure(c4, jar, java))
-    if not judge_model or not needs_judge(run_dir, judge_model):
+    if not judge_model or not needs_judge(run_dir, judge_model, tag):
         return "ok"
-    log = CallLog(run_dir / f"judge_calls_{judge_model}.jsonl")
+    log = CallLog(run_dir / f"judge_calls_{judge_name(judge_model, tag)}.jsonl")
     llm = GeminiClient(judge_model, api_key, log)
-    previous = load_judge(run_dir, judge_model)
+    previous = load_judge(run_dir, judge_model, tag)
     try:
-        scenarios = load_scenarios(scenarios_dir / f"{meta['brief']}.yaml")
-        result = judge_run(llm, briefs[meta["brief"]], c4, scenarios, previous=previous)
+        scenario_path = scenarios_dir / f"{meta['brief']}.yaml"
+        scenarios = load_scenarios(scenario_path)
+        brief = briefs[meta["brief"]]
+        if meta.get("brief_sha256") and hashlib.sha256(brief.encode("utf-8")).hexdigest() != meta["brief_sha256"]:
+            raise KeyError(f"brief {meta['brief']} changed since the run was generated")
+        result = judge_run(llm, brief, c4, scenarios, previous=previous)
+        result["provenance"] = {"judge_prompts": judge_prompt_hashes(), "brief_sha256":
+                                hashlib.sha256(brief.encode("utf-8")).hexdigest(), "scenarios_sha256":
+                                hashlib.sha256(scenario_path.read_bytes()).hexdigest()}
         status = f"judge error: {sorted(result['errors'])}" if result.get("errors") else "ok"
     except (JudgeError, LLMError, FileNotFoundError, KeyError) as err:
         result, status = {"model": judge_model, "error": f"{type(err).__name__}: {err}"}, "judge error"
-    write_json_atomic(judge_file(run_dir, judge_model), result)
+    if tag:
+        result["tag"] = tag
+    write_json_atomic(judge_file(run_dir, judge_model, tag), result)
     return status
 
 
@@ -122,6 +136,10 @@ def main() -> None:
     ap.add_argument("--no-judge", action="store_true")
     ap.add_argument("--sample-rep", type=int, help="judge only this repetition (e.g. 1 for the control judge)")
     ap.add_argument("--limit", type=int, help="evaluate at most this many runs (e.g. a quick check of a slow judge)")
+    ap.add_argument("--sample", type=int, help="evaluate a random (seeded) sample of this many runs")
+    ap.add_argument("--seed", type=int, default=2026, help="seed for --sample")
+    ap.add_argument("--tag", default="", help="store the judgement under judge_<model>__<tag>.json, e.g. 'retest' "
+                                              "for a repeated evaluation with the same judge")
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--env-file")
     ap.add_argument("--force-structural", action="store_true")
@@ -141,14 +159,17 @@ def main() -> None:
     print(f"PlantUML compilation with: {java}")
     runs = [(d, m) for d, m in completed_runs(results) if m["status"] == "completed"]
     todo = [(d, m) for d, m in runs if not args.sample_rep or m["rep"] == args.sample_rep]
+    if args.sample:
+        import random
+        todo = sorted(random.Random(args.seed).sample(todo, min(args.sample, len(todo))), key=lambda x: str(x[0]))
     if args.limit:
         todo = todo[:args.limit]
     print(f"{len(runs)} completed runs; evaluating {len(todo)}" + (f" with judge {judge_model}" if judge_model else ""))
     counts, lock = {}, threading.Lock()
-    lock_name = f".evaluation-{judge_model or 'structural'}.lock"   # different judges may run side by side
+    lock_name = f".evaluation-{judge_name(judge_model, args.tag) if judge_model else 'structural'}.lock"
     with BatchLock(results, lock_name), ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
         futures = {pool.submit(evaluate_run, d, m, briefs, Path(args.scenarios_dir), Path(args.jar), judge_model,
-                               api_key, args.force_structural, java): d for d, m in todo}
+                               api_key, args.force_structural, java, args.tag): d for d, m in todo}
         try:
             for fut in as_completed(futures):
                 status = fut.result()

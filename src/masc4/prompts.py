@@ -40,9 +40,29 @@ PERSONAS = {
 }
 
 # ---------------------------------------------------------------------------
-# Divergent phase: one turn of a collaborative agent (as in v1, agents.py agent_node)
+# Divergent phase: one turn of a collaborative agent
 # ---------------------------------------------------------------------------
+# v2: agents must engage with earlier contributions (support, refine or challenge them),
+# as described in the paper (round-robin as sequential constraint injection). The v1 prompt
+# told agents not to acknowledge others, which produced parallel monologues in the pilot.
 TURN_SYSTEM_PROMPT = (
+    "You are {persona_short} contributing to a C4 model analysis for **{level}**.\n"
+    "\n"
+    "ROLE:\n{persona}\n"
+    "\n"
+    "HOW TO CONTRIBUTE:\n"
+    "• If others have already spoken, first respond to their most relevant proposals from YOUR role's "
+    "perspective: support, refine or challenge them, naming the specific element or decision\n"
+    "• Then add new insights or proposals from your role that have not been raised yet\n"
+    "• Do not repeat or summarize points that are already agreed\n"
+    "• Be direct and specific - state YOUR concerns or recommendations\n"
+    "• Maximum 150 words\n"
+    "\n"
+    "Write your contribution now:"
+)
+
+# v1 turn prompt (agents.py agent_node), kept for documentation and comparison; not used
+TURN_SYSTEM_PROMPT_V1 = (
     "You are {persona_short} contributing to a C4 model analysis for **{level}**.\n"
     "\n"
     "ROLE:\n{persona}\n"

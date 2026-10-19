@@ -195,3 +195,36 @@ def test_read_timeouts_and_dropped_connections_are_retried():
     client = GeminiClient("gemini-3.5-flash-lite", "KEY", CallLog(), opener=http, sleep=lambda s: None)
     resp = client.generate(system="s", user="u", temperature=0.5, purpose="turn|x|A")
     assert resp.text == "fine" and resp.attempts == 3
+
+
+def test_each_run_keeps_its_exact_brief(tmp_path):
+    import hashlib
+    settings, conds = load_conditions(ROOT / "configs/conditions_v2.yaml")
+    conds = {c.id: c for c in conds if c.id == "C0_baseline"}
+    brief = "title: Test System\nconstraints:\n  - GDPR\n"
+    plan = plan_runs(list(conds.values()), ["b1"], reps=1, seed=1)
+    run_plan(plan, conds, {"b1": brief}, settings, lambda m, log: make_fake_llm(call_log=log), tmp_path, ROOT,
+             log=lambda m: None)
+    run_dir = plan[0].directory(tmp_path)
+    assert (run_dir / "brief.yaml").read_text() == brief
+    assert json.loads((run_dir / "run.json").read_text())["brief_sha256"] == hashlib.sha256(brief.encode()).hexdigest()
+
+
+def test_cost_limit_stops_new_runs_and_resumes_with_a_higher_limit(tmp_path):
+    settings, conds = load_conditions(ROOT / "configs/conditions_v2.yaml")
+    conds = {c.id: c for c in conds if c.id in ("C0_baseline", "C3_no_devops", "C5_single_architect")}
+    plan = plan_runs(list(conds.values()), ["b1"], reps=1, seed=2)
+
+    def priced(model, log):                     # fake answers billed like the real generator
+        llm = make_fake_llm(call_log=log)
+        llm.model = "gemini-3.5-flash-lite"
+        return llm
+
+    messages = []
+    counts = run_plan(plan, conds, {"b1": "title: T\n"}, settings, priced, tmp_path, ROOT, workers=1,
+                      log=messages.append, max_cost_usd=1e-9)
+    assert counts["completed"] == 1 and counts.get("skipped") == 2
+    assert any("Cost limit reached" in m for m in messages)
+    counts = run_plan(plan, conds, {"b1": "title: T\n"}, settings, priced, tmp_path, ROOT, workers=1,
+                      log=lambda m: None, max_cost_usd=100.0)
+    assert counts["completed"] == 2

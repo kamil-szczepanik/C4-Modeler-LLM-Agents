@@ -6,6 +6,7 @@ A run whose run.json says "completed" is skipped, so an interrupted batch can be
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import random
 import subprocess
@@ -20,6 +21,7 @@ from typing import Callable, Dict, List, Optional
 from . import prompts as P
 from .conditions import Condition, GenerationSettings
 from .fsutil import BatchLock, write_json_atomic
+from .pricing import cost_of_log
 from .llm import CallLog, LLMClient
 from .pipeline import C4Generator, PipelineError, RunRecord, save_record
 
@@ -88,9 +90,11 @@ def execute_run(spec: RunSpec, condition: Condition, brief_text: str, settings: 
         "condition": condition.id, "brief": spec.brief_id, "rep": spec.rep,
         "team": [a.display_name for a in condition.team], "team_persona_keys": condition.team_keys,
         "memory": condition.memory, "model_requested": settings.model, "temperature": settings.temperature,
+        "brief_sha256": hashlib.sha256(brief_text.encode("utf-8")).hexdigest(),
         "rounds": settings.rounds, "code": code, "prompt_hashes": P.prompt_hashes(),
         "started": time.strftime("%Y-%m-%dT%H:%M:%S"), "status": "running",
     }
+    (run_dir / "brief.yaml").write_text(brief_text, encoding="utf-8")   # exact input of this run
     write_json_atomic(run_dir / "run.json", meta)
     record = RunRecord()
     try:
@@ -117,12 +121,17 @@ def execute_run(spec: RunSpec, condition: Condition, brief_text: str, settings: 
 
 def run_plan(plan: List[RunSpec], conditions: Dict[str, Condition], briefs: Dict[str, str],
              settings: GenerationSettings, make_llm: Callable[[str, CallLog], LLMClient], out_root: Path,
-             repo: Path, workers: int = 1, log: Callable[[str], None] = print) -> Dict[str, int]:
+             repo: Path, workers: int = 1, log: Callable[[str], None] = print,
+             max_cost_usd: Optional[float] = None) -> Dict[str, int]:
+    """Execute the plan; with max_cost_usd, no new run starts once the estimated generation cost of all
+    runs in out_root (this and earlier batches) reaches the limit."""
     with BatchLock(out_root):
-        return _run_plan_locked(plan, conditions, briefs, settings, make_llm, out_root, repo, workers, log)
+        return _run_plan_locked(plan, conditions, briefs, settings, make_llm, out_root, repo, workers, log,
+                                max_cost_usd)
 
 
-def _run_plan_locked(plan, conditions, briefs, settings, make_llm, out_root, repo, workers, log) -> Dict[str, int]:
+def _run_plan_locked(plan, conditions, briefs, settings, make_llm, out_root, repo, workers, log,
+                     max_cost_usd=None) -> Dict[str, int]:
     code = code_version(repo)
     other_models = sorted({m["model_requested"] for s in plan for m in [read_meta(s.directory(out_root))]
                            if m and m.get("model_requested") != settings.model})
@@ -134,13 +143,25 @@ def _run_plan_locked(plan, conditions, briefs, settings, make_llm, out_root, rep
         f"(code {str(code['commit'])[:8]}{' DIRTY' if code['dirty'] else ''})")
     counts = {"completed": 0, "failed": 0}
     lock = threading.Lock()
-    stop = threading.Event()   # set by a worker as soon as a daily quota is exhausted
+    stop = threading.Event()   # set on a daily-quota failure, on Ctrl+C/kill, or when the cost limit is reached
+    spent = {"usd": sum(cost_of_log(p) for p in out_root.glob("*/*/rep*/llm_calls*.jsonl"))
+             + sum(cost_of_log(p) for p in out_root.glob("*/*/rep*/previous_attempts/*/llm_calls*.jsonl")),
+             "limit_hit": False}
+    if max_cost_usd is not None:
+        log(f"cost limit ${max_cost_usd:.2f}; already spent in {out_root}: ${spent['usd']:.2f}")
 
     def guarded(spec: RunSpec) -> str:
         if stop.is_set():
             return "skipped"
+        if max_cost_usd is not None and spent["usd"] >= max_cost_usd:
+            with lock:
+                spent["limit_hit"] = True
+            stop.set()
+            return "skipped"
         status = execute_run(spec, conditions[spec.condition_id], briefs[spec.brief_id], settings, make_llm,
                              out_root, code)
+        with lock:
+            spent["usd"] += cost_of_log(spec.directory(out_root) / "llm_calls.jsonl")
         if status == "quota":
             stop.set()
         return status
@@ -171,7 +192,10 @@ def _run_plan_locked(plan, conditions, briefs, settings, make_llm, out_root, rep
             if status != "skipped":
                 done = sum(v for k, v in counts.items() if k != "skipped")
                 log(f"[{done}/{len(todo)}] {spec.condition_id} {spec.brief_id} rep{spec.rep:02d}: {status}")
-    if interrupted:
+    if spent["limit_hit"]:
+        log(f"Cost limit reached (estimated ${spent['usd']:.2f} >= ${max_cost_usd:.2f}): no new runs started. "
+            "Raise --max-cost and run the same command again to continue.")
+    elif interrupted:
         log("Stopped by the user. Run the same command again to continue; completed runs are kept.")
     elif stop.is_set():
         log(f"Daily API quota exhausted: stopped ({counts.get('skipped', 0)} runs not started). Run the same "

@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
-# USD per 1M tokens (input, output); thinking tokens are billed as output. Gemma is free of charge.
-PRICES = {"gemini-3.5-flash-lite": (0.30, 2.50), "gemini-3.1-flash-lite": (0.25, 1.50),
-          "gemini-3.8-flash": (0.75, 3.75), "gemini-3.6-flash": (0.75, 3.75)}
+REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "src"))
+from masc4.pricing import cost_of  # noqa: E402
 
 
 def read_jsonl(path: Path):
@@ -32,14 +33,6 @@ def read_jsonl(path: Path):
 def fmt_duration(seconds: float) -> str:
     seconds = int(seconds)
     return f"{seconds // 3600}h{seconds % 3600 // 60:02d}m" if seconds >= 3600 else f"{seconds // 60}m{seconds % 60:02d}s"
-
-
-def cost_of(calls) -> float:
-    total = 0.0
-    for c in calls:
-        price_in, price_out = PRICES.get(c["model"], (0.0, 0.0))
-        total += (c["input_tokens"] * price_in + (c["output_tokens"] + c["thought_tokens"]) * price_out) / 1e6
-    return total
 
 
 def judge_progress(results: Path) -> list:

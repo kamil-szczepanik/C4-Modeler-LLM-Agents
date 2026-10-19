@@ -71,9 +71,16 @@ def test_v1_prompt_texts_are_copied_verbatim():
     assert P.WRITER_TASK_PROMPT == v1.REPORT_GENERATOR_SYSTEM_PROMPT
 
 
-def test_turn_and_writer_prompts_match_v1_agents_source():
+def test_v2_turn_prompt_makes_agents_engage_with_earlier_contributions():
+    prompt = P.TURN_SYSTEM_PROMPT
+    assert "{persona_short}" in prompt and "{level}" in prompt and "{persona}" in prompt
+    assert "support, refine or challenge" in prompt and "Maximum 150 words" in prompt
+    assert "DO NOT repeat, summarize, or acknowledge" not in prompt      # the v1 rule that blocked dialogue
+
+
+def test_turn_v1_and_writer_prompts_match_v1_agents_source():
     source = (ROOT / "src/c4modeler/agents.py").read_text(encoding="utf-8")
-    for prompt in (P.TURN_SYSTEM_PROMPT, P.WRITER_SYSTEM_PROMPT):
+    for prompt in (P.TURN_SYSTEM_PROMPT_V1, P.WRITER_SYSTEM_PROMPT):
         for line in prompt.split("\n"):
             if line.strip():
                 assert line.replace("'", "\\'") in source or line in source, line

@@ -184,3 +184,9 @@ def test_judge_keeps_successful_tasks_and_repeats_only_failed_ones():
     second = J.judge_run(llm, BRIEF, model(), SCENARIOS, previous=first)
     assert "errors" not in second and second["iso"] == first["iso"]
     assert [c["purpose"] for c in llm.calls[n_before:]] == ["judge_requirements|attempt1"]
+
+
+def test_judge_prompt_hashes_are_stable_and_complete():
+    a, b = J.judge_prompt_hashes(), J.judge_prompt_hashes()
+    assert a == b and set(a) == {"JUDGE_SYSTEM_PROMPT", "ISO_TASK_PROMPT", "ATAM_TASK_PROMPT",
+                                 "REQUIREMENTS_TASK_PROMPT", "ISO_CHARACTERISTICS"}

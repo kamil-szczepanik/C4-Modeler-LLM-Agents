@@ -116,6 +116,15 @@ REQUIREMENTS_SCHEMA = {"type": "OBJECT", "properties": {"requirements": {"type":
     "required": ["id", "status"]}}}, "required": ["requirements"]}
 
 
+def judge_prompt_hashes() -> Dict[str, str]:
+    """Short hashes of the judge prompts and rubric, stored with every evaluation."""
+    import hashlib
+    items = {"JUDGE_SYSTEM_PROMPT": JUDGE_SYSTEM_PROMPT, "ISO_TASK_PROMPT": ISO_TASK_PROMPT,
+             "ATAM_TASK_PROMPT": ATAM_TASK_PROMPT, "REQUIREMENTS_TASK_PROMPT": REQUIREMENTS_TASK_PROMPT,
+             "ISO_CHARACTERISTICS": json.dumps(ISO_CHARACTERISTICS, sort_keys=True)}
+    return {k: hashlib.sha256(v.encode("utf-8")).hexdigest()[:12] for k, v in items.items()}
+
+
 class JudgeError(RuntimeError):
     pass
 
