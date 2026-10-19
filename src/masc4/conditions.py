@@ -11,7 +11,7 @@ import yaml
 from .prompts import PERSONAS
 
 MEMORY_TYPES = {"none", "glossary"}
-CONDITION_FIELDS = {"id", "studies", "description", "team", "memory"}
+CONDITION_FIELDS = {"id", "studies", "description", "team", "memory", "rep_factor"}
 
 
 @dataclass(frozen=True)
@@ -29,6 +29,7 @@ class Condition:
     description: str
     team: Tuple[AgentSpec, ...]
     memory: str
+    rep_factor: int = 1   # repetitions = rep_factor x --reps (the reference condition gets more runs)
 
     @property
     def team_keys(self) -> List[str]:
@@ -71,8 +72,11 @@ def load_conditions(path: Path) -> Tuple[GenerationSettings, List[Condition]]:
             raise ValueError(f"{raw['id']}: memory must be one of {sorted(MEMORY_TYPES)}")
         if not raw["team"]:
             raise ValueError(f"{raw['id']}: empty team")
+        rep_factor = raw.get("rep_factor", 1)
+        if not isinstance(rep_factor, int) or isinstance(rep_factor, bool) or rep_factor < 1:
+            raise ValueError(f"{raw['id']}: rep_factor must be a positive integer")
         conditions.append(Condition(id=raw["id"], studies=tuple(raw["studies"]), description=raw["description"],
-                                    team=build_team(list(raw["team"])), memory=raw["memory"]))
+                                    team=build_team(list(raw["team"])), memory=raw["memory"], rep_factor=rep_factor))
     ids = [c.id for c in conditions]
     if len(ids) != len(set(ids)):
         raise ValueError("duplicate condition ids")

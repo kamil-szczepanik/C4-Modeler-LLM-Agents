@@ -40,8 +40,10 @@ class RunSpec:
 
 
 def plan_runs(conditions: List[Condition], brief_ids: List[str], reps: int, seed: int) -> List[RunSpec]:
-    """All runs in a seeded random order, so that time (API drift, rate limits) is not confounded with condition."""
-    plan = [RunSpec(c.id, b, r) for c in conditions for b in brief_ids for r in range(1, reps + 1)]
+    """All runs in a seeded random order, so that time (API drift, rate limits) is not confounded with condition.
+
+    A condition runs reps x its rep_factor times per brief (the reference condition C0 has rep_factor 2)."""
+    plan = [RunSpec(c.id, b, r) for c in conditions for b in brief_ids for r in range(1, reps * c.rep_factor + 1)]
     random.Random(seed).shuffle(plan)
     return plan
 

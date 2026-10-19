@@ -79,7 +79,7 @@ def test_run_plan_is_resumable_and_records_failures(tmp_path):
     plan = plan_runs(list(conds.values()), ["b1"], reps=1, seed=1)
     failing = lambda model, log: make_fake_llm(call_log=log, fail_on="glossary")  # noqa: E731
     counts = run_plan(plan, conds, briefs, settings, failing, tmp_path, ROOT, log=lambda m: None)
-    assert counts == {"completed": 1, "failed": 1}
+    assert counts == {"completed": 2, "failed": 1}            # C0 has rep_factor 2
     failed = json.loads((RunSpec("C10_glossary_memory", "b1", 1).directory(tmp_path) / "run.json").read_text())
     assert failed["status"] == "failed" and "simulated API failure" in failed["error"]
     assert (RunSpec("C10_glossary_memory", "b1", 1).directory(tmp_path) / "1_context_definition.yaml").exists()
@@ -100,8 +100,11 @@ def test_run_plan_is_resumable_and_records_failures(tmp_path):
 def test_plan_is_randomized_but_reproducible():
     _, conds = load_conditions(ROOT / "configs/conditions_v2.yaml")
     a = plan_runs(conds, ["b1", "b2"], reps=3, seed=7)
-    assert a == plan_runs(conds, ["b1", "b2"], reps=3, seed=7) and len(a) == 11 * 2 * 3
+    assert a == plan_runs(conds, ["b1", "b2"], reps=3, seed=7) and len(a) == (10 + 2) * 2 * 3
     assert a != sorted(a, key=lambda s: (s.condition_id, s.brief_id, s.rep))
+    c0 = [i for i, s in enumerate(a) if s.condition_id == "C0_baseline"]
+    assert len(c0) == 2 * 2 * 3 and max(s.rep for s in a if s.condition_id == "C0_baseline") == 6
+    assert min(c0) < len(a) // 2 < max(c0)       # the extra baseline runs are mixed in, not appended
 
 
 
@@ -223,11 +226,11 @@ def test_cost_limit_stops_new_runs_and_resumes_with_a_higher_limit(tmp_path):
     messages = []
     counts = run_plan(plan, conds, {"b1": "title: T\n"}, settings, priced, tmp_path, ROOT, workers=1,
                       log=messages.append, max_cost_usd=1e-9)
-    assert counts["completed"] == 1 and counts.get("skipped") == 2
+    assert counts["completed"] == 1 and counts.get("skipped") == 3     # C0 x2, C3, C5
     assert any("Cost limit reached" in m for m in messages)
     counts = run_plan(plan, conds, {"b1": "title: T\n"}, settings, priced, tmp_path, ROOT, workers=1,
                       log=lambda m: None, max_cost_usd=100.0)
-    assert counts["completed"] == 2
+    assert counts["completed"] == 3
 
 
 
@@ -249,6 +252,6 @@ def test_invalid_team_output_is_final_but_infrastructure_errors_are_repeated(tmp
         return llm
 
     counts = run_plan(plan, conds, {"b1": "title: T\n"}, settings, flaky, tmp_path, ROOT, log=lambda m: None)
-    assert counts.get("invalid_output") == 1 and counts["completed"] == 1
+    assert counts.get("invalid_output") == 1 and counts["completed"] == 2     # C0 x2 completed, C3 invalid
     again = run_plan(plan, conds, {"b1": "title: T\n"}, settings, flaky, tmp_path, ROOT, log=lambda m: None)
     assert again["completed"] == 0 and not again.get("invalid_output")      # final: not repeated

@@ -61,9 +61,10 @@ def main() -> None:
 
     plan = plan_runs(conditions, sorted(briefs), args.reps, args.seed)
     print(f"model={settings.model} temperature={settings.temperature} rounds={settings.rounds}")
-    print(f"{len(conditions)} conditions x {len(briefs)} briefs x {args.reps} reps = {len(plan)} runs")
+    print(f"{len(conditions)} conditions x {len(briefs)} briefs x {args.reps} reps (x rep_factor) = {len(plan)} runs")
     for c in conditions:
-        print(f"  {c.id:24s} memory={c.memory:8s} team: {' -> '.join(a.display_name for a in c.team)}")
+        factor = f" reps x{c.rep_factor}" if c.rep_factor > 1 else ""
+        print(f"  {c.id:24s} memory={c.memory:8s} team: {' -> '.join(a.display_name for a in c.team)}{factor}")
     if args.dry_run:
         return
 
