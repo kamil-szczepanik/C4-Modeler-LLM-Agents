@@ -88,13 +88,22 @@ def write_csv(path: Path, rows: List[dict]) -> None:
         w.writerows(rows)
 
 
-def agreement(rows, col_a, col_b) -> dict:
+def agreement(rows, col_a, col_b, integer_scores: bool, n_boot: int = 2000, seed: int = 0) -> dict:
+    """Agreement of two judges on the same runs: absolute (ICC(A,1), alpha), systematic offset (mean
+    difference b - a with a bootstrap CI), rank agreement (Spearman) and, for integer scores, exact agreement."""
     pairs = np.array([(to_float(r.get(col_a)), to_float(r.get(col_b))) for r in rows
                       if to_float(r.get(col_a)) is not None and to_float(r.get(col_b)) is not None], float)
     if len(pairs) < 2:
-        return {"n": len(pairs), "icc_a1": float("nan"), "alpha": float("nan"), "exact": float("nan")}
+        return {"n": len(pairs), "icc_a1": float("nan"), "alpha": float("nan"), "exact": float("nan"),
+                "mean_diff": float("nan"), "diff_ci": "–", "spearman": float("nan")}
+    diff = pairs[:, 1] - pairs[:, 0]
+    rng = np.random.default_rng(seed)
+    boots = [rng.choice(diff, len(diff)).mean() for _ in range(n_boot)]
+    lo, hi = np.percentile(boots, [2.5, 97.5])
     return {"n": len(pairs), "icc_a1": icc_a1(pairs), "alpha": krippendorff_alpha_interval(pairs),
-            "exact": float(np.mean(np.isclose(pairs[:, 0], pairs[:, 1])))}
+            "exact": float(np.mean(np.isclose(pairs[:, 0], pairs[:, 1]))) if integer_scores else float("nan"),
+            "mean_diff": float(diff.mean()), "diff_ci": f"[{fmt(lo)}, {fmt(hi)}]",
+            "spearman": spearman(pairs[:, 0], pairs[:, 1])}
 
 
 def main() -> None:
@@ -232,15 +241,46 @@ def main() -> None:
 
     # 8. measurement quality (RQ3) ------------------------------------------------------------------
     meas = []
-    for label, other in (("test-retest", f"{judge}__{plan['retest_tag']}"), ("second judge", plan["control_judge"])):
+    control = plan["control_judge"]
+    for label, other in (("test-retest", f"{judge}__{plan['retest_tag']}"), ("control judge", control)):
         for m in ["iso_mean", "atam_ri", "req_coverage"] + [f"iso_{c}" for c in ISO_CHARACTERISTICS]:
-            a = agreement(all_rows, f"{judge}__{m}", f"{other}__{m}")
+            a = agreement(all_rows, f"{judge}__{m}", f"{other}__{m}",
+                          integer_scores=m.startswith("iso_") and m != "iso_mean", seed=seed)
             meas.append({"comparison": label, "metric": m, "n": str(a["n"]), "icc_a1": a["icc_a1"],
-                         "alpha": a["alpha"], "exact_agreement": a["exact"]})
-    report += ["## 8. Judge reliability (ICC(A,1), Krippendorff's α interval, exact agreement)\n",
-               table(meas, ["comparison", "metric", "n", "icc_a1", "alpha", "exact_agreement"],
-                     ["Comparison", "Metric", "n", "ICC(A,1)", "α", "Exact agreement"]), ""]
+                         "alpha": a["alpha"], "mean_diff": a["mean_diff"], "diff_ci": a["diff_ci"],
+                         "spearman": a["spearman"], "exact_agreement": a["exact"]})
+    report += ["## 8. Judge reliability (second judgement minus main judge, same runs)\n",
+               "ICC(A,1) and α measure absolute agreement, so a constant offset between judges lowers them; "
+               "the mean difference shows that offset and Spearman ρ whether the judges rank the runs alike.\n",
+               table(meas, ["comparison", "metric", "n", "icc_a1", "alpha", "mean_diff", "diff_ci", "spearman",
+                            "exact_agreement"],
+                     ["Comparison", "Metric", "n", "ICC(A,1)", "α", "Mean difference", "95% CI", "Spearman ρ",
+                      "Exact agreement"]), ""]
     write_csv(out / "judge_reliability.csv", meas)
+
+    # 8b. do the conclusions depend on the judge? effects of the conditions under both judges, same runs
+    sample = [r for r in rows if to_float(r.get(f"{control}__iso_mean")) is not None]
+    effects, agree = [], []
+    for m in ("iso_mean", "atam_ri", "req_coverage"):
+        pairs = []
+        for s, c in plan["comparison_list"]:
+            e_main = strat_effect(strata(sample, c, f"{judge}__{m}"), strata(sample, ref, f"{judge}__{m}"))
+            e_ctrl = strat_effect(strata(sample, c, f"{control}__{m}"), strata(sample, ref, f"{control}__{m}"))
+            known = not (np.isnan(e_main) or np.isnan(e_ctrl))
+            effects.append({"metric": m, "condition": c, "effect_main_judge": e_main, "effect_control_judge": e_ctrl,
+                            "same_direction": ("yes" if np.sign(e_main) == np.sign(e_ctrl) else "no") if known else "–"})
+            if known:
+                pairs.append((e_main, e_ctrl))
+        pairs = np.array(pairs, float).reshape(-1, 2)
+        agree.append({"metric": m, "conditions": str(len(pairs)),
+                      "same_direction": str(int(np.sum(np.sign(pairs[:, 0]) == np.sign(pairs[:, 1])))),
+                      "spearman": spearman(pairs[:, 0], pairs[:, 1]) if len(pairs) else float("nan")})
+    report += ["## 8b. Effects of the conditions under both judges (control-judge sample, same runs)\n",
+               table(agree, ["metric", "conditions", "same_direction", "spearman"],
+                     ["Metric", "Conditions", "Same direction", "Spearman ρ of the effects"]), "",
+               table(effects, ["metric", "condition", "effect_main_judge", "effect_control_judge", "same_direction"],
+                     ["Metric", "Condition", f"Effect ({judge})", f"Effect ({control})", "Same direction"]), ""]
+    write_csv(out / "judge_effect_agreement.csv", effects)
 
     corr = []
     for x, y in (("c4_sc", f"{judge}__iso_mean"), ("compilation", f"{judge}__iso_mean"),
@@ -266,6 +306,14 @@ def main() -> None:
         c4 = [to_float(r.get("c4_sc")) for r in subset]
         c4 = [v for v in c4 if v is not None]
         entry["c4_sc"] = float(np.mean(np.isclose(c4, 5))) if c4 else float("nan")
+        ceiling.append(entry)
+    for who in (judge, control):     # is the ceiling a property of the judge? both judges on the same runs
+        entry = {"briefs": f"control sample, {who}"}
+        for c in ISO_CHARACTERISTICS:
+            vals = [to_float(r.get(f"{who}__iso_{c}")) for r in sample]
+            vals = [v for v in vals if v is not None]
+            entry[c] = float(np.mean(np.array(vals) == 5)) if vals else float("nan")
+        entry["c4_sc"] = "–"
         ceiling.append(entry)
     cols = ["briefs"] + list(ISO_CHARACTERISTICS) + ["c4_sc"]
     report += ["## 10. Ceiling: share of runs at the maximum score\n", table(ceiling, cols, cols), ""]

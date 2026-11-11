@@ -72,7 +72,7 @@ scenario analysis of the Architecture Tradeoff Analysis Method (ATAM).
 **Scenarios:**
 {scenarios}
 
-For every scenario give:
+For each of the {n_scenarios} scenarios give:
 - score: integer from 1 to 5 (1 = the architecture cannot achieve the response; 3 = it can, but only with significant
   changes or with unaddressed risks; 5 = it achieves the response measure with the mechanisms it already contains)
 - elements: names of the architectural elements involved
@@ -224,7 +224,7 @@ def judge_iso(llm: LLMClient, brief: str, c4: dict) -> Dict:
 
 def judge_atam(llm: LLMClient, brief: str, c4: dict, scenarios: List[Dict[str, str]]) -> Dict:
     user = ATAM_TASK_PROMPT.format(brief=brief.strip(), architecture=render_architecture(c4),
-                                   scenarios=format_scenarios(scenarios))
+                                   scenarios=format_scenarios(scenarios), n_scenarios=len(scenarios))
     expected = {s["id"] for s in scenarios}
 
     def validate(d):
