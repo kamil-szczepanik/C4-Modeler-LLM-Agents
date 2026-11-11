@@ -255,3 +255,80 @@ def test_invalid_team_output_is_final_but_infrastructure_errors_are_repeated(tmp
     assert counts.get("invalid_output") == 1 and counts["completed"] == 2     # C0 x2 completed, C3 invalid
     again = run_plan(plan, conds, {"b1": "title: T\n"}, settings, flaky, tmp_path, ROOT, log=lambda m: None)
     assert again["completed"] == 0 and not again.get("invalid_output")      # final: not repeated
+
+
+class FakeClock:
+    """Time that advances only through the client's sleep calls."""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+
+def test_an_unstable_connection_is_waited_out_but_other_errors_get_max_retries():
+    import socket
+    clock = FakeClock()
+    offline = [urllib.error.URLError(OSError(51, "Network is unreachable"))] * 20 + [socket.timeout("timed out")]
+    http = FakeHTTP(*offline, ok_payload("back online"))
+    client = GeminiClient("m", "KEY", CallLog(), opener=http, sleep=clock.sleep, clock=clock)
+    resp = client.generate(system="s", user="u", temperature=0.5, purpose="p")
+    assert resp.text == "back online" and resp.attempts == 22 and clock.now < 1800   # > max_retries (10)
+
+    clock = FakeClock()
+    http = FakeHTTP(*[urllib.error.URLError(OSError(51, "Network is unreachable"))] * 100)
+    client = GeminiClient("m", "KEY", CallLog(), opener=http, sleep=clock.sleep, clock=clock)
+    with pytest.raises(LLMError, match="Network is unreachable"):
+        client.generate(system="s", user="u", temperature=0.5, purpose="p")
+    assert 1800 <= clock.now < 1800 + 2 * 90                                     # gave up after ~30 min
+
+    http = FakeHTTP(*[http_error(503)] * 20)
+    client = GeminiClient("m", "KEY", CallLog(), opener=http, sleep=lambda s: None)
+    with pytest.raises(LLMError, match="HTTP 503"):
+        client.generate(system="s", user="u", temperature=0.5, purpose="p")
+    assert len(http.requests) == 10
+
+
+def test_failed_runs_are_repeated_in_further_passes(tmp_path):
+    settings, conds = load_conditions(ROOT / "configs/conditions_v2.yaml")
+    conds = {c.id: c for c in conds if c.id in ("C3_no_devops", "C5_single_architect")}
+    plan = plan_runs(list(conds.values()), ["b1"], reps=2, seed=4)
+    first_attempts = set()
+
+    def flaky(model, log):              # every run fails on its first attempt (e.g. a long outage)
+        run_dir = Path(log.path).parent
+        if run_dir not in first_attempts:
+            first_attempts.add(run_dir)
+            return make_fake_llm(call_log=log, fail_on="writer")
+        return make_fake_llm(call_log=log)
+
+    waits, messages = [], []
+    counts = run_plan(plan, conds, {"b1": "title: T\n"}, settings, flaky, tmp_path, ROOT, log=messages.append,
+                      repeat_failed=2, repeat_wait_s=600, sleep=waits.append)
+    assert counts == {"completed": len(plan), "failed": 0} and waits == [600]
+    assert any("repeating them in 10 min" in m for m in messages)
+    assert all(json.loads((s.directory(tmp_path) / "run.json").read_text())["status"] == "completed" for s in plan)
+
+
+def test_no_repeat_pass_after_the_daily_quota_is_exhausted(tmp_path):
+    from masc4.llm import LLMError as Err
+    settings, conds = load_conditions(ROOT / "configs/conditions_v2.yaml")
+    conds = {c.id: c for c in conds if c.id == "C5_single_architect"}
+    plan = plan_runs(list(conds.values()), ["b1", "b2"], reps=1, seed=1)
+
+    def quota(model, log):
+        llm = make_fake_llm(call_log=log)
+        def responder(p, s, u):
+            raise Err("daily quota exhausted (GenerateRequestsPerDay): limit")
+        llm.responder = responder
+        return llm
+
+    waits = []
+    run_plan(plan, conds, {"b1": "title: T\n", "b2": "title: U\n"}, settings, quota, tmp_path, ROOT,
+             log=lambda m: None, repeat_failed=3, sleep=waits.append)
+    assert waits == []
+

@@ -95,13 +95,15 @@ class GeminiClient(LLMClient):
     """
 
     def __init__(self, model: str, api_key: str, call_log: CallLog, *, max_retries: int = 10,
-                 timeout_s: float = 180.0, system_as_user: Optional[bool] = None,
+                 network_patience_s: float = 1800.0, timeout_s: float = 180.0, system_as_user: Optional[bool] = None,
                  supports_schema: Optional[bool] = None, extra_generation_config: Optional[dict] = None,
-                 opener: Optional[Callable] = None, sleep: Callable[[float], None] = time.sleep):
+                 opener: Optional[Callable] = None, sleep: Callable[[float], None] = time.sleep,
+                 clock: Callable[[], float] = time.time):
         self.model = model
         self._api_key = api_key
         self.call_log = call_log
         self.max_retries = max_retries
+        self.network_patience_s = network_patience_s   # an unstable connection is waited out this long
         self.timeout_s = timeout_s
         self.system_as_user = model.startswith("gemma") if system_as_user is None else system_as_user
         # Gemma models get the JSON format only through the prompt; callers parse leniently
@@ -109,6 +111,7 @@ class GeminiClient(LLMClient):
         self.extra_generation_config = extra_generation_config or {}
         self._open = opener or urllib.request.urlopen
         self._sleep = sleep
+        self._clock = clock
 
     def _body(self, system: str, user: str, temperature: float, json_schema: Optional[dict]) -> dict:
         generation_config = {"temperature": temperature, **self.extra_generation_config}
@@ -128,8 +131,11 @@ class GeminiClient(LLMClient):
         body = json.dumps(self._body(system, user, temperature, json_schema)).encode("utf-8")
         url = f"{GEMINI_BASE}/models/{self.model}:generateContent"
         last_error = ""
-        start = time.time()
-        for attempt in range(1, self.max_retries + 1):
+        start = self._clock()
+        attempt = 0
+        while True:
+            attempt += 1
+            network_error = False
             request = urllib.request.Request(url, data=body, headers={
                 "x-goog-api-key": self._api_key, "Content-Type": "application/json"})
             try:
@@ -143,7 +149,7 @@ class GeminiClient(LLMClient):
                     input_tokens=usage.get("promptTokenCount", 0),
                     output_tokens=usage.get("candidatesTokenCount", 0),
                     thought_tokens=usage.get("thoughtsTokenCount", 0),
-                    latency_s=round(time.time() - start, 3), finish_reason=finish, attempts=attempt)
+                    latency_s=round(self._clock() - start, 3), finish_reason=finish, attempts=attempt)
                 self.call_log.add(purpose, _request_hash(system, user, temperature, json_schema), response)
                 return response
             except urllib.error.HTTPError as err:
@@ -159,13 +165,17 @@ class GeminiClient(LLMClient):
                     raise LLMError(f"daily quota exhausted ({', '.join(quotas)}): {message[:200]}") from None
                 if err.code not in RETRYABLE_HTTP:
                     raise LLMError(last_error) from None
-            except (OSError, http.client.HTTPException, ValueError, LLMError) as err:
-                # OSError covers URLError, connection resets and socket.timeout (which on Python 3.9 is
-                # not a TimeoutError); HTTPException covers dropped connections; ValueError a garbled body
+            except (OSError, http.client.HTTPException) as err:
+                # no answer from the API: OSError covers URLError (no network, DNS), connection resets and
+                # socket.timeout (not a TimeoutError on Python 3.9); HTTPException covers dropped connections
+                last_error, network_error = f"{type(err).__name__}: {err}", True
+            except (ValueError, LLMError) as err:   # a garbled body or an empty answer
                 last_error = f"{type(err).__name__}: {err}"
-            if attempt < self.max_retries:
-                self._sleep(min(90.0, 2.0 ** attempt) * (0.5 + random.random()))  # up to ~10 min in total
-        raise LLMError(f"{purpose}: failed after {self.max_retries} attempts ({last_error})")
+            # an unstable connection is waited out for network_patience_s; other errors get max_retries attempts
+            waited_out = network_error and self._clock() - start < self.network_patience_s
+            if not waited_out and attempt >= self.max_retries:
+                raise LLMError(f"{purpose}: failed after {attempt} attempts ({last_error})")
+            self._sleep(min(90.0, 2.0 ** min(attempt, 7)) * (0.5 + random.random()))
 
 
 class FakeLLM(LLMClient):

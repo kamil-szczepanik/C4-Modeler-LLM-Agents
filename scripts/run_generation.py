@@ -39,6 +39,9 @@ def main() -> None:
     ap.add_argument("--env-file", help=".env file with GEMINI_API_KEY (if not set in the environment)")
     ap.add_argument("--max-cost", type=float, help="stop starting new runs once the estimated generation cost "
                                                     "of this results directory reaches this many USD")
+    ap.add_argument("--repeat-failed", type=int, default=3,
+                    help="after the plan, repeat runs that failed (network or API errors) in up to this many "
+                         "further passes, 10 minutes apart (default 3)")
     ap.add_argument("--dry-run", action="store_true", help="print the plan and exit")
     ap.add_argument("--fake", action="store_true", help="use the scripted fake model (no API calls)")
     args = ap.parse_args()
@@ -77,7 +80,7 @@ def main() -> None:
         make_llm = lambda model, log: GeminiClient(model, api_key, log)  # noqa: E731
 
     counts = run_plan(plan, {c.id: c for c in conditions}, briefs, settings, make_llm, Path(args.out), REPO,
-                      workers=args.workers, max_cost_usd=args.max_cost)
+                      workers=args.workers, max_cost_usd=args.max_cost, repeat_failed=args.repeat_failed)
     print("done:", counts)
 
 

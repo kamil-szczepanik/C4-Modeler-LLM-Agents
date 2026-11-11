@@ -79,6 +79,11 @@ glossary after one retry), are final. Runs stopped by an infrastructure error (A
 repeated, and the earlier attempt is kept in `previous_attempts/`. `--max-cost` stops starting
 new runs once the estimated generation cost reaches the limit, in USD.
 
+**Unstable connection.** A model call without network waits up to 30 minutes for the connection to
+return; other API errors are retried 10 times. Runs that still fail are repeated automatically after
+the plan, in up to three further passes 10 minutes apart (`--repeat-failed`). Whatever remains failed
+is repeated by running the same command again.
+
 **Appendix of the article.** `scripts/export_appendix.py --paper PAPER.tex` writes the prompts,
 briefs, judge rubrics and scenarios from the code into the article.
 

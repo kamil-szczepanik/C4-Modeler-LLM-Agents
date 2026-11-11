@@ -131,16 +131,19 @@ def execute_run(spec: RunSpec, condition: Condition, brief_text: str, settings: 
 def run_plan(plan: List[RunSpec], conditions: Dict[str, Condition], briefs: Dict[str, str],
              settings: GenerationSettings, make_llm: Callable[[str, CallLog], LLMClient], out_root: Path,
              repo: Path, workers: int = 1, log: Callable[[str], None] = print,
-             max_cost_usd: Optional[float] = None) -> Dict[str, int]:
+             max_cost_usd: Optional[float] = None, repeat_failed: int = 0, repeat_wait_s: float = 600.0,
+             sleep: Callable[[float], None] = time.sleep) -> Dict[str, int]:
     """Execute the plan; with max_cost_usd, no new run starts once the estimated generation cost of all
-    runs in out_root (this and earlier batches) reaches the limit."""
+    runs in out_root (this and earlier batches) reaches the limit. With repeat_failed > 0, runs that failed
+    (network or API errors) are repeated after the plan, in up to repeat_failed further passes that start
+    repeat_wait_s apart; no pass is added after Ctrl+C, an exhausted daily quota or the cost limit."""
     with BatchLock(out_root):
         return _run_plan_locked(plan, conditions, briefs, settings, make_llm, out_root, repo, workers, log,
-                                max_cost_usd)
+                                max_cost_usd, repeat_failed, repeat_wait_s, sleep)
 
 
 def _run_plan_locked(plan, conditions, briefs, settings, make_llm, out_root, repo, workers, log,
-                     max_cost_usd=None) -> Dict[str, int]:
+                     max_cost_usd=None, repeat_failed=0, repeat_wait_s=600.0, sleep=time.sleep) -> Dict[str, int]:
     code = code_version(repo)
     other_models = sorted({m["model_requested"] for s in plan for m in [read_meta(s.directory(out_root))]
                            if m and m.get("model_requested") != settings.model})
@@ -150,7 +153,7 @@ def _run_plan_locked(plan, conditions, briefs, settings, make_llm, out_root, rep
     todo = [s for s in plan if not is_completed(s.directory(out_root))]
     log(f"{len(plan)} runs planned, {len(plan) - len(todo)} already final, {len(todo)} to do "
         f"(code {str(code['commit'])[:8]}{' DIRTY' if code['dirty'] else ''})")
-    counts = {"completed": 0, "failed": 0}
+    total = {"completed": 0}
     lock = threading.Lock()
     stop = threading.Event()   # set on a daily-quota failure, on Ctrl+C/kill, or when the cost limit is reached
     spent = {"usd": sum(cost_of_log(p) for p in out_root.glob("*/*/rep*/llm_calls*.jsonl"))
@@ -176,31 +179,51 @@ def _run_plan_locked(plan, conditions, briefs, settings, make_llm, out_root, rep
         return status
 
     interrupted = False
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        futures = {pool.submit(guarded, s): s for s in todo}
-        pending = set(futures)
-        while pending:
+    for pass_no in range(repeat_failed + 1):
+        if pass_no:   # repeat the runs that failed (network or API errors) after a pause
+            todo = [s for s in plan if not is_completed(s.directory(out_root))]
+            if not todo or interrupted or stop.is_set():
+                break
+            log(f"{len(todo)} runs failed (network or API errors); repeating them in {repeat_wait_s / 60:.0f} min "
+                f"(pass {pass_no + 1} of {repeat_failed + 1}; Ctrl+C stops)")
             try:
-                fut = next(as_completed(pending))
+                sleep(repeat_wait_s)
             except KeyboardInterrupt:
-                if interrupted:
-                    raise
                 interrupted = True
-                stop.set()
-                for f in pending:
-                    f.cancel()
-                log("Interrupted: no new runs will start; waiting for the runs in progress to finish "
-                    "(press Ctrl+C again to abandon them - they will simply be repeated next time).")
-                continue
-            pending.discard(fut)
-            if fut.cancelled():
-                continue
-            spec, status = futures[fut], fut.result()
-            with lock:
-                counts[status] = counts.get(status, 0) + 1
-            if status != "skipped":
-                done = sum(v for k, v in counts.items() if k != "skipped")
-                log(f"[{done}/{len(todo)}] {spec.condition_id} {spec.brief_id} rep{spec.rep:02d}: {status}")
+                break
+        counts = {"completed": 0, "failed": 0}
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            futures = {pool.submit(guarded, s): s for s in todo}
+            pending = set(futures)
+            while pending:
+                try:
+                    fut = next(as_completed(pending))
+                except KeyboardInterrupt:
+                    if interrupted:
+                        raise
+                    interrupted = True
+                    stop.set()
+                    for f in pending:
+                        f.cancel()
+                    log("Interrupted: no new runs will start; waiting for the runs in progress to finish "
+                        "(press Ctrl+C again to abandon them - they will simply be repeated next time).")
+                    continue
+                pending.discard(fut)
+                if fut.cancelled():
+                    continue
+                spec, status = futures[fut], fut.result()
+                with lock:
+                    counts[status] = counts.get(status, 0) + 1
+                if status != "skipped":
+                    done = sum(v for k, v in counts.items() if k != "skipped")
+                    log(f"[{done}/{len(todo)}] {spec.condition_id} {spec.brief_id} rep{spec.rep:02d}: {status}")
+        for k, v in counts.items():   # final runs add up over passes; "failed" is what the last pass left
+            if k != "failed":
+                total[k] = total.get(k, 0) + v
+        total["failed"] = counts["failed"]
+        if not counts["failed"]:
+            break
+    counts = total
     if spent["limit_hit"]:
         log(f"Cost limit reached (estimated ${spent['usd']:.2f} >= ${max_cost_usd:.2f}): no new runs started. "
             "Raise --max-cost and run the same command again to continue.")
