@@ -41,8 +41,8 @@ diagrams, scores and the judge's justifications). Each release is archived on Ze
 - Python 3.9 or newer: `pip install -r requirements.txt`
 - Java 11 or newer and PlantUML 1.2025.10, saved as `plantuml.jar` in the repository root
   (or passed with `--jar`); needed only for the compilation metric
-- A Gemini API key (Google AI Studio) in the environment variable `GEMINI_API_KEY`, or in a
-  `.env` file passed with `--env-file` (see `.env.example`)
+- A Gemini API key (Google AI Studio) in `GEMINI_API_KEY`, and for the control judge an Anthropic API key
+  in `ANTHROPIC_API_KEY`, in the environment or in a `.env` file passed with `--env-file` (see `.env.example`)
 
 Run the tests with `python -m pytest tests -q`.
 
@@ -59,8 +59,9 @@ python scripts/progress.py results/v2 --planned 432 --watch 30
 # 2. Structural metrics and the main judge on all completed runs
 python scripts/run_evaluation.py --results results/v2 --judge-model gemini-3.8-flash --workers 4
 
-# 3. Control judge on the first repetition of every condition and brief (66 runs)
-python scripts/run_evaluation.py --results results/v2 --judge-model gemini-3.6-flash --sample-rep 1 --workers 4
+# 3. Control judge from another model family (Claude, key ANTHROPIC_API_KEY) on the first repetition
+#    of every condition and brief (66 runs)
+python scripts/run_evaluation.py --results results/v2 --judge-model claude-sonnet-5-5 --judge-effort medium --sample-rep 1 --workers 4
 
 # 4. Test-retest: the main judge again on a random sample of 20 runs
 python scripts/run_evaluation.py --results results/v2 --judge-model gemini-3.8-flash --sample 20 --tag retest
@@ -70,8 +71,8 @@ python scripts/run_evaluation.py --results results/v2 --no-judge --csv results/v
 python scripts/analyze.py results/v2/runs.csv --out results/v2/analysis
 ```
 
-At the prices of October 2026, generation cost about 0.11 USD and the main judge about 0.04 USD
-per run; a run takes 2.5–3 minutes.
+At the prices of November 2026, generation cost about 0.11 USD and the main judge about 0.04 USD per run,
+the control judge about 0.11 USD per judged run; a run takes 2.5–3 minutes.
 
 **Interruptions.** All batches can be stopped with Ctrl+C and resumed with the same command.
 Runs that completed, or that ended with an unusable team output (`invalid_output`: no valid YAML or
