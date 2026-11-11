@@ -239,6 +239,18 @@ def main() -> None:
                table(by_type, ["briefs", "metric", "condition", "effect", "ci"], ["Briefs", "Metric", "Condition", "Effect", "95% CI"]), ""]
     write_csv(out / "brief_type.csv", by_type)
 
+    # 7b. exploratory: decomposition of the team effect (contrasts between two conditions) -------------
+    decomp = []
+    for d in plan.get("decomposition_contrasts", []):
+        for m in plan["primary_metrics"]:
+            r = compare(rows, d["condition"], d["reference"], m, n_perm, n_boot, seed)
+            r.update(reference=d["reference"], isolates=d["isolates"], ci=f"[{fmt(r['ci_low'])}, {fmt(r['ci_high'])}]")
+            decomp.append(r)
+    report += ["## 7b. Exploratory: decomposition of the team effect (unadjusted p-values)\n",
+               table(decomp, ["condition", "reference", "isolates", "metric", "n", "n_ref", "effect", "ci", "p"],
+                     ["Condition", "Reference", "Isolates", "Metric", "n", "n ref", "Effect", "95% CI", "p (unadjusted)"]), ""]
+    write_csv(out / "decomposition.csv", decomp)
+
     # 8. measurement quality (RQ3) ------------------------------------------------------------------
     meas = []
     control = plan["control_judge"]
