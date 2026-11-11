@@ -201,15 +201,115 @@ class FakeLLM(LLMClient):
         return response
 
 
-def load_api_key(env_file: Optional[Path] = None) -> str:
-    """Read GEMINI_API_KEY (or GOOGLE_API_KEY) from the environment or a .env-style file."""
+ANTHROPIC_BASE = "https://api.anthropic.com/v1"
+ANTHROPIC_VERSION = "2026-10-21"
+ANTHROPIC_RETRYABLE_HTTP = RETRYABLE_HTTP | {529}   # 529: API overloaded
+
+
+def to_json_schema(schema: dict) -> dict:
+    """Gemini response schema (type names in capitals) -> JSON Schema for Claude structured outputs."""
+    out = {k: v for k, v in schema.items() if k not in ("type", "properties", "items")}
+    out["type"] = schema["type"].lower()
+    if "properties" in schema:
+        out["properties"] = {k: to_json_schema(v) for k, v in schema["properties"].items()}
+    if "items" in schema:
+        out["items"] = to_json_schema(schema["items"])
+    if out["type"] == "object":
+        out["additionalProperties"] = False
+    return out
+
+
+class AnthropicClient(LLMClient):
+    """Claude Messages API via REST (the control judge from another model family).
+
+    Raw HTTP like GeminiClient: the official SDK needs Python >= 3.10 and this project runs on 3.9.
+    `temperature` is not sent: current Claude models accept only the default sampling, and API
+    version 2026-10-21 rejects the field. A JSON schema is enforced with structured outputs.
+    The usage's output tokens include the model's thinking, so thought_tokens is 0.
+    """
+
+    def __init__(self, model: str, api_key: str, call_log: CallLog, *, effort: Optional[str] = None,
+                 max_tokens: int = 16000, max_retries: int = 10, network_patience_s: float = 1800.0,
+                 timeout_s: float = 300.0, opener: Optional[Callable] = None,
+                 sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.time):
+        self.model = model
+        self._api_key = api_key
+        self.call_log = call_log
+        self.effort = effort
+        self.max_tokens = max_tokens
+        self.max_retries = max_retries
+        self.network_patience_s = network_patience_s
+        self.timeout_s = timeout_s
+        self._open = opener or urllib.request.urlopen
+        self._sleep = sleep
+        self._clock = clock
+
+    def _body(self, system: str, user: str, json_schema: Optional[dict]) -> dict:
+        body = {"model": self.model, "max_tokens": self.max_tokens, "system": system,
+                "messages": [{"role": "user", "content": user}]}
+        output_config = {}
+        if self.effort:
+            output_config["effort"] = self.effort
+        if json_schema is not None:
+            output_config["format"] = {"type": "json_schema", "schema": to_json_schema(json_schema)}
+        if output_config:
+            body["output_config"] = output_config
+        return body
+
+    def generate(self, *, system: str, user: str, temperature: float, purpose: str,
+                 json_schema: Optional[dict] = None) -> LLMResponse:
+        body = json.dumps(self._body(system, user, json_schema)).encode("utf-8")
+        headers = {"x-api-key": self._api_key, "anthropic-version": ANTHROPIC_VERSION,
+                   "content-type": "application/json"}
+        last_error = ""
+        start = self._clock()
+        attempt = 0
+        while True:
+            attempt += 1
+            network_error = False
+            request = urllib.request.Request(f"{ANTHROPIC_BASE}/messages", data=body, headers=headers)
+            try:
+                with self._open(request, timeout=self.timeout_s) as resp:
+                    data = json.load(resp)
+                stop = data.get("stop_reason", "")
+                text = "".join(b.get("text", "") for b in data.get("content") or [] if b.get("type") == "text")
+                if stop == "refusal" or not text.strip():
+                    raise LLMError(f"no answer (stop_reason={stop})")
+                usage = data.get("usage") or {}
+                response = LLMResponse(
+                    text=text, model=self.model, model_version=data.get("model", ""),
+                    input_tokens=usage.get("input_tokens", 0), output_tokens=usage.get("output_tokens", 0),
+                    thought_tokens=0, latency_s=round(self._clock() - start, 3), finish_reason=stop,
+                    attempts=attempt)
+                self.call_log.add(purpose, _request_hash(system, user, temperature, json_schema), response)
+                return response
+            except urllib.error.HTTPError as err:
+                try:
+                    message = json.load(err).get("error", {}).get("message", "")
+                except Exception:
+                    message = ""
+                last_error = f"HTTP {err.code}: {message[:300]}"
+                if err.code not in ANTHROPIC_RETRYABLE_HTTP:
+                    raise LLMError(last_error) from None
+            except (OSError, http.client.HTTPException) as err:
+                last_error, network_error = f"{type(err).__name__}: {err}", True
+            except (ValueError, LLMError) as err:
+                last_error = f"{type(err).__name__}: {err}"
+            waited_out = network_error and self._clock() - start < self.network_patience_s
+            if not waited_out and attempt >= self.max_retries:
+                raise LLMError(f"{purpose}: failed after {attempt} attempts ({last_error})")
+            self._sleep(min(90.0, 2.0 ** min(attempt, 7)) * (0.5 + random.random()))
+
+
+def load_api_key(env_file: Optional[Path] = None, names: tuple = ("GEMINI_API_KEY", "GOOGLE_API_KEY")) -> str:
+    """Read the first of `names` from the environment or a .env-style file."""
     import os
-    for name in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
+    for name in names:
         if os.environ.get(name):
             return os.environ[name]
     if env_file and Path(env_file).exists():
         for line in Path(env_file).read_text(encoding="utf-8").splitlines():
             key, _, value = line.partition("=")
-            if key.strip() in ("GEMINI_API_KEY", "GOOGLE_API_KEY") and value.strip():
+            if key.strip() in names and value.strip():
                 return value.strip().strip('"').strip("'")
-    raise LLMError("No API key: set GEMINI_API_KEY or pass --env-file")
+    raise LLMError(f"No API key: set {' or '.join(names)} or pass --env-file")

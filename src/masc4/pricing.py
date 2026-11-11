@@ -14,6 +14,9 @@ PRICES = {
     "gemini-3.1-flash-lite": (0.25, 1.50),
     "gemini-3.8-flash": (0.75, 3.75),
     "gemini-3.6-flash": (0.75, 3.75),
+    # platform.claude.com/docs/en/about-claude/pricing (Nov 2026); thinking is included in output tokens
+    "claude-sonnet-5-5": (2.00, 10.00),
+    "claude-haiku-5-5": (0.10, 0.50),
 }
 
 

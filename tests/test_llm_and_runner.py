@@ -332,3 +332,40 @@ def test_no_repeat_pass_after_the_daily_quota_is_exhausted(tmp_path):
              log=lambda m: None, repeat_failed=3, sleep=waits.append)
     assert waits == []
 
+
+def claude_payload(text='{"ok": 1}', model="claude-sonnet-5-5"):
+    return {"model": model, "stop_reason": "end_turn", "usage": {"input_tokens": 100, "output_tokens": 40},
+            "content": [{"type": "thinking", "thinking": ""}, {"type": "text", "text": text}]}
+
+
+def test_claude_client_sends_no_temperature_and_enforces_the_json_schema(tmp_path):
+    from masc4.judge import ISO_SCHEMA
+    from masc4.llm import ANTHROPIC_VERSION, AnthropicClient
+    http = FakeHTTP(http_error(529), claude_payload('{"x": 1}'))
+    log = CallLog(tmp_path / "calls.jsonl")
+    client = AnthropicClient("claude-sonnet-5-5", "AKEY", log, effort="medium", opener=http, sleep=lambda s: None)
+    resp = client.generate(system="sys", user="u", temperature=0.0, purpose="judge_iso|attempt1", json_schema=ISO_SCHEMA)
+    assert resp.text == '{"x": 1}' and resp.attempts == 2 and resp.model_version == "claude-sonnet-5-5"
+    body = json.loads(http.requests[-1].data)
+    assert "temperature" not in body and body["system"] == "sys" and body["output_config"]["effort"] == "medium"
+    schema = body["output_config"]["format"]["schema"]
+    assert schema["type"] == "object" and schema["additionalProperties"] is False
+    assert schema["properties"]["security"]["properties"]["score"]["type"] == "integer"
+    assert http.requests[-1].get_header("X-api-key") == "AKEY"
+    assert http.requests[-1].get_header("Anthropic-version") == ANTHROPIC_VERSION
+    assert "AKEY" not in (tmp_path / "calls.jsonl").read_text()
+
+
+def test_claude_client_bad_request_is_not_retried_and_refusal_is_an_error():
+    from masc4.llm import AnthropicClient
+    http = FakeHTTP(http_error(400))
+    with pytest.raises(LLMError, match="HTTP 400"):
+        AnthropicClient("claude-sonnet-5-5", "K", CallLog(), opener=http, sleep=lambda s: None).generate(
+            system="s", user="u", temperature=0, purpose="p")
+    assert len(http.requests) == 1
+    refusal = dict(claude_payload(), stop_reason="refusal", content=[])
+    http = FakeHTTP(*[refusal] * 10)
+    with pytest.raises(LLMError, match="refusal"):
+        AnthropicClient("claude-sonnet-5-5", "K", CallLog(), opener=http, sleep=lambda s: None).generate(
+            system="s", user="u", temperature=0, purpose="p")
+

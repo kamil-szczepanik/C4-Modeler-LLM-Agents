@@ -31,7 +31,7 @@ sys.path.insert(0, str(REPO / "src"))
 from masc4.conditions import load_conditions  # noqa: E402
 from masc4.judge import ISO_CHARACTERISTICS, JudgeError, judge_prompt_hashes, judge_run, load_scenarios  # noqa: E402
 from masc4.signals import install_stop_handlers  # noqa: E402
-from masc4.llm import CallLog, GeminiClient, LLMError, load_api_key  # noqa: E402
+from masc4.llm import AnthropicClient, CallLog, GeminiClient, LLMError, load_api_key  # noqa: E402
 from masc4.fsutil import BatchLock, write_json_atomic  # noqa: E402
 from masc4.structural import evaluate_structure, find_java  # noqa: E402
 
@@ -40,6 +40,17 @@ def completed_runs(results: Path):
     for meta_path in sorted(results.glob("*/*/rep*/run.json")):
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         yield meta_path.parent, meta
+
+
+def judge_client(model: str, api_key: str, log: CallLog, effort=None):
+    """Claude models (the control judge from another family) via AnthropicClient, Gemini models via GeminiClient."""
+    if model.startswith("claude-"):
+        return AnthropicClient(model, api_key, log, effort=effort)
+    return GeminiClient(model, api_key, log)
+
+
+def key_names(model: str) -> tuple:
+    return ("ANTHROPIC_API_KEY",) if model.startswith("claude-") else ("GEMINI_API_KEY", "GOOGLE_API_KEY")
 
 
 def judge_name(model: str, tag: str = "") -> str:
@@ -63,14 +74,14 @@ def needs_judge(run_dir: Path, model: str, tag: str = "") -> bool:
 
 
 def evaluate_run(run_dir: Path, meta: dict, briefs: dict, scenarios_dir: Path, jar: Path, judge_model, api_key,
-                 force_structural: bool, java: str = "java", tag: str = "") -> str:
+                 force_structural: bool, java: str = "java", tag: str = "", effort=None) -> str:
     c4 = json.loads((run_dir / "c4_model.json").read_text(encoding="utf-8"))
     if force_structural or not (run_dir / "structural.json").exists():
         write_json_atomic(run_dir / "structural.json", evaluate_structure(c4, jar, java))
     if not judge_model or not needs_judge(run_dir, judge_model, tag):
         return "ok"
     log = CallLog(run_dir / f"judge_calls_{judge_name(judge_model, tag)}.jsonl")
-    llm = GeminiClient(judge_model, api_key, log)
+    llm = judge_client(judge_model, api_key, log, effort)
     previous = load_judge(run_dir, judge_model, tag)
     try:
         scenario_path = scenarios_dir / f"{meta['brief']}.yaml"
@@ -147,6 +158,8 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=2026, help="seed for --sample")
     ap.add_argument("--tag", default="", help="store the judgement under judge_<model>__<tag>.json, e.g. 'retest' "
                                               "for a repeated evaluation with the same judge")
+    ap.add_argument("--judge-effort", choices=["low", "medium", "high", "xhigh", "max"],
+                    help="thinking effort for a Claude judge (default: the model's default)")
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--env-file")
     ap.add_argument("--force-structural", action="store_true")
@@ -160,7 +173,8 @@ def main() -> None:
     judge_model = None if args.no_judge else args.judge_model
     if not args.no_judge and not judge_model:
         sys.exit("give --judge-model or --no-judge")
-    api_key = load_api_key(Path(args.env_file) if args.env_file else None) if judge_model else None
+    api_key = (load_api_key(Path(args.env_file) if args.env_file else None, key_names(judge_model))
+               if judge_model else None)
 
     java = find_java()
     print(f"PlantUML compilation with: {java}")
@@ -176,7 +190,7 @@ def main() -> None:
     lock_name = f".evaluation-{judge_name(judge_model, args.tag) if judge_model else 'structural'}.lock"
     with BatchLock(results, lock_name), ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
         futures = {pool.submit(evaluate_run, d, m, briefs, Path(args.scenarios_dir), Path(args.jar), judge_model,
-                               api_key, args.force_structural, java, args.tag): d for d, m in todo}
+                               api_key, args.force_structural, java, args.tag, args.judge_effort): d for d, m in todo}
         try:
             for fut in as_completed(futures):
                 status = fut.result()

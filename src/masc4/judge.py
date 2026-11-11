@@ -168,9 +168,12 @@ def parse_json_answer(text: str) -> dict:
         raise
 
 
+JUDGE_ATTEMPTS = 3   # an incomplete answer (e.g. a scenario list that stops early) is requested again
+
+
 def _ask(llm: LLMClient, user: str, schema: dict, purpose: str, validate) -> dict:
     last = ""
-    for attempt in (1, 2):
+    for attempt in range(1, JUDGE_ATTEMPTS + 1):
         text = llm.generate(system=JUDGE_SYSTEM_PROMPT, user=user, temperature=JUDGE_TEMPERATURE,
                             purpose=f"{purpose}|attempt{attempt}", json_schema=schema).text
         try:
@@ -181,7 +184,7 @@ def _ask(llm: LLMClient, user: str, schema: dict, purpose: str, validate) -> dic
             last = problem
         except (json.JSONDecodeError, TypeError, KeyError, AttributeError) as err:
             last = f"{type(err).__name__}: {err}"
-    raise JudgeError(f"{purpose}: no valid answer after 2 attempts ({last})")
+    raise JudgeError(f"{purpose}: no valid answer after {JUDGE_ATTEMPTS} attempts ({last})")
 
 
 def _score_ok(value) -> bool:
