@@ -252,7 +252,8 @@ def main() -> None:
                      ["x", "y", "Runs", "ρ", "ρ within brief", "ρ within cell"]), ""]
 
     # 6. single ISO characteristics -------------------------------------------------------------------------------
-    chars = []
+    chars = [{"condition": f"{ref} (mean)", **{ch: f"{np.mean([f(r, f'{judge}__iso_{ch}') for r in rows if r['condition'] == ref]):.2f}"
+                                               for ch in ISO_CHARACTERISTICS}}]
     for c in conditions:
         row = {"condition": c}
         for ch in ISO_CHARACTERISTICS:
