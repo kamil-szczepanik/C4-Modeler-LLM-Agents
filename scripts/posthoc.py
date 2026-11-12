@@ -2,6 +2,7 @@
 
   .venv/bin/python scripts/posthoc.py results/v2/runs.csv --out results/v2/analysis
 
+0. Residual standard deviation within condition x brief cells.
 1. Consistency across briefs: the effect of each condition on the primary outcomes within every brief, and the
    number of briefs whose effect has the sign of the stratified effect.
 2. Manipulation check: hits of security, operations and user-related terms per 1,000 words, in the discussion
@@ -117,6 +118,17 @@ def main() -> None:
     briefs = plan["canonical_briefs"] + plan["complex_briefs"]
     run_dir = lambda r: results / r["condition"] / r["brief"] / f"rep{int(r['rep']):02d}"  # noqa: E731
     report = [f"# Post-hoc analyses\n\nInput: `{args.csv}` ({len(rows)} completed runs). Not part of the analysis plan.\n"]
+
+    # 0. residual SD within condition x brief cells (compare with the pilot SDs of the sample-size calculation)
+    sds = []
+    for m in plan["primary_metrics"]:
+        cells = collections.defaultdict(list)
+        for r in rows:
+            cells[(r["condition"], r["brief"])].append(f(r, m))
+        dof = sum(len(v) - 1 for v in cells.values())
+        sds.append({"metric": m, "pooled_within_cell_sd": float(np.sqrt(sum((len(v) - 1) * np.var(v, ddof=1) for v in cells.values()) / dof))})
+    report += ["## 0. Pooled standard deviation within condition x brief cells\n",
+               table(sds, ["metric", "pooled_within_cell_sd"], ["Metric", "SD"]), ""]
 
     # 1. consistency across briefs ----------------------------------------------------------------------
     by_brief = []
