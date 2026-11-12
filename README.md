@@ -69,6 +69,9 @@ python scripts/run_evaluation.py --results results/v2 --judge-model gemini-3.8-f
 # 5. One CSV row per run (all metrics and judges), then the analysis of the plan
 python scripts/run_evaluation.py --results results/v2 --no-judge --csv results/v2/runs.csv
 python scripts/analyze.py results/v2/runs.csv --out results/v2/analysis
+
+# 6. Post-hoc analyses reported in the article (labelled there as post hoc)
+python scripts/posthoc.py results/v2/runs.csv --out results/v2/analysis
 ```
 
 At the prices of November 2026, generation cost about 0.11 USD and the main judge about 0.04 USD per run,
