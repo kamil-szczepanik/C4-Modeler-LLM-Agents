@@ -72,6 +72,9 @@ python scripts/analyze.py results/v2/runs.csv --out results/v2/analysis
 
 # 6. Post-hoc analyses reported in the article (labelled there as post hoc)
 python scripts/posthoc.py results/v2/runs.csv --out results/v2/analysis
+
+# 7. Figures of the Results section (matplotlib)
+python scripts/figures.py results/v2/runs.csv --out results/v2/analysis
 ```
 
 At the prices of November 2026, generation cost about 0.11 USD and the main judge about 0.04 USD per run,
