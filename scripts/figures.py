@@ -2,6 +2,10 @@
 
   .venv/bin/python scripts/figures.py results/v2/runs.csv --out results/v2/analysis
 
+fig_forest.pdf       effects of the ten conditions on each primary outcome (ISO mean, C4-SC) with 95% bootstrap
+                     CIs; filled markers: significant after the Holm correction (confirmatory_primary.csv)
+fig_example_l2.svg   Container diagram of one baseline run, rendered with PlantUML (needs Java and plantuml.jar;
+                     skipped otherwise) without the title and legend lines of the generated source
 fig_effects.pdf      effects of the ten conditions on both primary outcomes (C4-SC, ISO mean) in one plane,
                      with 95% bootstrap CIs (from confirmatory_primary.csv of analyze.py) and the relative
                      model size as marker area
@@ -59,6 +63,68 @@ def minus(x: float, nd: int = 2) -> str:
     if float(s) == 0:
         s = s.lstrip("-")
     return s.replace("-", "−")
+
+
+def fig_forest(plan, analysis: Path, out: Path) -> None:
+    judge = plan["judge"]
+    prim = {(r["metric"], r["condition"]): r for r in csv.DictReader(open(analysis / "confirmatory_primary.csv"))}
+    conds = list(LABELS)
+    gaps = {"C7_architect_first": 0.5, "C9_generic_team": 0.5, "C10_glossary_memory": 0.5}  # study boundaries
+    ys, y = [], 0.0
+    for c in conds:
+        y += gaps.get(c, 0.0)
+        ys.append(y)
+        y += 1.0
+    panels = [(f"{judge}__iso_mean", "ISO mean (judged quality)", 0.25, (-0.95, 0.3)),
+              ("c4_sc", "C4-SC (structural consistency)", 0.10, (-0.15, 0.5))]
+    fig, axes = plt.subplots(1, 2, figsize=(WIDTH_IN, 3.2), sharey=True, gridspec_kw={"width_ratios": [1.25, 1.0]})
+    for ax, (metric, title, sesoi, xlim) in zip(axes, panels):
+        ax.axvspan(-sesoi, sesoi, color=NEUTRAL, zorder=0, lw=0)
+        ax.axvline(0, color=AXIS, lw=0.7, zorder=1)
+        ax.grid(True, axis="x", color=GRID, lw=0.4, zorder=0)
+        for c, yy in zip(conds, ys):
+            r = prim[(metric, c)]
+            e, lo, hi = float(r["effect"]), float(r["ci_low"]), float(r["ci_high"])
+            ax.plot([lo, hi], [yy, yy], color=SERIES, lw=1.2, solid_capstyle="round", zorder=2)
+            filled = r["significant"] == "yes"
+            ax.scatter([e], [yy], s=30, color=SERIES if filled else "white", edgecolor=SERIES, linewidth=1.1, zorder=3)
+        ax.set_xlim(*xlim)
+        ax.set_title(title, fontsize=8, color=INK, pad=4)
+        ax.set_xlabel("Difference from C0", fontsize=7.5)
+        for s in ("top", "right", "left"):
+            ax.spines[s].set_visible(False)
+        ax.tick_params(axis="y", length=0)
+    axes[0].set_yticks(ys)
+    axes[0].set_yticklabels([LABELS[c] for c in conds], fontsize=7.5, color=INK)
+    axes[0].set_ylim(ys[-1] + 0.7, -0.7)
+    handles = [plt.Line2D([], [], marker="o", ls="", color=SERIES, markersize=5, label="significant (Holm)"),
+               plt.Line2D([], [], marker="o", ls="", markerfacecolor="white", markeredgecolor=SERIES, markersize=5,
+                          label="not significant"),
+               Rectangle((0, 0), 1, 1, color=NEUTRAL, label="smallest effects of practical interest")]
+    fig.legend(handles=handles, loc="lower center", ncol=3, frameon=False, fontsize=7, bbox_to_anchor=(0.6, 0.0),
+               handletextpad=0.4, columnspacing=1.2)
+    fig.subplots_adjust(left=0.235, right=0.985, top=0.92, bottom=0.25, wspace=0.08)
+    fig.savefig(out / "fig_forest.pdf")
+    fig.savefig(out / "fig_forest.png", dpi=200)
+    plt.close(fig)
+
+
+def fig_example(results: Path, out: Path, run: str = "C0_baseline/claims-system-modernization/rep01") -> None:
+    """Container diagram of one run as SVG, rendered offline with the C4 library bundled with PlantUML."""
+    import re
+    import subprocess
+    from masc4.structural import C4_INCLUDE, find_java
+    jar = REPO / "plantuml.jar"
+    if not jar.exists():
+        print("plantuml.jar not found: example diagram skipped")
+        return
+    src = (results / run / "2_container_diagram.puml").read_text(encoding="utf-8")
+    src = C4_INCLUDE.sub(r"!include <C4/\1>", src)
+    src = re.sub(r"(?m)^\s*(title .*|LAYOUT_WITH_LEGEND\(\)|SHOW_LEGEND\(\))\s*\n", "", src)  # caption carries the title
+    src = src.replace("@startuml", "@startuml\n!pragma layout smetana", 1)  # layout engine built into PlantUML
+    svg = subprocess.run([find_java(), "-Djava.awt.headless=true", "-jar", str(jar), "-tsvg", "-pipe"],
+                         input=src.encode("utf-8"), capture_output=True, check=True).stdout
+    (out / "fig_example_l2.svg").write_bytes(svg)
 
 
 def fig_effects(rows, plan, analysis: Path, out: Path) -> None:
@@ -171,6 +237,8 @@ def main() -> None:
     rows = [r for r in load_rows(Path(args.csv)) if r["status"] == "completed"]
     out = Path(args.out) if args.out else Path(args.csv).parent / "analysis"
     out.mkdir(parents=True, exist_ok=True)
+    fig_forest(plan, out, out)
+    fig_example(Path(args.csv).parent, out)
     fig_effects(rows, plan, out, out)
     fig_iso_profile(rows, plan, out, args.n_boot)
     print(f"figures: {out / 'fig_effects.pdf'}, {out / 'fig_iso_profile.pdf'}")
