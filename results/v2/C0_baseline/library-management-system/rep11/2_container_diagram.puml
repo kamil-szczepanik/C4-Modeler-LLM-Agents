@@ -1,0 +1,49 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Library Management System
+
+Person(LibraryPatrons, "Library Patrons", "Members of the library accessing the self-service portal to browse, borrow, and manage items.")
+Person(Librarians, "Librarians", "Circulation staff managing day-to-day library operations, loans, and inventory.")
+Person(LibraryAdministrators, "Library Administrators", "Administrators managing system configurations, users, and overall library policies.")
+
+System_Ext(EUIdentityProvider, "EU Identity Provider", "Keycloak or Auth0 handling authentication via OIDC/OAuth2.")
+System_Ext(EUPaymentGateway, "EU Payment Gateway", "Stripe EU or regional APIs handling secure financial transactions.")
+System_Ext(EUNotificationService, "EU Notification Service", "Service providing asynchronous notifications over HTTPS.")
+System_Ext(EUCloudRegionProvider, "EU Cloud Region Provider", "AWS Frankfurt/Ireland or OVHcloud providing EU-compliant cloud infrastructure.")
+System_Ext(CentralLoggingMonitoringSIEM, "Central Logging & Monitoring SIEM", "System for non-blocking audit logging and infrastructure telemetry.")
+System_Ext(WebApplicationFirewallWAF, "Web Application Firewall (WAF)", "Security layer protecting incoming web traffic using TLS 1.3.")
+
+System_Boundary(LibraryManagementSystem, "Library Management System") {
+    Container(PatronSelfServicePortal, "Patron Self-Service Portal", "React / TypeScript SPA", "Single page application served via CDN for rapid patron engagement.")
+    Container(LibrarianWorkbench, "Librarian Workbench", ".NET Core", "Modular monolith for librarians and administrators to manage system operations.")
+    Container(CatalogAPISearchService, "Catalog API & Search Service", ".NET Core", "API and search service handling catalogue operations and high-performance search.")
+    Container(AsynchronousProcessingWorker, "Asynchronous Processing Worker", ".NET Core Worker Service", "Worker service handling background tasks and decoupled asynchronous processing.")
+    Container(IntegrationGateway, "Integration Gateway", "Kong / Envoy API Gateway", "API Gateway routing and securing external and internal traffic.")
+    ContainerDb(Database, "Database", "PostgreSQL with GIN indexes", "Database storing relational data and utilizing built-in full-text search.")
+    Container(MessageBroker, "Message Broker", "Redis / RabbitMQ", "Message broker supporting asynchronous processing with Dead Letter Queues.")
+}
+
+Rel(LibraryPatrons, WebApplicationFirewallWAF, "Accesses patron portal via secure web traffic", "HTTPS / TLS 1.3")
+Rel(Librarians, WebApplicationFirewallWAF, "Accesses librarian workbench via secure web traffic", "HTTPS / TLS 1.3")
+Rel(LibraryAdministrators, WebApplicationFirewallWAF, "Accesses administrative interfaces via secure web traffic", "HTTPS / TLS 1.3")
+Rel(WebApplicationFirewallWAF, IntegrationGateway, "Forwards sanitized traffic to internal integration gateway", "HTTPS / REST over TLS 1.3")
+Rel(PatronSelfServicePortal, IntegrationGateway, "Sends API requests to backend services", "HTTPS / REST over TLS 1.3")
+Rel(IntegrationGateway, CatalogAPISearchService, "Routes authenticated API requests", "gRPC over mTLS with OAuth2/OIDC token validation")
+Rel(LibrarianWorkbench, CatalogAPISearchService, "Communicates with catalog and search services", "gRPC over mTLS")
+Rel(CatalogAPISearchService, Database, "Queries and updates catalogue and operational data", "SQL query over encrypted connections within EU availability zones")
+Rel(AsynchronousProcessingWorker, MessageBroker, "Consumes and produces asynchronous messages", "AMQP/TCP with message-level encryption")
+Rel(PatronSelfServicePortal, CentralLoggingMonitoringSIEM, "Sends structured JSON logs and Prometheus metrics", "OpenTelemetry (with PII sanitization)")
+Rel(LibrarianWorkbench, CentralLoggingMonitoringSIEM, "Sends structured JSON logs and Prometheus metrics", "OpenTelemetry (with PII sanitization)")
+Rel(CatalogAPISearchService, CentralLoggingMonitoringSIEM, "Sends structured JSON logs and Prometheus metrics", "OpenTelemetry (with PII sanitization)")
+Rel(AsynchronousProcessingWorker, CentralLoggingMonitoringSIEM, "Sends structured JSON logs and Prometheus metrics", "OpenTelemetry (with PII sanitization)")
+Rel(IntegrationGateway, CentralLoggingMonitoringSIEM, "Sends structured JSON logs and Prometheus metrics", "OpenTelemetry (with PII sanitization)")
+Rel(Database, CentralLoggingMonitoringSIEM, "Sends structured JSON logs and Prometheus metrics", "OpenTelemetry (with PII sanitization)")
+Rel(MessageBroker, CentralLoggingMonitoringSIEM, "Sends structured JSON logs and Prometheus metrics", "OpenTelemetry (with PII sanitization)")
+Rel(IntegrationGateway, EUIdentityProvider, "Validates user identities and tokens", "OIDC/OAuth2 over HTTPS")
+Rel(LibrarianWorkbench, EUPaymentGateway, "Processes library fees and payments", "REST API over HTTPS with mTLS")
+Rel(AsynchronousProcessingWorker, EUNotificationService, "Triggers automated patron notifications", "Asynchronous REST API over HTTPS with mTLS")
+Rel(CatalogAPISearchService, EUCloudRegionProvider, "Deploys data storage with AES-256 encryption-at-rest", "Cloud Infrastructure Storage")
+
+@enduml

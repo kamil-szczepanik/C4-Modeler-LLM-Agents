@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Event Broker container
+
+System_Ext(real_time_scoring_engine, "Real-Time Scoring Engine", "External system producing authorization events.")
+System_Ext(audit_log_sitter, "Audit Log Sitter", "External consumer group for audit events.")
+System_Ext(case_management_api, "Case Management API", "External consumer processing case creation events.")
+System_Ext(aws_secrets_manager, "AWS Secrets Manager", "Provides secrets and validates mTLS certificates.")
+System_Ext(s3_object_lock_bucket, "S3 Object Lock Bucket", "Stores tamper-evident audit streams asynchronously.")
+
+Container_Boundary(event_broker, "Event Broker") {
+    Component(topic_router_partition_manager, "Topic Router & Partition Manager", "AWS MSK / Kafka Partition Manager", "Manages topic creation, partition assignment, and high-throughput routing using hashed card ID keys.")
+    Component(access_control_auth_enforcer, "Access Control & Auth Enforcer", "mTLS, Kafka ACLs, AWS Secrets Manager", "Validates mutual TLS (mTLS) certificates and enforces Kafka ACLs to isolate the audit-log topic.")
+    Component(storage_replication_engine, "Storage & Replication Engine", "AWS MSK 3-AZ Storage, AWS KMS CMK", "Handles 3-AZ log replication and encrypted-at-rest persistence via AWS KMS CMKs.")
+}
+
+Rel(real_time_scoring_engine, topic_router_partition_manager, "Publishes authorization events and telemetry", "TCP/TLS 1.3, Kafka Protocol")
+Rel(topic_router_partition_manager, audit_log_sitter, "Streams audit events via dedicated consumer group", "TCP/TLS 1.3, Kafka Protocol")
+Rel(topic_router_partition_manager, case_management_api, "Streams events for case creation", "TCP/TLS 1.3, Kafka Protocol")
+Rel(access_control_auth_enforcer, aws_secrets_manager, "Validates mTLS certificates and credentials", "HTTPS/TLS 1.3")
+Rel(storage_replication_engine, s3_object_lock_bucket, "Offloads tamper-evident audit streams asynchronously", "AWS PrivateLink")
+
+@enduml

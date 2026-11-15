@@ -1,0 +1,32 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the AWS API Gateway container
+
+Person_Ext(payment_gateway, "Payment Gateway / Acquirer Systems", "External payment processor or acquirer system")
+
+System_Boundary(aws_api_gateway, "AWS API Gateway") {
+    Component(aws_waf, "AWS WAF", "AWS WAF", "Edge security filter for IP reputation and geo-fencing.")
+    Component(api_gateway_http, "AWS API Gateway HTTP API", "AWS API Gateway HTTP API", "Public-facing ingress router for incoming payment requests.")
+    Component(mtls_validator, "Authentication & mTLS Validator", "Mutual TLS", "Enforces transport security via Mutual TLS.")
+    Component(payload_validator, "Payload Validator & Schema Enforcer", "JSON Schema", "Validates incoming request structures using JSON Schema.")
+    Component(rate_limiter, "Rate Limiter & Throttling Controller", "AWS API Gateway Throttling", "Protects downstream services from traffic spikes and DDoS attacks.")
+    Component(service_registry, "Internal Service Registry", "AWS Cloud Map", "Dynamic container endpoint resolution.")
+    Component(audit_log_redactor, "Audit Log Redactor / Sanitizer", "AWS Lambda", "Strips cleartext card data from logs for PCI-DSS compliance.")
+    Component(metrics_emitter, "Metrics & Telemetry Emitter", "Amazon CloudWatch and AWS X-Ray", "Tracing and monitoring for observability.")
+}
+
+System_Ext(scoring_engine, "Real-Time Scoring Engine", "Downstream processing service")
+System_Ext(s3_object_lock, "Amazon S3 Object Lock", "Tamper-evident storage")
+
+Rel(payment_gateway, aws_waf, "Inspects inbound requests", "HTTPS")
+Rel(aws_waf, mtls_validator, "Forwards filtered traffic", "HTTPS")
+Rel(mtls_validator, payload_validator, "Passes authenticated traffic internally", "HTTP/2")
+Rel(payload_validator, scoring_engine, "Routes validated payloads", "gRPC via AWS VPC Link")
+Rel(api_gateway_http, metrics_emitter, "Collects telemetry asynchronously", "AWS internal telemetry bus")
+Rel(api_gateway_http, s3_object_lock, "Streams sanitized logs", "AWS Kinesis Data Firehose")
+Rel(scoring_engine, api_gateway_http, "Returns decisions", "gRPC")
+Rel(api_gateway_http, payment_gateway, "Returns final responses", "HTTPS")
+
+@enduml

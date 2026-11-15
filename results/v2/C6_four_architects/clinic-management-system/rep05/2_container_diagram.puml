@@ -1,0 +1,66 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(Patient, "Patient", "Web or Mobile users who access portal features, registration, and scheduling.")
+Person(ClinicianStaff, "Clinician/Staff", "Desktop or Web users who manage clinical workflows and electronic medical records.")
+Person(BillingAdministrator, "Billing Administrator", "Web users who manage billing and insurance claims.")
+
+System_Ext(IdentityProviderIdP, "Identity Provider (IdP)", "Provides federated multi-factor authentication via OIDC/SAML 2.0.")
+System_Ext(InsuranceGateway, "Insurance Gateway", "Handles insurance claims and verifications.")
+System_Ext(ExternalLabImagingSystems, "External Lab & Imaging Systems", "Integrates clinical lab and imaging data via HL7 FHIR.")
+System_Ext(NationalHealthRegistry, "National Health Registry", "External registry for patient and health data reporting.")
+System_Ext(ExternalArchivalStorage, "External Archival Storage", "Long-term external storage for archival data.")
+System_Ext(SMSNotificationGateway, "SMS/Notification Gateway", "Sends notifications and SMS messages to users.")
+
+System_Boundary(ClinicManagementSystem, "Clinic Management System") {
+    Container(ApiGateway, "API Gateway", "Nginx / Kong", "Container handling SSL termination, rate limiting, and JWT validation via OIDC.")
+    Container(PatientSchedulingService, "Patient & Scheduling Service", "Java / Spring Boot", "Container managing registrations and appointments.")
+    Container(EmrService, "EMR Service", "Java / Spring Boot", "Container handling clinical notes, audit trails, and gRPC communication.")
+    Container(BillingService, "Billing Service", "Node.js / TypeScript", "Container handling insurance claims and billing.")
+    Container(FhirInteroperabilityService, "FHIR Interoperability Service", "Python / FastAPI", "Container translating data to HL7 FHIR standards.")
+    Container(BackgroundWorker, "Background Worker", "Python / Celery", "Container handling asynchronous tasks, PDF generation, and log offloading.")
+    Container(KeycloakContainer, "Keycloak Container", "Docker / Keycloak", "Local IAM container managing RBAC tokens and local token introspection.")
+    Container(ObservabilityAgent, "Observability Agent", "Prometheus / Grafana Promtail", "Sidecar container for metrics and structured logging.")
+    ContainerDb(DistributedCache, "Distributed Cache", "Redis Enterprise", "Cluster providing fast data reads.")
+    Container(MessageBroker, "Message Broker", "Apache Kafka", "Cluster for asynchronous event-driven decoupling.")
+    ContainerDb(PrimaryDatabase, "Primary Database", "PostgreSQL", "Multi-master active-active cluster with AES-256 encryption.")
+    Container(DatabaseAccessProxy, "Database Access Proxy", "PgBouncer", "Proxy with IAM authentication for connection pooling.")
+    ContainerDb(AuditArchivalStore, "Audit & Archival Store", "AWS S3 / On-Prem Object Storage", "Storage for 10+ year immutable data retention.")
+    Container(InternalServiceMesh, "Internal Service Mesh", "Istio / Envoy", "Enforces mutual TLS (mTLS) across all containers.")
+}
+
+Rel(Patient, ApiGateway, "Access portal features, registration, and scheduling", "HTTPS / TLS 1.3")
+Rel(ClinicianStaff, ApiGateway, "Manage clinical workflows and electronic medical records", "HTTPS / TLS 1.3")
+Rel(BillingAdministrator, ApiGateway, "Manage billing and insurance claims", "HTTPS / TLS 1.3")
+
+Rel(ApiGateway, PatientSchedulingService, "Routes registration and appointment traffic", "Istio Service Mesh (mTLS / HTTP/2)")
+Rel(ApiGateway, EmrService, "Routes clinical data traffic", "Istio Service Mesh (mTLS / HTTP/2)")
+Rel(ApiGateway, BillingService, "Routes billing traffic", "Istio Service Mesh (mTLS / HTTP/2)")
+Rel(ApiGateway, FhirInteroperabilityService, "Routes FHIR translation traffic", "Istio Service Mesh (mTLS / HTTP/2)")
+Rel(ApiGateway, KeycloakContainer, "Token validation and IAM requests", "HTTPS / OIDC")
+
+Rel(PatientSchedulingService, MessageBroker, "Publishes asynchronous events", "SASL/SCRAM over TLS")
+Rel(EmrService, MessageBroker, "Publishes asynchronous events", "SASL/SCRAM over TLS")
+Rel(BillingService, MessageBroker, "Publishes asynchronous events", "SASL/SCRAM over TLS")
+Rel(FhirInteroperabilityService, MessageBroker, "Publishes asynchronous events", "SASL/SCRAM over TLS")
+
+Rel(PatientSchedulingService, DistributedCache, "Queries data for fast reads", "TCP")
+Rel(EmrService, DistributedCache, "Queries data for fast reads", "TCP")
+Rel(BillingService, DistributedCache, "Queries data for fast reads", "TCP")
+
+Rel(PatientSchedulingService, DatabaseAccessProxy, "Queries data via connection pooling", "TCP")
+Rel(EmrService, DatabaseAccessProxy, "Queries data via connection pooling", "TCP")
+Rel(BillingService, DatabaseAccessProxy, "Queries data via connection pooling", "TCP")
+
+Rel(DatabaseAccessProxy, PrimaryDatabase, "Connects to database cluster", "TLS 1.3")
+
+Rel(BackgroundWorker, MessageBroker, "Consumes asynchronous events", "SASL/SCRAM over TLS")
+Rel(BackgroundWorker, AuditArchivalStore, "Writes cold audit data", "HTTPS")
+
+Rel(ClinicManagementSystem, IdentityProviderIdP, "Federated multi-factor authentication", "OIDC/SAML 2.0")
+Rel(ClinicManagementSystem, ExternalLabImagingSystems, "Clinical data exchange", "HL7 FHIR over HTTPS")
+Rel(ClinicManagementSystem, InsuranceGateway, "Claims and verification processing", "REST/JSON over HTTPS with mTLS")
+Rel(ClinicManagementSystem, NationalHealthRegistry, "Health data reporting", "REST/JSON over HTTPS with mTLS")
+
+@enduml

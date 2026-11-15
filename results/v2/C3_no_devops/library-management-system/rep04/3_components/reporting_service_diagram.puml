@@ -1,0 +1,22 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(StaffDashboard, "Staff Dashboard", "Web Browser / UI", "External staff interface for requesting and downloading reports.")
+System_Ext(RabbitMQ, "RabbitMQ", "Message Broker", "Message broker for asynchronous task distribution.")
+System_Ext(PostgreSQLReadReplica, "PostgreSQL Read Replica", "PostgreSQL", "Dedicated database for heavy analytics queries.")
+System_Ext(MinIO, "MinIO", "S3-compatible Object Storage", "Sovereign, local object storage for temporary file staging and downloading.")
+
+Container_Boundary(ReportingService, "Reporting Service") {
+    Component(ReportGeneratorComponent, "Report Generator Component", "Python, FastAPI", "Handles on-demand requests and API endpoints.")
+    Component(ExportWorkerComponent, "Export Worker Component", "Python, Celery, Pandas, ReportLab", "Processes asynchronous export jobs and renders structured CSV and PDF exports.")
+    Component(SchedulerComponent, "Scheduler Component", "APScheduler", "Manages timezone-aware automated reports.")
+}
+
+Rel(StaffDashboard, ReportGeneratorComponent, "Requests on-demand reports and schedules", "REST/JSON over mTLS")
+Rel(ReportGeneratorComponent, ExportWorkerComponent, "Dispatches background export tasks via RabbitMQ", "AMQP over TLS")
+Rel(ExportWorkerComponent, PostgreSQLReadReplica, "Fetches large datasets for aggregation", "SQL over mTLS")
+Rel(ExportWorkerComponent, MinIO, "Persists generated CSV/PDF files temporarily", "HTTPS over TLS")
+Rel(StaffDashboard, MinIO, "Downloads generated reports securely", "time-limited cryptographically signed HTTPS URLs")
+
+@enduml

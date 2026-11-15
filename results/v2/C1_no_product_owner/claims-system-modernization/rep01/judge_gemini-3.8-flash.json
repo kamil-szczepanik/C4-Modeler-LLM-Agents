@@ -1,0 +1,332 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "Claims Portal serves online submissions (R-01) and adjusters (R-02). Migration Router Component enables incremental claim-type migration (R-03) and fallback to legacy. Outbox Pattern Component, Sync Orchestrator, and Sync Ledger Table ensure reliable claim data exchange without data loss.",
+   "performance_efficiency": "The sub-2s target (R-05) is addressed by serving adjusters from the modern State Store (Claim Operational Table) decoupled from the 5s mainframe via Integration & Sync Engine and Outbox Pattern Component. However, explicit read caching mechanisms are not defined.",
+   "compatibility": "Mainframe coexistence is well supported via Legacy Mainframe Adapter Component, Mainframe Adapter (IBM MQ), and ExpressRoute. Active Directory federation is properly handled via OIDC/SAML and OAuth 2.0 within Authentication Client and Azure API Management.",
+   "usability": "Claims Portal and Frontend UI provide web interfaces for both Customers & Brokers and Claims Adjusters. However, both user groups share a single generic portal without explicit differentiation in UI components for adjuster-specific workflows.",
+   "reliability": "R-04 consistency is strongly addressed via Outbox Pattern Component, Integration & Sync Engine, Sync Ledger Table, and Resilience4j in Legacy Mainframe Adapter Component, preventing message loss or duplicate processing across systems.",
+   "security": "R-07 is met with Active Directory SSO via Authentication Client and Azure API Management. Security Policy Enforcer, Security Policy Component (RBAC/ABAC), mTLS over ExpressRoute, Managed Identities, and Audit & Fallback Log provide thorough security.",
+   "maintainability": "Migration Router Component and Temporal Tables support one-day rollback (R-06). Clear separation of concerns exists across components. However, choosing AKS for multiple services runs counter to the constraint that the team has little cloud experience.",
+   "portability": "Target hybrid regions (on-prem and Azure West Europe) are well reflected via ExpressRoute, Azure App Service, and AKS. Technology choices like Spring Boot and Apache Camel facilitate container portability across environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.90625,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "While Sync Orchestrator syncs data to Azure SQL, synchronous calls via Legacy Mainframe Adapter take up to 5s. Achieving sub-2s loads requires explicit asynchronous UI aggregation or pre-fetching mechanisms not fully articulated.",
+    "elements": [
+     "Claims Portal",
+     "Frontend UI",
+     "Azure API Management",
+     "Claims Modernization Core",
+     "Legacy Mainframe Adapter Component",
+     "Claim Operational Table"
+    ],
+    "sensitivity_points": [
+     "Synchronous mainframe SOAP latency directly impacts portal response times",
+     "Data freshness in Claim Operational Table versus live mainframe reads"
+    ],
+    "tradeoffs": [
+     "Serving stale pre-synchronized data improves response time but risks inconsistent state"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Submissions are accepted by AKS and persisted via Outbox Pattern to Azure Service Bus. Messages queue asynchronously, buffering spikes and preventing mainframe overload during batch windows.",
+    "elements": [
+     "Claims Portal",
+     "Azure API Management",
+     "Claim Ingestion Component",
+     "Outbox Pattern Component",
+     "Integration & Sync Engine",
+     "Resource Governor"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue capacity and message retention during high-volume spikes",
+     "Throttling policy configuration on Azure SQL Resource Governor"
+    ],
+    "tradeoffs": [
+     "Asynchronous queuing increases ingest throughput at the expense of eventual mainframe consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Outbox Pattern Component and Azure Service Bus buffer incoming claims while the mainframe batch runs. Once the window closes, Apache Camel Sync Orchestrator drains queued submissions.",
+    "elements": [
+     "Claims Modernization Core",
+     "Outbox Pattern Component",
+     "Integration & Sync Engine",
+     "Sync Orchestrator",
+     "State Store"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue depth handling 6 hours of queued batch data",
+     "Retry and backoff configurations in Resilience4j and Apache Camel"
+    ],
+    "tradeoffs": [
+     "Decoupling mainframe availability via queues delays downstream processing until morning"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Exactly-once guarantees are provided by Outbox Pattern, Sync Ledger Table watermarks, and Temporal Tables. Re-deliveries are deduplicated, ensuring no claim is lost or processed twice.",
+    "elements": [
+     "Outbox Pattern Component",
+     "Sync Orchestrator",
+     "Mainframe Adapter",
+     "Sync Ledger Table",
+     "Audit & Fallback Log"
+    ],
+    "sensitivity_points": [
+     "Idempotency keys and ledger watermark consistency across restarts",
+     "Dead-letter queue handling for unrecoverable sync payloads"
+    ],
+    "tradeoffs": [
+     "Strict ledger-based idempotency checks add latency to synchronization processing pipelines"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Migration Router Component conditionally routes claims by type. Reverting or switching claim types is managed via configuration in the router and Audit & Fallback Log within hours.",
+    "elements": [
+     "Migration Router Component",
+     "Claim Management Component",
+     "Legacy Mainframe Adapter Component",
+     "Audit & Fallback Log"
+    ],
+    "sensitivity_points": [
+     "Migration Router rule evaluation overhead on incoming requests",
+     "Synchronization ledger reconciliation speed during traffic cutover"
+    ],
+    "tradeoffs": [
+     "Dynamic routing rules increase component complexity to enable rapid switch-back capability"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Frontends communicate solely with APIM and Core services. Decommissioning the mainframe simply shifts Migration Router entirely to Claim Management, retiring legacy adapters without impacting UI layers.",
+    "elements": [
+     "Frontend UI",
+     "Azure API Management",
+     "Migration Router Component",
+     "Claim Management Component",
+     "State Store"
+    ],
+    "sensitivity_points": [
+     "Complete migration of legacy claims data into State Store",
+     "Decoupling of all legacy mainframe adapters from Core services"
+    ],
+    "tradeoffs": [
+     "Maintaining abstraction layers during migration adds overhead but isolates frontend from changes"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Security Policy Enforcer in APIM and Security Policy Component enforce ABAC/RBAC, denying cross-tenant broker requests. Unauthorized access attempts are recorded in the Audit & Fallback Log.",
+    "elements": [
+     "Azure API Management",
+     "Security Policy Enforcer",
+     "Security Policy Component",
+     "Audit & Fallback Log"
+    ],
+    "sensitivity_points": [
+     "Attribute validation accuracy within claims tokens and policy components",
+     "Audit log immutability and alerting latency"
+    ],
+    "tradeoffs": [
+     "Fine-grained ABAC enforcement adds computational overhead to every API request"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Claims Portal federates directly with Active Directory, revoking platform access immediately upon AD account deactivation. However, synchronization of revocation to internal mainframe security tables (e.g. RACF) is not explicitly defined.",
+    "elements": [
+     "Active Directory",
+     "Authentication Client",
+     "Azure API Management",
+     "Security Policy Enforcer"
+    ],
+    "sensitivity_points": [
+     "Token lifetime and session revocation propagation time across APIM",
+     "Deprovisioning latency between on-premises Active Directory and legacy mainframe"
+    ],
+    "tradeoffs": [
+     "Short token lifetimes improve revocation speed but increase authentication token renewal requests"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe System",
+     "Integration & Sync Engine",
+     "Sync Orchestrator",
+     "Mainframe Adapter",
+     "Sync Ledger Table"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Integration & Sync Engine",
+     "Resource Governor"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Legacy Mainframe Adapter Component",
+     "Mainframe Adapter"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Claims Portal",
+     "Azure API Management",
+     "State Store",
+     "Security Policy Enforcer"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers & Brokers",
+     "Claims Portal",
+     "Frontend UI",
+     "Claim Ingestion Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Claims Portal",
+     "Frontend UI",
+     "Claim Management Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Migration Router Component",
+     "Claim Management Component",
+     "Legacy Mainframe Adapter Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Outbox Pattern Component",
+     "Sync Ledger Table",
+     "Stored Procedure Gateway",
+     "Integration & Sync Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Claims Portal",
+     "Frontend UI",
+     "Claim Operational Table",
+     "Integration & Sync Engine"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Migration Router Component",
+     "Audit & Fallback Log",
+     "Temporal Tables / Change Tracking"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Active Directory",
+     "Authentication Client",
+     "Azure API Management",
+     "Security Policy Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

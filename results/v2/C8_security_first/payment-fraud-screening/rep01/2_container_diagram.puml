@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening Platform
+
+Person(FraudAnalystRiskManager, "Fraud Analyst & Risk Manager", "Internal users reviewing cases and monitoring fraud metrics.")
+
+System_Ext(PaymentGatewayAcquirer, "Payment Gateway / Acquirer", "Upstream actor submitting authorization requests.")
+System_Ext(CorporateIdentityPrIdP, "Corporate Identity Provider (IdP)", "Authenticates analysts via OIDC/SAML.")
+System_Ext(CardTokenizationProvider, "Card Tokenization Provider", "External vault for PCI-DSS scope reduction.")
+System_Ext(NotificationGateway, "Notification Gateway", "External SMS/Email service (Amazon SES/Twilio) for alerts.")
+
+System_Boundary(RealTimePaymentFraudScreeningPlatform, "Real-Time Payment Fraud Screening Platform") {
+    Container(APIGateway, "API Gateway", "AWS API Gateway - HTTP APIs", "Ingresses and routes incoming requests.")
+    Container(ScoringEngineContainer, "Scoring Engine Container", "Go, ONNX runtime, Amazon ECS on AWS Fargate", "Executes real-time fraud scoring models.")
+    Container(CaseManagementContainer, "Case Management Container", "Next.js / Node.js, Amazon ECS on AWS Fargate", "Manages analyst case reviews and operational workflows.")
+    ContainerDb(AmazonRDSPostgreSQL, "Amazon RDS PostgreSQL", "Amazon RDS PostgreSQL", "Relational data store for cases and transaction metadata.")
+    ContainerDb(AmazonS3WORMBucketModelBucket, "Amazon S3 WORM Bucket & Model Bucket", "Amazon S3 with WORM Object Lock", "Secure storage for machine learning models and tamper-evident audit logs.")
+    Container(AmazonSQSEventBridge, "Amazon SQS / EventBridge", "Amazon SQS / EventBridge", "Messaging and event backbone for asynchronous communication.")
+    ContainerDb(AmazonAthenaS3DataLake, "Amazon Athena & S3 Data Lake", "Amazon Athena, Amazon Kinesis, Amazon S3", "Analytics engine and data lake for compliance and audit reporting.")
+}
+
+Rel(PaymentGatewayAcquirer, APIGateway, "Sends payment authorization requests", "mTLS")
+Rel(FraudAnalystRiskManager, APIGateway, "Accesses Case Management UI and reviews cases", "HTTPS via ALB")
+Rel(APIGateway, ScoringEngineContainer, "Routes authorization scoring requests", "gRPC over HTTP/2")
+Rel(APIGateway, CaseManagementContainer, "Routes analyst and management requests", "HTTPS")
+Rel(ScoringEngineContainer, AmazonS3WORMBucketModelBucket, "Loads fraud screening models", "HTTPS with digital signature verification")
+Rel(CaseManagementContainer, AmazonRDSPostgreSQL, "Reads and writes case data", "TLS")
+Rel(CaseManagementContainer, AmazonSQSEventBridge, "Publishes and consumes asynchronous events", "AWS SDK")
+Rel(FraudAnalystRiskManager, CorporateIdentityPrIdP, "Authenticates via OIDC/SAML", "OIDC/SAML")
+Rel(CaseManagementContainer, NotificationGateway, "Dispatches operational alerts", "HTTPS")
+Rel(AmazonAthenaS3DataLake, AmazonS3WORMBucketModelBucket, "Queries data for compliance audit reports", "SQL queries")
+
+@enduml

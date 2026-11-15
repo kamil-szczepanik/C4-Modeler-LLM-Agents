@@ -1,0 +1,322 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are met: R-01 via 'Customer & Broker Portal', R-02 via 'Adjuster Web Application', and R-03 through 'Migration Routing Proxy' and 'Routing & Feature Flag Component' enabling claim-type-by-claim-type migration.",
+   "performance_efficiency": "The under 2-second target (R-05) is achieved despite mainframe latency using 'Adjuster BFF Router & Aggregator' with parallel fetching/caching, optimistic UI updates in 'Claim Workspace Router & State Manager', and offloading reads to 'Read-Only Replica Routing'.",
+   "compatibility": "Smooth coexistence with legacy systems is achieved by the 'Mainframe Integration Adapter' and 'Mainframe Broker Client' using MQ/CICS while honoring batch windows, coupled with 'Change Data Capture / CDC' and 'Azure AD' integration.",
+   "usability": "Both distinct user groups are explicitly served with tailored interfaces: external users via 'Customer & Broker Portal' and internal staff via 'Adjuster Web Application' featuring responsive views and streamlined workflow routing.",
+   "reliability": "Guarantees zero lost or duplicate claims (R-04) using 'Claims Workflow Orchestrator' sagas, 'Mainframe Sync Coordinator' with Polly circuit breakers, and 'Azure Service Bus' FIFO sessions with 'Dead-Letter Queue (DLQ)' handling.",
+   "security": "Implements Active Directory SSO (R-07) across 'Auth Guard Component', 'Authentication Client', and BFF 'Authentication & Authorization Component' via OIDC/OAuth2, complemented by 'Audit & Security Subsystem' providing row-level security and SQL auditing.",
+   "maintainability": "R-06 is well supported via 'Routing & Feature Flag Component' and 'Migration Routing Proxy' for fast rollbacks. However, introducing multiple distinct stacks (NestJS, .NET 8, React) adds cognitive burden for a team with little cloud experience.",
+   "portability": "The hybrid topology (on-prem and Azure) is accurately reflected across containers like 'Mainframe Integration Adapter' and 'Claims Core Processing Service', though high coupling to proprietary Azure PaaS limits multi-cloud portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Adjuster BFF uses caching, parallel data fetching, and partial-response fallbacks to decouple UI latency from slow mainframe calls. However, cold-cache misses on uncached legacy records may still challenge the strict 2-second threshold without aggressive pre-fetching.",
+    "elements": [
+     "Adjuster Web Application",
+     "Adjuster BFF Router & Aggregator",
+     "API Composition & Data Shaping Service",
+     "Mainframe Integration Adapter"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios for open claims requiring mainframe synchronization",
+     "Parallel fetch latency when partial-response fallbacks are invoked"
+    ],
+    "tradeoffs": [
+     "Data freshness traded for UI responsiveness under 2 seconds"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Peak claim submissions are absorbed asynchronously by Azure Service Bus and staged in Azure SQL, cleanly decoupling ingestion spikes from mainframe synchronization and preserving the nightly batch window.",
+    "elements": [
+     "API Gateway / Backend-for-Frontend",
+     "Claims Core Processing Service",
+     "Azure Service Bus",
+     "Mainframe Integration Adapter",
+     "Mainframe.Outbox Queue"
+    ],
+    "sensitivity_points": [
+     "Service Bus throttling limits during 5x submission surges",
+     "Queue draining rate aligned with mainframe batch processing limits"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission acceptance traded against immediate mainframe confirmation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Submissions persist locally in Azure SQL and buffer in the Mainframe Outbox Queue with FIFO sessions and circuit breakers, enabling seamless continuation during batch windows and deferred replay afterward.",
+    "elements": [
+     "Customer & Broker Portal",
+     "Claims Core Processing Service",
+     "Azure SQL Database",
+     "Azure Service Bus",
+     "Mainframe Broker Client"
+    ],
+    "sensitivity_points": [
+     "Buffer storage capacity for full 6-hour batch window",
+     "Automated circuit breaker recovery detection when batch window closes"
+    ],
+    "tradeoffs": [
+     "Eventual consistency accepted to maintain continuous intake availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "MassTransit state machine orchestrates sagas while Change Data Capture, FIFO queues, and dead-letter queues capture failures. Dual-write synchronization across heterogeneous platforms carries slight split-brain risk without distributed transactions.",
+    "elements": [
+     "Claims Workflow Orchestrator",
+     "Mainframe Sync Coordinator",
+     "Change Data Capture / CDC",
+     "Dead-Letter Queue (DLQ)",
+     "Mainframe Broker Client"
+    ],
+    "sensitivity_points": [
+     "Idempotency enforcement across legacy CICS/MQ updates",
+     "Timely alerting and remediation workflows for DLQ poison messages"
+    ],
+    "tradeoffs": [
+     "Operational overhead of saga compensating actions versus distributed 2PC locks"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Migration Routing Proxy combined with Azure App Configuration feature flags allows routing specific claim types to the new platform and provides fast switch-back capability within one day without altering client code or core mainframe contracts.",
+    "elements": [
+     "Migration Routing Proxy",
+     "Routing & Feature Flag Component",
+     "Adapter API Controller",
+     "Azure App Configuration"
+    ],
+    "sensitivity_points": [
+     "Centralized configuration refresh latency across distributed gateway instances",
+     "Backward compatibility of shared legacy data structures during cutover"
+    ],
+    "tradeoffs": [
+     "Routing proxy complexity added to prevent mainframe interface redeployments"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Both client SPAs communicate strictly through the API Gateway/BFF layer. Retiring the mainframe merely requires decommissioning the integration adapter and background sync queues without affecting UI components or frontend contracts.",
+    "elements": [
+     "Customer & Broker Portal",
+     "Adjuster Web Application",
+     "API Gateway / Backend-for-Frontend",
+     "Claims Core Processing Service",
+     "Mainframe Integration Adapter"
+    ],
+    "sensitivity_points": [
+     "Strict adherence of BFF contracts to domain models rather than mainframe schemas",
+     "Clean separation of sync coordinator logic from core domain boundaries"
+    ],
+    "tradeoffs": [
+     "Upfront cost of BFF abstraction layers versus zero UI rework at decommission"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Azure AD authentication combined with database Row-Level Security and audit logging prevents cross-tenant access and records infractions. Explicit tenant/broker tenancy validation logic in the BFF or domain model could be more prominent.",
+    "elements": [
+     "Authentication & Authorization Component",
+     "Customer BFF Router & Aggregator",
+     "Audit & Security Subsystem",
+     "Audit Logging & Analytics Component"
+    ],
+    "sensitivity_points": [
+     "Row-Level Security policy enforcement on all multi-tenant queries",
+     "Immediate propagation of audit events to Application Insights"
+    ],
+    "tradeoffs": [
+     "Granular row-level security checks incur minor database query overhead"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Centralizing authentication on Azure AD via MSAL.js and OIDC enables immediate account deactivation. Adjusters access mainframe data solely through platform services, though token expiration windows must be strictly constrained to satisfy the 15-minute SLA.",
+    "elements": [
+     "Insurer's Active Directory / Azure AD",
+     "Auth Guard Component",
+     "Authentication & Authorization Component",
+     "Mainframe Integration Adapter"
+    ],
+    "sensitivity_points": [
+     "Access token maximum lifetime and Continuous Access Evaluation (CAE) support",
+     "Absence of direct adjuster credentials on the legacy mainframe"
+    ],
+    "tradeoffs": [
+     "Short-lived OAuth tokens increase token refresh traffic to Azure AD"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Mainframe Integration Adapter",
+     "Mainframe Sync Coordinator",
+     "Change Data Capture / CDC"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Mainframe Integration Adapter",
+     "Mainframe Broker Client",
+     "Mainframe.Outbox Queue"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Mainframe Integration Adapter",
+     "Mainframe Broker Client"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer & Broker Portal",
+     "Claim Submission Controller",
+     "Customer BFF Router & Aggregator"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Web Application",
+     "Claim Details View Component",
+     "Adjuster BFF Router & Aggregator"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Migration Routing Proxy",
+     "Routing & Feature Flag Component",
+     "Claim Data Store"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Claims Workflow Orchestrator",
+     "Mainframe Sync Coordinator",
+     "Mainframe.Outbox Queue",
+     "Dead-Letter Queue (DLQ)",
+     "Azure Service Bus"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Adjuster BFF Router & Aggregator",
+     "Claim Workspace Router & State Manager",
+     "API Composition & Data Shaping Service",
+     "Read-Only Replica Routing"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Routing & Feature Flag Component",
+     "Migration Routing Proxy"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Insurer's Active Directory / Azure AD",
+     "Authentication & Authorization Component",
+     "Auth Guard Component",
+     "Authentication Client"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

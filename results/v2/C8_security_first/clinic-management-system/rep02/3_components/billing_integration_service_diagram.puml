@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Billing Integration Service container
+
+Component(API_Gateway, "API Gateway", "Istio/Envoy", "Routes billing requests [gRPC over mTLS, OAuth 2.0]")
+System_Ext(Insurance_Clearinghouse, "Insurance Clearinghouse", "Receives claim submissions.")
+System_Ext(Message_Broker, "Message Broker", "Receives billing and retry events.")
+System_Ext(Data_Tier, "Data Tier", "Stores encrypted records.")
+
+Container_Boundary(Billing_Integration_Service, "Billing Integration Service") {
+    Component(Claim_Management_Controller, "Claim Management Controller", "gRPC/REST, Spring Boot", "Exposes gRPC/REST endpoints for the API Gateway and handles OAuth token extraction.")
+    Component(Validation_Rules_Engine, "Validation & Rules Engine", "Java / Spring Boot", "Executes pre-submission payer rules and payload sanitization.")
+    Component(Clearinghouse_Adapter, "Clearinghouse Adapter", "HTTPS/mTLS, Secure APIs", "Communicates with the Insurance Clearinghouse via secure HTTPS/mTLS.")
+    Component(Billing_Event_Publisher, "Billing Event Publisher", "NATS JetStream / Kafka", "Emits asynchronous claim-state events to the Message Broker.")
+    Component(Data_Access_Repository, "Data Access Repository", "Spring Data JPA, SQL", "Handles persistence using Spring Data JPA with field-level encryption.")
+    Component(Reconciliation_Batch_Job_Scheduler, "Reconciliation & Batch Job Scheduler", "Spring Batch", "Executes scheduled syncs to reconcile out-of-sync claim statuses.")
+    Component(DLQ_Notification_Router, "DLQ & Notification Router", "Java / Spring Boot", "Manages exhausted retry events and triggers manual intervention alerts.")
+    Component(Resilience_Circuit_Breaker_Wrapper, "Resilience & Circuit Breaker Wrapper", "Resilience4j", "Enforces fault tolerance around external vendor integrations.")
+}
+
+Rel(API_Gateway, Claim_Management_Controller, "Routes billing requests", "gRPC over mTLS, OAuth 2.0")
+Rel(Clearinghouse_Adapter, Insurance_Clearinghouse, "Submits claims", "Secure APIs over HTTPS, mTLS, OAuth")
+Rel(Billing_Event_Publisher, Message_Broker, "Publishes billing and retry events", "NATS JetStream / Kafka protocol")
+Rel(Data_Access_Repository, Data_Tier, "Reads and writes encrypted records", "SQL over encrypted connections")
+
+@enduml

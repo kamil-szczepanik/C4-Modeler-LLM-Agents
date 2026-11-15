@@ -1,0 +1,37 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening and Case Management System
+
+Person(FraudAnalysts, "Fraud Analysts", "Internal users who access case management to review fraud cases.")
+Person(MLEngineers, "ML Engineers", "Engineers who develop and update models and rules.")
+
+System_Ext(PaymentGatewayAcquirerSystems, "Payment Gateway / Acquirer Systems", "External systems that send card-not-present payment authorization requests.")
+System_Ext(CardNetworksTokenVaults, "Card Networks / Token Vaults", "External systems used for token resolution.")
+
+System_Boundary(RealTimePaymentFraudScreeningandCaseManagementSystem, "Real-Time Payment Fraud Screening and Case Management System") {
+    Container(AWSAPIGateway, "AWS API Gateway", "AWS API Gateway", "Ingestion router for incoming payment authorization requests.")
+    Container(RealTimeScoringEngine, "Real-Time Scoring Engine", "Go on AWS ECS Fargate", "Evaluates card-not-present payment authorizations in real-time.")
+    Container(MLInferenceService, "ML Inference Service", "Python with ONNX Runtime on AWS ECS Fargate", "Executes machine learning scoring and zero-downtime model updates.")
+    Container(CaseManagementBackend, "Case Management Backend", "Go/Node.js on AWS ECS Fargate", "Handles case management and backend routing for fraud analysts.")
+    Container(FraudAnalystFrontend, "Fraud Analyst Frontend", "Amazon CloudFront and S3", "Frontend application allowing fraud analysts to review cases.")
+    ContainerDb(AmazonElastiCache, "Amazon ElastiCache", "Redis", "Feature store providing low-latency feature lookups for context hydration.")
+    ContainerDb(AmazonDynamoDB, "Amazon DynamoDB", "Amazon DynamoDB", "Scalable storage for system data.")
+    ContainerDb(AmazonS3ObjectLock, "Amazon S3 Object Lock", "Amazon S3 Object Lock", "WORM storage providing tamper-evident 7-year auditability.")
+    Container(AmazonEventBridge, "Amazon EventBridge", "Amazon EventBridge", "Event bus handling asynchronous, event-driven case routing.")
+}
+
+Rel(PaymentGatewayAcquirerSystems, AWSAPIGateway, "Sends payment authorization requests", "mTLS over HTTPS / gRPC")
+Rel(AWSAPIGateway, RealTimeScoringEngine, "Routes requests to scoring engine", "gRPC")
+Rel(RealTimeScoringEngine, MLInferenceService, "Requests ML model inference", "Internal gRPC")
+Rel(RealTimeScoringEngine, AmazonElastiCache, "Performs feature lookups", "TCP (RESP)")
+Rel(RealTimeScoringEngine, AmazonDynamoDB, "Reads and writes authorization and transaction data", "HTTPS (AWS SDK)")
+Rel(CaseManagementBackend, AmazonDynamoDB, "Reads and writes case data", "HTTPS (AWS SDK)")
+Rel(AmazonDynamoDB, AmazonS3ObjectLock, "Streams audit logs", "AWS Internal Stream")
+Rel(RealTimeScoringEngine, AmazonEventBridge, "Publishes fraud screening events", "HTTPS (AWS SDK)")
+Rel(AmazonEventBridge, CaseManagementBackend, "Routes events asynchronously", "HTTPS / Webhook")
+Rel(FraudAnalysts, FraudAnalystFrontend, "Accesses fraud cases and interface", "HTTPS")
+Rel(FraudAnalystFrontend, CaseManagementBackend, "Sends API requests for case management", "HTTPS")
+
+@enduml

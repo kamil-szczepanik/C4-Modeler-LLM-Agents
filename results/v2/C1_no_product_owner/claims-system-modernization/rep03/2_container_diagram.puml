@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for New Insurance Platform
+
+Person(CustomersBrokers, "Customers & Brokers", "External actors who submit online claims via the Web UI.")
+Person(ClaimsAdjusters, "Claims Adjusters", "Internal actors who manage workflows using the platform.")
+
+System_Ext(LegacyMainframe, "Legacy Mainframe", "30-year-old COBOL/DB2 on-premises System of Record acting as the legacy backend.")
+System_Ext(AzureActiveDirectory, "Azure Active Directory", "Enforces single sign-on (SSO) and hybrid identity management.")
+
+System_Boundary(NewInsurancePlatform, "New Insurance Platform") {
+    Container(CustomerPortal, "Customer Portal", "SPA React", "Frontend interface for online submissions by customers and brokers.")
+    Container(AdjusterWorkspace, "Adjuster Workspace", "SPA React", "Frontend interface for fast adjuster workflows.")
+    Container(ApiGateway, "API Gateway", "Azure API Management", "Secures and routes external traffic with OAuth 2.0 and RBAC.")
+    Container(ClaimsCoreContainer, "Claims Core Container", ".NET / Azure Container Apps", "Runs backend core services and handles business logic.")
+    Container(ReadModelProjector, "Read Model Projector", "Azure Functions / .NET", "Executes asynchronous event projections for read storage.")
+    Container(IntegrationAclContainer, "Integration & ACL Container", "Azure Functions", "Handles data translation and communicates with the legacy mainframe.")
+    ContainerDb(AdjusterReadDatabase, "Adjuster Read Database", "Azure Cosmos DB", "Provides low-latency CQRS read storage for sub-2s UI loads.")
+    Container(MessageBroker, "Message Broker", "IBM MQ", "Manages asynchronous message exchange across the hybrid cloud-to-mainframe perimeter.")
+}
+
+Rel(CustomersBrokers, CustomerPortal, "Interacts for online submissions", "HTTPS/REST")
+Rel(ClaimsAdjusters, AdjusterWorkspace, "Interacts for internal workflows", "HTTPS/REST")
+Rel(CustomerPortal, AzureActiveDirectory, "Authenticates users", "OpenID Connect / OAuth 2.0")
+Rel(AdjusterWorkspace, AzureActiveDirectory, "Authenticates users", "OpenID Connect / OAuth 2.0")
+Rel(CustomerPortal, ApiGateway, "Routes frontend traffic", "HTTPS")
+Rel(AdjusterWorkspace, ApiGateway, "Routes frontend traffic", "HTTPS")
+Rel(ApiGateway, ClaimsCoreContainer, "Forwards requests", "HTTPS")
+Rel(ClaimsCoreContainer, MessageBroker, "Publishes events", "IBM MQ")
+Rel(ReadModelProjector, AdjusterReadDatabase, "Updates read database via internal messaging", "Internal Messaging")
+Rel(IntegrationAclContainer, LegacyMainframe, "Communicates with legacy system", "IBM MQ with mTLS")
+
+@enduml

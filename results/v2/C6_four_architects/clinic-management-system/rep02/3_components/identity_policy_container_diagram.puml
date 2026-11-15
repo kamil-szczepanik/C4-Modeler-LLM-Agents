@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Identity & Policy Container container
+
+System_Ext(api_gateway, "API Gateway", "Kong or Envoy routing external traffic.")
+System_Ext(core_services_emr_service, "Core Services / EMR Service", "Node.js/NestJS and Java/Spring Boot services for patient, appointment, and EMR logic.")
+System_Ext(message_broker, "Message Broker", "Apache Kafka or RabbitMQ for asynchronous event streaming.")
+System_Ext(data_layer, "Data Layer", "PostgreSQL and MinIO/AWS S3 for data persistence.")
+
+Container_Boundary(identity_policy_container, "Identity & Policy Container") {
+    Component(authn_engine, "Authn Engine", "Keycloak Authentication SPIs, Java", "Built-in Keycloak Authentication SPIs handling MFA and OIDC/OAuth2.")
+    Component(policy_enforcement_rb_ac_module, "Policy Enforcement / RBAC Module", "Keycloak Authorization Services", "Evaluates fine-grained roles and user permissions.")
+    Component(user_federation_service, "User Federation Service", "LDAP/SAML SPI", "Integrates with external IdPs via LDAP/SAML.")
+    Component(local_token_cache, "Local Token Cache", "Infinispan, JGroups", "Infinispan distributed cache for session synchronization.")
+    Component(audit_logging_spi, "Audit Logging SPI", "Keycloak Event Listener SPI", "Captures security events for compliance tracking.")
+    Component(oauth2_token_introspection_module, "OAuth2 Token Introspection Module", "Keycloak OAuth2 Endpoint", "Handles token revocation and session termination.")
+}
+
+Rel(api_gateway, authn_engine, "Token validation", "JWT/JWKS over HTTPS")
+Rel(policy_enforcement_rb_ac_module, core_services_emr_service, "Authorization endpoints", "gRPC over mTLS")
+Rel(audit_logging_spi, message_broker, "Event publishing", "AMQP/Kafka over TLS")
+Rel(core_services_emr_service, oauth2_token_introspection_module, "Token validation", "gRPC over mTLS")
+Rel(authn_engine, local_token_cache, "Session synchronization", "JGroups over TLS")
+Rel(oauth2_token_introspection_module, local_token_cache, "Session synchronization", "JGroups over TLS")
+Rel(policy_enforcement_rb_ac_module, local_token_cache, "Session synchronization", "JGroups over TLS")
+Rel(authn_engine, data_layer, "Credential and session persistence", "JDBC over TLS")
+
+@enduml

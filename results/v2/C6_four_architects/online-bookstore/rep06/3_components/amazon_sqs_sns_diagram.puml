@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Amazon SQS/SNS container
+
+System_Ext(AmazonEventBridge, "Amazon EventBridge", "External Event Source")
+System_Ext(CoreECommerceService, "Core E-Commerce Service", "Consumes orders")
+System_Ext(IntegrationService, "Integration Service", "Consumes shipping tasks")
+System_Ext(AuditComplianceService, "Audit & Compliance Service", "Consumes error logs")
+
+Container_Boundary(AmazonSQSSNS, "Amazon SQS/SNS") {
+    Component(EventBridgeIngressGateway, "EventBridge Ingress Gateway", "AWS EventBridge Target Configuration", "Receiving domain events.")
+    Component(SNSTopicRouter, "SNS Topic Router", "Amazon SNS (Standard/FIFO)", "Pub/sub event fan-out.")
+    Component(SQSOrderQueue, "SQS Order Queue", "Amazon SQS (FIFO)", "Strict order and payment buffering.")
+    Component(SQSIntegrationQueue, "SQS Integration Queue", "Amazon SQS (Standard)", "Outbound shipping tasks.")
+    Component(SQSDeadLetterQueueDLQ, "SQS Dead-Letter Queue (DLQ)", "Amazon SQS Standard/FIFO", "Capturing failed messages.")
+    Component(SQSSNSAccessPolicyManager, "SQS/SNS Access Policy Manager", "AWS IAM & KMS", "Managing encryption and security.")
+}
+
+Rel(AmazonEventBridge, EventBridgeIngressGateway, "Forwards events", "HTTPS")
+Rel(EventBridgeIngressGateway, SNSTopicRouter, "Publishes payload", "AWS Internal")
+Rel(SNSTopicRouter, SQSOrderQueue, "Publish/Subscribe", "HTTPS")
+Rel(SNSTopicRouter, SQSIntegrationQueue, "Publish/Subscribe", "HTTPS")
+Rel(SQSOrderQueue, CoreECommerceService, "Polls messages", "SQS Protocol")
+Rel(SQSIntegrationQueue, IntegrationService, "Polls messages", "SQS Protocol")
+Rel(SQSOrderQueue, SQSDeadLetterQueueDLQ, "Fails over", "AWS Internal")
+Rel(SQSIntegrationQueue, SQSDeadLetterQueueDLQ, "Fails over", "AWS Internal")
+Rel(SQSDeadLetterQueueDLQ, AuditComplianceService, "Consumes error logs", "SQS Protocol")
+Rel(SQSSNSAccessPolicyManager, SNSTopicRouter, "Secures & Encrypts", "AWS IAM/KMS")
+Rel(SQSSNSAccessPolicyManager, SQSIntegrationQueue, "Secures & Encrypts", "AWS IAM/KMS")
+
+@enduml

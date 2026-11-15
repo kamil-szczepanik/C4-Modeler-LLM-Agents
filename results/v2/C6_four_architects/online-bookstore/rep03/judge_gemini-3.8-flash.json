@@ -1,0 +1,354 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "Catalog & Search Service with Amazon OpenSearch fulfills R-01; Order & Checkout Service with DynamoDB and Stripe/PayPal fulfills R-02; Recommendation & Review Service covers R-03 and R-04 via AWS Personalize. Constraints like multi-currency and shipping (UPS/FedEx) are directly supported by dedicated components.",
+   "performance_efficiency": "CloudFront CDN, Next.js SPA, and API Gateway support sub-2s loads. ElastiCache Redis caches search, sessions, and currency rates, while OpenSearch offloads text queries. DynamoDB, PgBouncer, RDS read replicas, and async queues (EventBridge/SQS) ensure scalability to handle 1M MAU without bottlenecks.",
+   "compatibility": "The system establishes explicit REST/HTTPS egress adapters for third-party shipping APIs (UPS/FedEx), payment gateways (Stripe/PayPal), and tax calculation (Avalara). External AWS integrations (Personalize, Fraud Detector) communicate seamlessly via AWS SDKs and standard REST protocols.",
+   "usability": "Both Customer and Store Administrator personas interact via the React SPA. Components like Localization & Currency Component handle multi-currency display, and Admin & Content Management Service provides administrative UI access. However, specific interfaces for electronic book consumption/downloading are omitted.",
+   "reliability": "Availability targets (99.95%) are addressed by DynamoDB Global Tables, RDS Read Replica Routing, Resilience4j circuit breakers, and Redis idempotency locks. The Order Orchestrator (Temporal.io) manages distributed checkout sagas, while Amazon SQS with Dead Letter Queues prevents message loss during failures.",
+   "security": "OWASP Top-10 mitigations are enforced via AWS WAF and Lambda Authorizers on API Gateway. Field-level PII encryption using AWS KMS, ConsentManager, pgAudit, and GDPRComplianceEngine thoroughly address GDPR and CCPA compliance requirements.",
+   "maintainability": "Services are cleanly decoupled around distinct business capabilities with modular internal architectures (controllers, managers, orchestrators). However, maintaining a heavily polyglot stack (Java/Spring Boot, Node.js, .NET Core, Python/FastAPI) across multiple small microservices introduces substantial cognitive overhead and operational maintenance complexity.",
+   "portability": "The architecture explicitly supports multi-region deployment across AWS target regions using DynamoDB Global Tables and CloudFront. However, tight coupling to proprietary AWS-managed services (Personalize, Fraud Detector, EventBridge, DynamoDB) severely limits portability or migration to other cloud providers."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.9375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.0,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "CloudFront caches static assets globally, while the Catalog & Search Service utilizes Redis query caching and OpenSearch indexing to offload the database, keeping response times well under 2 seconds on 3G connections.",
+    "elements": [
+     "AWS CloudFront/Route 53",
+     "React Single Page Application",
+     "Amazon API Gateway",
+     "Catalog & Search Service",
+     "Amazon ElastiCache (Redis)",
+     "Amazon OpenSearch"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios on CloudFront and Redis under traffic surges",
+     "OpenSearch query latency during high-concurrency catalogue searches"
+    ],
+    "tradeoffs": [
+     "Higher cache TTL improves throughput but increases product data staleness"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendation generation is offloaded asynchronously to AWS Personalize and cached in Redis. Catalogue browsing endpoints execute independently through separate services and data stores, ensuring browsing latency remains unaffected.",
+    "elements": [
+     "Recommendation & Review Service",
+     "AWS Personalize",
+     "Amazon ElastiCache (Redis)",
+     "Catalog & Search Service"
+    ],
+    "sensitivity_points": [
+     "Isolation of compute resources between catalogue and recommendation services",
+     "Redis read throughput for cached recommendation payloads"
+    ],
+    "tradeoffs": [
+     "Precomputed cached recommendations reduce query load but may delay real-time user affinity"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Checkout workflows use distributed saga orchestration and EventBridge queues. Shipping API calls are performed asynchronously by worker services with dead-letter queue handling, allowing customer orders to succeed even during external carrier outages.",
+    "elements": [
+     "Order & Checkout Service",
+     "Order Orchestrator",
+     "Amazon EventBridge & SQS",
+     "Async Worker Service",
+     "DLQ Handler Component"
+    ],
+    "sensitivity_points": [
+     "Reliability of asynchronous event delivery and DLQ redrive policies",
+     "Idempotency enforcement across retried shipping requests"
+    ],
+    "tradeoffs": [
+     "Asynchronous fulfillment improves checkout availability but delays immediate shipping tracking confirmation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Route 53 and DynamoDB Global Tables support multi-region traffic, but the primary transactional store is configured as standard Amazon RDS PostgreSQL rather than Aurora Global Database, making cross-region write failover complex and prone to downtime.",
+    "elements": [
+     "AWS CloudFront/Route 53",
+     "Amazon DynamoDB",
+     "Global Tables Replicator",
+     "Amazon RDS (PostgreSQL)",
+     "Read Replica Routing Logic"
+    ],
+    "sensitivity_points": [
+     "Cross-region replication latency and failover promotion time of PostgreSQL RDS",
+     "Route 53 health check convergence time during regional outages"
+    ],
+    "tradeoffs": [
+     "Multi-region active-passive databases ensure consistency but increase recovery time objective during failover"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Currency operations are encapsulated within the frontend Localization & Currency Component and the dedicated backend Payment & Currency Service. Adding JPY requires updating exchange rate feeds and configuration without touching core catalog or ordering logic.",
+    "elements": [
+     "Localization & Currency Component",
+     "Payment & Currency Service",
+     "Currency Exchange Component",
+     "Amazon ElastiCache (Redis)"
+    ],
+    "sensitivity_points": [
+     "Decoupling of currency formatting and conversion logic from order persistence",
+     "Supported currencies list within payment gateway integrations"
+    ],
+    "tradeoffs": [
+     "Centralized currency conversion isolates changes but adds network hops to checkout calls"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Recommendation & Review Service encapsulates recommendation retrieval behind a dedicated client adapter and API contract. Swapping AWS Personalize for an alternative recommendation engine requires modifications only within this service.",
+    "elements": [
+     "Recommendation & Review Service",
+     "Recommendation Engine Client",
+     "AWS Personalize"
+    ],
+    "sensitivity_points": [
+     "API contract stability between the gateway and recommendation service",
+     "Coupling between the recommendation client and AWS Personalize SDK"
+    ],
+    "tradeoffs": [
+     "Abstracting external ML providers simplifies component replacement but limits provider-specific feature utilization"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "AWS WAF filters malicious SQLi and XSS payloads at the API Gateway. Backend services employ parameterized queries, security interceptors, and strict JSON schemas, while pgAudit and CloudWatch log security events.",
+    "elements": [
+     "Amazon API Gateway",
+     "WAF & Threat Mitigation Filter",
+     "Catalog Security/Validation Interceptor",
+     "Amazon RDS (PostgreSQL)",
+     "API Logging & Telemetry Publisher"
+    ],
+    "sensitivity_points": [
+     "Coverage and update frequency of AWS WAF managed rule sets",
+     "Strict use of parameterized queries and ORMs across all microservices"
+    ],
+    "tradeoffs": [
+     "Deep payload inspection increases ingress request latency slightly to prevent injection attacks"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The GDPRComplianceEngine orchestrates deletion requests via EventBridge. The Async Worker's GDPR Purge Component scrubs personal data from PostgreSQL and DynamoDB, while immutable audit trails in DynamoDB ensure full compliance tracking.",
+    "elements": [
+     "Data Privacy & User Service",
+     "GDPRComplianceEngine",
+     "Amazon EventBridge & SQS",
+     "Async Worker Service",
+     "GDPR/CCPA Compliance Purge Component",
+     "AuditLogger"
+    ],
+    "sensitivity_points": [
+     "Comprehensiveness of distributed deletion events across all microservice databases",
+     "Immutability of compliance audit logs stored in DynamoDB"
+    ],
+    "tradeoffs": [
+     "Asynchronous distributed purging simplifies decoupling but requires eventual consistency across data stores"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Data Privacy & User Service",
+     "GDPRComplianceEngine",
+     "ConsentManager",
+     "DataEncryptionService",
+     "AuditLogger",
+     "DataRetentionEnforcer",
+     "GDPR/CCPA Compliance Purge Component",
+     "Data Privacy & Compliance Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Payment & Currency Service",
+     "Currency Exchange Component",
+     "Localization & Currency Component",
+     "Currency Rate Cache Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "UPS/FedEx",
+     "Order & Checkout Service",
+     "Fulfillment & Risk Client",
+     "Async Worker Service",
+     "Third-party Shipping APIs (UPS/FedEx)"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Service",
+     "Amazon OpenSearch",
+     "Search Controller",
+     "Search Service",
+     "Search Indexer",
+     "Query Processing API",
+     "Catalog & Search Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Cart & Checkout Component",
+     "Order & Checkout Service",
+     "Cart Manager",
+     "Checkout Controller",
+     "Order Orchestrator",
+     "Payment & Currency Service",
+     "Amazon DynamoDB",
+     "Stripe/PayPal"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Recommendation & Review Service",
+     "Review & Rating Manager",
+     "Recommendation & Review Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "AWS Personalize",
+     "Recommendation Engine Client",
+     "Recommendation & Review Service",
+     "Recommendation & Review Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Amazon ElastiCache (Redis)",
+     "Amazon DynamoDB",
+     "PgBouncer",
+     "Read Replica Routing Logic",
+     "Amazon EventBridge & SQS",
+     "Rate Limiting & Throttling Engine",
+     "AWS CloudFront/Route 53"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "React Single Page Application",
+     "AWS CloudFront/Route 53",
+     "Catalog Cache Manager",
+     "Amazon ElastiCache (Redis)",
+     "Amazon OpenSearch"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "AWS CloudFront/Route 53",
+     "Global Tables Replicator",
+     "Read Replica Routing Logic",
+     "Catalog Circuit Breaker",
+     "Amazon EventBridge & SQS"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "WAF & Threat Mitigation Filter",
+     "Authentication & Authorization Filter",
+     "API Client & Interceptor Component",
+     "Catalog Security/Validation Interceptor",
+     "DataEncryptionService",
+     "AWS KMS"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

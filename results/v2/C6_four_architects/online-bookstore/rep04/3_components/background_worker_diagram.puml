@@ -1,0 +1,42 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Background Worker container
+
+System_Ext(amazon_sqs, "Amazon SQS", "Message queue for background tasks")
+System_Ext(shipping_payment, "Shipping Provider APIs & Payment Gateway", "External shipping and payment services")
+System_Ext(databases, "Amazon Aurora PostgreSQL & Amazon DynamoDB", "Primary data stores")
+System_Ext(observability, "Amazon CloudWatch & AWS X-Ray", "Logging, metrics, and tracing services")
+
+Container_Boundary(background_worker, "Background Worker") {
+    Component(task_router, "Task Router & Dispatcher", "Node.js/TypeScript", "Routes incoming tasks from SQS and dispatches them to specialized workers.")
+    Component(order_fulfillment, "Order Fulfillment Processor", "Java/Spring Boot", "Processes order fulfillment and interacts with external shipping and payment services.")
+    Component(gdpr_handler, "GDPR Data Purge Handler", "Python/Boto3", "Handles data scrubbing and GDPR compliance tasks across databases.")
+    Component(recommendation_sync, "Recommendation Sync Engine", "Python/FastAPI", "Powers data science indexing and synchronization for recommendations.")
+    Component(currency_sync, "Currency Rate Sync Worker", "Node.js/TypeScript", "Synchronizes currency rates for multi-currency requirements.")
+    Component(notification_worker, "Notification Dispatch Worker", "Node.js/TypeScript", "Dispatches notifications to users asynchronously.")
+    Component(health_dlq_manager, "Worker Health & DLQ Manager", "Java/Spring Boot", "Manages worker health and dead-letter queues for error management.")
+    Component(sidecar, "AWS X-Ray / CloudWatch Agent Sidecar", "AWS Agent", "Collects logs, metrics, and tracing data for observability.")
+}
+
+Rel(amazon_sqs, task_router, "AWS SDK / Long Polling over HTTPS")
+Rel(task_router, order_fulfillment, "In-process async event emitters")
+Rel(task_router, gdpr_handler, "In-process async event emitters")
+Rel(task_router, recommendation_sync, "In-process async event emitters")
+Rel(task_router, currency_sync, "In-process async event emitters")
+Rel(task_router, notification_worker, "In-process async event emitters")
+Rel(task_router, health_dlq_manager, "In-process async event emitters")
+
+Rel(order_fulfillment, shipping_payment, "HTTPS REST")
+Rel(gdpr_handler, databases, "JDBC/TCP & AWS SDK")
+
+Rel(task_router, observability, "Local UDP/TCP")
+Rel(order_fulfillment, observability, "Local UDP/TCP")
+Rel(gdpr_handler, observability, "Local UDP/TCP")
+Rel(recommendation_sync, observability, "Local UDP/TCP")
+Rel(currency_sync, observability, "Local UDP/TCP")
+Rel(notification_worker, observability, "Local UDP/TCP")
+Rel(health_dlq_manager, observability, "Local UDP/TCP")
+
+@enduml

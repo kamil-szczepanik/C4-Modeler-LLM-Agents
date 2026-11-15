@@ -1,0 +1,34 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Backup & Archive Manager container
+
+System_Ext(api_gateway, "API Gateway / Admin CLI", "External client or gateway")
+System_Ext(cloud_backup, "Cloud Backup Archive", "Cloud storage for archives")
+System_Ext(audit_logging, "Audit & Compliance Logging", "Audit trail system")
+
+Container_Boundary(backup_archive_manager, "Backup & Archive Manager") {
+    Component(api_controller, "Backup Management API Controller", "Go", "Inbound interface for administrative triggers, status monitoring, and manual overrides.")
+    Component(scheduler_engine, "Scheduler Engine", "Go", "Triggers automated snapshot and archival jobs based on compliance policies.")
+    Component(snapshot_agent, "Snapshot Agent", "Velero-based", "Captures consistent data states from Kubernetes, PostgreSQL, and MinIO.")
+    Component(encryption_pipeline, "Encryption & Compliance Pipeline", "Go", "Enforces AES-256 encryption and sanitizes volatile session data.")
+    Component(retention_enforcer, "Retention Policy Enforcer", "Go", "Manages lifecycle rules and executes secure data purging.")
+    Component(integrity_service, "Integrity & Verification Service", "Go", "Performs automated restore drills and cryptographic hash validation.")
+    Component(key_intermediary, "Key Management Intermediary", "Go / Vault SDK", "Manages archive-specific encryption keys and cryptographic deletion.")
+}
+
+Rel(api_gateway, api_controller, "Forwards administrative commands", "gRPC / mTLS")
+Rel(api_controller, scheduler_engine, "Dispatches manual run requests", "Internal gRPC")
+Rel(scheduler_engine, snapshot_agent, "Triggers backups", "Internal gRPC")
+Rel(snapshot_agent, encryption_pipeline, "Streams raw backup payloads", "Internal Channel / Memory")
+Rel(encryption_pipeline, key_intermediary, "Fetches archive-specific encryption keys", "Transit API / mTLS")
+Rel(encryption_pipeline, cloud_backup, "Uploads encrypted archives", "HTTPS / TLS 1.3")
+Rel(retention_enforcer, cloud_backup, "Applies object lifecycle policies", "S3 API / HTTPS")
+Rel(retention_enforcer, key_intermediary, "Revokes/destroys keys for secure purging", "Transit API / mTLS")
+Rel(scheduler_engine, integrity_service, "Triggers validation jobs", "Internal gRPC")
+Rel(integrity_service, cloud_backup, "Reads and verifies archived payloads", "S3 API / HTTPS")
+Rel(integrity_service, audit_logging, "Reports verification audit trails", "gRPC")
+Rel(api_controller, audit_logging, "Emits security audit events", "gRPC")
+
+@enduml

@@ -1,0 +1,20 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(Consultation_Service, "Consultation Service", "Node.js, WebRTC", "Provides video consultations and publishes regional telemetry and chat events")
+System_Ext(Clinical_Prescription_Service, "Clinical & Prescription Service", "Java, Spring Boot", "Handles clinical and prescription workflows")
+
+Container_Boundary(regional_message_broker, "Regional Message Broker") {
+    Component(Event_Ingestion_Gateway, "Event Ingestion Gateway", "Envoy Proxy sidecar", "Handles event ingestion, terminates gRPC over mTLS connections using SPIFFE/SPIRE, and routes validated messages.")
+    Component(Regional_Topic_Router, "Regional Topic Router", "GCP Pub/Sub Topics", "Regionally isolated message brokering with region-scoped IAM policies ensuring strict regional data residency.")
+    Component(Dead_Letter_Retry_Controller, "Dead-Letter & Retry Controller", "GCP Pub/Sub Dead-Letter Topics with Cloud Monitoring", "Routes and manages unacknowledged messages after max retries.")
+    Component(Immutable_Audit_Logging_Service, "Immutable Audit Logging Service", "Node.js / GCP Cloud KMS", "Provides application-layer envelope encryption restricted to regional keys for immutable audit logging.")
+}
+
+Rel(Consultation_Service, Event_Ingestion_Gateway, "Publishes regional telemetry and chat events", "gRPC over mTLS")
+Rel(Clinical_Prescription_Service, Event_Ingestion_Gateway, "Publishes prescription events", "gRPC over mTLS")
+Rel(Event_Ingestion_Gateway, Regional_Topic_Router, "Routes validated messages", "Pub/Sub API")
+Rel(Regional_Topic_Router, Dead_Letter_Retry_Controller, "Routes unacknowledged messages after max retries", "Pub/Sub API")
+
+@enduml

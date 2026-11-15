@@ -1,0 +1,308 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 3,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.625,
+  "justifications": {
+   "functional_suitability": "Requirements R-01 and R-03 are addressed via Customer Portal SPA and Claim Router Component. However, R-02 is compromised because Claims Adjusters are routed to the Customer Portal SPA, whose component description explicitly defines functionality only for customers and brokers to submit and track claims.",
+   "performance_efficiency": "While Claims BFF Controller and Azure Service Bus decouple asynchronous processing, no dedicated caching or read-model store is defined to guarantee adjuster screens load in under 2 seconds when reading data from the 5-second Legacy Mainframe.",
+   "compatibility": "The architecture integrates with Legacy Mainframe using Azure Service Bus over ExpressRoute/VPN, supports Active Directory via Authentication Client using OIDC/OAuth 2.0, and integrates external Notification Service through HTTPS REST. Clear protocols support legacy coexistence.",
+   "usability": "The architecture channels Customers, Brokers, and Claims Adjusters through a single Customer Portal SPA. The internal Customer Portal UI component is tailored for submission and tracking, lacking specialized adjuster workbench interfaces required for complex claim handling.",
+   "reliability": "R-04 consistency is well supported by Reconciliation Engine Component, DLQ Manager Component, and Audit & State Store Component. Circuit breaking at the API Gateway and message queuing via Azure Service Bus safeguard the Legacy Mainframe batch window.",
+   "security": "R-07 is fulfilled via Identity Provider integration using OpenID Connect and JWT Validation Module. Traffic is inspected by WAF & Security Module, while Audit & State Store Component provides immutable transaction logging for accountability.",
+   "maintainability": "Modular decoupling is clear across containers. R-06 is directly supported by the Claim Router Component in the Routing & Reconciliation Service to switch claim types back within a day. Responsibilities between BFF, processing, and routing are cleanly isolated.",
+   "portability": "The architecture targets hybrid deployment across Azure and on-premise mainframe. However, introducing Azure Kubernetes Service contradicts the team's constraint of having little cloud experience, introducing significant infrastructure operational complexity and platform coupling."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 3,
+   "MOD-02": 4,
+   "PERF-01": 2,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.65625,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 5.0,
+   "Modifiability": 3.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "justification": "The architecture lacks an explicit read cache or data replication store for mainframe claim data. Direct or synchronous downstream calls will inherit the 5 s mainframe latency, violating the 2 s load requirement.",
+    "elements": [
+     "Claims BFF Controller",
+     "Claims Processing Engine",
+     "Routing & Reconciliation Service",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Cache freshness versus synchronous mainframe data consistency"
+    ],
+    "tradeoffs": [
+     "Prefetching claim data improves screen latency but increases synchronization complexity"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Azure Service Bus decouples claim ingestion from mainframe ingestion, buffering peak submission bursts. Rate limiting at API Management and asynchronous messaging prevent peak submission loads from impacting the mainframe batch window.",
+    "elements": [
+     "API Gateway",
+     "Rate Limiting Module",
+     "Claims Processing Engine",
+     "Routing & Reconciliation Service",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue capacity and message retention policies under peak traffic"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission buffering sacrifices instant mainframe confirmation for backend stability"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Online submissions are captured in the cloud and queued asynchronously via Azure Service Bus and the Routing & Reconciliation Service, buffering transactions until the nightly batch window completes without dropping claims.",
+    "elements": [
+     "Customer Portal SPA",
+     "API Gateway",
+     "Claims Processing Core & BFF",
+     "Routing & Reconciliation Service",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Message durability and retention limits in Azure Service Bus during outages"
+    ],
+    "tradeoffs": [
+     "Queueing during batch windows introduces temporary eventual consistency between systems"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Routing & Reconciliation Service explicitly features a dedicated Reconciliation Engine Component, DLQ Manager Component, and immutable Audit & State Store in Cosmos DB to detect partial syncs and prevent duplicate processing.",
+    "elements": [
+     "Routing & Reconciliation Service",
+     "Reconciliation Engine Component",
+     "DLQ Manager Component",
+     "Audit & State Store Component",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Idempotency key enforcement across message retries and DLQ replays"
+    ],
+    "tradeoffs": [
+     "Strict reconciliation auditing adds persistence latency to state transitions"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "The Claim Router Component isolates routing logic, but the architecture does not specify dynamic routing configuration, dual-writing, or reverse synchronization mechanisms necessary to safely roll back a migrated claim type within one day.",
+    "elements": [
+     "Claim Router Component",
+     "Routing & Reconciliation Service",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Mainframe schema compatibility when falling back to legacy processing"
+    ],
+    "tradeoffs": [
+     "Dual-writing to legacy preserves fast switchback but increases write overhead"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Adjuster and customer UIs interact exclusively with the API Gateway and BFF, completely abstracting mainframe dependencies. Mainframe retirement only affects backend routing and reconciliation layers, requiring no frontend rewrites.",
+    "elements": [
+     "Customer Portal SPA",
+     "API Gateway",
+     "Claims Processing Core & BFF",
+     "Routing & Reconciliation Service",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Decoupling of frontend view models from legacy mainframe data structures"
+    ],
+    "tradeoffs": [
+     "Maintaining BFF translation layers adds ongoing maintenance overhead during migration"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "While API Gateway validates JWT tokens via Azure AD, object-level authorization (verifying a broker owns a requested claim) and security audit event logging are not explicitly modeled in the backend claims components.",
+    "elements": [
+     "API Gateway",
+     "JWT Validation Module",
+     "Claims BFF Controller",
+     "Claims Processing Engine",
+     "Audit & State Store Component"
+    ],
+    "sensitivity_points": [
+     "Enforcement of fine-grained claims ownership authorization in the BFF/engine"
+    ],
+    "tradeoffs": [
+     "Deep authorization inspection at the service layer increases request processing latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "SSO with Azure AD enables centralized user deactivation for the cloud portal and gateway validation. However, the architecture does not specify how token revocation or mainframe-side credential deactivation propagates within 15 minutes.",
+    "elements": [
+     "Identity Provider",
+     "Authentication Client",
+     "API Gateway",
+     "JWT Validation Module",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Access token lifetime and active revocation propagation across hybrid environments"
+    ],
+    "tradeoffs": [
+     "Short token lifespans improve revocation speed but increase token refresh traffic"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "none",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "full"
+  },
+  "coverage": 0.6363636363636364,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Routing & Reconciliation Service"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Routing & Reconciliation Service",
+     "Legacy Mainframe"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Claims Processing Core & BFF"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers",
+     "Brokers",
+     "Customer Portal SPA",
+     "Customer Portal UI",
+     "API Gateway",
+     "Claims Processing Core & BFF"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Claims Adjusters",
+     "Customer Portal SPA"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Routing & Reconciliation Service",
+     "Claim Router Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Routing & Reconciliation Service",
+     "Reconciliation Engine Component",
+     "DLQ Manager Component",
+     "Audit & State Store Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Claims BFF Controller",
+     "Audit & State Store Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Routing & Reconciliation Service",
+     "Claim Router Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Identity Provider",
+     "Authentication Client",
+     "JWT Validation Module"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

@@ -1,0 +1,317 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All requirements are met: R-01 via 'Customer Portal' and 'Claim Submission Wizard Component', R-02 via 'Adjuster Web Application', and R-03 via 'Claim Routing & Proxy Controller' and 'Integration & Sync Service' managing incremental claim-type migrations.",
+   "performance_efficiency": "Requirement R-05 (<2s load vs 5s mainframe) is met using 'BFF Client Adapter' with React Query client caching, asynchronous processing via 'Azure Service Bus', and read operations served directly from 'Operational Read-Model Cache' rather than querying the legacy mainframe synchronously.",
+   "compatibility": "Interoperability with 'Corporate Active Directory' is achieved via 'Authentication Middleware' (OIDC), and 'Legacy Mainframe System' via 'Mainframe Adapter Component' over ExpressRoute. However, explicit mechanisms honoring the strict, unextendable nightly batch window (23:00-05:00) constraint are only lightly detailed.",
+   "usability": "Distinct user groups are fully served: customers and brokers use 'Customer Portal' with offline drafts ('Claim Submission Wizard Component') and tracking ('Status Tracker View Component'), while adjusters get optimized, dedicated UI workflows in 'Adjuster Web Application'.",
+   "reliability": "Zero data loss and deduplication (R-04) are ensured by 'Sync-State Ledger', 'Reconciliation & DLQ Manager Component', and 'Audit & Event Store'. Resilience against mainframe instability is provided via 'Resilience & Integration Handler' using Polly circuit breakers and retries.",
+   "security": "Meets R-07 via SSO integration between 'Corporate Active Directory' and 'Authentication Middleware' (OIDC/SAML). In-transit security uses mTLS and ExpressRoute to the mainframe, and integrity is reinforced via 'Audit Logging Subsystem' and append-only 'Audit & Event Store'.",
+   "maintainability": "The 'Claim Routing & Proxy Controller' (YARP) directly enables switching claim types within one day (R-06). Modularity is strong, though introducing multiple datastores and containers adds architectural complexity for a team with noted limited cloud experience.",
+   "portability": "The hybrid environment (on-prem mainframe and Azure West Europe) is respected using standard container runtimes ('Azure Container Apps') and .NET 8. Some components use Azure-specific services (Cosmos DB, Service Bus), slightly limiting cross-cloud portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 5.0,
+   "Modifiability": 4.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Adjuster screens query the Operational Read-Model Cache and use React Query caching in the BFF Client Adapter, completely decoupling UI response time from legacy mainframe latency.",
+    "elements": [
+     "Adjuster Web Application",
+     "BFF Client Adapter",
+     "Claims API Gateway / BFF",
+     "Operational Datastore",
+     "Operational Read-Model Cache"
+    ],
+    "sensitivity_points": [
+     "Read-model cache invalidation and freshness frequency",
+     "Latency between BFF and operational datastore private endpoints"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of read models in exchange for sub-second UI response times"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Submissions are accepted 24/7 by the portal and buffered via Azure Service Bus and the Integration & Sync Service, throttling traffic to protect the mainframe and its nightly batch window.",
+    "elements": [
+     "Customer Portal",
+     "Claims API Gateway / BFF",
+     "Integration & Sync Service",
+     "Messaging Consumer/Publisher Component",
+     "Azure Service Bus"
+    ],
+    "sensitivity_points": [
+     "Message queue ingestion throughput and consumer concurrency limits",
+     "Mainframe ingestion rate limits"
+    ],
+    "tradeoffs": [
+     "Delayed ingestion into mainframe during peak volume in favor of protecting batch windows"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Customer Portal and API Gateway persist incoming claims to Azure Service Bus and the Operational Datastore, while the Mainframe Adapter and Sync Orchestrator hold and replay forward messages after the batch window.",
+    "elements": [
+     "Customer Portal",
+     "Claims API Gateway / BFF",
+     "Integration & Sync Service",
+     "Sync Orchestrator Component",
+     "Mainframe Adapter Component",
+     "Azure Service Bus"
+    ],
+    "sensitivity_points": [
+     "Service Bus retention period and dead-letter handling during prolonged downtime"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission processing instead of immediate legacy mainframe confirmation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Sync-State Ledger in Operational Datastore, append-only Audit & Event Store, and Reconciliation & DLQ Manager work together to record transaction states and replay failed synchronization without duplicate processing.",
+    "elements": [
+     "Integration & Sync Service",
+     "Reconciliation & DLQ Manager Component",
+     "Operational Datastore",
+     "Sync-State Ledger",
+     "Audit & Event Store"
+    ],
+    "sensitivity_points": [
+     "Idempotency key enforcement in the Sync-State Ledger and Mainframe Adapter"
+    ],
+    "tradeoffs": [
+     "Storage and processing overhead of dual-run event ledgers for guaranteed consistency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Claim Routing & Proxy Controller in YARP and the Sync-State Ledger enable configuration-based routing and rapid switch-back per claim type, though specific mainframe integration contract changes are minimally detailed.",
+    "elements": [
+     "Claims API Gateway / BFF",
+     "Claim Routing & Proxy Controller",
+     "Integration & Sync Service",
+     "Operational Datastore",
+     "Sync-State Ledger"
+    ],
+    "sensitivity_points": [
+     "Routing table configuration deployment and cache eviction time during cutover"
+    ],
+    "tradeoffs": [
+     "Increased routing logic complexity in the gateway to preserve legacy interface simplicity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "User interfaces interact exclusively with the Claims API Gateway / BFF. Retiring the mainframe requires only repointing gateway routes and deprecating the sync service without touching client applications.",
+    "elements": [
+     "Customer Portal",
+     "Adjuster Web Application",
+     "Claims API Gateway / BFF",
+     "Operational Datastore",
+     "Claims Registry Table"
+    ],
+    "sensitivity_points": [
+     "Full schema autonomy of the Claims Registry Table prior to legacy decommissioning"
+    ],
+    "tradeoffs": [
+     "Strict BFF abstraction layer maintenance throughout migration for future UI decoupling"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Authentication Middleware and Active Directory handle identity, while Audit Logging Subsystem and Audit & Event Store track access. However, multi-tenant broker-customer authorization logic and boundary access enforcement are not explicitly detailed.",
+    "elements": [
+     "Claims API Gateway / BFF",
+     "Authentication Middleware",
+     "Operational Datastore",
+     "Audit Logging Subsystem",
+     "Audit & Event Store"
+    ],
+    "sensitivity_points": [
+     "Fine-grained claim-level attribute-based access control (ABAC) in the API gateway"
+    ],
+    "tradeoffs": [
+     "Fine-grained policy enforcement overhead at gateway versus frontend simplicity"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "SSO revocation in Corporate Active Directory terminates cloud sessions once tokens expire, but propagation of revocation to the legacy mainframe within 15 minutes is not explicitly specified or coordinated across the hybrid link.",
+    "elements": [
+     "Corporate Active Directory",
+     "Claims API Gateway / BFF",
+     "Authentication Middleware",
+     "Legacy Mainframe System"
+    ],
+    "sensitivity_points": [
+     "JWT token lifetimes, refresh token revocation mechanics, and mainframe RACF synchronization"
+    ],
+    "tradeoffs": [
+     "Short token lifetimes improve revocation speed but increase authentication token exchange overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe System",
+     "Integration & Sync Service",
+     "Mainframe Adapter Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Integration & Sync Service",
+     "Mainframe Adapter Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "End Customers & Brokers",
+     "Customer Portal",
+     "Claim Submission Wizard Component",
+     "Claims API Gateway / BFF"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Adjuster Web Application",
+     "Claim Workspace Shell",
+     "Triage & Queue Manager",
+     "Dynamic Form Engine"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Claim Routing & Proxy Controller",
+     "Sync-State Ledger",
+     "Integration & Sync Service"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Sync-State Ledger",
+     "Reconciliation & DLQ Manager Component",
+     "Messaging Consumer/Publisher Component",
+     "Audit & Event Store"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Operational Read-Model Cache",
+     "BFF Client Adapter",
+     "Claims API Gateway / BFF"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Migration Operations Lead",
+     "Claim Routing & Proxy Controller",
+     "Integration & Sync Service",
+     "Sync-State Ledger"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Corporate Active Directory",
+     "Authentication Middleware",
+     "Auth Integration Module"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

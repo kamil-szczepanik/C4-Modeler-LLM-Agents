@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(Patients_and_Licensed_Clinicians, "Patients and Licensed Clinicians", "End-users utilizing video consultations, e-prescriptions, and the AI symptom checker across EU and US regions.")
+
+System_Ext(US_HL7_FHIR_Providers, "US HL7 FHIR Providers", "External US-based healthcare systems using HL7 FHIR protocols.")
+System_Ext(EU_National_E_Prescription_Gateways, "EU National E-Prescription Gateways", "External EU-based national gateways for managing e-prescriptions.")
+System_Ext(Regional_Pharmacy_Networks, "Regional Pharmacy Networks", "External regional pharmacy networks for fulfilling prescriptions.")
+
+System_Boundary(Cross_Border_Telehealth_Platform, "Cross-Border Telehealth Platform") {
+    Container(API_Gateway_Region_Router, "API Gateway / Region Router", "Google Cloud Platform / HTTPS / WebSockets", "Routes incoming traffic to regional containers in europe-west3 and us-central1.")
+    Container(Offline_First_Patient_Mobile_Web_App, "Offline-First Patient Mobile/Web App", "REST/gRPC / Idempotency Keys", "Client application that synchronizes state and handles unstable rural network connections.")
+    Container(Consent_Management_Container, "Consent Management Container", "Authorization Middleware", "Enforces authorization middleware and privacy compliance across all API routes.")
+    Container(Core_Business_Logic_Video_Consultation_Containers, "Core Business Logic & Video Consultation Containers", "GCP Regional Containers / WebRTC", "Handles core telehealth workflows, AI symptom checker, and video consultations.")
+    Container(Traceability_Logging_Container, "Traceability Logging Container", "OpenTelemetry Collector Sidecars", "Performs localized distributed tracing and audit logging.")
+    Container(FHIR_E_Prescription_Adapter_Containers, "FHIR/E-Prescription Adapter Containers", "REST/FHIR / National Protocols", "Integrates with external US HL7 FHIR Providers, EU National Gateways, and Pharmacy Networks.")
+    Container(Event_Driven_Integration_Bus, "Event-Driven Integration Bus", "GCP Pub/Sub", "Handles asynchronous handoffs and decoupling per region.")
+    ContainerDb(Regional_Caches, "Regional Caches", "GCP Memorystore", "Supports stateless container scaling and temporary sync payloads.")
+}
+
+Rel(Patients_and_Licensed_Clinicians, API_Gateway_Region_Router, "Interacts with platform via secure protocols", "HTTPS/WebSockets")
+Rel(API_Gateway_Region_Router, Consent_Management_Container, "Enforces authorization middleware across API routes", "Internal API")
+Rel(API_Gateway_Region_Router, Core_Business_Logic_Video_Consultation_Containers, "Routes traffic to regional deployment boundaries", "gRPC/REST")
+Rel(Offline_First_Patient_Mobile_Web_App, API_Gateway_Region_Router, "Synchronizes state and sends requests with idempotency keys", "REST/gRPC")
+Rel(Consent_Management_Container, Core_Business_Logic_Video_Consultation_Containers, "Validates consent and access rights", "Internal Middleware")
+Rel(Core_Business_Logic_Video_Consultation_Containers, Event_Driven_Integration_Bus, "Publishes and consumes asynchronous regional events", "GCP Pub/Sub")
+Rel(Core_Business_Logic_Video_Consultation_Containers, Regional_Caches, "Stores and retrieves temporary sync payloads", "GCP Memorystore")
+Rel(FHIR_E_Prescription_Adapter_Containers, US_HL7_FHIR_Providers, "Exchanges clinical data and interoperability payloads", "REST/FHIR")
+Rel(FHIR_E_Prescription_Adapter_Containers, EU_National_E_Prescription_Gateways, "Routes national e-prescriptions", "National Protocols")
+Rel(FHIR_E_Prescription_Adapter_Containers, Regional_Pharmacy_Networks, "Coordinates prescription fulfillment", "REST/HTTPS")
+Rel(Core_Business_Logic_Video_Consultation_Containers, FHIR_E_Prescription_Adapter_Containers, "Requests prescription creation and external data lookup", "Internal API / gRPC")
+Rel(Traceability_Logging_Container, Core_Business_Logic_Video_Consultation_Containers, "Collects distributed traces and audit logs", "OpenTelemetry")
+
+@enduml

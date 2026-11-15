@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the AWS Lambda container (AWS Lambda)
+
+System_Ext(aws_kms, "AWS KMS", "External AWS Service")
+System_Ext(amazon_s3_object_lock, "Amazon S3 Object Lock", "External AWS Service")
+System_Ext(amazon_sqs_dlq, "Amazon SQS (DLQ)", "External AWS Service")
+
+Container_Boundary(aws_lambda, "AWS Lambda") {
+    Component(sqs_event_consumer, "SQS Event Consumer", "Node.js (TypeScript)", "Consumes audit events from Amazon SQS for asynchronous processing.")
+    Component(audit_normalizer, "Audit Normalizer", "Node.js (TypeScript)", "Normalizes incoming audit event payloads.")
+    Component(cryptographic_signer, "Cryptographic Signer", "Node.js (TypeScript)", "Orchestrates the cryptographic signing process for audit logs.")
+    Component(kms_signer_client, "KMS Signer Client", "Node.js (TypeScript) / AWS SDK v3", "Interacts with AWS KMS to generate cryptographic signatures.")
+    Component(s3_storage_client, "S3 Storage Client", "Node.js (TypeScript) / AWS SDK v3", "Manages persistence of signed audit logs to storage.")
+    Component(dlq_error_handler, "DLQ Error Handler", "Node.js (TypeScript)", "Handles failed audit payloads by routing them to the Dead Letter Queue.")
+}
+
+Rel(sqs_event_consumer, audit_normalizer, "In-memory function call", "")
+Rel(audit_normalizer, cryptographic_signer, "In-memory function call", "")
+Rel(cryptographic_signer, kms_signer_client, "In-memory function call", "")
+Rel(kms_signer_client, aws_kms, "Requests cryptographic signature", "HTTPS / AWS SigV4")
+Rel(cryptographic_signer, s3_storage_client, "In-memory function call", "")
+Rel(s3_storage_client, amazon_s3_object_lock, "Persists audit logs", "HTTPS / AWS SigV4")
+Rel(sqs_event_consumer, amazon_sqs_dlq, "Sends failed audit payloads", "HTTPS / AWS SigV4")
+
+@enduml

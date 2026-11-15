@@ -1,0 +1,318 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: Customer BFF Container handles online claim submission (R-01), Adjuster BFF Container manages adjuster workflows (R-02), and the Routing / Feature Flag Container paired with the Anti-Corruption Layer enables incremental claim-type migration (R-03).",
+   "performance_efficiency": "Under-2-second adjuster response times against 5-second mainframe latency are achieved using Azure Cache for Redis, asynchronous messaging via Azure Service Bus, and local caching in the Routing and IAM proxy containers.",
+   "compatibility": "The Anti-Corruption Layer and DB2 Connector directly address mainframe interoperability, and IAM Proxy integrates with Active Directory. However, explicit scheduling mechanisms respecting the strict 23:00-05:00 batch window constraint are not detailed.",
+   "usability": "Both user groups are explicitly served through dedicated endpoints: Customer BFF Container provides external submission interfaces, while Adjuster BFF Container and Adjuster UI Controller provide tailored workflows for claims adjusters.",
+   "reliability": "Zero data loss and no duplicate processing (R-04) are ensured by the Outbox Pattern Component, Azure Service Bus with dead-lettering, Circuit Breaker Component, and the Data Sync / Reconciliation Container.",
+   "security": "Active Directory SSO (R-07) is addressed by the IAM Proxy / Token Exchange Container via SAML/OAuth2/OIDC. Edge Security, Azure Key Vault secrets management, and Centralized Audit Log Sink enforce comprehensive security.",
+   "maintainability": "Switching claim types within one day (R-06) is enabled by the Routing Engine and OpenFeature Evaluation Engine. The Modular Monolith uses Hexagonal Architecture, ensuring clear domain separation and low cognitive overhead.",
+   "portability": "The hybrid topology (on-prem mainframe and azure-westeurope) is respected using containerized components in Azure Container Apps. However, heavy reliance on proprietary Azure services limits infrastructure replaceability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Adjuster screens achieve low latency via Adjuster BFF, Modular Monolith, and Redis caching. Continuous background synchronization minimizes synchronous mainframe calls, but a cache miss requiring real-time ACL queries to the 5-second mainframe could breach the 2-second threshold unless explicitly handled asynchronously.",
+    "elements": [
+     "Adjuster BFF Container",
+     "Modular Monolith Container",
+     "Asynchronous Messaging & Caching Layer",
+     "Anti-Corruption Layer (ACL) Container",
+     "Data Sync / Reconciliation Container"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in Azure Cache for Redis",
+     "Synchronization freshness between mainframe and Azure data store"
+    ],
+    "tradeoffs": [
+     "Serving cached claims data improves response times but risks temporary eventual consistency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Peak claim submissions are ingested through Customer BFF and buffered using Azure Service Bus and transactional outbox patterns. This decouples peak submission load from the mainframe, fully protecting the 23:00-05:00 batch window from uncontrolled real-time traffic spikes.",
+    "elements": [
+     "Customer BFF Container",
+     "API Gateway Container",
+     "Modular Monolith Container",
+     "Asynchronous Messaging & Caching Layer",
+     "Azure Service Bus"
+    ],
+    "sensitivity_points": [
+     "Azure Service Bus queue depth and throttling limits under 5x peak ingestion"
+    ],
+    "tradeoffs": [
+     "Buffering submissions via queues ensures mainframe protection at the cost of delayed batch processing"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "During the batch window, the modern platform remains available. Customer submissions are accepted and durably persisted in Azure Service Bus and the Modular Monolith outbox. Circuit breakers protect ACL calls, and messages are forwarded when the batch window closes without data loss.",
+    "elements": [
+     "Customer BFF Container",
+     "Modular Monolith Container",
+     "Asynchronous Messaging & Caching Layer",
+     "Anti-Corruption Layer (ACL) Container",
+     "Circuit Breaker Component"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker trip thresholds and retry policies during scheduled mainframe downtime"
+    ],
+    "tradeoffs": [
+     "Queuing submissions guarantees 24/7 ingestion availability while accepting deferred legacy synchronization"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Reconciliation Engine and Sync Orchestrator detect inconsistencies between the modern store and DB2. Outbox patterns prevent message drops. However, explicit idempotent deduplication mechanisms across partial failure states are not fully detailed to guarantee no claim is processed twice.",
+    "elements": [
+     "Data Sync / Reconciliation Container",
+     "Reconciliation Engine",
+     "Sync Orchestrator",
+     "DB2 Connector",
+     "Anti-Corruption Layer (ACL) Container"
+    ],
+    "sensitivity_points": [
+     "Reconciliation schedule frequency and DB2 lock contention during data comparison"
+    ],
+    "tradeoffs": [
+     "Automated background reconciliation guarantees consistency but consumes network and mainframe processing bandwidth"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Migrating a claim type is enabled by the Routing Engine and Feature Flag Evaluation Engine (OpenFeature/Azure App Configuration). The ACL isolates mainframe interface changes, and toggling feature flags allows instant rollback to the mainframe well within the one-day requirement.",
+    "elements": [
+     "Routing / Feature Flag Container",
+     "Routing Engine",
+     "Feature Flag Evaluation Engine",
+     "Anti-Corruption Layer (ACL) Container",
+     "Modular Monolith Container"
+    ],
+    "sensitivity_points": [
+     "Feature flag evaluation latency and cache invalidation propagation across containers"
+    ],
+    "tradeoffs": [
+     "Dynamic routing via feature flags adds routing hops but enables instantaneous migration rollbacks"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "BFFs and client applications interact exclusively with the modern API Gateway and Modular Monolith, which houses core domain modules. Decommissioning the mainframe only requires removing the ACL and sync components; client UIs and BFF contracts remain completely unaffected.",
+    "elements": [
+     "Customer BFF Container",
+     "Adjuster BFF Container",
+     "API Gateway Container",
+     "Modular Monolith Container",
+     "Anti-Corruption Layer (ACL) Container"
+    ],
+    "sensitivity_points": [
+     "Complete decoupling of frontend BFF interfaces from legacy data structures"
+    ],
+    "tradeoffs": [
+     "Maintaining dual domain models in ACL increases interim migration overhead to preserve UI stability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Edge security, API Gateway, and Claims Domain Modules enforce authorization boundaries, while the Centralized Audit Log Sink and OpenTelemetry collector record security events. However, multi-tenant broker data isolation rules and fine-grained authorization policies are only generically specified.",
+    "elements": [
+     "API Gateway Container",
+     "Modular Monolith Container",
+     "Claims Domain Module",
+     "Observability & Logging Container",
+     "Centralized Audit Log Sink"
+    ],
+    "sensitivity_points": [
+     "Fine-grained data authorization logic enforcement in application and domain services"
+    ],
+    "tradeoffs": [
+     "Detailed audit logging for security non-repudiation increases storage and I/O overhead"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Active Directory SSO integrates directly with the IAM Proxy / Token Exchange container. While AD revocation cuts off authentication, cached tokens in Redis Session and Cache Manager must have TTLs below 15 minutes or support back-channel invalidation to guarantee the 15-minute SLA.",
+    "elements": [
+     "Active Directory",
+     "IAM Proxy / Token Exchange Container",
+     "Authentication and Token Exchange Module",
+     "Session and Cache Manager",
+     "Adjuster BFF Container"
+    ],
+    "sensitivity_points": [
+     "Token lifetime and session cache TTL in Redis"
+    ],
+    "tradeoffs": [
+     "Short token TTLs enforce prompt access revocation but require frequent token refresh validations"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "full",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "COBOL/DB2 Mainframe",
+     "Anti-Corruption Layer (ACL) Container",
+     "Data Sync / Reconciliation Container"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Anti-Corruption Layer (ACL) Container",
+     "Legacy Adapter Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Modular Monolith Container"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers and Brokers",
+     "Customer BFF Container",
+     "Claim Submission Controller"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Modern Web Application",
+     "Adjuster BFF Container",
+     "Adjuster UI Controller"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Routing / Feature Flag Container",
+     "Routing Engine",
+     "Feature Flag Evaluation Engine",
+     "Routing & Feature Flag Evaluator"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Application Services",
+     "Outbox Pattern Component",
+     "Azure Service Bus",
+     "Data Sync / Reconciliation Container",
+     "Reconciliation Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Asynchronous Messaging & Caching Layer",
+     "Azure Cache for Redis",
+     "Circuit Breaker Component",
+     "Session and Cache Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Routing / Feature Flag Container",
+     "Routing Engine",
+     "Feature Flag Evaluation Engine"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Active Directory",
+     "IAM Proxy / Token Exchange Container",
+     "Authentication and Token Exchange Module"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

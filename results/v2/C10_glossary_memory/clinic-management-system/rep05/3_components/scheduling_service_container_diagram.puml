@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Scheduling Service Container container
+
+Container_Ext(api_gateway_bff_container, "API Gateway / BFF Container", "Kong / Envoy", "Routes internal requests to the scheduling service container.")
+System_Ext(notification_gateway, "Notification Gateway", "Twilio / SendGrid", "External gateway that dispatches alerts and notifications.")
+
+Container_Boundary(scheduling_service_container, "Scheduling Service Container") {
+    Component(scheduling_api_controller, "Scheduling API Controller", "TypeScript / Express or Fastify", "Handles incoming routing and validation logic for scheduling endpoints.")
+    Component(resource_clash_engine, "Resource Clash Engine", "TypeScript", "Executes validation logic to detect resource clashes and enforce atomic locks.")
+    Component(appointment_manager, "Appointment Manager", "TypeScript", "Manages appointment business logic and queues reminders.")
+    Component(notification_dispatcher, "Notification Dispatcher", "TypeScript", "Queues reminders and dispatches alerts to the external notification gateway.")
+    ComponentDb(clinical_database, "Clinical Database", "PostgreSQL", "Enforces atomic locks with SERIALIZABLE isolation over TLS 1.3 to prevent double-booking race conditions.")
+    Component(audit_observability_sidecar, "Audit & Observability Sidecar", "FluentBit / Prometheus", "Emits logs and metrics for tamper-evident logging and observability.")
+}
+
+Rel(api_gateway_bff_container, scheduling_api_controller, "Routes internal requests", "gRPC over mTLS")
+Rel(scheduling_api_controller, resource_clash_engine, "Executes validation logic", "In-memory / Function call")
+Rel(resource_clash_engine, clinical_database, "Enforces atomic locks", "SQL with SERIALIZABLE isolation over TLS 1.3")
+Rel(appointment_manager, notification_dispatcher, "Queues reminders", "AMQP/RabbitMQ")
+Rel(notification_dispatcher, notification_gateway, "Dispatches alerts", "HTTPS with TLS 1.3")
+Rel(scheduling_api_controller, audit_observability_sidecar, "Emits logs and metrics", "Stdout / Prometheus metrics")
+Rel(resource_clash_engine, audit_observability_sidecar, "Emits logs and metrics", "Stdout / Prometheus metrics")
+Rel(appointment_manager, audit_observability_sidecar, "Emits logs and metrics", "Stdout / Prometheus metrics")
+Rel(notification_dispatcher, audit_observability_sidecar, "Emits logs and metrics", "Stdout / Prometheus metrics")
+@enduml

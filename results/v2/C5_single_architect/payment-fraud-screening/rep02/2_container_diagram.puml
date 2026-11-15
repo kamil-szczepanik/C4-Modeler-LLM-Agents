@@ -1,0 +1,34 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalyst, "Fraud Analyst", "Accesses case management interface for fraud analysis and reviewing flagged transactions.")
+
+System_Ext(PaymentGatewayCoreProcessingPlatform, "Payment Gateway / Core Processing Platform", "Sends card-not-present payment authorizations to be screened for fraud.")
+System_Ext(IdentityProvider, "Identity Provider", "Authenticates fraud analysts.")
+System_Ext(AWSKeyManagementServiceKMSHSM, "AWS Key Management Service (KMS) / HSM", "Provides cryptographic keys for envelope encryption and tamper-evident audit logs.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(APIGatewayApplicationLoadBalancer, "API Gateway / Application Load Balancer", "AWS API Gateway / ALB", "Routes incoming traffic to internal services using TLS 1.3.")
+    Container(FraudScoringEngine, "Fraud Scoring Engine", "Go or Rust, AWS ECS Fargate", "Screens payment authorizations in real time to meet sub-50ms latency requirements.")
+    Container(CaseManagementService, "Case Management Service", "Node.js / TypeScript, AWS ECS Fargate", "Provides case management and audit log archiving capabilities for fraud analysts.")
+    ContainerDb(AmazonElastiCacheRedis, "Amazon ElastiCache Redis", "Amazon ElastiCache Redis", "Stores feature stores and rule caching for low-latency access.")
+    ContainerDb(AmazonAuroraPostgreSQL, "Amazon Aurora PostgreSQL", "Amazon Aurora PostgreSQL", "Stores transactional case data and audit logs.")
+    Container(AmazonS3ImmutableVault, "Amazon S3 Immutable Vault", "Amazon S3 with Object Lock in Compliance Mode", "Archives audit logs and case data in a tamper-evident manner.")
+    Container(AmazonSQSSNS, "Amazon SQS / SNS", "Amazon SQS / SNS", "Handles asynchronous event publishing and consumption between services.")
+}
+
+Rel(PaymentGatewayCoreProcessingPlatform, APIGatewayApplicationLoadBalancer, "Invokes payment authorization requests", "HTTPS using TLS 1.3")
+Rel(APIGatewayApplicationLoadBalancer, FraudScoringEngine, "Calls fraud scoring logic", "gRPC over HTTP/2")
+Rel(FraudScoringEngine, AmazonElastiCacheRedis, "Reads/writes from feature stores and rule cache", "Redis Protocol")
+Rel(FraudScoringEngine, AmazonAuroraPostgreSQL, "Queries transactional data", "PostgreSQL Wire Protocol")
+Rel(FraudScoringEngine, AmazonSQSSNS, "Publishes asynchronous events", "AWS SDK / SQS/SNS API")
+Rel(CaseManagementService, AmazonSQSSNS, "Consumes asynchronous events", "AWS SDK / SQS API")
+Rel(CaseManagementService, AmazonAuroraPostgreSQL, "Reads/writes transactional case data", "PostgreSQL Wire Protocol")
+Rel(CaseManagementService, AmazonS3ImmutableVault, "Archives audit logs and case data", "AWS SDK / S3 API")
+Rel(FraudAnalyst, CaseManagementService, "Accesses case management interface", "HTTPS")
+Rel(FraudAnalyst, IdentityProvider, "Authenticates for system access", "HTTPS / OIDC")
+
+@enduml

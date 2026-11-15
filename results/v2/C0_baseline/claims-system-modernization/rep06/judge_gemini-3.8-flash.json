@@ -1,0 +1,325 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 2,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "While claim submission (R-01) and phased migration (R-03) are supported via Claims Processing Service and Migration Dashboard, R-02 is incomplete: no web application container is modeled for Claims Adjusters, who connect directly to Azure API Management.",
+   "performance_efficiency": "Under-2-second response time (R-05) is met by isolating reads to the Claim Operational Store, decoupling mainframe calls via Outbox Data Repository and Azure Service Bus, and utilizing caching within the Resilience Adapter.",
+   "compatibility": "Coexistence with the COBOL/DB2 mainframe is addressed through Mainframe Sync Function, ExpressRoute/VPN, and Azure Service Bus, which buffers requests around the strict nightly batch window without requiring frequent mainframe interface modifications.",
+   "usability": "The brief requires online submission and an adjuster web application, but no customer/broker portals or adjuster UI containers exist. Only the internal Migration Dashboard UI is defined; end users connect directly to Azure API Management.",
+   "reliability": "Consistency (R-04) is ensured through Outbox Data Repository, Event Publisher, Service Bus Premium Messaging Engine, and Replay & Audit API for message deduplication. The Resilience Adapter provides fault tolerance against mainframe latency.",
+   "security": "R-07 is satisfied by Azure Active Directory (Entra ID) supporting SSO via OAuth 2.0/OIDC. Security Validator, Azure Key Vault with Managed Identities, RBAC middleware, and Private Endpoints enforce thorough defense-in-depth.",
+   "maintainability": "One-day rollback (R-06) is achieved via Rollback Controller Component, Migration State & Routing Registry, and dynamic routing in API Gateway. Modular decomposition across containers and Spring Boot components ensures clear separation of concerns.",
+   "portability": "The architecture successfully addresses the hybrid deployment requirement across azure-westeurope and on-prem-mainframe. However, heavy reliance on specialized, proprietary Azure PaaS components limits replaceability of the cloud infrastructure."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "A caching adapter and resilience circuit breaker are present, but there is no explicit CQRS read-model pre-population mechanism to guarantee sub-2-second response on cache misses against a 5-second mainframe.",
+    "elements": [
+     "Claims Processing Service",
+     "Resilience Adapter",
+     "Claim Operational Store",
+     "Azure API Management"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios for mainframe-resident claim records",
+     "Read-through fallback latency to legacy systems"
+    ],
+    "tradeoffs": [
+     "Data freshness versus sub-2-second screen response time"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Peak submission volumes are decoupled from the mainframe via Azure API Management, transactional persistence in Azure SQL, and Azure Service Bus queues designed to buffer workloads across the batch window.",
+    "elements": [
+     "Azure API Management",
+     "Claims Processing Service",
+     "Azure Service Bus",
+     "Service Bus Premium Messaging Engine"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue storage and message retention capacity during peaks",
+     "Autoscaling speed of Azure Container Apps under sudden load"
+    ],
+    "tradeoffs": [
+     "Immediate ingestion availability versus asynchronous eventual consistency on the mainframe"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "During the batch window, online claims are persisted locally in Azure SQL using the transactional outbox pattern and queued in Azure Service Bus, guaranteeing retention until forwarding resumes.",
+    "elements": [
+     "Claims Processing Service",
+     "Outbox Data Repository",
+     "Azure Service Bus",
+     "Azure Logic Apps / Functions"
+    ],
+    "sensitivity_points": [
+     "Outbox publisher reliability when resuming post-window processing",
+     "Queue depth limits during prolonged batch unavailability"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission decoupling versus immediate mainframe confirmation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Transactional outbox persistence, Service Bus deduplication, replay APIs, exception triage workflows, and dedicated reconciliation logs prevent lost messages and duplicated claims across integration failures.",
+    "elements": [
+     "Outbox Data Repository",
+     "Azure Service Bus",
+     "Replay & Audit API",
+     "Exception Triage Orchestrator",
+     "Audit & Reconciliation Log"
+    ],
+    "sensitivity_points": [
+     "Message deduplication window configuration on Azure Service Bus",
+     "Completeness of automated reconciliation and compensation logic"
+    ],
+    "tradeoffs": [
+     "System complexity of compensation workflows versus data consistency guarantees"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Claim-type routing in API Management, the Migration State & Routing Registry, and the dashboard's Rollback Controller enable rapid rerouting and single-day rollbacks without mainframe alterations.",
+    "elements": [
+     "Azure API Management",
+     "API Gateway",
+     "Rollback Controller Component",
+     "Migration State & Routing Registry"
+    ],
+    "sensitivity_points": [
+     "Propagation latency of dynamic routing updates across gateway nodes",
+     "Granularity of claim-type routing policies"
+    ],
+    "tradeoffs": [
+     "Dynamic routing flexibility versus gateway configuration complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "External clients and adjusters interact exclusively with Azure API Management and cloud services. Decommissioning the mainframe simply removes the asynchronous sync adapters without touching frontend applications.",
+    "elements": [
+     "Azure API Management",
+     "Claims Processing Service",
+     "Claim Operational Store",
+     "Mainframe Sync Function"
+    ],
+    "sensitivity_points": [
+     "Decoupling depth between UI contracts and legacy mainframe data formats",
+     "Transition of Claim Operational Store to sole system of record"
+    ],
+    "tradeoffs": [
+     "Maintaining dual-write synchronization overhead until total mainframe retirement"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Token validation and identity federation are specified, but object-level authorization (broker-to-customer claim ownership rules) is only documented on the Migration Dashboard, leaving the claims processing service logic unspecified.",
+    "elements": [
+     "Security Validator",
+     "Azure Active Directory (Entra ID)",
+     "Claims Routing Controller",
+     "Claim Processing Service"
+    ],
+    "sensitivity_points": [
+     "Enforcement of fine-grained resource-level claims access policies",
+     "Validation of tenant and customer scopes within API tokens"
+    ],
+    "tradeoffs": [
+     "Centralized gateway token validation versus domain-level fine-grained authorization checks"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Entra ID centralizes cloud SSO, but token caching at API Management and lack of an automated de-provisioning link to legacy mainframe security (RACF/Top Secret) jeopardize the 15-minute SLA across both systems.",
+    "elements": [
+     "Azure Active Directory (Entra ID)",
+     "Token Service (STS)",
+     "Security Validator",
+     "On-premise COBOL/DB2 Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Access token lifetimes and absence of Continuous Access Evaluation",
+     "Synchronization latency between Active Directory and on-premise mainframe directories"
+    ],
+    "tradeoffs": [
+     "Token verification performance via caching versus rapid revocation enforcement"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "On-premise COBOL/DB2 Legacy Mainframe",
+     "Azure Service Bus",
+     "Azure Logic Apps / Functions",
+     "Mainframe Sync Function"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Azure Service Bus",
+     "Service Bus Premium Messaging Engine"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Azure Logic Apps / Functions",
+     "Mainframe Sync Function"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Migration Dashboard UI"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer",
+     "Broker",
+     "Azure API Management",
+     "API Gateway",
+     "Claims Routing Controller",
+     "Claim Processing Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Claims Adjuster",
+     "Azure API Management",
+     "Claims Processing Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Azure API Management",
+     "API Gateway",
+     "Claims Routing Controller",
+     "Migration State & Routing Registry"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Outbox Data Repository",
+     "Claim Operational Store",
+     "Azure SQL Database",
+     "Azure Service Bus",
+     "Replay & Audit API",
+     "Audit & Reconciliation Log"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Resilience Adapter",
+     "Claim Operational Store",
+     "Claims Processing Service"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Migration Dashboard",
+     "Rollback Controller Component",
+     "Azure API Management",
+     "Migration State & Routing Registry"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Azure Active Directory (Entra ID)",
+     "Token Service (STS)",
+     "Security Validator"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

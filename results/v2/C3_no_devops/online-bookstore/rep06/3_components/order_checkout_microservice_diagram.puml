@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Order & Checkout Microservice container
+
+Person(Shopper_Customer_Support_Agent, "Shopper & Customer Support Agent", "Internal actors interacting with the checkout and order management flows.")
+System_Ext(API_Gateway, "API Gateway", "Routes incoming checkout requests.")
+System_Ext(Notification_Microservice, "Notification Microservice", "Receives domain events for notifications.")
+System_Ext(AWS_Aurora_PostgreSQL, "AWS Aurora PostgreSQL", "Relational data store enforcing field-level encryption for PII.")
+
+Container_Boundary(Order_Checkout_Microservice, "Order & Checkout Microservice") {
+    Component(Order_API_Controller, "Order API Controller", "Node.js & TypeScript, gRPC, JWT", "Handles incoming gRPC requests and JWT-based authorization.")
+    Component(Checkout_Orchestrator_Saga_Coordinator, "Checkout Orchestrator (Saga Coordinator)", "Node.js & TypeScript", "Manages distributed transaction workflows and transient failures.")
+    Component(Payment_Processor_Client, "Payment Processor Client", "Node.js & TypeScript, HTTPS REST API", "Integrates with the Payment Gateway using tokenization.")
+    Component(Fulfillment_Adapter, "Fulfillment Adapter", "Node.js & TypeScript, HTTPS API", "Interfaces with the Third-Party Shipping Partner API.")
+    Component(Tax_Currency_Evaluator, "Tax & Currency Evaluator", "Node.js & TypeScript, HTTPS REST", "Handles real-time USD, EUR, and GBP conversion.")
+    Component(Retry_DLQ_Manager, "Retry & DLQ Manager", "AWS SQS with AWS KMS", "Manages asynchronous failure resilience.")
+    Component(Event_Publisher, "Event Publisher", "Node.js & TypeScript, AWS EventBridge / SNS", "Dispatches domain events to downstream services.")
+    Component(Order_Repository, "Order Repository", "AWS Aurora PostgreSQL & TypeORM", "Persists encrypted transaction and order data.")
+}
+
+Rel(API_Gateway, Order_API_Controller, "Routes incoming checkout requests", "gRPC over mTLS via AWS App Mesh")
+Rel(Checkout_Orchestrator_Saga_Coordinator, Payment_Processor_Client, "Processes financial transactions", "HTTPS REST API")
+Rel(Checkout_Orchestrator_Saga_Coordinator, Fulfillment_Adapter, "Sends fulfillment data", "HTTPS API")
+Rel(Checkout_Orchestrator_Saga_Coordinator, Tax_Currency_Evaluator, "Fetches localized pricing", "HTTPS REST")
+Rel(Checkout_Orchestrator_Saga_Coordinator, Retry_DLQ_Manager, "Offloads transient failures", "AWS SQS with AWS KMS")
+Rel(Event_Publisher, Notification_Microservice, "Dispatches order state changes", "AWS EventBridge / SNS")
+Rel(Order_Repository, AWS_Aurora_PostgreSQL, "Persists order data", "TCP with AWS KMS encryption at rest")
+
+@enduml

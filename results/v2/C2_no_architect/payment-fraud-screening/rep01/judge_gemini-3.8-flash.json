@@ -1,0 +1,292 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 2,
+   "security": 3,
+   "maintainability": 3,
+   "portability": 3
+  },
+  "mean": 3.0,
+  "justifications": {
+   "functional_suitability": "While Fraud Scoring Controller and Case Management Service address R-01 and R-02, the architecture lacks a direct connection or mechanism for Scoring Engine Container to push review cases into Case Management Container or Amazon Aurora Serverless. Zero-downtime model and rule updates (R-03) lack explicit runtime mechanisms.",
+   "performance_efficiency": "Meeting sub-50ms P99 at 3,000 TPS is precarious: requests traverse Ingress Router, Routing Controller, Fraud Scoring Controller, and external AWS SageMaker Serverless Inference via network hops. Although Model Inference Runtime uses ONNX, lack of in-memory caching or colocation makes meeting the latency budget difficult.",
+   "compatibility": "External Payment Gateway integrates cleanly via HTTPS/mTLS (TLS 1.3) through Ingress Router. Case Management Container adheres to standard web protocols and identity federation (OIDC/OAuth2, WebAuthn MFA). GitHub Actions communicates via standard AWS APIs.",
+   "usability": "Fraud Analyst is well-supported by Case Management Service using MFA. However, Risk Operations Manager and Fraud Data Scientist are declared in Level 2 without any interfaces, workflows, or architectural interactions mapped to support their tasks.",
+   "reliability": "The architecture fails to provide a fail-open, bypass, or timeout mechanism to satisfy R-07 (payments unblocked within 1 minute during scoring outages). While Amazon SQS provides a dead-letter queue for audit logs, no circuit breaker or degradation pattern exists for the primary scoring flow.",
+   "security": "Auth and WAF Filter, mTLS, AWS Secrets Manager, and S3 Object Lock Storage effectively address ingress security and tamper-evident auditability. However, explicit card tokenization or masking mechanisms required by R-05 to ensure analysts never view full PANs are entirely omitted.",
+   "maintainability": "Responsibilities are divided across containers, but C4 boundaries are confused (Amazon Aurora Serverless, Amazon SQS, and QLDB are incorrectly modeled as internal components of Case Management Container). Furthermore, managing diverse distributed components exceeds the operational capacity intended for three engineers.",
+   "portability": "The architecture targets AWS eu-west-1 using ECS Fargate, but relies heavily on proprietary services (AWS SageMaker, Amazon Aurora Serverless, S3 Object Lock, AWS KMS, AWS Secrets Manager), creating deep platform lock-in and inhibiting execution across alternative containerized environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 2,
+   "PERF-02": 5,
+   "SEC-01": 2,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.5,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 3.0,
+   "Modifiability": 2.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "justification": "Python REST API and SageMaker SDK invocations over multi-tier Fargate containers risk breaching the 50 ms P99 latency SLA at 3,000 TPS. Component descriptions inconsistently specify SageMaker Serverless, Real-Time endpoints, and ECS ONNX runtime.",
+    "elements": [
+     "API Gateway / Ingress Container",
+     "Scoring Engine Container",
+     "AWS SageMaker Serverless Inference",
+     "Fraud Scoring Controller",
+     "Model Inference Client"
+    ],
+    "sensitivity_points": [
+     "Network hop latency across internal VPC endpoints at 3,000 TPS",
+     "Inference execution time and SDK serialization overhead"
+    ],
+    "tradeoffs": [
+     "External SageMaker service calls trade simplicity for higher network invocation latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management workloads are strictly decoupled onto separate ECS containers and Aurora Serverless, completely isolating analyst query load from the real-time scoring engine and its low-latency data flow.",
+    "elements": [
+     "Case Management Container",
+     "Case Management Service",
+     "Amazon Aurora Serverless",
+     "Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Independent autoscaling policies for Aurora Serverless and Case Management Fargate tasks"
+    ],
+    "tradeoffs": [
+     "Maintaining dedicated infrastructure for case management increases operational complexity and cost"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The API Gateway and Ingress Router lack an explicit fallback mechanism, circuit breaker, or stand-in default approval/decline path if the Scoring Engine crashes or fails to respond within timeouts.",
+    "elements": [
+     "API Gateway / Ingress Container",
+     "Ingress Router",
+     "Routing Controller",
+     "Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Absence of edge circuit breaker or fallback rule engine in API Gateway"
+    ],
+    "tradeoffs": [
+     "Fail-open or fail-closed decisions trade fraud risk against transaction processing continuity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Audit Log Dispatcher offloads decision logs asynchronously using Amazon SQS, buffering logs against downstream audit storage slowness without degrading synchronous scoring latency or dropping audit records.",
+    "elements": [
+     "Scoring Engine Container",
+     "Audit Log Dispatcher",
+     "Amazon SQS",
+     "QLDB / S3 Object Lock"
+    ],
+    "sensitivity_points": [
+     "Queue capacity, message retention limits, and KMS encryption latency on SQS writes"
+    ],
+    "tradeoffs": [
+     "Asynchronous log dispatch preserves scoring throughput but introduces slight eventual consistency for audit logs"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Blue/green deployment via GitHub Actions supports zero downtime, but the architecture lacks specific mechanisms for tracking model version IDs within decision outputs or executing rapid rollbacks within 5 minutes.",
+    "elements": [
+     "GitHub Actions",
+     "AWS SageMaker Serverless Inference",
+     "Model Inference Client",
+     "Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Propagation delay of container or SageMaker endpoint updates during rollback"
+    ],
+    "tradeoffs": [
+     "Decoupled CI/CD deployments enable safe rollouts but require robust orchestration tooling"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The model focuses exclusively on machine learning inference. There is no business rule engine, parameter store, or dynamic rule configuration system present to evaluate velocity checks or explain rule-based decisions.",
+    "elements": [
+     "Scoring Engine Container",
+     "Fraud Scoring Controller",
+     "Model Inference Client"
+    ],
+    "sensitivity_points": [
+     "Lack of dynamic rule evaluation runtime separate from ML inference"
+    ],
+    "tradeoffs": [
+     "Hardcoding rules into code requires redeploying containers rather than runtime rule updates"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "justification": "While MFA and role separation are present, the design omits a PCI-compliant tokenization service or PAN masking mechanism in the data path, and specifies no anomaly detection or alerting system for analyst sessions.",
+    "elements": [
+     "Case Management Container",
+     "Case Management Service",
+     "Auth and WAF Filter",
+     "AWS Secrets Manager"
+    ],
+    "sensitivity_points": [
+     "Lack of explicit card tokenization or redaction proxy before analyst presentation"
+    ],
+    "tradeoffs": [
+     "Strict tokenization confines PCI scope but requires specialized vault or token services"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Decisions and audit trails are persisted into Amazon S3 with Object Lock in Compliance Mode alongside KMS encryption, ensuring immutability for 7 years and straightforward retrieval of historic decision artifacts.",
+    "elements": [
+     "QLDB / S3 Object Lock",
+     "S3 Object Lock Storage",
+     "AWS KMS Encryption Service",
+     "Audit Log Dispatcher"
+    ],
+    "sensitivity_points": [
+     "S3 Object Lock retention policy configuration and customer-managed KMS key management"
+    ],
+    "tradeoffs": [
+     "Compliance Mode prevents deletion even by root users, increasing irreversible storage retention costs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "none",
+   "R-06": "partial",
+   "R-07": "none"
+  },
+  "coverage": 0.4090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Ingress Router",
+     "Auth and WAF Filter",
+     "Case Management Service",
+     "AWS KMS Encryption Service"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "QLDB / S3 Object Lock",
+     "S3 Object Lock Storage",
+     "Audit Log Dispatcher"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none"
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none"
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Scoring Engine Container",
+     "Fraud Scoring Controller",
+     "Model Inference Client",
+     "Model Inference Runtime"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Container",
+     "Case Management Service",
+     "Case Data Store"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "GitHub Actions"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Ingress Router",
+     "Scoring Engine Container",
+     "Model Inference Runtime"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "none"
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit Log Dispatcher",
+     "QLDB / S3 Object Lock",
+     "S3 Object Lock Storage"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none"
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

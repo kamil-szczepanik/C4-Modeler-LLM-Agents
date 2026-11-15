@@ -1,0 +1,335 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "All requirements are met: R-01 is fulfilled by 'Customer Portal', R-02 by 'Adjuster Workspace', and R-03 via 'Routing & Integration Service' and 'Claims Core Engine', which manage gradual claim-type routing and processing alongside the 'Legacy Mainframe'.",
+   "performance_efficiency": "R-05 is directly addressed using a CQRS pattern: 'Adjuster Workspace' reads from 'Claims Read-Model Store' in 'Azure SQL Database' in under 2 seconds, decoupling screen loads from the 5-second latency of 'Legacy Mainframe'.",
+   "compatibility": "The architecture excels at coexisting with legacy infrastructure via 'Anti-Corruption Layer (ACL) Component' and 'Legacy Adapter'. It integrates seamlessly with 'Legacy Mainframe' via ExpressRoute/mTLS and federates with 'Active Directory / Microsoft Entra ID' using standard SAML/OIDC.",
+   "usability": "Distinct web portals serve each user group: external users interact with 'Customer Portal', while internal adjusters and support agents operate through 'Adjuster Workspace' backed by 'Azure API Management' for clear task partitioning.",
+   "reliability": "R-04 consistency targets are satisfied by 'Azure Service Bus Topics' using Session IDs for deduplication, peek-lock message handling in 'Subscription Filters', 'Dead-Letter Manager', and fault-tolerant communication implemented via Resilience4j in 'Anti-Corruption Layer (ACL) Component'.",
+   "security": "R-07 SSO is enforced by 'Microsoft Entra ID' and validated via 'APIM Policy Fragment Engine' and 'Authentication Client'. Secure transport is maintained using TLS 1.3, mTLS, IPsec VPN tunnels, and credential management in 'Azure Key Vault'.",
+   "maintainability": "R-06 is achieved through 'Configuration Cache' (Azure App Configuration) and 'Router Dispatcher', allowing one-day rollbacks. The 'Anti-Corruption Layer (ACL) Component' and modular decomposition ensure loose coupling and respect mainframe interface constraints.",
+   "portability": "The architecture satisfies the target hybrid deployment across 'on-prem-mainframe' and 'azure-westeurope'. However, heavy architectural reliance on proprietary Azure PaaS offerings ('Azure API Management', 'Azure Service Bus', 'Azure App Configuration') limits cross-cloud replaceability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 4.0,
+   "Modifiability": 5.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CQRS read-model storage in Azure SQL allows adjuster screens to load directly without synchronous mainframe dependencies, though background projection sync latency from mainframe DB2 is not fully elaborated.",
+    "elements": [
+     "Adjuster Workspace",
+     "Azure SQL Database",
+     "Claims Read-Model Store",
+     "Claims Core Engine",
+     "Anti-Corruption Layer (ACL) Component"
+    ],
+    "sensitivity_points": [
+     "Read-model projection latency from legacy DB2 to Azure SQL",
+     "Direct database querying from workspace container"
+    ],
+    "tradeoffs": [
+     "Eventual consistency in adjuster views versus sub-second response times",
+     "Increased read-model storage cost versus reduced mainframe MIPS"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Customer Portal and Azure APIM buffer traffic via Azure Service Bus Topics, insulating backend systems from load spikes and protecting the batch window, although queue drainage rate controls need explicit policies.",
+    "elements": [
+     "Customer Portal",
+     "Azure API Management",
+     "Azure Service Bus Topics",
+     "Claims Core Engine",
+     "Transform & Load Component"
+    ],
+    "sensitivity_points": [
+     "Service Bus topic capacity and throttling thresholds during month-end spikes",
+     "Decoupling of synchronous ingestion from batch processing pipelines"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission acknowledgement versus immediate verification against mainframe",
+     "Queue buffering cost versus mainframe peak processing charges"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Asynchronous messaging in Azure Service Bus with peek-lock dispatching holds claims safely during the 23:00-05:00 batch downtime, allowing uninterrupted submissions that forward automatically once the window closes.",
+    "elements": [
+     "Azure API Management",
+     "Azure Service Bus Topics",
+     "Topic Router",
+     "Subscription Filters",
+     "Routing & Integration Service",
+     "Legacy Adapter"
+    ],
+    "sensitivity_points": [
+     "Message retention duration and queue depth in Azure Service Bus",
+     "Resilient reconnect logic within Legacy Adapter when mainframe resumes"
+    ],
+    "tradeoffs": [
+     "Guaranteed message persistence versus slightly delayed downstream mainframe sync",
+     "Storage footprint in Service Bus during extended batch windows"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Session IDs, duplicate detection, and Dead-Letter queues prevent duplicate messaging within Azure, but compensation logic and transactional reconciliation between cloud storage and mainframe DB2 are insufficiently detailed.",
+    "elements": [
+     "Azure Service Bus Topics",
+     "Dead-Letter Manager",
+     "Anti-Corruption Layer (ACL) Component",
+     "Claims Core Engine",
+     "Routing & Integration Service"
+    ],
+    "sensitivity_points": [
+     "Mainframe distributed transaction boundaries or idempotent update handling",
+     "Dead-letter processing and automated compensating transaction workflows"
+    ],
+    "tradeoffs": [
+     "At-least-once delivery with deduplication versus complex two-phase commit overhead",
+     "Manual DLQ reconciliation effort versus automated complex compensation logic"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Dynamic claim-type switching via Azure App Configuration and Router Dispatcher allows instant redirection of motor claims back to the mainframe without code changes or exceeding quarterly interface limits.",
+    "elements": [
+     "Routing & Integration Service",
+     "Router Dispatcher",
+     "Configuration Cache",
+     "Feature Flag Client",
+     "Legacy Adapter"
+    ],
+    "sensitivity_points": [
+     "Dynamic configuration refresh interval in Router Dispatcher",
+     "Mainframe interface compatibility maintained across rollback states"
+    ],
+    "tradeoffs": [
+     "Routing flexibility at runtime versus runtime configuration dependency",
+     "Mainframe schema abstraction overhead in ACL versus quick fallback capability"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "UI applications communicate exclusively with modern platform endpoints and CQRS read stores via APIM, enabling mainframe retirement by decommissioning the ACL and Legacy Adapter without UI impact.",
+    "elements": [
+     "Adjuster Workspace",
+     "Customer Portal",
+     "Azure API Management",
+     "Claims Core Engine",
+     "Anti-Corruption Layer (ACL) Component"
+    ],
+    "sensitivity_points": [
+     "Clean encapsulation of legacy interfaces behind the ACL",
+     "Decoupling of UI contracts from mainframe payload schemas"
+    ],
+    "tradeoffs": [
+     "Extra abstraction layer maintenance during migration versus zero UI refactoring later",
+     "Initial CQRS setup complexity versus painless future legacy decommissioning"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "APIM Policy Fragment Engine and Entra ID provide authentication and token validation, but domain-level multi-tenant claim isolation and authorization controls between competing brokers are not clearly articulated.",
+    "elements": [
+     "Azure API Management",
+     "APIM Policy Fragment Engine",
+     "Microsoft Entra ID",
+     "Audit Logger Component",
+     "Claims Read-Model Store"
+    ],
+    "sensitivity_points": [
+     "Fine-grained tenant and broker claim ownership enforcement in APIM/core engine",
+     "Completeness of audit logging across cross-tenant unauthorized access attempts"
+    ],
+    "tradeoffs": [
+     "Enforcing authorization policies at gateway versus domain service layer",
+     "Fine-grained permission checks latency versus loose tenant boundary risks"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Central Entra ID federation revokes cloud workspace access immediately, but the architecture does not specify automated identity synchronization or credential termination for on-premise mainframe accounts within 15 minutes.",
+    "elements": [
+     "Microsoft Entra ID",
+     "Azure API Management",
+     "APIM Policy Fragment Engine",
+     "Adjuster Workspace",
+     "Authentication Client"
+    ],
+    "sensitivity_points": [
+     "Token lifetime and revocation propagation speed in Entra ID and APIM",
+     "Lack of synchronization between Entra ID and legacy mainframe security RACF"
+    ],
+    "tradeoffs": [
+     "Short-lived token validation overhead versus rapid revocation enforcement",
+     "Centralized cloud identity ease versus dual-system account management complexity"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Anti-Corruption Layer (ACL) Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Business Analytics & Reporting",
+     "Transform & Load Component",
+     "ETL Ingestion Worker"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Anti-Corruption Layer (ACL) Component",
+     "Legacy Adapter"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Data Warehouse Store"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer Portal",
+     "Claim Submission UI",
+     "Customers / Brokers"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Workspace",
+     "Claims Adjusters"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Routing & Integration Service",
+     "Router Dispatcher",
+     "Configuration Cache",
+     "Legacy Adapter",
+     "Claim Processing Service"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Azure Service Bus Topics",
+     "Topic Router",
+     "Subscription Filters",
+     "Dead-Letter Manager"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Azure SQL Database",
+     "Claims Read-Model Store",
+     "Adjuster Workspace"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Configuration Cache",
+     "Router Dispatcher",
+     "Routing & Integration Service"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Active Directory / Microsoft Entra ID",
+     "Microsoft Entra ID",
+     "Authentication Client",
+     "APIM Policy Fragment Engine"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

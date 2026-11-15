@@ -1,0 +1,342 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: 'Video Streaming Server' provides video consultations (R-01), 'EU E-Prescriptions Adapter' and 'US Healthcare Interoperability Service' handle prescriptions (R-02), 'AI Symptom Checker Service' assesses urgency (R-03), and 'Consent & Policy Engine' enforces per-purpose consent management (R-04).",
+   "performance_efficiency": "Performance is achieved through the 'ABR Controller' dynamically throttling video bitrates, the 'Resiliency & Fallback Manager' using compact Protobuf serialization, local caching via 'Offline State Manager', and asynchronous processing via 'Google Cloud Pub/Sub'.",
+   "compatibility": "The design provides explicit interoperability mechanisms: 'US Healthcare Interoperability Service' integrates via Smart-on-FHIR and HL7 FHIR endpoints, 'EU E-Prescriptions Adapter' transforms canonical models to national standards, and external authentication interfaces with eIDAS and OAuth/OIDC IdPs.",
+   "usability": "Both patients and clinicians are served via the unified 'Web App & Mobile App' with a 'Client UI Layer' and an 'Offline State Manager' aiding low-connectivity usability. However, role-specific interaction details or accessibility mechanisms for impaired patients are not detailed.",
+   "reliability": "Availability and fault tolerance are robustly addressed by the 'ABR Controller' and 'TURN/STUN Relay Agent' handling sub-300 kbit/s connections, circuit breaking via 'Gateway Resilience & Routing Module', and asynchronous retry queues using 'GCP Pub/Sub Dead-Letter Queue (DLQ)'.",
+   "security": "Security thoroughly matches requirements: 'Data Residency Validator' and 'Regional Cloud SQL Instances' enforce geographic boundaries, 'Consent & Policy Engine' governs ABAC, and 'Traceability & Audit Component' logs signed inference records to CMEK-encrypted 'Regional Cloud Storage WORM Buckets'.",
+   "maintainability": "The architecture exhibits modular, domain-driven decomposition. Regional variations are cleanly isolated into separate containers ('EU E-Prescriptions Adapter' and 'US Healthcare Interoperability Service'), decoupling jurisdiction-specific logic from the 'Core Telehealth Backend' using standard gRPC interfaces.",
+   "portability": "The architecture is tailored to the specified GCP target regions (`europe-west3` and `us-central1`). However, high coupling to proprietary services like GCP Vertex AI, Cloud Armor, and Cloud Storage WORM bucket locks slightly hinders portability across other cloud providers."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "While Mediasoup SFU and Signaling Handler handle WebRTC routing, the architecture lacks explicit horizontal SFU clustering and auto-scaling mechanisms to guarantee 5,000 concurrent sessions.",
+    "elements": [
+     "Video Streaming Server",
+     "SFU Core",
+     "Signaling Handler",
+     "GCP API Gateway",
+     "Core Telehealth Backend"
+    ],
+    "sensitivity_points": [
+     "SFU media routing capacity per instance",
+     "Signaling server connection handling under burst join traffic"
+    ],
+    "tradeoffs": [
+     "Distributed SFU media relays increase infrastructure complexity but are essential for peak concurrency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "At ~14 req/s, load is well within limits; asynchronous Pub/Sub audit logging decouples slow I/O, allowing Vertex AI inference and FastAPI to return recommendations within 3 s.",
+    "elements": [
+     "GCP API Gateway",
+     "AI Symptom Checker Service",
+     "Clinical Inference Proxy",
+     "GCP Vertex AI",
+     "Google Cloud Pub/Sub",
+     "Traceability & Audit Component"
+    ],
+    "sensitivity_points": [
+     "Model inference latency on Vertex AI endpoints",
+     "Asynchronous decoupling of audit logging via Pub/Sub"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging improves response times but risks slight delay before log persistence"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The ABR Controller downmixes media dynamically, the Resiliency & Fallback Manager applies Protobuf serialization for low bandwidth, and the Offline State Manager caches consultation notes locally.",
+    "elements": [
+     "Video Streaming Server",
+     "ABR Controller",
+     "SFU Core",
+     "Core Telehealth Backend",
+     "Resiliency & Fallback Manager",
+     "Web App & Mobile App",
+     "Offline State Manager"
+    ],
+    "sensitivity_points": [
+     "Bitrate adaptation responsiveness of the ABR Controller",
+     "Local client cache persistence during disconnects"
+    ],
+    "tradeoffs": [
+     "Dropping video to preserve audio fidelity sacrifices visual consultation quality for session continuity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The target cloud specifies only us-central1 for the US. Without a secondary US region defined in GCP, a regional failure cannot be recovered within 1 hour while preserving data residency.",
+    "elements": [
+     "GCP Cloud SQL & Cloud Storage",
+     "Regional Cloud SQL Instances",
+     "Regional Cloud Storage WORM Buckets",
+     "Data Residency Validator"
+    ],
+    "sensitivity_points": [
+     "Absence of secondary regional cloud deployment in the US",
+     "Disaster recovery replication within regional borders"
+    ],
+    "tradeoffs": [
+     "Multi-region intra-country deployment increases operational costs but is required to survive complete regional outages"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Prescription Transformation Engine in the EU E-Prescriptions Adapter isolates mapping logic using MapStruct, allowing new national gateways to be integrated without altering core backend services.",
+    "elements": [
+     "EU E-Prescriptions Adapter",
+     "Prescription Transformation Engine",
+     "Gateway Resilience & Routing Module",
+     "Core Telehealth Backend"
+    ],
+    "sensitivity_points": [
+     "Decoupling canonical prescription models from country-specific schemas"
+    ],
+    "tradeoffs": [
+     "Adapter translation layer adds minimal processing overhead while achieving strict isolation of national integration changes"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Vertex AI supports model versioning and rollbacks, while the Traceability & Audit Component cryptographically records model version metadata and inputs into immutable WORM storage.",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Clinical Inference Proxy",
+     "GCP Vertex AI",
+     "Traceability & Audit Component",
+     "Regional Cloud Storage WORM Buckets"
+    ],
+    "sensitivity_points": [
+     "Binding the exact model version ID to each inference trace",
+     "Model traffic shifting in Vertex AI"
+    ],
+    "tradeoffs": [
+     "Strict WORM compliance storage incurs higher storage costs to satisfy EU MDR traceability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The Consent & Policy Engine validates tenant isolation and cross-region consent using ABAC/RBAC, VPC Service Controls enforce perimeter residency, and the Audit Logging Daemon records all attempts.",
+    "elements": [
+     "Core Telehealth Backend",
+     "Consent & Policy Engine",
+     "Audit Logging Daemon",
+     "Data Residency Validator",
+     "Regional Cloud SQL Instances"
+    ],
+    "sensitivity_points": [
+     "Strict enforcement of ABAC policies on cross-border data requests",
+     "Network-level perimeter controls via VPC Service Controls"
+    ],
+    "tradeoffs": [
+     "Rigid perimeter isolation and ABAC checks add processing latency but guarantee regulatory privacy compliance"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "The Consent & Policy Engine evaluates ABAC rules dynamically on every request, immediately revoking access. However, specific asynchronous bulk research-sharing and verification pipelines are not explicitly detailed.",
+    "elements": [
+     "Core Telehealth Backend",
+     "Consent & Policy Engine",
+     "Audit Logging Daemon",
+     "Regional Cloud Storage WORM Buckets"
+    ],
+    "sensitivity_points": [
+     "Immediate propagation and cache invalidation of revoked consent states",
+     "Auditability of consent changes"
+    ],
+    "tradeoffs": [
+     "Synchronous policy checks on data access ensure immediate revocation enforcement without batch reconciliation"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Logger",
+     "HIPAA Audit & Compliance Logger",
+     "Consent & Policy Engine",
+     "Regional Cloud SQL Instances",
+     "Regional Identity Providers"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Data Residency Validator",
+     "Regional Cloud SQL Instances",
+     "Regional Cloud Storage WORM Buckets",
+     "ESPv2 Gateway Proxy"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Traceability & Audit Component",
+     "Output Validation Guardrail",
+     "Regional Cloud Storage WORM Buckets"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "ABR Controller",
+     "TURN/STUN Relay Agent",
+     "Resiliency & Fallback Manager",
+     "Offline State Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Web App & Mobile App",
+     "Video Streaming Server",
+     "SFU Core",
+     "Consultation Coordinator"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "EU E-Prescriptions Adapter",
+     "US Healthcare Interoperability Service",
+     "Prescription Transformation Engine",
+     "US E-Prescription Dispatcher",
+     "National e-Prescription Gateways and US Pharmacies/EHRs"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Clinical Inference Proxy",
+     "Output Validation Guardrail"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Consent & Policy Engine",
+     "Core Telehealth Backend"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Data Residency Validator",
+     "Regional Cloud SQL Instances",
+     "Consent & Policy Engine"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "ABR Controller",
+     "SFU Core",
+     "Resiliency & Fallback Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Traceability & Audit Component",
+     "Regional Cloud Storage WORM Buckets"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "US Healthcare Interoperability Service",
+     "US Transformation Engine",
+     "EU E-Prescriptions Adapter",
+     "Prescription Transformation Engine"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

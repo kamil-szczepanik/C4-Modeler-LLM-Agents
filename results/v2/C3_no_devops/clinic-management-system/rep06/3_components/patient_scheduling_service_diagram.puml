@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Patient & Scheduling Service container
+
+System_Ext(api_gateway, "API Gateway & Patient Portal BFF", "External BFF and Gateway")
+
+Container_Boundary(patient_scheduling_service, "Patient & Scheduling Service") {
+    Component(patient_registry_controller, "Patient Registry Controller", "Go (Gin/Protobuf)", "Component for patient registration.")
+    Component(scheduling_engine, "Scheduling Engine", "Go", "Component executing appointment logic and resource clash checks.")
+    Component(policy_enforcer, "Policy Enforcer", "Go", "Component evaluating cancellation rules and receptionist override permissions.")
+    Component(waitlist_manager, "Waitlist Manager", "Go", "Component managing waitlist promotion logic.")
+    Component(event_publisher, "Event Publisher", "Go (AMQP client)", "Component dispatching domain and waitlist events.")
+    Component(data_access_repository, "Data Access Repository", "Go (pgx/sqlc)", "Component interfacing with PostgreSQL.")
+}
+
+System_Ext(rabbitmq, "RabbitMQ", "Message broker (AMQPS)", "Asynchronous broker using AMQPS for secure event-driven workflows.")
+System_Ext(postgresql, "PostgreSQL", "PostgreSQL with AES-256 encryption at rest", "Primary database providing serializable isolation levels to prevent double-booking.")
+
+Rel(api_gateway, patient_registry_controller, "Routes requests", "gRPC over mTLS with JWT/OAuth2 RBAC")
+Rel(api_gateway, scheduling_engine, "Routes requests", "gRPC over mTLS with JWT/OAuth2 RBAC")
+Rel(scheduling_engine, policy_enforcer, "Evaluates rules", "in-memory function calls")
+Rel(policy_enforcer, waitlist_manager, "Triggers promotions", "in-memory function calls")
+Rel(waitlist_manager, event_publisher, "Dispatches promotion events", "in-memory calls")
+Rel(event_publisher, rabbitmq, "Publishes messages", "AMQPS (TLS-encrypted AMQP) with field-level PII encryption")
+Rel(scheduling_engine, data_access_repository, "Executes queries", "SQL / TLS")
+Rel(data_access_repository, postgresql, "Reads/Writes", "SQL / TLS")
+
+@enduml

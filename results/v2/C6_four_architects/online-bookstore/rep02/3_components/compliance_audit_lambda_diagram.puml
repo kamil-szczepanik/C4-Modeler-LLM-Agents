@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Compliance/Audit Lambda container
+
+Container_Boundary(compliance_audit_lambda, "Compliance/Audit Lambda") {
+    Component(EventRouter, "Event Router", "TypeScript", "Component multiplexing incoming events from Amazon EventBridge and Amazon MSK.")
+    Component(CompliancePolicyValidator, "Compliance Policy Validator", "TypeScript", "Rule-evaluation component checking retention and consent rules.")
+    Component(AuditLogIngestor, "Audit Log Ingestor", "Node.js/TypeScript, AWS SDK", "Component utilizing AWS SDK to consume security and data-access events.")
+    Component(GDPRCCPADataRedactor, "GDPR/CCPA Data Redactor", "TypeScript", "Component executing erasure, anonymization, and PII scrubbing.")
+    Component(ComplianceReportGenerator, "Compliance Report Generator", "TypeScript, AWS SDK", "Component aggregating audit trails and building scheduled reports.")
+}
+
+Component(AmazonMSK, "Amazon MSK", "Apache Kafka", "External messaging system acting as an event source.")
+Component(AmazonAuroraGlobalDatabase, "Amazon Aurora Global Database", "SQL Database", "External relational database storing persistent data.")
+Component(AmazonDynamoDB, "Amazon DynamoDB", "NoSQL Database", "External NoSQL database storing operational data.")
+Component(AmazonS3, "Amazon S3", "Object Storage", "External storage service for report exports.")
+Component(AmazonAthena, "Amazon Athena", "Query Service", "External query service for reading immutable metadata.")
+
+Rel(EventRouter, AuditLogIngestor, "Dispatches payloads", "in-memory function calls")
+Rel(EventRouter, GDPRCCPADataRedactor, "Dispatches payloads", "in-memory function calls")
+Rel(EventRouter, CompliancePolicyValidator, "Dispatches payloads", "in-memory function calls")
+Rel(CompliancePolicyValidator, GDPRCCPADataRedactor, "Triggers", "in-memory calls when regulatory thresholds are met")
+Rel(AuditLogIngestor, AmazonMSK, "Consumes events", "TCP/TLS")
+Rel(GDPRCCPADataRedactor, AmazonAuroraGlobalDatabase, "Queries/mutates", "SQL protocols over TLS")
+Rel(GDPRCCPADataRedactor, AmazonDynamoDB, "Queries/mutates", "NoSQL protocols over TLS")
+Rel(ComplianceReportGenerator, AmazonS3, "Writes exports", "HTTPS")
+Rel(ComplianceReportGenerator, AmazonAthena, "Reads immutable metadata", "HTTPS (AWS SDK)")
+
+@enduml

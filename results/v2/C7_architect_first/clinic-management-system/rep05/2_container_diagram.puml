@@ -1,0 +1,55 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patients, "Patients", "Individuals who access the system for appointments, portals, and billing interactions.")
+Person(Clinicians, "Clinicians", "Medical professionals who access latency-critical electronic medical records (EMR) workflows.")
+Person(HospitalAdministrators, "Hospital Administrators", "Staff members who manage administrative, scheduling, and billing operations.")
+
+System_Ext(IdentityProviderIdP, "Identity Provider (IdP)", "External system responsible for user authentication and authorization.")
+System_Ext(ExternalLabImagingSystems, "External Lab & Imaging Systems", "External medical systems that integrate with the platform for clinical data exchange via HL7 FHIR.")
+System_Ext(PaymentGatewaysInsuranceClearinghouses, "Payment Gateways & Insurance Clearinghouses", "External financial and insurance systems utilized for billing and payment processing.")
+
+System_Boundary(ClinicManagementSystem, "Clinic Management System") {
+    Container(APIGateway, "API Gateway", "Kong, Nginx, Envoy sidecar", "Manages incoming traffic, routing, mTLS, circuit breaking, and resilience.")
+    Container(PatientPortalService, "Patient Portal Service", "Node.js / TypeScript", "Handles patient-facing portal workflows and interactions.")
+    Container(PatientSchedulingService, "Patient & Scheduling Service", "Node.js / TypeScript", "Manages patient records and appointment scheduling workflows.")
+    Container(EMRService, "EMR Service", "Java / Spring Boot", "Handles electronic medical records and clinical workflows.")
+    Container(BillingService, "Billing Service", "Python / FastAPI", "Processes billing, payments, and interactions with financial clearinghouses.")
+    Container(IntegrationService, "Integration Service", "Apache Camel", "Integrates with external lab, imaging, and healthcare systems using HL7 FHIR APIs.")
+    ContainerDb(PostgreSQLDatabases, "PostgreSQL Databases", "PostgreSQL with read replicas", "Persists core application data with read replicas for high availability.")
+    Container(ApacheKafkaEventBroker, "Apache Kafka Event Broker", "Apache Kafka", "Provides event-driven asynchronous messaging across microservices.")
+    Container(HashiCorpVault, "HashiCorp Vault", "HashiCorp Vault", "Manages secrets and sensitive configuration data securely.")
+}
+
+Rel(Patients, APIGateway, "Accesses portals and scheduling", "HTTPS/REST/GraphQL/mTLS")
+Rel(Clinicians, APIGateway, "Accesses EMR workflows and clinical data", "HTTPS/REST/GraphQL/mTLS")
+Rel(HospitalAdministrators, APIGateway, "Accesses management and administrative functions", "HTTPS/REST/GraphQL/mTLS")
+
+Rel(APIGateway, PatientPortalService, "Routes requests", "gRPC / Internal Mesh with mTLS")
+Rel(APIGateway, PatientSchedulingService, "Routes requests", "gRPC / Internal Mesh with mTLS")
+Rel(APIGateway, EMRService, "Routes requests", "gRPC / Internal Mesh with mTLS")
+Rel(APIGateway, BillingService, "Routes requests", "gRPC / Internal Mesh with mTLS")
+Rel(APIGateway, IntegrationService, "Routes requests", "gRPC / Internal Mesh with mTLS")
+
+Rel(PatientPortalService, PostgreSQLDatabases, "Reads and writes data", "TCP / TLS")
+Rel(PatientPortalService, ApacheKafkaEventBroker, "Publishes and consumes events", "TCP / TLS")
+
+Rel(PatientSchedulingService, PostgreSQLDatabases, "Reads and writes data", "TCP / TLS")
+Rel(PatientSchedulingService, ApacheKafkaEventBroker, "Publishes and consumes events", "TCP / TLS")
+
+Rel(EMRService, PostgreSQLDatabases, "Reads and writes data", "TCP / TLS")
+Rel(EMRService, ApacheKafkaEventBroker, "Publishes and consumes events", "TCP / TLS")
+
+Rel(BillingService, PostgreSQLDatabases, "Reads and writes data", "TCP / TLS")
+Rel(BillingService, ApacheKafkaEventBroker, "Publishes and consumes events", "TCP / TLS")
+
+Rel(IntegrationService, PostgreSQLDatabases, "Reads and writes data", "TCP / TLS")
+Rel(IntegrationService, ApacheKafkaEventBroker, "Publishes and consumes events", "TCP / TLS")
+
+Rel(IntegrationService, ExternalLabImagingSystems, "Exchanges clinical data", "HL7 FHIR APIs")
+Rel(BillingService, PaymentGatewaysInsuranceClearinghouses, "Processes claims and payments", "HTTPS")
+
+@enduml

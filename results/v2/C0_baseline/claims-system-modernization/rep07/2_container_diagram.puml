@@ -1,0 +1,34 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for New Insurance Claims Platform
+
+Person(End_Customers_Brokers, "End Customers & Brokers", "External users who submit and manage insurance claims online.")
+Person(Claims_Adjusters, "Claims Adjusters", "Internal users responsible for reviewing and managing claims.")
+Person(Migration_Product_Owners, "Migration Product Owners", "Internal users responsible for overseeing incremental claim-type migration and rollbacks.")
+
+System_Ext(Legacy_COBOL_DB2_Mainframe, "Legacy COBOL/DB2 Mainframe", "30-year-old legacy system of record running claims processing.")
+System_Ext(Azure_Key_Vault_Active_Directory_Entra_ID, "Azure Key Vault & Active Directory (Entra ID)", "Provides secrets management, customer-managed keys, and identity authentication.")
+
+System_Boundary(New_Insurance_Claims_Platform, "New Insurance Claims Platform") {
+    Container(Web_Frontend_SPA, "Web Frontend (SPA)", "Azure Static Web Apps, React", "Provides the online claim submission and adjuster management user interface.")
+    Container(Claims_API_Gateway, "Claims API Gateway", "Azure API Management", "Enforces AD authentication and routes requests to core services.")
+    Container(Core_Claims_Service, "Core Claims Service", "Azure Container Apps", "Processes core business logic and claims management.")
+    Container(Mainframe_Anti_Corruption_Layer_ACL, "Mainframe Anti-Corruption Layer (ACL)", "Azure Event Hubs (Kafka)", "Asynchronously decouples the modern platform from the legacy mainframe.")
+    Container(Integration_Transformation_Worker, "Integration & Transformation Worker", "Azure Container Apps", "Transforms and worker processes messages bridging the new platform and legacy systems.")
+    Container(Operational_Observability_Dead_Letter_Container, "Operational Observability & Dead-Letter Container", "Azure Container Apps, Azure Monitor", "Monitors system health and handles failed message delivery.")
+}
+
+Rel(End_Customers_Brokers, Web_Frontend_SPA, "Submit and manage claims", "HTTPS / REST / WebSockets")
+Rel(Claims_Adjusters, Web_Frontend_SPA, "Manage claims and adjusters", "HTTPS / REST / WebSockets")
+Rel(Migration_Product_Owners, Web_Frontend_SPA, "Monitor migration and rollbacks", "HTTPS / REST / WebSockets")
+Rel(Web_Frontend_SPA, Claims_API_Gateway, "Sends API requests", "HTTPS / REST")
+Rel(Claims_API_Gateway, Core_Claims_Service, "Routes authenticated requests", "gRPC / internal HTTPS")
+Rel(Core_Claims_Service, Mainframe_Anti_Corruption_Layer_ACL, "Publishes asynchronous events", "Azure Event Hubs (Kafka)")
+Rel(Mainframe_Anti_Corruption_Layer_ACL, Legacy_COBOL_DB2_Mainframe, "Communicates data across hybrid boundaries", "IPsec VPN / Azure ExpressRoute (SFTP, MQ, Batch)")
+Rel(Claims_API_Gateway, Azure_Key_Vault_Active_Directory_Entra_ID, "Authenticates requests", "Managed Identities (HTTPS)")
+Rel(Core_Claims_Service, Azure_Key_Vault_Active_Directory_Entra_ID, "Retrieves secrets and keys", "Managed Identities (HTTPS)")
+Rel(Integration_Transformation_Worker, Azure_Key_Vault_Active_Directory_Entra_ID, "Retrieves secrets and keys", "Managed Identities (HTTPS)")
+
+@enduml

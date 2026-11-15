@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Identity & Access Proxy container
+
+Container_Boundary(identity_access_proxy, "Identity & Access Proxy") {
+    Component(mTLS_Termination_Component, "mTLS Termination Component", "Envoy / Go", "Terminates mTLS and passes decrypted payload streams.")
+    Component(Token_Validator_Component, "Token Validator Component", "Go / JWT Library", "Validates tokens, fetches and caches JWKS from external IdP, and routes external calls.")
+    Component(PEP, "Policy Enforcement Point (PEP)", "Open Policy Agent (OPA)", "Enforces policies, checks roles and revocation lists, and passes authorized requests.")
+    Component(Session_State_Manager, "Session State Manager", "Go / Redis", "Persists and manages session tokens in the distributed cache.")
+    Component(Circuit_Breaker_Fall_Back_Handler, "Circuit Breaker & Fallback Handler", "Go", "Handles circuit breaking and falls back to cached keys on external call failures.")
+    Component(Audit_Interceptor, "Audit Interceptor", "Go", "Emits security and audit events to the log shipper.")
+    Component(Claim_Transformation_Sanitization_Engine, "Claim Transformation & Sanitization Engine", "Go", "Passes and forwards sanitized requests to backend services.")
+}
+
+System_Ext(Audit_Compliance_Log_Shipper, "Audit & Compliance Log Shipper", "Log shipper container for auditing")
+System_Ext(Distributed_Cache, "Distributed Cache", "Redis distributed cache")
+
+Rel(mTLS_Termination_Component, Token_Validator_Component, "Passes decrypted payload streams", "Internal gRPC")
+Rel(Token_Validator_Component, Circuit_Breaker_Fall_Back_Handler, "Routes external calls", "HTTPS/REST")
+Rel(PEP, Claim_Transformation_Sanitization_Engine, "Passes authorized requests", "Internal gRPC")
+Rel(Audit_Interceptor, Audit_Compliance_Log_Shipper, "Emits security events", "Local Fluentbit Socket")
+Rel(Session_State_Manager, Distributed_Cache, "Persists session tokens", "In-memory RESP")
+@enduml

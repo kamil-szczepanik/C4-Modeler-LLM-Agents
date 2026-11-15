@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the EMR & Scheduling Service container
+
+Container_Boundary(emr_scheduling_service, "EMR & Scheduling Service") {
+    Component(patient_registry, "Patient Registry", "Node.js / Java", "Manages patient demographic records, admissions, and master patient index.")
+    Component(scheduling_engine, "Scheduling Engine", "Node.js / Java", "Handles appointments, resource clash checks, and slot caching using Redis.")
+    Component(emr_core, "EMR Core", "Node.js / Java", "Processes electronic medical records and clinical notes with optimistic locking against PostgreSQL.")
+    Component(access_control_policy_enforcer_opa, "Access Control & Policy Enforcer (OPA)", "Open Policy Agent (OPA)", "Enforces fine-grained ABAC/RBAC policies, cryptographic context checks, and break-glass auditing.")
+    Component(audit_interceptor, "Audit Interceptor", "Node.js / Java", "Streams PHI-masked telemetry and immutable audit records to SIEM and WORM storage.")
+}
+
+System_Ext(redis_cache, "Redis Cache", "In-memory session and slot caching")
+System_Ext(postgresql, "Region-local PostgreSQL", "Database with Row-Level Security")
+System_Ext(kafka_rabbitmq, "Apache Kafka/RabbitMQ", "Message brokers")
+System_Ext(worm_storage, "AWS S3 / on-prem WORM Object Storage", "Immutable object storage")
+System_Ext(vault, "HashiCorp Vault", "Secret management")
+System_Ext(siem, "Centralized SIEM & Observability Platform", "SIEM & Observability")
+
+Rel(access_control_policy_enforcer_opa, emr_core, "Forwards authorized requests with cryptographic context", "Internal gRPC")
+Rel(access_control_policy_enforcer_opa, patient_registry, "Forwards authorized requests with cryptographic context", "Internal gRPC")
+Rel(scheduling_engine, redis_cache, "Executes sub-100ms resource clash checks", "Redis Protocol")
+Rel(emr_core, postgresql, "Reads and writes operational data with optimistic locking", "Encrypted TCP")
+Rel(patient_registry, postgresql, "Reads and writes operational data", "Encrypted TCP")
+Rel(emr_core, kafka_rabbitmq, "Publishes asynchronous events", "Kafka/AMQP protocol")
+Rel(audit_interceptor, worm_storage, "Archives immutable audit records", "HTTPS / S3 API")
+Rel(emr_core, vault, "Retrieves dynamic database credentials", "HTTPS / Vault API")
+Rel(audit_interceptor, siem, "Streams PHI-masked telemetry", "Secure syslog/OTLP")
+@enduml

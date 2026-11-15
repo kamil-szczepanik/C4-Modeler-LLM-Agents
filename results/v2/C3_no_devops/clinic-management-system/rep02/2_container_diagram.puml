@@ -1,0 +1,51 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patient, "Patient", "An individual receiving care who uses the web or mobile UI to access their portal, schedule appointments, and view medical records.")
+Person(Clinical Staff, "Clinical Staff", "Doctors and nurses who interact with the system to manage electronic medical records (EMR), patient admissions, and clinical workflows.")
+Person(Administrative Staff, "Administrative Staff", "Staff members responsible for managing scheduling, billing, and administrative operations within the clinic.")
+Person(Compliance Officer / Auditor, "Compliance Officer / Auditor", "Personnel responsible for monitoring system security, auditing access logs, and ensuring HIPAA/GDPR compliance.")
+
+System_Ext(Payment Gateway, "Payment Gateway", "External financial service used to process patient payments and billing transactions securely.")
+System_Ext(Insurance Clearinghouse, "Insurance Clearinghouse", "External system used to verify insurance coverage and process insurance claims.")
+System_Ext(External Lab / Imaging Systems, "External Lab / Imaging Systems", "External clinical systems used for diagnostic testing, lab results, and medical imaging.")
+System_Ext(Pharmacy Management System, "Pharmacy Management System", "External system used for managing electronic prescriptions and pharmacy integration.")
+
+System_Boundary(Clinic Management System, "Clinic Management System") {
+    Container(API Gateway, "API Gateway", "Kong / Nginx in Kubernetes", "Handles ingress, TLS termination, rate-limiting, and routes traffic to internal containers.")
+    Container(Patient Self-Service Container, "Patient Self-Service Container", "React / Next.js SPA served via CDN", "Provides the patient portal interface for self-service workflows.")
+    Container(EMR Backend Container, "EMR Backend Container", "Node.js / Java Spring Boot", "Manages electronic medical records, patient admissions, and core business logic.")
+    Container(Scheduling & Resource Engine Container, "Scheduling & Resource Engine Container", "Java Spring Boot / Redis Cluster", "Manages clinic appointments, scheduling, and resource allocation.")
+    Container(Integration Broker Container, "Integration Broker Container", "Apache Camel / Node-RED", "Translates and manages HL7 FHIR APIs for external clinical systems.")
+    Container(Audit & Compliance Daemon Container, "Audit & Compliance Daemon Container", "Go", "Streams and logs asynchronous immutable audit data for compliance tracking.")
+    ContainerDb(EMR Database, "EMR Database", "PostgreSQL with RLS", "Stores core electronic medical records and relational data with row-level security.")
+    ContainerDb(Redis Cluster, "Redis Cluster", "In-memory Redis with TLS", "Provides caching and fast state management for scheduling and real-time operations.")
+    ContainerDb(Cold Storage, "Cold Storage", "Long-term storage with 10-year retention", "Archives historical medical records and audit data for long-term retention.")
+    Container(Apache Kafka, "Apache Kafka", "Apache Kafka", "Handles asynchronous log streaming for audit and compliance data.")
+}
+
+Rel(Patient, API Gateway, "Accesses self-service portal via web/mobile UI", "HTTPS/REST with OAuth2/OIDC, JWT, and MFA")
+Rel(Clinical Staff, API Gateway, "Accesses EMR and clinical workflows", "HTTPS/REST with OAuth2/OIDC, JWT, and MFA")
+Rel(Administrative Staff, API Gateway, "Accesses scheduling and billing features", "HTTPS/REST with OAuth2/OIDC, JWT, and MFA")
+Rel(Compliance Officer / Auditor, API Gateway, "Monitors audit logs and compliance controls", "HTTPS/REST with OAuth2/OIDC, JWT, and MFA")
+
+Rel(API Gateway, Patient Self-Service Container, "Routes patient portal traffic", "Internal mTLS over gRPC/REST")
+Rel(API Gateway, EMR Backend Container, "Routes EMR and core clinical requests", "Internal mTLS over gRPC/REST")
+Rel(API Gateway, Scheduling & Resource Engine Container, "Routes scheduling requests", "Internal mTLS over gRPC/REST")
+Rel(API Gateway, Integration Broker Container, "Routes integration requests", "Internal mTLS over gRPC/REST")
+Rel(API Gateway, Audit & Compliance Daemon Container, "Routes compliance and audit queries", "Internal mTLS over gRPC/REST")
+
+Rel(Integration Broker Container, External Lab / Imaging Systems, "Exchanges clinical data and diagnostic results", "HL7 FHIR APIs over gRPC/REST")
+Rel(Integration Broker Container, Pharmacy Management System, "Sends and receives electronic prescriptions", "HL7 FHIR APIs over gRPC/REST")
+Rel(Integration Broker Container, Payment Gateway, "Processes billing and payment transactions", "HTTPS / REST")
+Rel(Integration Broker Container, Insurance Clearinghouse, "Verifies insurance and submits claims", "HTTPS / REST")
+
+Rel(EMR Backend Container, EMR Database, "Reads and writes encrypted patient records", "Encrypted TLS with AES-256 and HashiCorp Vault")
+Rel(Scheduling & Resource Engine Container, Redis Cluster, "Caches scheduling states and locks", "Encrypted TLS with AES-256")
+Rel(Audit & Compliance Daemon Container, Apache Kafka, "Streams asynchronous immutable audit logs", "TLS")
+Rel(EMR Backend Container, Cold Storage, "Archives long-term records", "Encrypted Storage (10-year retention)")
+
+@enduml

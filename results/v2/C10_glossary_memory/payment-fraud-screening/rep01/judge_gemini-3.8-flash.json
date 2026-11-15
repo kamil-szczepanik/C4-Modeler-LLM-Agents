@@ -1,0 +1,323 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 3,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 and R-02 via 'Decision API Container', 'Scoring Engine Container', and 'Case Management Portal Container'. R-03 is partially addressed via 'Model Registry Sync Agent', though explicit rule update mechanics outside ML model synchronization are not clearly differentiated.",
+   "performance_efficiency": "Low latency is supported by Go, internal gRPC, in-memory feature extraction, and ONNX Runtime C-API with asynchronous explanations. However, synchronous writes from 'Decision API Container' to 'Amazon Aurora PostgreSQL' under 3,000 TPS risk latency degradation despite RDS Proxy.",
+   "compatibility": "Interoperability is thoroughly handled using standard protocols: gRPC/HTTPS for 'Merchant / Payment Gateway', mTLS for 'Payment Processing Core / Acquirer', OIDC/OAuth2 with 'Identity Provider (IdP)', and S3 APIs for 'AWS Audit & Compliance Store'.",
+   "usability": "The 'Fraud Analyst' user group is well served by the 'UI Presentation Component' within 'Case Management Portal Container'. However, the 'Risk & Compliance Officer' defined in Context lacks dedicated interfaces or workflows for oversight.",
+   "reliability": "R-07 is directly addressed by 'Circuit Breaker & Fallback Manager' within 'Decision API Container' ensuring decisions fall back quickly. Container isolation on AWS Fargate and Aurora read replicas provide solid fault tolerance and recoverability.",
+   "security": "While mTLS, IdP MFA, and WORM storage are present, R-05 is compromised: card data tokenization is unaddressed in the backend, and relying on 'client-side card data masking' in 'UI Presentation Component' violates strict PCI-DSS Level 1 compliance requirements.",
+   "maintainability": "Decomposition into Go, Python, and TypeScript containers cleanly separates decisioning, ML execution, and case management. 'Model Registry Sync Agent' allows independent zero-downtime model updates, fitting the capacity of a three-engineer team.",
+   "portability": "Containerized components (Go, Python, Node.js) on AWS Fargate operate effectively in the specified AWS eu-west-1 region. Replaceability is slightly constrained by deep coupling with proprietary AWS services ('Amazon Aurora PostgreSQL', S3 WORM, CloudWatch)."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 3.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Go-based Decision API, gRPC mTLS, and ONNX Runtime C-API enable low-latency scoring, though scaling Python inference containers and Aurora connection management under 3,000 RPS requires precise tuning.",
+    "elements": [
+     "Decision API Container",
+     "API Handler Component",
+     "Scoring Engine Container",
+     "Model Execution Engine",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Inference latency in ONNX Runtime",
+     "RDS Proxy connection pool capacity"
+    ],
+    "tradeoffs": [
+     "In-memory ONNX execution minimizes latency at the cost of container memory footprint"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management runs in an isolated container querying Aurora PostgreSQL read replicas, preventing analyst queries from impacting transactional scoring latency.",
+    "elements": [
+     "Case Management Portal Container",
+     "Case Management API Component",
+     "Amazon Aurora PostgreSQL",
+     "Transactional Database Store",
+     "Decision API Container"
+    ],
+    "sensitivity_points": [
+     "Read replica replication lag under peak write traffic"
+    ],
+    "tradeoffs": [
+     "Read replicas ensure scoring performance at the expense of slight case data lag"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Circuit Breaker & Fallback Manager handles scoring service failure within millisecond timeouts, executing fallbacks and routing audit records through the Audit Dispatcher without blocking authorizations.",
+    "elements": [
+     "Decision API Container",
+     "Circuit Breaker & Fallback Manager",
+     "API Handler Component",
+     "Audit Dispatcher Component",
+     "AWS Audit & Compliance Store"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker trip threshold and timeout tuning"
+    ],
+    "tradeoffs": [
+     "Fail-open or heuristic fallback preserves availability while accepting short-term fraud risk"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Audit Dispatcher and Scoring Engine write directly to AWS S3 over HTTPS without a durable message queue or local spooling, risking backpressure and dropped records during S3 degradation.",
+    "elements": [
+     "Decision API Container",
+     "Audit Dispatcher Component",
+     "Scoring Engine Container",
+     "AWS Audit & Compliance Store"
+    ],
+    "sensitivity_points": [
+     "S3 write latency during network contention",
+     "Audit dispatcher thread buffer size"
+    ],
+    "tradeoffs": [
+     "Synchronous or unqueued S3 dispatch saves infrastructure cost but risks backpressure"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Model Registry Sync Agent pulls updated models from the registry pipeline for dynamic loading by ONNX Runtime with zero downtime, though rollback orchestration across Fargate instances requires automated health checks.",
+    "elements": [
+     "Scoring Engine Container",
+     "Model Registry Sync Agent",
+     "Model Execution Engine",
+     "CI/CD & Model Registry Pipeline"
+    ],
+    "sensitivity_points": [
+     "Model reload time in ONNX runtime memory",
+     "Model version tagging in inference logs"
+    ],
+    "tradeoffs": [
+     "Runtime dynamic model hot-reloading increases memory usage compared to immutable container redeployments"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The architecture specifies ML inference components and model sync, but lacks a configurable rules engine, rule storage, or distributed velocity state store needed for dynamic velocity rules.",
+    "elements": [
+     "Scoring Engine Container",
+     "Feature Extraction Component",
+     "Model Execution Engine"
+    ],
+    "sensitivity_points": [
+     "Absence of a dedicated rule evaluation engine",
+     "Velocity feature state calculation latency"
+    ],
+    "tradeoffs": [
+     "Bundling rule logic into code deployments slows iteration but simplifies engine architecture"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Identity Provider with MFA and audit logging are present, but UI presentation specifies client-side card masking, implying cleartext PANs may reach analyst browsers rather than being tokenized server-side.",
+    "elements": [
+     "Case Management Portal Container",
+     "UI Presentation Component",
+     "Case Management API Component",
+     "Identity Provider (IdP)",
+     "AWS CloudWatch / Observability Platform"
+    ],
+    "sensitivity_points": [
+     "Client-side versus server-side data masking enforcement",
+     "CloudWatch anomaly detection alert rules"
+    ],
+    "tradeoffs": [
+     "Client-side masking reduces backend transformation cost but risks exposing PANs to browser compromises"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The AWS Audit & Compliance Store implements tamper-evident WORM retention for seven years, capturing model inputs, version tags, and asynchronous explanations for rapid retrieval.",
+    "elements": [
+     "AWS Audit & Compliance Store",
+     "Scoring Engine Container",
+     "Explanation Generation Component",
+     "Decision API Container",
+     "Audit Dispatcher Component"
+    ],
+    "sensitivity_points": [
+     "WORM retention policy enforcement on S3",
+     "Indexing of decision identifiers for query retrieval"
+    ],
+    "tradeoffs": [
+     "Asynchronous explanation generation decouples latency from compliance storage requirements"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "none",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7272727272727273,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Identity Provider (IdP)",
+     "AWS Audit & Compliance Store",
+     "Transactional Database Store",
+     "UI Presentation Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "AWS Audit & Compliance Store",
+     "Explanation Generation Component",
+     "Audit Dispatcher Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Decision API Container",
+     "Scoring Engine Container",
+     "Case Management Portal Container",
+     "Amazon Aurora PostgreSQL",
+     "AWS CloudWatch / Observability Platform"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Decision API Container",
+     "API Handler Component",
+     "Scoring Engine Container",
+     "Inference API Controller",
+     "Model Execution Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Portal Container",
+     "UI Presentation Component",
+     "Case Management API Component",
+     "Transactional Database Store"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "CI/CD & Model Registry Pipeline",
+     "Model Registry Sync Agent",
+     "Model Execution Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Decision API Container",
+     "Model Execution Engine",
+     "Feature Extraction Component",
+     "Transactional Database Store",
+     "Circuit Breaker & Fallback Manager"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "UI Presentation Component",
+     "Audit Logging Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "AWS Audit & Compliance Store",
+     "Audit Dispatcher Component",
+     "Explanation Generation Component",
+     "Audit Logging Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Circuit Breaker & Fallback Manager"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

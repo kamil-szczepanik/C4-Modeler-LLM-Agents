@@ -1,0 +1,340 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "All requirements (R-01 to R-04) are addressed by dedicated components within 'Core Services' (Patient Registry, Scheduling Engine, EMR Management, Billing Processor) supported by external integrations with 'Insurance Verification Service' and 'Payment Gateway'.",
+   "performance_efficiency": "EMR sub-second loads and scalability are supported by 'Replica DB Instances', 'PgBouncer', 'Caching & Redis Cluster' for sub-millisecond RBAC evaluations, and Kafka asynchronous event streaming. However, explicit caching mechanisms for patient EMR read records are not detailed.",
+   "compatibility": "Interoperability is thoroughly handled by the 'Integration Service' containing 'FHIR Transformer Engine' and 'External Protocol Adapter' to exchange standard HL7 FHIR data with 'External Lab & Imaging Systems', along with REST/OAuth2 connections to external verification services.",
+   "usability": "All user personas (Patients, Clinical Staff, Administrators, Billing Specialists) are mapped to the 'API Gateway', but the architecture lacks dedicated presentation containers or frontend client applications (e.g., patient portal, clinical web/mobile apps) to serve them directly.",
+   "reliability": "Resilience4j, MirrorMaker 2, DLQs, and Patroni failover provide resilience. However, the requirement specifies 99.99% active-active availability, whereas 'Data Tier' is explicitly defined as an active-passive PostgreSQL cluster, creating a regional failover bottleneck.",
+   "security": "HIPAA/GDPR needs are thoroughly addressed: 'Identity & Access Management' provides MFA and RBAC; 'Data Tier' implements column-level AES-256 with HashiCorp Vault; mTLS secures internal services; and 'Storage' utilizes 'Retention & Compliance Controller' for 10-year immutable WORM audit retention.",
+   "maintainability": "The C4 model exhibits clean separation of concerns across Gateway, IAM, Core Services, Integration, and Data tiers. Loose coupling is maintained via asynchronous Kafka events, Schema Registry, and modular Spring Boot components.",
+   "portability": "The stack relies on cloud-agnostic technologies (Envoy, Keycloak, Kafka, Patroni/PostgreSQL, MinIO) compatible with on-prem-k8s and AWS eu-central-1. However, specific hybrid Kubernetes deployment topologies or active data sync between the two regions are omitted."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 3,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "PgBouncer pooling, read replicas via Patroni, and in-memory Redis token caching support concurrent clinician reads, though EMR queries lack a dedicated application-level caching layer.",
+    "elements": [
+     "API Gateway",
+     "Edge Router Component",
+     "Authentication Filter Component",
+     "Identity & Access Management",
+     "Caching & Redis Cluster",
+     "Core Services",
+     "EMR Management Component",
+     "Data Tier",
+     "Connection Pooler",
+     "Replica DB Instances"
+    ],
+    "sensitivity_points": [
+     "PgBouncer pool sizing and read replica replication lag under peak concurrent queries."
+    ],
+    "tradeoffs": [
+     "Direct read-replica querying prioritizes freshness over application cache throughput."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Incoming FHIR payloads are decoupled through Camel transformations and asynchronous Kafka buffering, isolating write ingestion from transactional read workloads and protecting EMR screen performance.",
+    "elements": [
+     "Integration Service",
+     "External Protocol Adapter",
+     "FHIR Transformer Engine",
+     "Message Broker",
+     "Ingestion Router",
+     "Core Services",
+     "EMR Management Component",
+     "Data Tier"
+    ],
+    "sensitivity_points": [
+     "Kafka partition throughput and Camel transformer worker thread pool capacity."
+    ],
+    "tradeoffs": [
+     "Asynchronous ingestion trades immediate cross-system consistency for decoupled high throughput."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The brief mandates active-active 99.99% availability, but Data Tier is defined as regional active-passive with asynchronous Patroni/MirrorMaker replication, risking cross-region data loss (RPO>0) and slow failover.",
+    "elements": [
+     "Data Tier",
+     "Primary DB Instance",
+     "Replica DB Instances",
+     "Message Broker",
+     "Topic Replicator",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Cross-site replication lag between on-prem-k8s and eu-central-1 during failover."
+    ],
+    "tradeoffs": [
+     "Active-passive regional topology avoids distributed database complexity but violates active-active zero-data-loss constraints."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Patroni provides automated node failover within 30 seconds, while Kafka DLQ, retries, and transactional PostgreSQL semantics protect in-flight claims against loss or duplicate submissions.",
+    "elements": [
+     "Data Tier",
+     "Primary DB Instance",
+     "Replica DB Instances",
+     "Connection Pooler",
+     "Core Services",
+     "Billing Processor",
+     "Message Broker",
+     "DLQ Manager"
+    ],
+    "sensitivity_points": [
+     "Patroni leader election timeout and transaction retry idempotency in Billing Processor."
+    ],
+    "tradeoffs": [
+     "Strict transactional idempotency and failover checks increase claim processing latency."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Integration Service is modeled specifically for HL7 FHIR and lab integrations, while billing/insurance connections are coupled directly to Core Services, requiring changes to the Billing Processor.",
+    "elements": [
+     "Core Services",
+     "Billing Processor",
+     "Integration Service",
+     "Insurance Verification Service"
+    ],
+    "sensitivity_points": [
+     "Coupling between external insurance protocols and internal billing domain logic."
+    ],
+    "tradeoffs": [
+     "Direct integration from Core Services simplifies initial routing but weakens protocol isolation."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Patient demographics and audit logging are encapsulated within Patient Registry Component, EMR Management Component, and append-only database audit partitions, limiting modifications to exactly three elements.",
+    "elements": [
+     "Core Services",
+     "Patient Registry Component",
+     "EMR Management Component",
+     "Data Tier",
+     "Audit Ledger Component"
+    ],
+    "sensitivity_points": [
+     "Schema flexibility in PostgreSQL partitions and Spring Boot domain entity definitions."
+    ],
+    "tradeoffs": [
+     "Strongly typed relational schemas require coordinated migrations across entities and audit partitions."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Keycloak strictly enforces MFA at the edge, while failed authentication events are captured by Envoy filters and asynchronously exported to Kafka topics for real-time alerting.",
+    "elements": [
+     "API Gateway",
+     "Authentication Filter Component",
+     "Identity & Access Management",
+     "Authentication Engine (Keycloak Core)",
+     "Audit Logger",
+     "Message Broker"
+    ],
+    "sensitivity_points": [
+     "MFA enforcement policies and audit log ingestion latency across Kafka topics."
+    ],
+    "tradeoffs": [
+     "Mandatory MFA and synchronous token validation increase initial login latency."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Fine-grained ABAC is validated via PDP and Redis, while reads trigger tamper-evident audit logging written to local SQLite WAL buffers and immutable WORM object storage.",
+    "elements": [
+     "Identity & Access Management",
+     "Policy Decision Point (PDP)",
+     "Caching & Redis Cluster",
+     "Core Services",
+     "EMR Management Component",
+     "Storage",
+     "Buffer Queue",
+     "Retention & Compliance Controller",
+     "Object Store Backend"
+    ],
+    "sensitivity_points": [
+     "WORM retention policy enforcement and write-ahead buffer durability during storage network partitions."
+    ],
+    "tradeoffs": [
+     "Synchronous audit recording and WORM replication overhead slightly penalize read throughput."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Telemetry & Audit Filter Component",
+     "Identity & Access Management",
+     "DLQ Exception Router",
+     "Retention & Compliance Controller",
+     "Storage"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Replica DB Instances",
+     "Topic Replicator",
+     "Resilience & Circuit Breaker Manager"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Storage",
+     "Retention & Compliance Controller",
+     "Object Store Backend",
+     "Audit Logger"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Registry Component",
+     "Core Services"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Scheduling Engine"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Management Component",
+     "Audit Ledger Component",
+     "Core Services",
+     "Storage"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Billing Processor",
+     "Insurance Verification Service",
+     "Payment Gateway"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Authentication Engine (Keycloak Core)",
+     "Identity & Access Management",
+     "Data Tier",
+     "EMR Management Component",
+     "External KMS",
+     "Encryption Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Data Tier",
+     "Topic Replicator",
+     "Replica DB Instances"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Replica DB Instances",
+     "Connection Pooler"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Service",
+     "FHIR Transformer Engine",
+     "External Protocol Adapter",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ },
+ "tag": "retest"
+}

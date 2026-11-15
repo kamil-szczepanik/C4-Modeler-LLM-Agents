@@ -1,0 +1,48 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patient, "Patient", "Accesses the system to manage patient admissions, electronic medical records, and scheduling.")
+Person(Clinics_Staff, "Clinician/Staff", "Accesses the system for clinical workflows and medical records management.")
+Person(Hospital_Administrator, "Hospital Administrator", "Accesses the system to oversee hospital administration and management.")
+
+System_Ext(Identity_Provider, "Identity Provider", "Handles user authentication and token validation.")
+System_Ext(Payment_Gateway, "Payment Gateway", "Handles insurance claims and payment processing.")
+System_Ext(External_Labs_Imaging_Systems, "External Labs & Imaging Systems", "Exchanges medical and laboratory data.")
+System_Ext(Regulatory_Archiving_Audit_Storage, "Regulatory Archiving / Audit Storage", "Stores long-term audit logs and compliance records.")
+
+System_Boundary(Clinic_Management_System, "Clinic Management System") {
+    Container(API_Gateway, "API Gateway", "Kong / Nginx", "Entry point for client requests, handling token validation, TLS termination, and OAuth2/MFA.")
+    Container(Patient_Scheduling_Service, "Patient & Scheduling Service", "NestJS / Node.js", "Manages patient registrations, profiles, and appointment scheduling.")
+    Container(EMR_Service, "EMR Service", "Spring Boot / Java", "Handles Electronic Medical Records and audit trails with high-performance P95 loads.")
+    Container(Billing_Service, "Billing Service", "FastAPI / Python", "Handles payment processing and medical claims.")
+    Container(FHIR_Integration_Broker, "FHIR Integration Broker", "Apache Camel / Node.js", "Ensures HL7 FHIR interoperability with external healthcare systems.")
+    Container(Audit_Compliance_Worker, "Audit & Compliance Worker", "Go", "Handles asynchronous audit logging and compliance tasks.")
+    ContainerDb(Database_Cluster, "Database Cluster", "PostgreSQL", "Primary multi-region active-active database with AES-256 encryption at rest.")
+    Container(Message_Broker, "Message Broker", "RabbitMQ / Kafka", "Enables reliable asynchronous event processing and message streaming.")
+}
+
+Rel(Patient, API_Gateway, "Accesses patient admissions and scheduling", "HTTPS / gRPC")
+Rel(Clinics_Staff, API_Gateway, "Accesses EMR and clinical workflows", "HTTPS / gRPC")
+Rel(Hospital_Administrator, API_Gateway, "Accesses administrative features", "HTTPS / gRPC")
+
+Rel(API_Gateway, Identity_Provider, "Validates tokens and user authentication", "HTTPS / OAuth2")
+Rel(API_Gateway, Patient_Scheduling_Service, "Routes client requests", "mTLS")
+Rel(API_Gateway, EMR_Service, "Routes EMR requests", "mTLS")
+Rel(API_Gateway, Billing_Service, "Routes billing requests", "mTLS")
+Rel(API_Gateway, FHIR_Integration_Broker, "Routes integration requests", "mTLS")
+
+Rel(Patient_Scheduling_Service, Database_Cluster, "Reads and writes patient/scheduling data", "PostgreSQL protocol")
+Rel(EMR_Service, Database_Cluster, "Reads and writes EMR data", "PostgreSQL protocol")
+Rel(Billing_Service, Database_Cluster, "Reads and writes billing data", "PostgreSQL protocol")
+
+Rel(Billing_Service, Payment_Gateway, "Processes claims and payments", "AMQP / REST")
+Rel(FHIR_Integration_Broker, External_Labs_Imaging_Systems, "Exchanges lab and imaging data", "HL7 FHIR over HTTPS")
+Rel(Audit_Compliance_Worker, Regulatory_Archiving_Audit_Storage, "Streams audit logs for 10-year retention", "AMQP / Kafka")
+
+Rel(EMR_Service, Message_Broker, "Publishes asynchronous audit events", "RabbitMQ / Kafka")
+Rel(Audit_Compliance_Worker, Message_Broker, "Consumes audit events", "RabbitMQ / Kafka")
+
+@enduml

@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Data Sync Worker container
+
+Container_Boundary(data_sync_worker, "Data Sync Worker") {
+    Component(CDCReaderComponent, "CDC Reader Component", "Java / Spring Boot", "Parses incoming delta messages from the legacy system.")
+    Component(MainframeProtocolHandlerComponent, "Mainframe Protocol Handler Component", "Java / Spring Boot, IBM MQ Client", "Translates proprietary MQ byte streams into domain objects.")
+    Component(ReconciliationEngineComponent, "Reconciliation Engine Component", "Java / Spring Boot", "Enforces state reconciliation and prevents data loss using idempotency keys.")
+    Component(OutboxDispatcherComponent, "Outbox Dispatcher Component", "Java / Spring Boot, Spring Integration", "Publishes synchronization events using the transactional outbox pattern.")
+    Component(DeadLetterExceptionRouterComponent, "Dead Letter & Exception Router Component", "Java / Spring Boot", "Isolates malformed payloads and reconciliation conflicts for manual intervention.")
+    Component(MetricsAuditTelemetryComponent, "Metrics & Audit Telemetry Component", "Micrometer, Azure Monitor SDK", "Emits structured tracking metrics and audit logs.")
+}
+
+Container(MainframeIntegrationAdapter, "Mainframe Integration Adapter", "Legacy Adapter", "On-premises legacy mainframe interface.")
+ContainerDb(PrimaryDatastore, "Primary Datastore", "Relational Database", "Stores reconciled state via JDBC / TDS over TLS.")
+Container(ClaimRoutingService, "Claim Routing Service", "Azure Service Bus / AMQP", "Routes state delta events and failure alerts.")
+Container(AuditandReconciliationService, "Audit and Reconciliation Service", "HTTPS / OpenTelemetry", "Consumes streamed audit telemetry.")
+
+Rel(MainframeIntegrationAdapter, MainframeProtocolHandlerComponent, "Delivers raw byte streams", "IBM MQ client")
+Rel(CDCReaderComponent, ReconciliationEngineComponent, "Passes raw delta payloads", "In-memory / Java queues")
+Rel(MainframeProtocolHandlerComponent, CDCReaderComponent, "Supplies parsed messages", "In-memory")
+Rel(ReconciliationEngineComponent, PrimaryDatastore, "Executes state upserts", "JDBC / TDS over TLS")
+Rel(ReconciliationEngineComponent, OutboxDispatcherComponent, "Triggers event propagation", "Transactional Outbox Pattern")
+Rel(ReconciliationEngineComponent, DeadLetterExceptionRouterComponent, "Forwards poisoned or conflicting records", "In-memory / BlockingQueue")
+Rel(OutboxDispatcherComponent, ClaimRoutingService, "Publishes state delta events", "AMQP over Azure Service Bus")
+Rel(DeadLetterExceptionRouterComponent, ClaimRoutingService, "Publishes failure alerts", "AMQP over Azure Service Bus")
+Rel(ReconciliationEngineComponent, MetricsAuditTelemetryComponent, "Emits sync counters", "In-memory")
+Rel(DeadLetterExceptionRouterComponent, MetricsAuditTelemetryComponent, "Emits sync counters", "In-memory")
+Rel(MetricsAuditTelemetryComponent, AuditandReconciliationService, "Streams audit telemetry", "HTTPS / OpenTelemetry")
+
+@enduml

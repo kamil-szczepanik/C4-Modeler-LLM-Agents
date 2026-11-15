@@ -1,0 +1,336 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Consultation handles video visits, Prescription coordinates e-prescriptions, AI Symptom Checker manages triage, and Consent & Policy with Context & Consent Injector enforces purpose-based patient consent.",
+   "performance_efficiency": "Regional Redis Caches, SFU Media Router, and the Localization & Fallbandwidth component handle low-bandwidth optimization and caching, though background asynchronous processing patterns for heavy workflows are not detailed.",
+   "compatibility": "Prescription explicitly connects to EU National e-Prescription Gateways and US Pharmacy Networks via REST and HL7 FHIR over mTLS. Identity Providers integrate via eIDAS, Login.gov, and OAuth2/OIDC as required.",
+   "usability": "Patients and Licensed Clinicians are provided tailored interfaces via the Web Application & Mobile App Containers. The Offline Sync Queue and Local State & Consent Manager support users in disconnected or rural environments.",
+   "reliability": "The Coturn TURN/STUN Relay, Mediasoup SFU Media Router, and Localization & Fallbandwidth component concretely ensure call continuity on connections below 300 kbit/s. Client-side Offline Sync Queue protects data integrity during disconnection.",
+   "security": "Data residency is enforced using regional PostgreSQL Regional Instances, CMEK, and VPC Service Controls. Consent & Policy (OPA), WORM-compliant Medical Artifact Buckets for AI MDR audit trails, and PII-stripping egress enforce strict compliance.",
+   "maintainability": "The Core Services GKE Clusters exhibit high cohesion and loose coupling with distinct microservices (Consultation, Prescription, AI Symptom Checker, Consent & Policy) isolated behind the GCP API Gateway and Istio service mesh.",
+   "portability": "The architecture targets GCP europe-west3 and us-central1 effectively using containerized workloads (GKE) and standard databases. Reliance on GCP-specific services (Cloud Endpoints, KMS, Memorystore) introduces moderate cloud lock-in."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Dedicated Mediasoup SFU and Coturn relays decouple heavy media traffic from Core Services, while Redis caches session state. However, dynamic regional auto-scaling of SFU media routing nodes is not explicitly detailed.",
+    "elements": [
+     "Web Application & Mobile App Containers",
+     "Media Relay Containers",
+     "SFU Media Router",
+     "TURN/STUN Relay",
+     "Consultation",
+     "Regional Redis Caches"
+    ],
+    "sensitivity_points": [
+     "SFU capacity limits under simultaneous WebRTC room allocations",
+     "Redis session cache lookup latency during peak connection spikes"
+    ],
+    "tradeoffs": [
+     "Deploying centralized SFU media relays reduces client complexity but increases cloud bandwidth costs"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "FastAPI microservice handles symptom checker requests efficiently at ~14 req/s. However, latency depends on third-party AI provider response times, which are subject to external network throttling and egress inspection overhead.",
+    "elements": [
+     "GCP API Gateway",
+     "AI Symptom Checker",
+     "Third-Party AI Model Providers",
+     "Medical Artifact Buckets"
+    ],
+    "sensitivity_points": [
+     "Third-party AI API response latency and egress filtering overhead",
+     "Pre-processor PII stripping latency before outbound dispatch"
+    ],
+    "tradeoffs": [
+     "Offloading inference to third parties avoids model hosting but introduces external latency dependencies"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The architecture incorporates a Localization & Fallbandwidth component, adaptive bitrate WebRTC, Mediasoup SFU track degradation, and client-side SQLCipher storage with an Offline Sync Queue to safeguard notes.",
+    "elements": [
+     "Media Client Module",
+     "Localization & Fallbandwidth",
+     "SFU Media Router",
+     "Local State & Consent Manager",
+     "Offline Sync Queue",
+     "Consultation"
+    ],
+    "sensitivity_points": [
+     "SFU audio stream prioritization threshold when bandwidth dips below 200 kbit/s",
+     "Local client queue persistence limits during extended offline states"
+    ],
+    "tradeoffs": [
+     "Degrading to audio-only prioritizes call continuity over visual clinical assessment"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The architecture designates only us-central1 for US deployment. If the entire US region fails, no secondary US region or automated regional failover within the US is configured, conflicting with residency constraints.",
+    "elements": [
+     "GCP API Gateway",
+     "Core Services GKE Clusters",
+     "PostgreSQL Regional Instances",
+     "Medical Artifact Buckets"
+    ],
+    "sensitivity_points": [
+     "Absence of secondary US cloud region for disaster recovery",
+     "Time required to provision infrastructure from cross-region cold backups"
+    ],
+    "tradeoffs": [
+     "Restricting US data to single-region deployment lowers cost but impairs cross-region disaster recovery"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Prescription microservice isolates e-prescription logic from UI and consultation components. However, internal adapter plug-ins for country-specific formatting are bundled inside a single service rather than separate extensible adapters.",
+    "elements": [
+     "Prescription",
+     "Core Services GKE Clusters",
+     "EU National e-Prescription Gateways"
+    ],
+    "sensitivity_points": [
+     "Coupling of multi-country gateway formats inside the Prescription microservice",
+     "Standardization of outbound HL7 FHIR transformation pipelines"
+    ],
+    "tradeoffs": [
+     "Consolidating prescription logic in one service simplifies deployment but risks regression across countries"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "AI trace bundles with model version metadata are persisted to WORM storage in Medical Artifact Buckets with Object Lock, and external models are routed dynamically via Istio Egress, enabling zero-downtime rollback.",
+    "elements": [
+     "AI Symptom Checker",
+     "Medical Artifact Buckets",
+     "Third-Party AI Model Providers",
+     "PostgreSQL Regional Instances"
+    ],
+    "sensitivity_points": [
+     "Immutability verification of AI trace bundles in WORM storage",
+     "Model version tagging consistency across external API gateways"
+    ],
+    "tradeoffs": [
+     "Writing immutable trace bundles to WORM storage increases storage overhead but ensures MDR compliance"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Strict isolation across europe-west3 and us-central1 via VPC Service Controls, Cloud KMS, and the Context & Consent Injector with OPA policy checks explicitly blocks cross-region access without verified patient consent.",
+    "elements": [
+     "Context & Consent Injector Component",
+     "Consent & Policy",
+     "PostgreSQL Regional Instances",
+     "Security and Encryption Services"
+    ],
+    "sensitivity_points": [
+     "OPA policy evaluation latency at the API Gateway context injection layer",
+     "Cryptographic isolation of regional CMEK keys"
+    ],
+    "tradeoffs": [
+     "Enforcing strict regional data boundaries adds authorization latency to cross-border clinician access"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Consent & Policy and the Context & Consent Injector enforce updated consent states on transactional requests. However, asynchronous propagation and deletion mechanisms for previously ingested research data in BI Ingestion are not fully specified.",
+    "elements": [
+     "Consent & Policy",
+     "BI Ingestion",
+     "Context & Consent Injector Component",
+     "PostgreSQL Regional Instances"
+    ],
+    "sensitivity_points": [
+     "Propagation delay of consent revocation events to downstream BI Ingestion",
+     "Auditability of consent revocation logs in transactional storage"
+    ],
+    "tradeoffs": [
+     "Decoupled asynchronous consent propagation risks temporary sharing windows if synchronization delays occur"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.875,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent & Policy",
+     "Context & Consent Injector Component",
+     "PostgreSQL Regional Instances",
+     "Security and Encryption Services"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Data Containers",
+     "PostgreSQL Regional Instances",
+     "Security and Encryption Services"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Medical Artifact Buckets",
+     "AI Symptom Checker",
+     "Infrastructure Services"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Localization & Fallbandwidth",
+     "TURN/STUN Relay",
+     "Local State & Consent Manager",
+     "Offline Sync Queue"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Consultation",
+     "Media Client Module",
+     "Media Relay Containers",
+     "SFU Media Router",
+     "TURN/STUN Relay"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Prescription",
+     "EU National e-Prescription Gateways",
+     "US Pharmacy Networks"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "AI Symptom Checker",
+     "AI Symptom Checker Client Module",
+     "Third-Party AI Model Providers"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Local State & Consent Manager",
+     "Consent & Policy",
+     "Context & Consent Injector Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Context & Consent Injector Component",
+     "Consent & Policy",
+     "PostgreSQL Regional Instances",
+     "Security and Encryption Services"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Localization & Fallbandwidth",
+     "SFU Media Router",
+     "TURN/STUN Relay"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Medical Artifact Buckets",
+     "AI Symptom Checker"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Prescription",
+     "EU National e-Prescription Gateways",
+     "US Pharmacy Networks"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

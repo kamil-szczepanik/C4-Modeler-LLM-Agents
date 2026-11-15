@@ -1,0 +1,316 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "All requirements are met: EMR & Scheduling Container with Scheduling & Clash Detection Engine covers R-01/R-02/R-03; Billing & Claims Container with Claim Processing Engine covers R-04; and Analytics Database ensures 10-year data retention.",
+   "performance_efficiency": "EMR screen load is aided by offloading analytical workloads to ClickHouse via Debezium CDC and Kafka event streaming. However, dedicated caching mechanisms for primary EMR clinical record reads to guarantee sub-second P95 loads are not fully specified.",
+   "compatibility": "Interoperability is thoroughly addressed by the FHIR Interoperability Adapter (HAPI FHIR) for Lab & Imaging Systems, Clearinghouse Integration Adapter for claims, and dedicated connectors for external regulatory and payment systems.",
+   "usability": "The Patient Portal provides dedicated UI components for patients. However, clinical, administrative, and compliance personnel interact only through the Edge API Gateway and persona-specific BFF routers without any defined frontend applications or interfaces.",
+   "reliability": "Although Kafka sagas, Celery queues, and Redis clusters are included, the architecture lacks explicit mechanisms for active-active data synchronization, conflict resolution, or failover across hybrid regions (on-prem-k8s and eu-central-1) to guarantee 99.99% uptime.",
+   "security": "Extensive controls are defined: MFA via Auth0/Passport, mTLS, TLS 1.3, AES-256 TDE with Row-Level Security in PostgreSQL, tokenized payment iFrames, and immutable audit log streaming to WORM storage and external compliance systems.",
+   "maintainability": "The system features modular domain decoupling (EMR, Billing, Analytics) with well-defined interfaces, Kafka Schema Registry for event evolution, and automated database migrations managed by Flyway/Liquibase.",
+   "portability": "Microservices are designed as Kubernetes-compatible containers with S3-compatible storage, fitting hybrid deployment. However, specific configurations handling cross-environment portability between on-prem-k8s and AWS eu-central-1 are only briefly outlined."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 3,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 3.0,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Spring Boot EMR services and PostgreSQL with Debezium CDC offload heavy queries to ClickHouse, keeping transactional read paths lean. However, without explicit read-through caching in front of PostgreSQL for active clinical rounds, database connection pool contention remains a slight risk.",
+    "elements": [
+     "Edge Router & TLS Terminator",
+     "API Gateway / BFF",
+     "Patient & EMR Management Component",
+     "PostgreSQL",
+     "Analytics Database"
+    ],
+    "sensitivity_points": [
+     "PostgreSQL read concurrency and connection pool limits under burst traffic"
+    ],
+    "tradeoffs": [
+     "Direct transactional reads preserve consistency at the expense of database load"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "justification": "The FHIR Interoperability Adapter interfaces with diagnostic systems, but incoming HL7 FHIR payloads lack an explicit asynchronous message queue buffer before ingestion into the EMR container, creating risk of thread starvation and degraded P95 response times on shared relational storage.",
+    "elements": [
+     "FHIR Interoperability Adapter",
+     "EMR & Scheduling Container",
+     "PostgreSQL",
+     "Lab & Imaging Systems"
+    ],
+    "sensitivity_points": [
+     "Lack of ingress message queue buffering high-volume FHIR ingestion bursts"
+    ],
+    "tradeoffs": [
+     "Synchronous ingestion guarantees immediate write visibility but risks transactional thread saturation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "While hybrid deployment regions are noted in the brief, the architecture lacks deployment-level specifications for active-active cross-region data replication, split-brain mitigation, or automated traffic failover between eu-central-1 and on-premise Kubernetes to guarantee zero data loss and sub-minute recovery.",
+    "elements": [
+     "API Gateway / BFF",
+     "Data & Messaging Layer",
+     "PostgreSQL",
+     "Apache Kafka"
+    ],
+    "sensitivity_points": [
+     "Cross-site PostgreSQL synchronous replication latency and failover automation"
+    ],
+    "tradeoffs": [
+     "Strict zero data loss requires synchronous replication which increases cross-region write latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Billing workflows use FastAPI, Celery, and Apache Kafka with Saga patterns and distributed transactions, allowing failed operations to be retried safely. Relational storage resilience depends on PostgreSQL high availability, which is indicated but lacks explicit automated failover configuration details.",
+    "elements": [
+     "Billing & Claims Container",
+     "Claim Processing Engine",
+     "Apache Kafka",
+     "PostgreSQL",
+     "Appeals & Rejection Workflow Handler"
+    ],
+    "sensitivity_points": [
+     "Database failover detection window and idempotency handling in claim retries"
+    ],
+    "tradeoffs": [
+     "Idempotent event processing prevents duplicate claims but increases implementation complexity"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The architecture strictly decouples billing from clinical workflows and isolates clearinghouse interactions inside the Clearinghouse Integration Adapter. Integrating a new clearinghouse requires modifications solely to this adapter without impacting the core EMR or scheduling services.",
+    "elements": [
+     "Clearinghouse Integration Adapter",
+     "Billing & Claims Container",
+     "Payment Gateway & Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Adapter interface abstraction quality across heterogeneous clearinghouse protocols"
+    ],
+    "tradeoffs": [
+     "Decoupled integration adapter isolates external changes but introduces additional network hops"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Adding an audited demographic field is localized to the UI/Controller, the Patient & EMR Management Component, and automated database schema migrations via Flyway/Liquibase. Audit trails automatically capture entity updates, neatly satisfying the three-component limit within one sprint.",
+    "elements": [
+     "Patient & EMR Management Component",
+     "Patient Dashboard & EMR Viewer",
+     "Flyway/Liquibase",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Automated backward-compatible database schema migrations via Liquibase or Flyway"
+    ],
+    "tradeoffs": [
+     "Automated migration frameworks streamline delivery but require strict schema backward-compatibility discipline"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The edge API Gateway enforces MFA, OAuth2/OIDC, and token validation via the Auth & Policy Enforcement Filter before routing. Audit logging interceptors emit access violation events asynchronously via Kafka, facilitating near real-time security alerting.",
+    "elements": [
+     "Edge Router & TLS Terminator",
+     "Auth & Policy Enforcement Filter",
+     "Authentication & Session Component",
+     "Audit Logging Interceptor",
+     "Apache Kafka"
+    ],
+    "sensitivity_points": [
+     "Edge-level token verification and prompt event publication for authentication anomalies"
+    ],
+    "tradeoffs": [
+     "Enforcing multi-factor authentication at edge increases ingress latency but blocks unauthorized access"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Row-Level Security in PostgreSQL combined with policy enforcement filters and audit interceptors ensures all reads are logged. Long-term compliance is addressed by streaming logs to ClickHouse/Pinot and external regulatory systems, though explicit contextual break-glass authorization logic is not detailed.",
+    "elements": [
+     "Auth & Policy Enforcement Filter",
+     "PostgreSQL",
+     "Audit Logging Interceptor",
+     "Analytics Database",
+     "Regulatory & Auditing System"
+    ],
+    "sensitivity_points": [
+     "Comprehensive capture of read events via interceptors without bypassing policy layers"
+    ],
+    "tradeoffs": [
+     "Auditing every record read guarantees compliance but adds write amplification and storage growth"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Auth & Policy Enforcement Filter",
+     "PostgreSQL",
+     "Audit Logging Interceptor",
+     "Regulatory & Auditing System"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Redis Cluster",
+     "Flyway/Liquibase",
+     "Edge API Gateway"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Analytics & Reporting Container",
+     "Analytics Database"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Patient & EMR Management Component",
+     "Patient Portal"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling & Clash Detection Engine",
+     "Redis Cluster",
+     "EMR & Scheduling Container"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Engine",
+     "Patient & EMR Management Component",
+     "Audit Logging Interceptor",
+     "Regulatory & Auditing System"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Container",
+     "Claim Processing Engine",
+     "Clearinghouse Integration Adapter",
+     "Billing & Ledger Service",
+     "Payment Gateway & Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "API Gateway / BFF",
+     "Authentication & Session Component",
+     "PostgreSQL",
+     "Data & Messaging Layer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Clinic Core Services",
+     "Data & Messaging Layer"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "EMR Engine",
+     "Clinical Workflow & Telemetry Component",
+     "Patient & EMR Management Component"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Interoperability Adapter",
+     "Lab & Imaging Systems",
+     "EMR & Scheduling Container"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

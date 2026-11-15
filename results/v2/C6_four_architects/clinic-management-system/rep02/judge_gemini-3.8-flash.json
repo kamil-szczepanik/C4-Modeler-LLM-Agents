@@ -1,0 +1,328 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: 'Patient Management Component' handles demographics (R-01), 'Scheduling Engine Component' executes clash checks (R-02), 'EMR Domain Engine' and 'Audit Interceptor' provide audited records (R-03), and 'Billing Service Component' submits claims to 'Insurance Clearinghouses' (R-04).",
+   "performance_efficiency": "Sub-second screen loads and efficiency are achieved using 'EMR Cache Manager' backed by 'Redis Cluster', connection pooling via 'Data Access Proxy' (PgBouncer), client-side caching with 'Offline State & Sync Manager', and asynchronous decoupling through 'Message Broker' (Kafka).",
+   "compatibility": "Interoperability is thoroughly supported by 'Integration Service' featuring 'FHIR Ingress/Egress Router', 'HL7 v2 MLLP Adapter', and 'FHIR Transformer Component' (HAPI FHIR), exchanging standards-compliant HL7 FHIR data with 'External Lab/Imaging Systems' and clearinghouses.",
+   "usability": "The 'Web Application' provides specialized interfaces ('EMR UI Module', 'Billing & Scheduling UI Module') and offline support via 'Offline State & Sync Manager' for Doctors, Nurses, Receptionists, Billing Officers, and Patients, though differentiated channels (e.g., dedicated patient mobile portal) are absent.",
+   "reliability": "High availability (99.99%) is addressed via 'Redis Active-Active CRDTs', multi-region data sync via 'Replication & Sync Manager' (Debezium/Kafka), resilient messaging with Kafka KRaft, and Camel's 'Circuit Breaker & Resilience Engine' with Dead Letter Channels.",
+   "security": "Enforces MFA via Keycloak 'Authn Engine', RBAC through 'Policy Enforcement / RBAC Module', field/storage encryption with 'Encryption-at-Rest Middleware' (AES-256) and 'Vault/KMS', alongside edge protection via 'Data Masking Filter' and HIPAA auditing in 'Audit Logging Store'.",
+   "maintainability": "Strong modular decomposition separates domain boundaries into 'EMR Service', 'Core Services', and 'Integration Service'. Maintainability is reinforced by 'Schema Registry Component' for contracts, 'Flyway/Liquibase' for database migrations, and pluggable AOP audit logging interceptors.",
+   "portability": "Explicitly addresses hybrid deployment ('on-prem-k8s' and 'eu-central-1') using standard containerized microservices, environment-agnostic storage abstraction ('MinIO / AWS S3'), and cross-site WAN replication managed by 'Replication & Sync Manager' and 'Cache / State Store (Active-Active Sync)'."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.90625,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.0,
+   "Modifiability": 4.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Distributed Redis Cluster caching and client-side IndexedDB caching bypass the relational database for read-heavy operations, while PgBouncer connection pooling ensures fast data access under concurrent load.",
+    "elements": [
+     "Web Application",
+     "API Gateway",
+     "EMR Service",
+     "EMR Cache Manager",
+     "Cache / State Store",
+     "Data Access Proxy"
+    ],
+    "sensitivity_points": [
+     "Redis cache hit ratio directly governs EMR screen retrieval latency."
+    ],
+    "tradeoffs": [
+     "Aggressive client and server caching risks displaying slightly stale clinical data."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Integration Service ingests HL7 FHIR messages and pushes them directly to Kafka, decoupling ingestion from asynchronous Celery and Temporal processing without impacting synchronous EMR query resources.",
+    "elements": [
+     "Integration Service",
+     "FHIR Ingress/Egress Router",
+     "Message Broker",
+     "Async Worker Containers",
+     "Workflow Orchestrator"
+    ],
+    "sensitivity_points": [
+     "Kafka partitioning and worker concurrency determine message processing throughput."
+    ],
+    "tradeoffs": [
+     "Asynchronous decoupling introduces eventual consistency before lab results appear in EMR."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Replication across hybrid environments relies on Debezium and Kafka Connect. Asynchronous replication over WAN cannot guarantee zero data loss (RPO=0) during an unannounced cloud region failure.",
+    "elements": [
+     "Replication & Sync Manager",
+     "Primary Relational Store",
+     "Cache / State Store",
+     "Broker Cluster Coordinator"
+    ],
+    "sensitivity_points": [
+     "WAN bandwidth and latency bound cross-site replication lag."
+    ],
+    "tradeoffs": [
+     "Asynchronous cross-region replication minimizes write latency but risks data loss during failover."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "PgBouncer handles connection drops while Temporal durable workflows and Celery DLQ ensure in-flight claim submissions are executed idempotently and retried without data loss or duplication.",
+    "elements": [
+     "Data Access Proxy",
+     "Workflow Orchestrator",
+     "Dead-Letter Queue (DLQ) Handler",
+     "Billing Service Component"
+    ],
+    "sensitivity_points": [
+     "Idempotency token enforcement on insurance claim endpoints."
+    ],
+    "tradeoffs": [
+     "Durable workflow state persistence increases claim processing execution overhead."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Claim submission logic connects directly from Core Services Billing Service Component rather than using Integration Service, but EMR Service remains completely isolated and unchanged.",
+    "elements": [
+     "Billing Service Component",
+     "Core Services",
+     "Integration Service",
+     "Insurance Clearinghouses"
+    ],
+    "sensitivity_points": [
+     "Degree of abstraction in the Billing Service claim dispatch interface."
+    ],
+    "tradeoffs": [
+     "Direct billing integration avoids Camel routing overhead but couples clearinghouse logic to core services."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Modifications are restricted to the UI module, Core Services Patient Management entity, and a Flyway migration script, with generic audit logging capturing payload changes automatically.",
+    "elements": [
+     "Billing & Scheduling UI Module",
+     "Patient Management Component",
+     "Audit Logger Component",
+     "Database Migration & Schema Manager"
+    ],
+    "sensitivity_points": [
+     "Flyway schema migration execution without table locking."
+    ],
+    "tradeoffs": [
+     "Strict relational schema validation requires deliberate migration scripts over schema-less flexibility."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Keycloak Authn Engine enforces multi-factor authentication via Authentication SPIs, rejecting single-factor authentication. Failed login events are captured by the Audit Logging SPI and dispatched to Kafka within seconds.",
+    "elements": [
+     "API Gateway",
+     "Auth Filter",
+     "Identity & Policy Container",
+     "Authn Engine",
+     "Audit Logging SPI",
+     "Message Broker"
+    ],
+    "sensitivity_points": [
+     "MFA enforcement policies configured in Keycloak execution flows."
+    ],
+    "tradeoffs": [
+     "Strict step-up MFA increases user login friction."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Keycloak RBAC enforces policy checks, while Spring AOP Audit Interceptor and Envoy capture read accesses into Kafka, appending to an append-only store and tiering to immutable S3 for 10-year retention.",
+    "elements": [
+     "Policy Enforcement / RBAC Module",
+     "Audit Interceptor",
+     "Message Broker",
+     "Audit Logging Store",
+     "Log Compaction & Retention Manager",
+     "Blob Object Store"
+    ],
+    "sensitivity_points": [
+     "Coverage of Spring AOP interceptors across all read methods."
+    ],
+    "tradeoffs": [
+     "Auditing every read access generates massive log volumes requiring automated tiered cold storage."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Data Masking Filter",
+     "Audit Interceptor",
+     "Encryption-at-Rest Middleware Component",
+     "Encryption / Sanitization Component",
+     "Audit Logging Store",
+     "Access Control & TLS Termination Module"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Primary Relational Store",
+     "Replication & Sync Manager",
+     "Broker Cluster Coordinator",
+     "Cache / State Store (Active-Active Sync)"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Data Layer",
+     "Log Compaction & Retention Manager",
+     "MinIO / AWS S3"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Management Component",
+     "Patient Data Repository Component",
+     "Billing & Scheduling UI Module"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Engine Component",
+     "In-Memory Data Engine",
+     "Billing & Scheduling UI Module"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "EMR Domain Engine",
+     "Audit Interceptor",
+     "Audit Logging Store",
+     "EMR UI Module"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service Component",
+     "Insurance Clearinghouses",
+     "Billing & Scheduling UI Module"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "Auth & Session Manager",
+     "Authn Engine",
+     "Encryption-at-Rest Middleware Component",
+     "Encryption & Key Management Module"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Data Layer",
+     "Primary Relational Store",
+     "Replication & Sync Manager",
+     "Cache / State Store (Active-Active Sync)"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "EMR Cache Manager",
+     "In-Memory Data Engine",
+     "EMR UI Module"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Service",
+     "FHIR Ingress/Egress Router",
+     "FHIR Transformer Component",
+     "External Lab/Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

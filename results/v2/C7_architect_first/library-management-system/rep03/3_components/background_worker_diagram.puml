@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Background Worker container
+
+System_Ext(asynchronous_broker, "Asynchronous Broker", "Message broker for asynchronous tasks")
+System_Ext(notification_system, "Notification System", "External notification delivery service")
+System_Ext(national_library_registry, "National Library Registry", "External registry for catalogue metadata")
+ContainerDb(database, "Database", "PostgreSQL / PgBouncer", "Persistent storage for job states, audit logs, and patron preferences")
+
+Container_Boundary(background_worker, "Background Worker") {
+    Component(task_consumer, "Task Consumer", "Python 5.x / Celery 5.x", "Celery Worker Core that consumes asynchronous tasks via AMQP/Redis using TLS and mTLS.")
+    Component(notification_dispatcher, "Notification Dispatcher", "Python 5.x", "Sends alerts and handles out-of-band communications via REST/HTTPS.")
+    Component(data_sync_processor, "Data Sync Processor", "Python 5.x", "Synchronizes catalogue metadata with the National Library Registry via REST/HTTPS with TLS 1.3.")
+    Component(task_router_dlq_handler, "Task Router & DLQ Handler", "Python 5.x / Celery 5.x", "Routes tasks and handles the Dead Letter Queue to prevent task starvation and isolate long-running jobs.")
+}
+
+Rel(task_consumer, asynchronous_broker, "Consumes tasks", "AMQP/Redis [TLS, mTLS]")
+Rel(notification_dispatcher, notification_system, "Sends alerts", "REST/HTTPS")
+Rel(data_sync_processor, national_library_registry, "Syncs metadata", "REST/HTTPS [TLS 1.3]")
+Rel(task_consumer, database, "Reads/writes job states", "SQLAlchemy [TLS 1.3, PgBouncer]")
+
+@enduml

@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Amazon SQS/SNS container
+
+System_Ext(Order_Checkout_Service, "Order & Checkout Service", "Java/Spring Boot microservice")
+System_Ext(Notification_Service, "Notification Service", "Node.js/Express microservice")
+System_Ext(Recommendation_Service, "Recommendation Service", "Python/FastAPI microservice")
+
+Container_Boundary(Amazon_SQS_SNS, "Amazon SQS/SNS") {
+    Component(OrderEventsTopic, "OrderEventsTopic", "AWS SNS", "Publishes and fans out order-related events using SNS filter policies and subscription protocols.")
+    Component(CatalogEventsTopic, "CatalogEventsTopic", "AWS SNS", "Publishes and fans out catalog-related events.")
+    Component(OrderProcessing_HighPriorityQueue, "OrderProcessing-HighPriorityQueue", "Amazon SQS", "Handles high-priority order processing messages to isolate critical checkout flows.")
+    Component(OrderProcessing_StandardQueue, "OrderProcessing-StandardQueue", "Amazon SQS", "Handles standard order processing messages.")
+    Component(NotificationQueue, "NotificationQueue", "Amazon SQS", "Queues messages for the notification service.")
+    Component(RecommendationQueue, "RecommendationQueue", "Amazon SQS", "Queues messages for the recommendation service.")
+    Component(Dead_Letter_Queues_DLQs, "Dead-Letter Queues (DLQs)", "Amazon SQS", "Dedicated failure queues paired with CloudWatch alarms for capturing undeliverable messages.")
+}
+
+Rel(Order_Checkout_Service, OrderEventsTopic, "Publishes encrypted JSON events over HTTPS using AWS SDK", "HTTPS / AWS SDK")
+Rel(OrderEventsTopic, OrderProcessing_HighPriorityQueue, "Dispatches filtered messages using SNS filter policies", "SNS Subscription")
+Rel(OrderEventsTopic, OrderProcessing_StandardQueue, "Dispatches filtered messages using SNS filter policies", "SNS Subscription")
+Rel(OrderEventsTopic, NotificationQueue, "Dispatches filtered messages using SNS filter policies", "SNS Subscription")
+Rel(OrderEventsTopic, RecommendationQueue, "Dispatches filtered messages using SNS filter policies", "SNS Subscription")
+Rel(OrderProcessing_HighPriorityQueue, Order_Checkout_Service, "Pulls messages using AWS SDK with exponential backoff and jitter", "AWS SDK")
+Rel(OrderProcessing_StandardQueue, Order_Checkout_Service, "Pulls messages using AWS SDK with exponential backoff and jitter", "AWS SDK")
+Rel(NotificationQueue, Notification_Service, "Pulls messages using AWS SDK with exponential backoff and jitter", "AWS SDK")
+Rel(RecommendationQueue, Recommendation_Service, "Pulls messages using AWS SDK with exponential backoff and jitter", "AWS SDK")
+
+@enduml

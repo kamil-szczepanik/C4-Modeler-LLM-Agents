@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(fraud_analyst, "Fraud Analyst & Risk/Compliance Officer", "Reviews flagged suspicious transactions and ensures compliance with regulatory standards.")
+
+System_Ext(payment_gateway, "Payment Gateway / Merchants", "API Client that sends card-not-present payment authorization requests.")
+System_Ext(immutable_audit_sink, "Immutable Audit Sink", "AWS S3 Object Lock storage for WORM compliance and secure record retention.")
+System_Ext(cloudwatch_route53, "Amazon CloudWatch & Route 53", "Provides real-time health metrics, heartbeats, and circuit-breaker fallback mechanisms.")
+
+System_Boundary(fraud_system, "Real-Time Payment Fraud Screening System") {
+    Container(real_time_scoring_engine, "Real-Time Scoring Engine", "Go on Amazon ECS Fargate", "Screens card-not-present payment authorizations for fraud before approval.")
+    Container(case_management_app, "Case Management App", "Node.js/TypeScript on Amazon ECS Fargate", "Provides case management for suspicious payment reviews.")
+    Container(feature_store_cache, "Feature Store & Cache", "Amazon ElastiCache Redis", "Provides sub-millisecond feature lookups.")
+    ContainerDb(database, "Database", "Amazon Aurora PostgreSQL Serverless v2", "Stores relational case and transaction data.")
+    Container(messaging_audit_pipeline, "Messaging & Audit Pipeline", "Amazon SQS/SNS and Amazon S3 with Object Lock", "Handles decoupled asynchronous processing and tamper-evident compliance audit logs.")
+    Container(model_registry, "Model Registry", "Amazon SageMaker Model Registry", "Stores and manages fraud detection models.")
+    Container(network_security, "Network & Security", "AWS WAF, Amazon API Gateway, AWS Secrets Manager, AWS KMS", "Handles mTLS, routing, credential rotation, and encryption.")
+}
+
+Rel(payment_gateway, real_time_scoring_engine, "Invokes authorization scoring requests via HTTPS/REST with mTLS", "Amazon API Gateway / HTTPS")
+Rel(real_time_scoring_engine, feature_store_cache, "Reads features for scoring", "Amazon ElastiCache Redis")
+Rel(real_time_scoring_engine, messaging_audit_pipeline, "Publishes asynchronous events and compliance audit logs", "Amazon SQS/SNS")
+Rel(messaging_audit_pipeline, immutable_audit_sink, "Writes compliance audit logs to WORM storage", "Amazon S3 with Object Lock and AWS KMS")
+Rel(fraud_analyst, case_management_app, "Accesses case management for suspicious payment reviews", "Amazon API Gateway / HTTPS")
+Rel(case_management_app, database, "Reads and writes relational case data", "Amazon Aurora PostgreSQL Serverless v2")
+Rel(real_time_scoring_engine, cloudwatch_route53, "Provides circuit-breaker fallback mechanisms and health checks", "Route 53 / API Gateway")
+
+@enduml

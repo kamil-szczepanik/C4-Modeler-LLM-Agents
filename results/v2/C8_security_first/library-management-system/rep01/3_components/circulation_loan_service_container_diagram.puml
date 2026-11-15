@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container_Boundary(circulation_loan_service, "Circulation & Loan Service Container") {
+    Component(loan_management_controller, "Loan Management Controller", "Spring MVC", "Manages library circulation, loans, and related transactions, exposing REST APIs.")
+    Component(circulation_policy_engine, "Circulation Policy Engine", "Java / Spring Bean", "Enforces circulation policies and business rules.")
+    Component(transaction_persistence_service, "Transaction & Persistence Service", "Spring Data JPA, PostgreSQL, HikariCP", "Handles relational data management for loan states and ACID transactions with connection pooling.")
+    Component(event_publisher, "Event Publisher", "Spring Cloud Stream", "Publishes asynchronous events for circulation and loan transactions.")
+    Component(event_consumer, "Event Consumer", "Spring Cloud Stream", "Consumes asynchronous events related to circulation and loans.")
+    Component(fallback_handler, "Fallback Handler / Offline Cache Component", "Resilience4j", "Provides circuit breaking and fallback handling to isolate downstream notification dependencies during peak loads.")
+}
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway")
+System_Ext(postgresql, "PostgreSQL", "Relational Database")
+System_Ext(notification_dispatcher, "Notification Dispatcher Container", "External Container")
+
+Rel(api_gateway, loan_management_controller, "Routes checkout requests", "mTLS, OAuth2/JWT")
+Rel(loan_management_controller, circulation_policy_engine, "Evaluates loan policies", "In-process")
+Rel(circulation_policy_engine, transaction_persistence_service, "Persists loan states", "In-process")
+Rel(transaction_persistence_service, postgresql, "Executes database queries", "JDBC with TLS 1.3")
+Rel(transaction_persistence_service, event_publisher, "Triggers domain events", "In-process")
+Rel(event_publisher, notification_dispatcher, "Publishes messages", "TLS-secured message broker, SASL/SCRAM")
+Rel(loan_management_controller, fallback_handler, "Applies circuit breaking", "In-process")
+
+@enduml

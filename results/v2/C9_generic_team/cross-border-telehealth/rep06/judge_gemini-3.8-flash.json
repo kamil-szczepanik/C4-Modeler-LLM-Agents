@@ -1,0 +1,322 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 2,
+   "performance_efficiency": 3,
+   "compatibility": 4,
+   "usability": 2,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.125,
+  "justifications": {
+   "functional_suitability": "While R-02 and R-04 are supported by 'Integration & Translation Container' and 'Consent and State Manager', the architecture completely omits containers or components for the video consultation media engine (R-01) and the AI symptom checker service with model execution (R-03).",
+   "performance_efficiency": "Caching via 'State & Session Management Container' (Redis) and asynchronous logging via Pub/Sub support performance. However, there is no processing or inference pipeline for AI symptom evaluation, and WebRTC media handling mechanisms are not detailed.",
+   "compatibility": "External interoperability for HL7 FHIR and EU e-prescriptions (R-08) is directly addressed by 'Integration & Translation Container', 'Protocol Adapter', and 'Validation and Schema Engine'. However, integration details for video signaling or external identity federations are missing.",
+   "usability": "Patients and clinicians are modeled at Level 1 and 2, but client applications (mobile/web apps) or user-facing interfaces are entirely absent. Mechanisms handling low-bandwidth operation at the user interface are only vaguely handled in backend session heartbeats.",
+   "reliability": "Circuit breakers ('Circuit Breaker Manager') and session resumption ('Heartbeat Lease Manager') support connection resilience. However, explicit mechanisms for degraded-mode media adaptation below 300 kbit/s (R-06), like audio fallback or codec downgrade, lack an underlying media server.",
+   "security": "Addressed thoroughly via 'Traffic Steering Engine', 'Consent and State Manager', 'Encryption Manager' (KMS per region), and mTLS. WORM storage in 'Log Archiver' supports auditability. However, specific consent verification during cross-region requests is not fully detailed in the routing path.",
+   "maintainability": "Containers exhibit high modularity and loose coupling using gRPC over mTLS and Pub/Sub. 'Schema Migration Manager' facilitates schema changes, and 'Config & Feature Management Container' provides dynamic feature flags, though the absent video and AI functional domains weaken overall component modularity.",
+   "portability": "Regional deployment across GCP europe-west3 and us-central1 is supported by managed services like Cloud Run, Cloud SQL/Spanner, and Secret Manager. However, high vendor lock-in to proprietary GCP services reduces portability across environments without substantial changes."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 2,
+   "PERF-01": 2,
+   "PERF-02": 1,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.46875,
+  "by_quality_attribute": {
+   "Performance": 1.5,
+   "Availability": 2.5,
+   "Modifiability": 3.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "justification": "While the API Gateway and Session Handler manage WebRTC connections and sessions, the architecture lacks any dedicated media server, WebRTC SFU, or media routing containers to scale 5,000 concurrent video streams.",
+    "elements": [
+     "API Gateway / Edge Proxy Container",
+     "State & Session Management Container",
+     "Session Handler"
+    ],
+    "sensitivity_points": [
+     "Throughput capacity of the API Gateway handling simultaneous WebRTC media and signaling traffic"
+    ],
+    "tradeoffs": [
+     "Terminating signaling at the Edge Gateway simplifies security but risks media-path bottlenecks"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 1,
+    "justification": "The architecture completely lacks an AI symptom checker container or component. Because no inference service, model hosting, or batching pipeline exists in the design, it cannot serve 50,000 requests per hour.",
+    "elements": [
+     "API Gateway / Edge Proxy Container"
+    ],
+    "sensitivity_points": [
+     "Absence of model inference execution infrastructure within container architecture"
+    ],
+    "tradeoffs": [
+     "Omitting dedicated AI compute prevents meeting sub-3-second inference latencies under load"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "The Session Handler and Heartbeat Lease Manager support reconnections and unstable links, and the API Gateway specifies adaptive bandwidth protocols. However, lacking an explicit media plane makes video-to-audio degradation mechanics vague.",
+    "elements": [
+     "API Gateway / Edge Proxy Container",
+     "State & Session Management Container",
+     "Heartbeat Lease Manager",
+     "Data Persistence Container"
+    ],
+    "sensitivity_points": [
+     "Heartbeat lease renewal interval tuning over high-latency or fluctuating connections"
+    ],
+    "tradeoffs": [
+     "Aggressive lease renewal detects drops quickly but increases bandwidth on constrained 200 kbit/s links"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Target cloud regions only include us-central1 and europe-west3. If the single US region fails, there is no secondary US region or cross-zone failover strategy defined to restore service without violating EU-US data residency.",
+    "elements": [
+     "API Gateway / Edge Proxy Container",
+     "Edge Router",
+     "Data Persistence Container",
+     "Database Router"
+    ],
+    "sensitivity_points": [
+     "Regional disaster recovery configuration within the same legal jurisdiction"
+    ],
+    "tradeoffs": [
+     "Strict regional residency prevents active-active failover to the EU region during outages"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Integration & Translation Container isolates external integration logic using a Protocol Adapter, Validation and Schema Engine, and Circuit Breaker, ensuring national standard additions are restricted to one isolated adapter.",
+    "elements": [
+     "Integration & Translation Container",
+     "Protocol Adapter",
+     "Validation and Schema Engine",
+     "Circuit Breaker Manager"
+    ],
+    "sensitivity_points": [
+     "Extensibility and modular decoupling of the Protocol Adapter interface"
+    ],
+    "tradeoffs": [
+     "Maintaining dedicated translation adapters per country adds development overhead but insulates core platform"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "Config & Feature Management supports feature flags and Audit Logging writes to WORM storage. However, the AI symptom checker and model registry components are entirely missing, preventing model version association and rollback.",
+    "elements": [
+     "Config & Feature Management Container",
+     "Feature Flag Controller",
+     "Audit & Traceability Logging Container",
+     "Log Archiver"
+    ],
+    "sensitivity_points": [
+     "Coupling between model execution artifacts and immutable audit payload schemas"
+    ],
+    "tradeoffs": [
+     "Managing model rollout purely via feature flags without a model registry impairs lineage tracking"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The IAM Container enforces purpose-based consent via Consent and State Manager, short-lived JWTs, and emits audit events to WORM storage. The Data Persistence Container enforces regional encryption and isolation, preventing unauthorized cross-border access.",
+    "elements": [
+     "Identity & Access Management (IAM) Container",
+     "Consent and State Manager",
+     "Authentication and Authorization Controller",
+     "Audit Event Emitter",
+     "Data Persistence Container"
+    ],
+    "sensitivity_points": [
+     "Enforcement of consent evaluation prior to cross-region database query dispatch"
+    ],
+    "tradeoffs": [
+     "Strict per-request consent checks increase authorization latency on cross-border data requests"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Consent updates are processed by the Consent and State Manager and immediately persisted, while 15-minute token expirations ensure propagation well within 24 hours. Verification is supported by tamper-evident WORM audit logging.",
+    "elements": [
+     "Identity & Access Management (IAM) Container",
+     "Consent and State Manager",
+     "Audit & Traceability Logging Container",
+     "Log Archiver"
+    ],
+    "sensitivity_points": [
+     "Lifespan of issued authorization tokens relative to consent revocation events"
+    ],
+    "tradeoffs": [
+     "Short token lifetimes enforce rapid consent propagation but increase IAM authentication load"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "full",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "none",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.75,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Identity & Access Management (IAM) Container",
+     "Consent and State Manager",
+     "Health & Metrics Engine",
+     "Data Persistence Container",
+     "Log Archiver"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Edge Router",
+     "Traffic Steering Engine",
+     "Data Persistence Container",
+     "Database Router",
+     "Encryption Manager"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Audit & Traceability Logging Container",
+     "Log Publisher",
+     "Log Processor",
+     "Log Archiver"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "State & Session Management Container",
+     "Heartbeat Lease Manager",
+     "API Gateway / Edge Proxy Container"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "API Gateway / Edge Proxy Container",
+     "State & Session Management Container",
+     "Session Handler"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Integration & Translation Container",
+     "Protocol Adapter",
+     "External Health Integrations & Pharmacies"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "none",
+    "elements": []
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Identity & Access Management (IAM) Container",
+     "Consent and State Manager"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Edge Router",
+     "Traffic Steering Engine",
+     "Consent and State Manager",
+     "Data Persistence Container",
+     "Database Router"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "API Gateway / Edge Proxy Container",
+     "State & Session Management Container",
+     "Heartbeat Lease Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Audit & Traceability Logging Container",
+     "Log Publisher",
+     "Log Processor",
+     "Log Archiver"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration & Translation Container",
+     "Protocol Adapter",
+     "Validation and Schema Engine",
+     "External Health Integrations & Pharmacies"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

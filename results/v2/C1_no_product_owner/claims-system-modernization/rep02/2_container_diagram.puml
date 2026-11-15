@@ -1,0 +1,37 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(Customers, "Customers", "External users who submit online insurance claims.")
+Person(Brokers, "Brokers", "External partners who manage and submit claims on behalf of customers.")
+Person(ClaimsAdjusters, "Claims Adjusters", "Internal staff who process claims and interact with the adjuster workspace.")
+
+System_Ext(LegacyMainframe, "Legacy Mainframe", "On-premise system of record containing historical claims data.")
+System_Ext(IdentityProvider, "Identity Provider", "Active Directory system providing OAuth2/OIDC authentication.")
+
+System_Boundary(InsuranceClaimsModernization, "Insurance Claims Modernization") {
+    Container(CustomerPortal, "Customer Portal", "Azure Static Web Apps, React", "Provides a web interface for customers and brokers to submit claims.")
+    Container(AdjusterWorkspace, "Adjuster Workspace", "Azure Container Apps, Node.js/React", "Provides a user interface for internal claims adjusters.")
+    Container(APIGateway, "API Gateway", "Azure Container Apps", "Validates OAuth2/OIDC tokens and routes traffic to backend services.")
+    Container(AdjusterBackendService, "Adjuster Backend Service", "Java/Spring Boot, Anti-Corruption Layer (ACL)", "Encapsulates business logic for claims processing and isolates the legacy backend.")
+    ContainerDb(AzureSQLDatabase, "Azure SQL Database", "Azure SQL Database, Spring Data JPA", "Persists migrated claim types locally.")
+    Container(AzureRedisCache, "Azure Redis Cache", "Azure Redis Cache", "Stores session and temporary data for fast screen load times.")
+    Container(AzureServiceBus, "Azure Service Bus", "Azure Service Bus with Dead-Letter Queues", "Manages asynchronous queues and ensures zero claim loss.")
+    Container(MainframeIntegrationAdapter, "Mainframe Integration Adapter", "mTLS Integration Adapter", "Connects securely to the on-premise Legacy Mainframe.")
+    Container(AzureKeyVault, "Azure Key Vault", "Azure Key Vault", "Centralizes secrets, mTLS certificates, and API keys securely.")
+}
+
+Rel(Customers, CustomerPortal, "Submit claims", "HTTPS/JSON")
+Rel(Brokers, CustomerPortal, "Submit and manage claims", "HTTPS/JSON")
+Rel(CustomerPortal, APIGateway, "Routes requests", "HTTPS/JSON")
+Rel(ClaimsAdjusters, AdjusterWorkspace, "Interacts to process claims", "HTTPS")
+Rel(AdjusterWorkspace, AdjusterBackendService, "Communicates for adjuster operations", "REST/HTTPS")
+Rel(APIGateway, IdentityProvider, "Validates OAuth2/OIDC tokens", "OAuth2/OIDC")
+Rel(AdjusterBackendService, AzureRedisCache, "Caches session and performance data", "Redis Protocol")
+Rel(AdjusterBackendService, AzureServiceBus, "Sends asynchronous messages for background processing", "AMQP")
+Rel(AdjusterBackendService, AzureSQLDatabase, "Persists claim data", "Spring Data JPA / TDS")
+Rel(AdjusterBackendService, MainframeIntegrationAdapter, "Integrates with legacy backend", "Internal API")
+Rel(MainframeIntegrationAdapter, LegacyMainframe, "Synchronizes data securely", "mTLS")
+Rel(AdjusterBackendService, AzureKeyVault, "Retrieves secrets and certificates", "Managed Identities / HTTPS")
+
+@enduml

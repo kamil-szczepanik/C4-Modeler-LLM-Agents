@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Patient & Scheduling Service container
+
+Container_Boundary(patient_scheduling_service, "Patient & Scheduling Service") {
+    Component(PatientController, "Patient Controller", "Java / Spring MVC", "Manages patient admissions and requests, triggering audit events via AOP.")
+    Component(SchedulingController, "Scheduling Controller", "Java / Spring MVC", "Handles scheduling requests and interactions, triggering audit events via AOP.")
+    Component(AppointmentEngine, "Appointment Engine", "Java / Core Domain Component", "Core business logic component for appointment management, checking slot locks and querying availability.")
+    Component(DataAccessRepository, "Data Access Repository", "Spring Data JPA", "Manages database operations and queries for availability with ACID compliance.")
+    Component(EventPublisher, "Event Publisher", "Spring Kafka Template", "Dispatches domain events to the message broker and commits events to transaction boundaries.")
+    Component(SchedulingCacheManager, "Scheduling Cache Manager", "Spring Data Redis", "Manages ephemeral availability locks and slot lock status.")
+    Component(AuditInterceptor, "Audit Interceptor", "Spring AOP", "Intersects controller operations to trigger audit events.")
+    Component(OutboxEventHandler, "Outbox Event Handler", "Transactional Outbox Pattern", "Handles events to guarantee data integrity across transaction boundaries.")
+    Component(FHIRTranslationAdapter, "FHIR Translation Adapter", "HL7 FHIR Mapper", "Dispatches standardized FHIR resources to the event publisher.")
+}
+
+System_Ext(DistributedCache, "Distributed Cache", "Redis Enterprise", "Distributed cache for fast pre-checks and locking.")
+System_Ext(MessageBroker, "Message Broker", "Apache Kafka", "Message broker for reliable asynchronous event streaming.")
+
+Rel(PatientController, AuditInterceptor, "Triggers audit events", "In-Process / AOP")
+Rel(SchedulingController, AuditInterceptor, "Triggers audit events", "In-Process / AOP")
+Rel(AppointmentEngine, SchedulingCacheManager, "Checks slot lock status", "In-Process")
+Rel(SchedulingCacheManager, DistributedCache, "Reads/writes ephemeral availability locks", "TCP")
+Rel(AppointmentEngine, DataAccessRepository, "Queries availability", "In-Process")
+Rel(EventPublisher, OutboxEventHandler, "Commits events to transaction boundary", "In-Process")
+Rel(EventPublisher, MessageBroker, "Dispatches domain events", "SASL/SCRAM over TLS")
+Rel(FHIRTranslationAdapter, EventPublisher, "Dispatches standardized FHIR resources", "In-Process")
+
+@enduml

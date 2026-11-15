@@ -1,0 +1,22 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(internal_event_bus, "Internal Event Bus", "Apache Kafka / RabbitMQ", "Event-driven messaging and native DLQ.")
+System_Ext(notification_service, "Notification Service", "External System", "Handles external outbound alerts.")
+System_Ext(eu_hosted_log_metrics_aggregator, "EU-hosted Log & Metrics Aggregator", "External System", "Receives structured logs and metrics.")
+
+Container_Boundary(notification_and_integration_worker, "Notification & Integration Worker") {
+    Component(event_consumer_component, "Event Consumer Component", "KafkaJS / Kafka-python", "Consumes domain events via TLS from the Internal Event Bus.")
+    Component(routing_template_engine, "Routing & Template Engine", "Nunjucks / Jinja2", "Compiles localized messages.")
+    Component(dispatch_retry_manager, "Dispatch & Retry Manager", "Axios / HTTPX, Redis, Kafka DLQ", "Sends outbound alerts and manages retries/delivery status.")
+    Component(audit_logger_publisher, "Audit Logger & Publisher", "OpenTelemetry SDK", "Forwards structured logs and metrics to the EU-hosted Log & Metrics Aggregator.")
+}
+
+Rel(internal_event_bus, event_consumer_component, "Consumes domain events via TLS", "Apache Kafka")
+Rel(routing_template_engine, dispatch_retry_manager, "Compiles localized messages", "Nunjucks / Jinja2")
+Rel(dispatch_retry_manager, notification_service, "Sends outbound alerts", "HTTPS/REST")
+Rel(dispatch_retry_manager, internal_event_bus, "Publishes delivery status events", "Apache Kafka")
+Rel(audit_logger_publisher, eu_hosted_log_metrics_aggregator, "Forwards structured logs and metrics", "OpenTelemetry / TLS")
+
+@enduml

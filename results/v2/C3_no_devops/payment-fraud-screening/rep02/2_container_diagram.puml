@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalysts, "Fraud Analysts & Risk Managers", "Human users reviewing cases and managing models.")
+System_Ext(PaymentGateway, "Payment Gateway / Core Processing Platform & Card Networks", "External systems submitting authorizations and receiving decisions.")
+
+System_Boundary(FraudSystem, "Real-Time Payment Fraud Screening System") {
+    Container(APIGateway, "API Gateway / Ingestion Service", "Go, AWS ALB", "Handles 3,000 req/sec incoming payment screening authorizations.")
+    Container(ScoringEngine, "Real-Time Scoring Engine", "Python, FastAPI, ONNX Runtime", "Evaluates card-not-present payment authorizations for fraud at scale.")
+    Container(ExplainabilityService, "Explainability Service", "Python, FastAPI", "Generates SHAP values for model explainability.")
+    Container(CaseBackend, "Case Management Backend", "Node.js, Go", "Provides backend services for fraud case management and analyst tools.")
+    Container(CaseWebApp, "Case Management Web App", "React SPA, S3, CloudFront", "Web interface for analysts and risk managers to review cases.")
+    Container(ModelRegistry, "Model & Rule Registry", "Amazon S3", "Stores models, rules, and artifacts.")
+    ContainerDb(FeatureStore, "Feature Store & Metadata DB", "PostgreSQL (RDS), AWS ElastiCache Redis", "Provides real-time features and relational metadata/audit logs.")
+    Container(SecurityServices, "Security & Infrastructure Services", "AWS Cognito, AWS Secrets Manager, Amazon S3 Object Lock, Amazon SQS", "Handles authentication, secrets management, asynchronous audit logging, and secure storage.")
+}
+
+Rel(PaymentGateway, APIGateway, "Sends payment authorization requests for fraud screening", "HTTPS / JSON")
+Rel(FraudAnalysts, CaseWebApp, "Accesses case management UI to review cases and manage models", "HTTPS")
+Rel(CaseWebApp, CaseBackend, "Sends API requests for case management and review workflows", "HTTPS / REST or GraphQL, AWS Cognito OAuth 2.0 / OIDC")
+Rel(APIGateway, ScoringEngine, "Forwards screening requests for low-latency scoring", "gRPC with mTLS")
+Rel(ScoringEngine, FeatureStore, "Retrieves features and performs offline logging", "TCP (Redis and PostgreSQL)")
+Rel(ScoringEngine, ModelRegistry, "Loads models and rules", "S3 API")
+Rel(ScoringEngine, ExplainabilityService, "Requests SHAP values for decisions", "gRPC / REST")
+Rel(ScoringEngine, SecurityServices, "Publishes asynchronous audit logs", "Amazon SQS")
+Rel(SecurityServices, FeatureStore, "Stores immutable audit logs", "S3 Object Lock")
+
+@enduml

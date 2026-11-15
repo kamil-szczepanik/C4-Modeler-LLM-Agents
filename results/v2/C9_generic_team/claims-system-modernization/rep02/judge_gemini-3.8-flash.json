@@ -1,0 +1,318 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "R-01 is served by REST API Router in the ACL. R-02 is supported by Adjuster Web Application Handler via BFF. R-03 is supported via Azure App Configuration feature toggles and event-driven migration, though specific claim-type partitioning details remain generic.",
+   "performance_efficiency": "R-05's sub-2-second requirement is explicitly achieved via Cache-Aside Read Manager, Caching & State Manager, and Azure Redis Cache storing pre-aggregated read models, isolating the UI from 5s mainframe latencies.",
+   "compatibility": "Legacy mainframe integration is handled using the Transformation Engine in the ACL and Data Synchronization / Reconciliation using batch/adapter patterns, respecting the constraint of minimal mainframe interface alterations.",
+   "usability": "While adjusters have a dedicated BFF and web app handler (R-02), customers and brokers (R-01) connect directly to the API Gateway/ACL with no dedicated customer/broker frontend client or portal defined.",
+   "reliability": "R-04 consistency is preserved by Dead-Letter Monitor, Idempotency & Stampede Prevention Module, Idempotent Upsert Pattern, and asynchronous reconciliation in Azure Functions. Mainframe batch window impacts are not deeply detailed.",
+   "security": "R-07 is fully met via IAM / Token Service, Directory Synchronization Service with Active Directory, Key Vault for secret management, and log-scrubbing middleware with audit cold storage in Azure Blob Storage.",
+   "maintainability": "R-06 (switching back within one day) is enabled by Azure App Configuration dynamic feature flags and strangler patterns. Decomposing responsibilities across ACL, BFF, and serverless workers maintains clean modularity.",
+   "portability": "The hybrid environment (on-prem mainframe and azure-westeurope) is respected; however, modern components are deeply tied to proprietary Azure PaaS services (Service Bus, Functions, App Configuration, Bicep), creating cloud vendor lock-in."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 3.5,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The BFF and Redis-based Caching/State Store serve pre-aggregated read models to achieve sub-2-second response times. However, cold cache misses or synchronous fallbacks through the ACL to the 5-second mainframe legacy interface could breach the latency threshold if not handled asynchronously.",
+    "elements": [
+     "Backend-for-Frontend (BFF)",
+     "Caching / State Store",
+     "Cache-Aside Read Manager",
+     "API Gateway / Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio for legacy claim lookups",
+     "Latency of fallback calls to the mainframe"
+    ],
+    "tradeoffs": [
+     "Trading read model freshness against strict sub-2-second UI response time"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Peak claim submissions are ingested through the API Gateway and queued in Azure Service Bus via asynchronous messaging. Decoupled processing buffers work and isolates the mainframe, ensuring batch extract transformations do not overrun the strict 23:00-05:00 nightly batch window.",
+    "elements": [
+     "API Gateway / Anti-Corruption Layer (ACL)",
+     "Event Broker",
+     "Message Publisher",
+     "Data Synchronization / Reconciliation"
+    ],
+    "sensitivity_points": [
+     "Service Bus topic throughput capacity during 5x spikes",
+     "Batch staging file export throughput"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission ingestion increases eventual consistency lag for claims"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Incoming submissions are decoupled from the mainframe by the API Gateway and durable Azure Service Bus messaging with Blob Storage claim checks. Submissions queue safely during the six-hour batch maintenance window and drain automatically once connectivity resumes, preventing data loss.",
+    "elements": [
+     "API Gateway / Anti-Corruption Layer (ACL)",
+     "Event Broker",
+     "Message Ingestion Handler",
+     "Claim Check Offloader",
+     "Worker / Background Processing"
+    ],
+    "sensitivity_points": [
+     "Message time-to-live and storage buffer limits during extended windows"
+    ],
+    "tradeoffs": [
+     "Queuing submissions delays legacy confirmation notifications until batch completion"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The architecture incorporates Idempotency modules in Redis, Dead-Letter Queues in Service Bus, and Idempotent Upsert patterns in Azure Functions to handle partial failures. Detailed distributed transactional compensation between cloud storage and DB2 is left high-level, posing a minor reconciliation risk.",
+    "elements": [
+     "Data Synchronization / Reconciliation",
+     "Idempotency & Stampede Prevention Module",
+     "Dead-Letter Monitor",
+     "Event Broker"
+    ],
+    "sensitivity_points": [
+     "Mainframe legacy error codes accurately triggering idempotent replays",
+     "Dead-letter processing logic completeness"
+    ],
+    "tradeoffs": [
+     "Maintaining dual-state deduplication logic increases operational synchronization complexity"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The ACL's Transformation Engine and Azure App Configuration feature flags allow claim routing changes and rapid rollbacks within one day without code deployments. However, the legacy mainframe synchronization schema modifications must strictly adhere to the quarterly constraint.",
+    "elements": [
+     "API Gateway / Anti-Corruption Layer (ACL)",
+     "Transformation Engine",
+     "Configuration & Secret Management",
+     "Azure App Configuration"
+    ],
+    "sensitivity_points": [
+     "Dynamic schema transformation adaptability within the ACL",
+     "Feature toggle propagation latency across containers"
+    ],
+    "tradeoffs": [
+     "Dynamic translation schemas add processing overhead to maintain deployment independence"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "UI applications interact solely with the BFF and API Gateway, protecting them from mainframe decommissioning. However, the architecture defines Redis and Blob storage but omits a primary cloud database to replace DB2 as the permanent System of Record, requiring notable structural additions.",
+    "elements": [
+     "API Gateway / Anti-Corruption Layer (ACL)",
+     "Backend-for-Frontend (BFF)",
+     "Data Synchronization / Reconciliation"
+    ],
+    "sensitivity_points": [
+     "Absence of an operational persistent transactional cloud datastore",
+     "Clean cutover mechanism for core entity ownership"
+    ],
+    "tradeoffs": [
+     "Decoupled edge tiers preserve frontends while cloud backend persistence remains unarchitected"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The API Gateway and REST router manage broker entry points and log activity to Azure Monitor. However, fine-grained object-level authorization (preventing cross-broker tenant data access) is not explicitly defined in the gateway components or token service.",
+    "elements": [
+     "API Gateway / Anti-Corruption Layer (ACL)",
+     "REST API Router",
+     "IAM / Token Service",
+     "Centralized Logging & Monitoring"
+    ],
+    "sensitivity_points": [
+     "Enforcement location for resource-based multi-tenant authorization policies",
+     "Audit trail immutability in logging components"
+    ],
+    "tradeoffs": [
+     "Fine-grained access token evaluation at the gateway increases request inspection latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "IAM leverages Azure AD/Entra ID Connect integrated with corporate Active Directory using SAML/OIDC. Revoking an adjuster in on-premises AD propagates identity revocation across SSO boundaries, though revoking active session tokens within 15 minutes depends on configured token lifetimes or Redis token blacklisting.",
+    "elements": [
+     "IAM / Token Service",
+     "Directory Synchronization Service",
+     "Corporate Active Directory",
+     "Backend-for-Frontend (BFF)"
+    ],
+    "sensitivity_points": [
+     "Active Directory replication and token expiration lifetimes",
+     "Session revocation propagation speed in Redis"
+    ],
+    "tradeoffs": [
+     "Shorter token validity increases IAM authentication traffic overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "full",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "COBOL/DB2 Mainframe",
+     "API Gateway / Anti-Corruption Layer (ACL)",
+     "Data Synchronization / Reconciliation",
+     "On-Premises COBOL/DB2 Mainframe"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "API Gateway / Anti-Corruption Layer (ACL)",
+     "Transformation Engine",
+     "Azure App Configuration and Key Vault"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Centralized Logging & Monitoring",
+     "Azure Monitor"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers",
+     "Brokers",
+     "API Gateway / Anti-Corruption Layer (ACL)",
+     "REST API Router"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Backend-for-Frontend (BFF)",
+     "Adjuster Web Application Handler"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Event Broker",
+     "Message Ingestion Handler",
+     "Event-Driven Migration Publisher",
+     "Azure App Configuration"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Data Synchronization / Reconciliation",
+     "Idempotency & Stampede Prevention Module",
+     "Dead-Letter Monitor",
+     "Azure Service Bus"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Caching / State Store",
+     "Cache-Aside Read Manager",
+     "Caching & State Manager",
+     "Cache Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Configuration & Secret Management",
+     "Azure App Configuration"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Corporate Active Directory",
+     "IAM / Token Service",
+     "Authentication & Token Controller",
+     "Directory Synchronization Service"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

@@ -1,0 +1,346 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements (R-01 to R-04) are directly addressed through dedicated components: Video Consultation Service for consultations, Prescription Manager Microservice and Interoperability Adapter for e-prescriptions, AI Symptom Checker for triage, and Policy & Consent Engine for purpose-based consent.",
+   "performance_efficiency": "Media Relay & SFU Controller supports adaptive bitrate streaming, Redis provides session token caching, and Cloud Pub/Sub enables asynchronous streaming to BigQuery. However, concrete mechanisms for model inference latency and caching for repeated symptom intake requests are omitted.",
+   "compatibility": "Interoperability Adapter thoroughly models external integration via FHIR Translation Facade (US HL7 FHIR), EU National Gateway Driver, and Apache Camel Transformation Pipeline Engine, satisfying R-08 for regional health systems and pharmacy networks.",
+   "usability": "Patients, clinicians, pharmacists, and compliance officers are mapped to tailored entry points like Localization & UI Gateway. However, client-side mechanisms managing user feedback or explicit bandwidth toggles for degraded connections under 300 kbit/s lack detail.",
+   "reliability": "Media Relay & SFU Controller provides adaptive streaming to maintain low-bandwidth connections (R-06). Independent regional deployments in GKE offer regional fault tolerance, though automated degraded-mode fallbacks (such as audio-only failover or circuit breakers) are not explicitly detailed.",
+   "security": "Security is addressed thoroughly with TLS 1.3, Envoy TLS Terminator, Consent and Policy Validator using OPA, mTLS across services, Cloud Storage WORM for tamper-proof audits (R-07), and strictly region-isolated Cloud SQL instances enforcing data residency (R-05).",
+   "maintainability": "The architecture shows clean modular decomposition: Regional Application Services decouple consultation, prescription, and consent logic into discrete microservices. Using Apache Camel within Interoperability Adapter allows maintainable, independent updates to external messaging schemas.",
+   "portability": "Core application workloads are containerized for GKE and Envoy across europe-west3 and us-central1. There is mild vendor lock-in to proprietary GCP services like Vertex AI, BigQuery, and Pub/Sub, but this aligns well with the brief's targeted GCP deployment."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.0,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The WebRTC SFU controller and Redis session manager handle signaling and media streams regionally, backed by autoscaling GKE clusters. However, managing 5,000 concurrent SFU video streams requires massive horizontal SFU fleet autoscaling and network bandwidth allocation, which lacks explicit cluster autoscaling policies.",
+    "elements": [
+     "Video Consultation Service",
+     "Media Relay & SFU Controller",
+     "Signaling & Session Manager",
+     "API Gateway",
+     "Consultation Orchestrator Microservice"
+    ],
+    "sensitivity_points": [
+     "SFU media relay bandwidth and CPU capacity under bursty concurrent session initialization."
+    ],
+    "tradeoffs": [
+     "Prioritizing adaptive media relay over heavy server-side processing preserves session startup latency."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "A load of 50,000 requests/hour equals roughly 14 requests/second. Vertex AI endpoints fronted by FastAPI intake controllers and asynchronous Pub/Sub logging easily process this volume well under the 3-second SLA without blocking the inference pipeline.",
+    "elements": [
+     "AI Symptom Checker",
+     "Symptom Intake API Controller",
+     "Inference Orchestrator",
+     "Audit & Traceability Logger",
+     "Data & Audit Tier"
+    ],
+    "sensitivity_points": [
+     "Inference latency on Vertex AI endpoints during parallel symptom evaluations."
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging decouples compliance writes from real-time inference latency."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The SFU controller explicitly supports adaptive bitrate streaming and low-bandwidth connections down to audio-only fallback. While L1 mentions offline synchronization, the specific clinical note caching and reconciliation mechanisms on reconnection are not explicitly elaborated in the L3 components.",
+    "elements": [
+     "Video Consultation Service",
+     "Media Relay & SFU Controller",
+     "Consultation Orchestrator Microservice",
+     "Signaling & Session Manager"
+    ],
+    "sensitivity_points": [
+     "Dynamic WebRTC bitrate adaptation threshold when switching audio and video tracks."
+    ],
+    "tradeoffs": [
+     "Dropping video quality or frames preserves audio stream continuity over constrained networks."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Target cloud configuration defines only two regions (europe-west3 and us-central1). Because US patient data cannot be moved to the EU due to residency constraints, complete failure of us-central1 cannot be recovered within 1 hour without an identified secondary US failover region.",
+    "elements": [
+     "Geo-Routing Router",
+     "Regional Application Services",
+     "Data & Audit Tier",
+     "Cloud SQL for PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Absence of a secondary disaster recovery region within the US geography."
+    ],
+    "tradeoffs": [
+     "Strict regional data isolation limits cross-region failover to foreign regions during outages."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Interoperability Adapter isolates national integration concerns using an Apache Camel transformation pipeline engine and modular EU National Gateway Drivers. Adding a new EU national standard requires implementing a new driver within this adapter without altering core services.",
+    "elements": [
+     "Interoperability Adapter",
+     "EU National Gateway Driver",
+     "Transformation Pipeline Engine",
+     "FHIR Translation Facade"
+    ],
+    "sensitivity_points": [
+     "Modular driver interfaces and Apache Camel routing flexibility for country-specific payloads."
+    ],
+    "tradeoffs": [
+     "Centralizing integration drivers in an adapter isolates core clinical workflows from format churn."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Vertex AI deployment supports versioned inference endpoints and rollbacks. The Explainability & Sanitization Engine and Audit & Traceability Logger capture inputs and model versions asynchronously to immutable Cloud Storage WORM and BigQuery, satisfying medical device traceability requirements.",
+    "elements": [
+     "AI Symptom Checker",
+     "Inference Orchestrator",
+     "Audit & Traceability Logger",
+     "Cloud Storage WORM",
+     "BigQuery"
+    ],
+    "sensitivity_points": [
+     "Model version tagging in inference orchestration and immutability of audit logs."
+    ],
+    "tradeoffs": [
+     "Writing detailed inference metadata to WORM storage increases storage for full traceability."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Requests pass through OPA-based Consent and Policy Validators at both API Gateway and regional microservice levels. Cross-region access is denied unless an active consent grant exists in the local policy store, and access attempts are logged to Cloud SQL and WORM storage.",
+    "elements": [
+     "API Gateway",
+     "Consent and Policy Validator",
+     "Policy & Consent Engine",
+     "Open Policy Agent (OPA)",
+     "Consent & Context Enforcer Microservice",
+     "Cloud Storage WORM"
+    ],
+    "sensitivity_points": [
+     "Immediate authorization checks using locally cached OPA policy rules before data access."
+    ],
+    "tradeoffs": [
+     "Strict zero-trust policy evaluation slightly increases latency on cross-border record queries."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Consent revocation is updated in regional Cloud SQL instances and propagated cross-region via Pub/Sub to regional OPA sidecars. Revocations take effect immediately for authorization checks, and the Consent Audit Transformer persists verifiable trails to BigQuery.",
+    "elements": [
+     "Policy & Consent Engine",
+     "Consent Sync Worker",
+     "Consent Audit Transformer",
+     "Open Policy Agent (OPA)",
+     "BigQuery",
+     "Cloud SQL for PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Propagation latency of Pub/Sub consent events to local OPA cache instances."
+    ],
+    "tradeoffs": [
+     "Asynchronous consent synchronization ensures eventual cross-region consistency without distributed locking."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.875,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent and Policy Validator",
+     "Policy & Consent Engine",
+     "Data & Audit Tier",
+     "Cloud Storage WORM",
+     "Compliance Officers"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Geo-Routing Router",
+     "Regional Application Services",
+     "Data & Audit Tier",
+     "Cloud SQL for PostgreSQL"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker",
+     "Audit & Traceability Logger",
+     "Cloud Storage WORM",
+     "BigQuery"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Rural Patients",
+     "Video Consultation Service",
+     "Media Relay & SFU Controller"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Urban Patients",
+     "Rural Patients",
+     "Licensed Clinicians",
+     "Video Consultation Service",
+     "Consultation Orchestrator Microservice",
+     "Signaling & Session Manager",
+     "Media Relay & SFU Controller",
+     "Localization & UI Gateway"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Prescription Manager Microservice",
+     "Interoperability Adapter",
+     "EU National Gateway Driver",
+     "FHIR Translation Facade",
+     "Transformation Pipeline Engine",
+     "External Pharmacy Networks"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker",
+     "Symptom Intake API Controller",
+     "Inference Orchestrator"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Policy & Consent Engine",
+     "Consent and Policy Validator",
+     "Consent & Context Enforcer Microservice",
+     "Consent Sync Worker"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Geo-Routing Router",
+     "Regional Application Services",
+     "Data & Audit Tier",
+     "Policy & Consent Engine",
+     "Consent Sync Worker",
+     "Consent and Policy Validator"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Video Consultation Service",
+     "Consultation Orchestrator Microservice",
+     "Media Relay & SFU Controller"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Audit & Traceability Logger",
+     "Cloud Storage WORM",
+     "BigQuery"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Interoperability Adapter",
+     "FHIR Translation Facade",
+     "EU National Gateway Driver",
+     "Transformation Pipeline Engine",
+     "External Pharmacy Networks"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

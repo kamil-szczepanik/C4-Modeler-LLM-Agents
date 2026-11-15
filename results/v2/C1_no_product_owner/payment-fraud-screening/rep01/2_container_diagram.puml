@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalyst, "Fraud Analyst", "Fraud analyst responsible for investigating suspicious transactions and managing fraud cases using MFA and RBAC.")
+
+System_Ext(PaymentGatewayAcquirer, "Payment Gateway / Acquirer", "External payment gateway sending card-not-present payment authorizations for real-time scoring.")
+System_Ext(CardNetworksTokenizationVault, "Card Networks & Tokenization Vault", "External vault used for token resolution.")
+System_Ext(CoreBankingLedgerSystem, "Core-Banking / Ledger System", "External core-banking ledger system used for final transaction disposition.")
+System_Ext(ModelTrainingEnvironment, "Model Training Environment", "External environment for training machine learning models and providing model artifacts.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(APIGatewayRoutingLayer, "API Gateway & Routing Layer", "AWS API Gateway and ALB", "Handles ingress, tokenization hand-offs, and routes incoming requests.")
+    Container(RealTimeScoringService, "Real-Time Scoring Service", "Go container on Amazon ECS on EC2", "Processes synchronous authorizations and fraud scoring via gRPC.")
+    Container(CaseManagementBackend, "Case Management Backend", "Java Spring Boot container on Amazon ECS on Fargate", "Manages analyst review workflows and fraud cases.")
+    ContainerDb(DataAuditStores, "Data & Audit Stores", "Amazon DynamoDB with AWS KMS, DynamoDB Streams, and Amazon RDS PostgreSQL", "Provides tamper-evident audit logs, feature store, and case management storage.")
+    Container(MessagingEventing, "Messaging & Eventing", "Amazon SQS, SNS, and EventBridge", "Decouples real-time scoring from asynchronous auditing and case creation.")
+}
+
+Rel(PaymentGatewayAcquirer, APIGatewayRoutingLayer, "Ingests authorization requests over HTTPS", "HTTPS")
+Rel(APIGatewayRoutingLayer, RealTimeScoringService, "Forwards requests for low-latency evaluation", "gRPC")
+Rel(RealTimeScoringService, DataAuditStores, "Writes cryptographically hashed, immutable decision payloads and reads/writes features", "AWS KMS / DynamoDB API")
+Rel(RealTimeScoringService, MessagingEventing, "Asynchronously publishes review cases and audit events", "Amazon SQS / SNS")
+Rel(MessagingEventing, CaseManagementBackend, "Triggers analyst workflows for suspicious transactions", "Amazon SQS")
+Rel(CaseManagementBackend, DataAuditStores, "Persists case management and review data", "Amazon RDS PostgreSQL")
+Rel(FraudAnalyst, CaseManagementBackend, "Reviews and manages fraud cases", "HTTPS with MFA and RBAC")
+Rel(RealTimeScoringService, CardNetworksTokenizationVault, "Performs token resolution", "mTLS / HTTPS")
+Rel(RealTimeScoringService, CoreBankingLedgerSystem, "Sends transaction disposition", "HTTPS / REST")
+Rel(ModelTrainingEnvironment, RealTimeScoringService, "Ingests secure model artifacts", "AWS Signer / KMS cryptographic verification")
+
+@enduml

@@ -1,0 +1,350 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively met: 'Patient Management Component' handles registration, 'Scheduling Engine Component' manages clashes, 'Clinical Record Manager' and 'Audit Trail Interceptor' satisfy EMR needs, while 'Claim Engine' and 'Payment Processor Client' cover billing.",
+   "performance_efficiency": "Low-latency EMR retrieval (<1s P95) is supported by Protobuf-based gRPC, 'PgBouncer' connection pooling, and 'Redis Enterprise' caching. However, explicit read-path caching strategies for heavy clinical EMR queries are missing, creating potential bottlenecks under high load.",
+   "compatibility": "Interoperability is fully realized through 'FHIR Interoperability Broker', 'Transformation Engine' supporting HL7 FHIR R4/STU3, and 'External Connector Client'. External integrations with 'Enterprise Identity Provider (IdP)', 'Payment Gateway', and 'Insurance Payer APIs' are well-specified.",
+   "usability": "All defined actors (Doctor, Patient, Receptionist, Administrators) are represented, but they interact directly with 'API Gateway' without dedicated frontend presentation layers, web portals, or mobile UI containers suited to their specific operational workflows.",
+   "reliability": "Active-active 99.99% availability is supported by 'Infinispan Distributed Cache Grid', multi-region database clustering, and 'Resilience4j' circuit breakers. However, concrete long-term backup and cold-storage mechanisms to satisfy the 10-year data retention constraint are not detailed.",
+   "security": "Extensive controls enforce HIPAA/GDPR: 'Authentication Engine' provides WebAuthn/TOTP MFA, 'KMS Client Adapter' with Vault/AWS KMS provides envelope encryption, 'Policy Enforcement Component' evaluates ABAC, and 'Audit Trail Interceptor' ensures tamper-evident audit logging.",
+   "maintainability": "The architecture exhibits high modularity with clear bounded contexts across services ('EMR Core Service', 'Billing & Claims Service', etc.). Decoupled asynchronous integration is cleanly maintained via 'Apache Kafka' and well-defined gRPC contracts.",
+   "portability": "The architecture supports hybrid deployment (on-prem k8s and eu-central-1) via containerized microservices and Istio service mesh, though relying simultaneously on AWS KMS and Azure Health Data Services introduces minor multi-cloud configuration complexity."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 2,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Local JWKS caching at the API Gateway, gRPC transport, and PgBouncer connection pooling support low latency under 500 concurrent requests, though KMS envelope decryption on un-cached reads introduces minor overhead.",
+    "elements": [
+     "API Gateway",
+     "Auth Interceptor Plugin",
+     "Routing & Load Balancer Engine",
+     "EMR Core Service",
+     "EMR Facade / Controller",
+     "Policy Enforcement Component",
+     "Clinical Record Manager",
+     "KMS Client Adapter",
+     "PostgreSQL Database"
+    ],
+    "sensitivity_points": [
+     "Connection pool saturation under sudden burst read concurrency",
+     "Latency overhead introduced by envelope decryption via KMS"
+    ],
+    "tradeoffs": [
+     "Strict field-level encryption security versus sub-second read performance"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "justification": "While the broker contains Camel routing and Resilience4j circuit breakers, there is no architectural path or message queue shown connecting the FHIR Interoperability Broker to the EMR Core Service for ingesting results.",
+    "elements": [
+     "FHIR Interoperability Broker",
+     "FHIR API Route Controller",
+     "Transformation Engine",
+     "External Connector Client",
+     "EMR Core Service"
+    ],
+    "sensitivity_points": [
+     "Missing ingestion conduit between FHIR Broker and clinical record storage",
+     "Unbuffered peak loads exhausting broker memory without backpressure"
+    ],
+    "tradeoffs": [
+     "External decoupling versus direct ingestion pipeline into core clinical data stores"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "IAM sessions leverage Infinispan cross-region replication and multi-region PostgreSQL, but EMR Core and Billing databases lack explicit cross-region replication mechanisms to guarantee sub-minute failover without data loss across hybrid clouds.",
+    "elements": [
+     "Identity & Access Management Service",
+     "Session & Revocation Component",
+     "IAM Database Repository",
+     "Patient & Scheduling Service",
+     "External State Store",
+     "EMR Core Service",
+     "PostgreSQL Database"
+    ],
+    "sensitivity_points": [
+     "Hybrid cloud network latency across on-premises and eu-central-1 database replication",
+     "Consistency guarantees across active-active data stores during sudden partition"
+    ],
+    "tradeoffs": [
+     "Strict ACID consistency across hybrid regions versus zero data loss failover speed"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Idempotency keys on the Payment Processor Client, Kafka dead-letter queues, and immutable audit logs ensure safe retry semantics and prevent duplicate submissions, although database automatic failover specifics are omitted.",
+    "elements": [
+     "Billing & Claims Service",
+     "Billing API Controller",
+     "Claim Engine",
+     "Payment Processor Client",
+     "Billing Data Access Layer (DAL)",
+     "Claims Event Publisher",
+     "Apache Kafka"
+    ],
+    "sensitivity_points": [
+     "Idempotency token persistence across database restarts and retries",
+     "Kafka partition failover latency during active transactions"
+    ],
+    "tradeoffs": [
+     "Idempotent processing overhead versus transaction completion throughput"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The modular service architecture isolates insurance clearinghouse communication entirely inside the Claim Engine within the Billing & Claims Service, leaving the EMR Core Service completely unaffected.",
+    "elements": [
+     "Billing & Claims Service",
+     "Claim Engine",
+     "Insurance Payer APIs"
+    ],
+    "sensitivity_points": [
+     "Coupling of payer-specific formats inside Claim Engine domain logic"
+    ],
+    "tradeoffs": [
+     "Direct payer adapter logic within Claim Engine versus dedicated external gateway adapter"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Patient demographics and scheduling are encapsulated cleanly in the Patient & Scheduling Service; modifications are strictly bounded to Patient Management Component, Data Access Repository, and Event Publisher Component.",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Patient Management Component",
+     "Data Access Repository",
+     "Event Publisher Component"
+    ],
+    "sensitivity_points": [
+     "Schema migration overhead on Go pgx repositories without downtime"
+    ],
+    "tradeoffs": [
+     "Strong schema typing across components versus dynamic schema evolution"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Mandatory WebAuthn/TOTP MFA is enforced at the Keycloak Authentication Engine, token issuance rejects unauthenticated credentials, and failed login events are dispatched via persistent write-ahead logging.",
+    "elements": [
+     "Identity & Access Management Service",
+     "Authentication Engine",
+     "Token Issuance Service",
+     "Audit Event Dispatcher",
+     "IAM Database Repository",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Latency and availability of enterprise IdP and Keycloak MFA SPI",
+     "WAL queue throughput on the Audit Event Dispatcher under credential stuffing"
+    ],
+    "tradeoffs": [
+     "Strict multi-factor friction on every login versus user authentication speed"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Spring Security ABAC policy enforcement blocks unauthorized reads, and the Audit Trail Interceptor signs access events and streams them to Kafka. However, specific 10-year immutable archive storage is not modeled.",
+    "elements": [
+     "EMR Core Service",
+     "EMR Facade / Controller",
+     "Policy Enforcement Component",
+     "Clinical Record Manager",
+     "Audit Trail Interceptor",
+     "Apache Kafka"
+    ],
+    "sensitivity_points": [
+     "ABAC rule evaluation latency on high-frequency clinical read operations",
+     "Kafka downstream retention and immutable archive storage provisioning"
+    ],
+    "tradeoffs": [
+     "Cryptographic signing overhead per read operation versus audit log throughput"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Identity & Access Management Service",
+     "Authentication Engine",
+     "Audit Event Dispatcher",
+     "EMR Core Service",
+     "Policy Enforcement Component",
+     "Audit Trail Interceptor",
+     "KMS Client Adapter",
+     "Billing Data Access Layer (DAL)",
+     "FHIR Interoperability Broker",
+     "Audit & Compliance Interceptor"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Session & Revocation Component",
+     "IAM Database Repository",
+     "External State Store",
+     "Rate Limiting & Throttling Engine"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "PostgreSQL Database",
+     "IAM Database Repository",
+     "Billing Data Access Layer (DAL)"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Patient Management Component",
+     "Data Access Repository",
+     "Receptionist"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Scheduling Engine Component",
+     "External State Store"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Core Service",
+     "EMR Facade / Controller",
+     "Clinical Record Manager",
+     "Audit Trail Interceptor",
+     "PostgreSQL Database"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Service",
+     "Billing API Controller",
+     "Claim Engine",
+     "Payment Processor Client",
+     "Payment Gateway",
+     "Insurance Payer APIs"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Authentication Engine",
+     "Identity & Access Management Service",
+     "IAM Database Repository",
+     "KMS Client Adapter",
+     "PostgreSQL Database",
+     "Billing Data Access Layer (DAL)"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Session & Revocation Component",
+     "IAM Database Repository",
+     "External State Store"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "EMR Facade / Controller",
+     "PostgreSQL Database"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Interoperability Broker",
+     "FHIR API Route Controller",
+     "Transformation Engine",
+     "External Connector Client",
+     "External Lab / Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

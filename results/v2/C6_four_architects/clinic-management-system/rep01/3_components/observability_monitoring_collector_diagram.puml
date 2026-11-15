@@ -1,0 +1,32 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Observability & Monitoring Collector container
+
+Container_Boundary(observability_collector, "Observability & Monitoring Collector") {
+    Component(otlp_receiver, "OTLP Receiver & mTLS Terminator", "Go", "Ingests telemetry data via gRPC/OTLP over TLS.")
+    Component(data_redaction, "Data Redaction Processor", "Custom Go Component", "Ensures strict HIPAA/GDPR compliance via automated PHI/PII redaction.")
+    Component(trace_sampler, "Trace Sampler Processor", "Go", "Performs tail-based sampling and optimizes cross-region bandwidth.")
+    Component(metrics_aggregator, "Metrics Aggregator Component", "Prometheus / Go", "Aggregates metrics for the hybrid infrastructure.")
+    Component(audit_enforcer, "Audit & Compliance Enforcer", "Go", "Validates sanitization compliance and enforces audit rules.")
+    Component(prometheus_exporter, "Prometheus Remote-Write Exporter", "Go", "Forwards metrics using HTTP/Snappy.")
+    Component(loki_exporter, "Grafana Loki Exporter", "Go", "Streams sanitized logs via gRPC/OTLP.")
+    Component(otlp_exporter, "OTLP Storage Exporter", "Go", "Forwards sampled traces.")
+    Component(key_management, "Key Management Service", "HashiCorp Vault / AWS KMS", "Provides masking policies and keys.")
+    Component(audit_log_store, "Audit Log Store", "PostgreSQL Append-Only tables / AWS S3 Glacier", "Persists verification logs.")
+}
+
+System_Ext(upstream_containers, "Upstream Containers", "External upstream systems sending telemetry data")
+
+Rel(upstream_containers, otlp_receiver, "Ingests telemetry data", "gRPC/OTLP over TLS")
+Rel(otlp_receiver, data_redaction, "Passes telemetry payloads", "Internal Memory Call")
+Rel(otlp_receiver, trace_sampler, "Passes telemetry payloads", "Internal Memory Call")
+Rel(data_redaction, key_management, "Fetches masking policies and keys", "HTTPS/REST, mTLS")
+Rel(data_redaction, audit_enforcer, "Validates sanitization compliance", "Internal Memory Call")
+Rel(audit_enforcer, audit_log_store, "Persists verification logs", "PostgreSQL Wire Protocol over TLS")
+Rel(trace_sampler, otlp_exporter, "Forwards sampled traces", "Internal gRPC")
+Rel(metrics_aggregator, prometheus_exporter, "Forwards metrics", "HTTP/Snappy")
+Rel(data_redaction, loki_exporter, "Streams sanitized logs", "gRPC/OTLP")
+
+@enduml

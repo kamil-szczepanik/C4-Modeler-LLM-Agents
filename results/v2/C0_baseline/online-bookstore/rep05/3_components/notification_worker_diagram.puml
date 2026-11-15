@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Notification Worker container
+
+System_Ext(Amazon_EventBridge, "Amazon EventBridge", "Amazon EventBridge", "Publishes domain events to Amazon SQS.")
+System_Ext(Amazon_SQS, "Amazon SQS", "Amazon SQS (Dual Queues: Transactional & Marketing, with Dead Letter Queue)", "Ensures resilient asynchronous message decoupling with queue-level isolation and DLQ support.")
+System_Ext(Amazon_DynamoDB, "Amazon DynamoDB", "Amazon DynamoDB", "Offers low-latency access for real-time consent and preference validation.")
+System_Ext(AWS_Secrets_Manager, "AWS Secrets Manager", "AWS Secrets Manager", "Injects API keys securely at container startup without environment variables.")
+System_Ext(Email_Notification_Service, "Email/Notification Service", "External REST API", "External service that receives rendered notifications.")
+
+Container_Boundary(Notification_Worker_Container, "Notification Worker") {
+    Component(Event_Consumer_Component, "Event Consumer Component", "Node.js with TypeScript", "Polls events asynchronously from dual SQS queues.")
+    Component(Routing_Prioritization_Component, "Routing & Prioritization Component", "Node.js with TypeScript", "Inspects and routes event payloads based on priority.")
+    Component(Preference_Consent_Validator_Component, "Preference & Consent Validator Component", "Node.js with TypeScript", "Queries user opt-in and GDPR flags from Amazon DynamoDB.")
+    Component(Localization_Template_Engine_Component, "Localization & Template Engine Component", "Node.js with TypeScript", "Renders localized multi-currency content.")
+    Component(Dispatcher_Component, "Dispatcher Component", "Node.js with TypeScript", "Sends notifications via exponential backoff with circuit breaking.")
+}
+
+Rel(Amazon_EventBridge, Amazon_SQS, "Publishes domain events", "HTTPS/SQS")
+Rel(Event_Consumer_Component, Amazon_SQS, "Polls events asynchronously", "HTTPS/SQS")
+Rel(Event_Consumer_Component, Routing_Prioritization_Component, "Passes events", "In-memory")
+Rel(Routing_Prioritization_Component, Preference_Consent_Validator_Component, "Inspects and routes event payloads", "In-memory typed interface")
+Rel(Preference_Consent_Validator_Component, Amazon_DynamoDB, "Queries user opt-in and GDPR flags", "HTTPS/TLS")
+Rel(Preference_Consent_Validator_Component, Localization_Template_Engine_Component, "Passes validated user data", "In-memory")
+Rel(Localization_Template_Engine_Component, Email_Notification_Service, "Renders localized multi-currency content", "In-memory")
+Rel(Dispatcher_Component, Email_Notification_Service, "Sends notifications via exponential backoff with circuit breaking", "REST/TLS")
+@enduml

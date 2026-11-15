@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Search Service container
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway routing requests")
+System_Ext(redis, "Redis", "In-memory cache for frequent queries")
+System_Ext(elasticsearch, "Elasticsearch", "Document store for catalog searches")
+System_Ext(rabbitmq, "RabbitMQ", "Message broker for domain events")
+
+Container_Boundary(search_service, "Search Service") {
+    Component(SearchController, "SearchController", "FastAPI router", "FastAPI router handling incoming requests and input validation.")
+    Component(QueryBuilder, "QueryBuilder", "Python module", "Python module translating filters into Elasticsearch Query DSL.")
+    Component(SearchRepository, "SearchRepository", "elasticsearch-py", "Elasticsearch client executing index queries.")
+    Component(IndexSyncConsumer, "IndexSyncConsumer", "RabbitMQ consumer", "RabbitMQ consumer processing asynchronous domain events.")
+    Component(SearchCacheManager, "SearchCacheManager", "redis-py", "Redis client managing search result caching.")
+    Component(CircuitBreaker, "CircuitBreaker", "tenacity", "Resilience module handling failovers to fallback cache.")
+}
+
+Rel(api_gateway, SearchController, "Routes search requests", "gRPC over mTLS")
+Rel(SearchController, SearchCacheManager, "Checks/sets search cache", "In-memory / TCP")
+Rel(SearchCacheManager, redis, "Reads/writes cached results", "RESP over TCP")
+Rel(QueryBuilder, SearchRepository, "Translates search filters", "Python Function")
+Rel(SearchRepository, elasticsearch, "Executes queries", "HTTP/REST over TCP")
+Rel(rabbitmq, IndexSyncConsumer, "Pushes catalog change events", "AMQP")
+
+@enduml

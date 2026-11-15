@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening
+
+Person(FraudAnalystsAndComplianceOfficers, "Fraud Analysts and Compliance Officers", "Human analysts who review cases and ensure compliance.")
+Person(AuditorsAndRegulators, "Auditors and Regulators", "External entities that review compliance reports and audit logs.")
+
+System_Ext(PaymentGatewayMerchants, "Payment Gateway / Merchants", "API clients that send card-not-present payment authorization requests.")
+System_Ext(AWSS3WithObjectLock, "AWS S3 with Object Lock", "Provides immutable 7-year storage for regulatory audit compliance.")
+
+System_Boundary(RealTimePaymentFraudScreening, "Real-Time Payment Fraud Screening") {
+    Container(AWSPayloadGateway, "AWS API Gateway", "AWS API Gateway", "Handles ingress traffic and TLS termination.")
+    Container(FraudScoringEngine, "Fraud Scoring Engine", "Go / Rust", "Evaluates transactions in real-time to detect fraud.")
+    Container(CaseManagementRulesService, "Case Management & Rules Service", "Node.js / Go", "Provides case management and rules tools for fraud analysts.")
+    Container(AuditEvidenceWorker, "Audit & Evidence Worker", "Go", "Consumes audit events and writes them to immutable storage.")
+    ContainerDb(AWSElastiCacheRedis, "AWS ElastiCache (Redis)", "Redis", "Provides sub-millisecond feature lookup for real-time scoring.")
+    Container(AmazonSQS, "Amazon SQS", "Amazon SQS", "Buffers asynchronous audit logging events.")
+}
+
+Rel(PaymentGatewayMerchants, AWSPayloadGateway, "Sends payment authorization requests", "HTTPS/JSON")
+Rel(AWSPayloadGateway, FraudScoringEngine, "Routes payment requests for scoring", "gRPC")
+Rel(FraudScoringEngine, AWSElastiCacheRedis, "Queries real-time features", "Redis Protocol")
+Rel(FraudScoringEngine, AmazonSQS, "Publishes decision events", "AWS SDK")
+Rel(AmazonSQS, AuditEvidenceWorker, "Delivers asynchronous audit events", "SQS Poll")
+Rel(AuditEvidenceWorker, AWSS3WithObjectLock, "Writes tamper-evident audit logs", "AWS SDK")
+Rel(FraudAnalystsAndComplianceOfficers, CaseManagementRulesService, "Accesses case management tools", "HTTPS")
+
+@enduml

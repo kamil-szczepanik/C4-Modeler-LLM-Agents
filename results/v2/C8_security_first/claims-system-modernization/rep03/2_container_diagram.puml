@@ -1,0 +1,39 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Insurance Claims Modernization Platform
+
+Person(CustomersBrokers, "Customers & Brokers", "External actors who submit online claims and interact with the platform.")
+Person(ClaimsAdjusters, "Claims Adjusters", "Internal actors who process and manage insurance claims.")
+
+System_Ext(LegacyMainframeSystem, "Legacy Mainframe System", "On-Premises COBOL/DB2 System of Record representing the 30-year-old claims system.")
+System_Ext(AzureActiveDirectoryEntraID, "Azure Active Directory / Entra ID", "Identity Provider for Single Sign-On and MFA.")
+System_Ext(AzureAPIGatewaywithRateLimiter, "Azure API Gateway with Rate Limiter", "Hybrid Boundary Protector isolating mainframe dependencies and handling rate limiting.")
+
+System_Boundary(InsuranceClaimsModernizationPlatform, "Insurance Claims Modernization Platform") {
+    Container(CustomerPortalAdjusterWebApps, "Customer Portal & Adjuster Web Apps", "Azure Static Web Apps, Single Page App", "Frontends providing online claim submission and adjuster workflows.")
+    Container(ClaimManagementAPI, "Claim Management API", "Azure Container Apps, .NET 8", "Backend microservice handling core claim management logic.")
+    Container(ClaimRouterAntiCorruptionLayerACL, "Claim Router / Anti-Corruption Layer (ACL)", "Azure Container Apps, .NET 8", "Isolates modern components from mainframe latency and batch constraints.")
+    Container(AuditReconciliationService, "Audit & Reconciliation Service", "Azure Container Apps, .NET 8", "Handles audit logging and reconciliation with internal data stores.")
+    Container(AzureServiceBus, "Azure Service Bus", "Azure Service Bus", "Messaging platform for decoupled, reliable eventing during mainframe batch windows.")
+    Container(AzureAppConfiguration, "Azure App Configuration", "Azure App Configuration", "Centralized configuration management.")
+    ContainerDb(AzureSQLDatabase, "Azure SQL Database", "Azure SQL Database", "Modern platform data store.")
+    Container(AzureKeyVault, "Azure Key Vault", "Azure Key Vault", "Secret management via managed identities.")
+}
+
+Rel(CustomersBrokers, CustomerPortalAdjusterWebApps, "Accesses portal and web apps to submit claims", "HTTPS/OIDC with MFA")
+Rel(ClaimsAdjusters, CustomerPortalAdjusterWebApps, "Accesses web apps for adjuster workflows", "HTTPS/OIDC with MFA")
+Rel(CustomerPortalAdjusterWebApps, AzureAPIGatewaywithRateLimiter, "Routes frontend requests to backend services", "HTTPS REST APIs")
+Rel(AzureAPIGatewaywithRateLimiter, ClaimManagementAPI, "Forwards API requests to claim management", "HTTPS REST APIs")
+Rel(AzureAPIGatewaywithRateLimiter, ClaimRouterAntiCorruptionLayerACL, "Routes legacy-bound requests through ACL", "HTTPS REST APIs")
+Rel(ClaimManagementAPI, AzureServiceBus, "Publishes asynchronous messages", "AMQP over TLS")
+Rel(ClaimRouterAntiCorruptionLayerACL, LegacyMainframeSystem, "Communicates with mainframe enforcing rate limiting and circuit breakers", "mTLS over dedicated ExpressRoute / IPsec VPN tunnel")
+Rel(AuditReconciliationService, AzureSQLDatabase, "Persists audit and reconciliation data", "Entity Framework Core")
+Rel(ClaimManagementAPI, AzureSQLDatabase, "Reads and writes claim data", "Entity Framework Core")
+Rel(CustomerPortalAdjusterWebApps, AzureActiveDirectoryEntraID, "Authenticates users", "OIDC / OAuth 2.0")
+Rel(ClaimManagementAPI, AzureKeyVault, "Retrieves secrets and configuration", "Managed Identities over HTTPS")
+Rel(ClaimRouterAntiCorruptionLayerACL, AzureKeyVault, "Retrieves secrets and configuration", "Managed Identities over HTTPS")
+Rel(AuditReconciliationService, AzureKeyVault, "Retrieves secrets and configuration", "Managed Identities over HTTPS")
+
+@enduml

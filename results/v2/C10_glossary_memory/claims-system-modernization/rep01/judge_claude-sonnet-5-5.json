@@ -1,0 +1,309 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 2,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.25,
+  "justifications": {
+   "functional_suitability": "Customer Portal covers submission (R-01), Web Application covers adjusters (R-02), and Feature Flag / Migration Router supports per-claim-type migration (R-03). Gaps: no explicit claim-type routing granularity, and no adjuster workflow components. Web Application and Customer Portal overlap in responsibility.",
+   "performance_efficiency": "Asynchronous ESB/MQ decoupling hints at hiding the 5 s mainframe latency, but no cache, read model, or replica serves the under-2 s adjuster screens. Cosmos DB access is mentioned, but scaling and data-access mechanisms are not tied to R-05. Container Apps scaling is not stated.",
+   "compatibility": "Integration Gateway / ACL with Message Translator (COBOL copybooks) and Mainframe Adapter over ESB/MQ meets the one-small-change-per-quarter limit. OIDC with Azure AD, an idempotent Payment Gateway, and Event Grid notifications are covered. Batch window coexistence is not addressed.",
+   "usability": "Customers and brokers get Customer Portal with Broker Dashboard Service; adjusters get Web Application. Responsive Next.js interfaces are mentioned. Gaps: no adjuster-specific UI components, and customers are routed to both Web Application and Customer Portal, which is confusing.",
+   "reliability": "Reconciliation & Sync Service, the Audit Ledger change feed, asynchronous ESB/MQ, and payment idempotency tokens support R-04. Feature Flag / Migration Router enables rollback (R-06). Gaps: no explicit deduplication or outbox, no retry/dead-letter, no HA/multi-region, and no stated rollback data resync.",
+   "security": "Azure AD OIDC SSO in Web Application and Customer Portal meets R-07, with RBAC. mTLS, TLS 1.3, Key Vault CMK, WORM Document Repository, and Audit Ledger give integrity and accountability. Gaps: no token validation at Claim Processing API and no API gateway or WAF.",
+   "maintainability": "Clear modular decomposition: Claim Processing API, Integration Gateway / ACL, Feature Flag / Migration Router, and Document & Audit Store. The ACL isolates the legacy system and the flag router supports per-type switching. Weaknesses: duplicate Web Application and Customer Portal, and the L3 Claim Processing API view wrongly lists external systems and containers as components.",
+   "portability": "Azure Container Apps containers and the hybrid ESB/MQ link fit the Azure West Europe plus on-prem target. Heavy use of Azure-specific services (Cosmos DB, Event Grid, App Configuration, Service Bus) limits replaceability. The team's limited cloud experience is not mitigated, and there are no IaC or deployment views."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 3,
+   "MOD-01": 3,
+   "MOD-02": 4,
+   "PERF-01": 2,
+   "PERF-02": 3,
+   "SEC-01": 2,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.46875,
+  "by_quality_attribute": {
+   "Performance": 2.5,
+   "Availability": 3.0,
+   "Modifiability": 3.5,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "elements": [
+     "Web Application",
+     "Claim Processing API",
+     "Integration Gateway / ACL",
+     "Document & Audit Store"
+    ],
+    "sensitivity_points": [
+     "No read cache or read model for mainframe-resident data",
+     "Mainframe link is async-only ESB/MQ"
+    ],
+    "tradeoffs": [
+     "Async messaging decouples but lacks synchronous reads within 2 s"
+    ],
+    "justification": "No cache, read model or replicated projection is defined for mainframe data. The ACL link is async-only, so a 5 s mainframe answer would breach the 2 s target. Cosmos DB could serve as a read store, but that is not described."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Customer Portal",
+     "Claim Processing API",
+     "Enterprise Service Bus (ESB/MQ)",
+     "Integration Gateway / ACL",
+     "Azure Container Apps"
+    ],
+    "sensitivity_points": [
+     "Autoscaling rules not specified",
+     "ESB queue depth and drain rate at the mainframe"
+    ],
+    "tradeoffs": [
+     "Queue buffering protects the mainframe but delays legacy sync"
+    ],
+    "justification": "ESB/MQ decoupling and Container Apps can absorb a 5x peak, and the mainframe is shielded by async queuing. However, no explicit scaling, throttling or batch-window-aware draining is described, so the risk is unaddressed."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "elements": [
+     "Claim Processing API",
+     "Enterprise Service Bus (ESB/MQ)",
+     "Integration Gateway / ACL",
+     "Document & Audit Store"
+    ],
+    "sensitivity_points": [
+     "Submission persisted before ESB publish is not explicit",
+     "Queue durability and retention during the outage"
+    ],
+    "tradeoffs": [
+     "Async forwarding gives availability but eventual consistency with the mainframe"
+    ],
+    "justification": "Async ESB/MQ and Cosmos persistence suggest submissions can continue and be forwarded later. No outbox, durable queue or replay mechanism is explicit, so zero loss is plausible but unproven."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Reconciliation & Sync Service",
+     "Audit Ledger",
+     "Claim Processing API",
+     "Integration Gateway / ACL"
+    ],
+    "sensitivity_points": [
+     "No idempotency or deduplication on the mainframe sync path",
+     "Reconciliation algorithm unspecified"
+    ],
+    "tradeoffs": [
+     "Reconciliation adds consistency at the cost of extra latency and complexity"
+    ],
+    "justification": "A Reconciliation & Sync Service and an audit ledger with change feed address partial failures. However, idempotent consumers, dedup keys and the correlation logic needed to prevent double processing are not described, only payment idempotency tokens."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Feature Flag / Migration Router",
+     "Integration Gateway / ACL",
+     "Claim Processing API",
+     "Message Translator"
+    ],
+    "sensitivity_points": [
+     "Per-claim-type flag granularity",
+     "Message Translator changes per claim type"
+    ],
+    "tradeoffs": [
+     "Flag routing enables fast switch-back but dual-write complicates data consistency"
+    ],
+    "justification": "The migration router with App Configuration flags and the ACL support per-type migration and quick switch-back. Data re-sync on switch-back and the limit of one mainframe interface change are not addressed explicitly."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "elements": [
+     "Web Application",
+     "Customer Portal",
+     "Claim Processing API",
+     "Integration Gateway / ACL",
+     "Document & Audit Store"
+    ],
+    "sensitivity_points": [
+     "UIs depend only on the Claim Processing API contract",
+     "Cosmos DB must become the system of record"
+    ],
+    "tradeoffs": [
+     "The ACL isolates the UI from legacy, but adds a translation layer to remove later"
+    ],
+    "justification": "UIs talk only to the Claim Processing API, never to the mainframe, so switching it off affects the ACL and router, not the front ends. Data migration to system of record is not detailed."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "elements": [
+     "Customer Portal",
+     "Claim Processing API",
+     "Azure AD (Entra ID)",
+     "Audit Ledger"
+    ],
+    "sensitivity_points": [
+     "No broker-to-customer ownership authorization in the API",
+     "Mainframe-side authorization is unaddressed"
+    ],
+    "tradeoffs": [
+     "Central RBAC is simple but is not fine-grained data-level access control"
+    ],
+    "justification": "Authentication via Entra ID and an audit ledger exist, but no component enforces per-broker data-level authorization or records denials. Enforcement in the mainframe is not covered, so the response measure is not achieved."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Azure AD (Entra ID)",
+     "Web Application",
+     "Customer Portal",
+     "Integration Gateway / ACL",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Token lifetime and session revocation settings",
+     "Mainframe user identity mapping to AD is unspecified"
+    ],
+    "tradeoffs": [
+     "Short-lived tokens improve revocation but increase re-authentication load"
+    ],
+    "justification": "Entra ID SSO means disabling the account blocks the new platform once tokens expire. Mainframe access via a service account through the ACL is not tied to AD, and token lifetime or revocation is unspecified, leaving the 15-minute target unproven."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "none",
+   "R-06": "partial",
+   "R-07": "full"
+  },
+  "coverage": 0.5454545454545454,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Legacy Mainframe",
+     "Integration Gateway / ACL"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Integration Gateway / ACL",
+     "Message Translator"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Azure Container Apps"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer Portal",
+     "Claim Submission Controller",
+     "Claim Processing API"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Web Application",
+     "Claim Processing API"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Feature Flag / Migration Router",
+     "Feature Flag Evaluator",
+     "Migration & Routing Client Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Reconciliation & Sync Service",
+     "Audit Ledger",
+     "Enterprise Service Bus (ESB/MQ)"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "none",
+    "elements": []
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Feature Flag / Migration Router",
+     "Feature Flag Evaluator"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Azure AD (Entra ID)",
+     "Authentication Client",
+     "Web Application",
+     "Customer Portal"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

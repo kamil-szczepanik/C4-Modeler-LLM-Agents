@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Fraud Scoring Engine container
+
+System_Ext(aws_api_gateway_alb, "AWS API Gateway / ALB", "External System/Load Balancer")
+System_Ext(amazon_elasticache_redis, "Amazon ElastiCache Redis", "In-memory data store for velocity features")
+System_Ext(amazon_aurora_postgresql, "Amazon Aurora PostgreSQL", "Relational database for reference data")
+System_Ext(amazon_sqs_sns, "Amazon SQS / SNS", "Message queue for audit payloads")
+
+Container_Boundary(fraud_scoring_engine, "Fraud Scoring Engine") {
+    Component(api_handler_component, "API Handler Component", "Tonic gRPC framework, Rust", "Ingests authorization requests via gRPC over HTTP/2.")
+    Component(scoring_engine_core_component, "Scoring Engine Core Component", "Native Rust async tasks", "Executes scoring logic via in-memory function calls.")
+    Component(feature_aggregator_component, "Feature Aggregator Component", "Tokio async I/O with Redis-rs, Rust", "Fetches velocity features concurrently within the latency budget.")
+    Component(data_access_component, "Data Access Component", "Rust, PostgreSQL Wire Protocol", "Queries reference data from the database.")
+    Component(audit_logger_component, "Audit Logger Component", "AWS SDK for Rust, aws-sdk-sqs", "Dispatches tamper-evident payloads to SQS.")
+}
+
+Rel(aws_api_gateway_alb, api_handler_component, "Ingests authorization requests", "gRPC over HTTP/2")
+Rel(api_handler_component, scoring_engine_core_component, "Executes scoring logic", "In-memory function call")
+Rel(scoring_engine_core_component, feature_aggregator_component, "Requests velocity features", "Async call")
+Rel(scoring_engine_core_component, data_access_component, "Requests reference data", "Async call")
+Rel(scoring_engine_core_component, audit_logger_component, "Sends audit events", "Async call")
+Rel(feature_aggregator_component, amazon_elasticache_redis, "Fetches velocity features", "Redis Protocol via TLS")
+Rel(data_access_component, amazon_aurora_postgresql, "Queries reference data", "PostgreSQL Wire Protocol")
+Rel(audit_logger_component, amazon_sqs_sns, "Dispatches tamper-evident payloads", "AWS SDK / SQS API")
+
+@enduml

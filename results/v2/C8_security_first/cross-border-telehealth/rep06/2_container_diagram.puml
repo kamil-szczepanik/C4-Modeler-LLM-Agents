@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Cross-Border Telehealth Platform
+
+Person(Patients_EU_and_US, "Patients (EU and US)", "Patients located in the EU and US utilizing video consultations, e-prescriptions, and the AI symptom checker.")
+Person(Licensed_Clinicians, "Licensed Clinicians", "Clinicians who conduct video consultations and issue e-prescriptions.")
+
+System_Ext(External_Identity_Providers_OAuth2_OIDC, "External Identity Providers (OAuth2/OIDC)", "External identity providers managing authentication.")
+System_Ext(National_e_Prescription_Gateways___US_Pharmacy_Networks_HL7_FHIR, "National e-Prescription Gateways & US Pharmacy Networks (HL7 FHIR)", "External national gateways and pharmacy networks for routing prescriptions.")
+
+System_Boundary(Cross_Border_Telehealth_Platform, "Cross-Border Telehealth Platform") {
+    Container(API_Gateway___BFF, "API Gateway & BFF", "Go, Envoy Proxy", "Routes internal traffic, enforces token validation and purpose-based consent.")
+    Container(Video_Consultation_Container, "Video Consultation Container", "WebRTC SFU, MediaSoup", "Handles video consultation media streams with adaptive bitrate down to 150 kbit/s.")
+    Container(E_Prescription_Integration_Container, "E-Prescription Integration Container", "Node.js, Express", "Manages e-prescription integration with external networks and national gateways.")
+    Container(AI_Symptom_Checker_Container, "AI Symptom Checker Container", "Python, FastAPI", "Processes AI symptom checks and logs inputs, outputs, and signed model versions.")
+    ContainerDb(Cloud_SQL_PostgreSQL, "Cloud SQL (PostgreSQL)", "Cloud SQL, PostgreSQL", "Relational database for structured application data.")
+    ContainerDb(Cloud_Storage_WORM_enabled, "Cloud Storage (WORM enabled)", "Google Cloud Storage", "Regional secure storage with WORM policies for logs, signed models, and compliance data.")
+}
+
+Rel(Patients_EU_and_US, API_Gateway___BFF, "Connects to API Gateway for telehealth services", "HTTPS / WebSocket over TLS 1.3")
+Rel(Licensed_Clinicians, API_Gateway___BFF, "Connects to API Gateway for consultations and management", "HTTPS / WebSocket over TLS 1.3")
+Rel(Patients_EU_and_US, Video_Consultation_Container, "Streams video consultations via WebRTC", "DTLS-SRTP")
+Rel(Licensed_Clinicians, Video_Consultation_Container, "Streams video consultations via WebRTC", "DTLS-SRTP")
+Rel(API_Gateway___BFF, E_Prescription_Integration_Container, "Routes e-prescription requests", "mTLS over gRPC/REST")
+Rel(API_Gateway___BFF, AI_Symptom_Checker_Container, "Routes symptom checking requests", "mTLS over gRPC/REST")
+Rel(API_Gateway___BFF, Video_Consultation_Container, "Routes consultation management requests", "mTLS over gRPC/REST")
+Rel(E_Prescription_Integration_Container, National_e_Prescription_Gateways___US_Pharmacy_Networks_HL7_FHIR, "Connects to pharmacy networks and national gateways", "HL7 FHIR / REST")
+Rel(AI_Symptom_Checker_Container, Cloud_Storage_WORM_enabled, "Logs inputs, outputs, and signed model versions", "Cloud Storage APIs")
+Rel(E_Prescription_Integration_Container, Cloud_SQL_PostgreSQL, "Persists prescription data", "PostgreSQL Protocol")
+Rel(AI_Symptom_Checker_Container, Cloud_SQL_PostgreSQL, "Persists symptom check data", "PostgreSQL Protocol")
+Rel(API_Gateway___BFF, External_Identity_Providers_OAuth2_OIDC, "Validates tokens and authenticates users", "OAuth2 / OIDC")
+
+@enduml

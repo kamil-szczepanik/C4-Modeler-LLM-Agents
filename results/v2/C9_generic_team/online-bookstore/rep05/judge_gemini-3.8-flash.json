@@ -1,0 +1,326 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "All core functional requirements are addressed by Catalog & Search Container, Checkout & Order Container, Recommendation Container, and Customer & Reviews Container. Multi-currency and shipping integrations are included, though shopping cart state management prior to checkout lacks explicit architectural detail.",
+   "performance_efficiency": "Performance and scalability (1M MAU) are well-supported via CDN caching, OpenSearch for sub-100ms catalog queries, ElastiCache/Redis read-through caching in Search and Recommendation containers, and asynchronous job processing through AWS SQS/SNS.",
+   "compatibility": "Interoperability is thoroughly defined for all external systems, including Third-Party Shipping Provider, Payment Gateway, Tax Calculation Service, and Currency Exchange Rate Service using clear protocols (HTTPS, gRPC/REST over TLS) and resilient integration handlers.",
+   "usability": "While 'Customers' are identified as accessing the platform via web browsers and mobile apps, client applications or user-interface tiers are omitted as explicit containers, leaving interface presentation and client delivery mechanisms partially unspecified.",
+   "reliability": "Achieving 99.95% availability is supported by circuit breaking via Envoy and Resilience4j, DLQ Triage and Replay Manager, and Idempotency and State Manager. However, concrete cross-region database replication mechanisms across the three AWS regions are omitted.",
+   "security": "OWASP Top-10 mitigations, TLS encryption, JWT validation via Security & Authentication Filter, and Secrets Management Service are well defined. GDPR/CCPA is addressed via anonymization in Customer Profile Domain, though fine-grained authorization policies are sparsely detailed.",
+   "maintainability": "The system exhibits clean modular decomposition across domain containers with loose coupling via asynchronous messaging. However, minor C4 modeling inconsistencies exist where parent containers and external systems are duplicated as components inside container diagrams.",
+   "portability": "Deploying containerized workloads onto AWS ECS/EKS matches the specified target regions. While adaptable across AWS environments, architectural coupling to AWS-native services (SQS, Secrets Manager, DynamoDB) creates minor vendor lock-in if infrastructure portability outside AWS is required."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.0,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CDN edge caching, Redis query caching, and dedicated OpenSearch indexing offload traffic efficiently. However, dynamic auto-scaling rules and database read-replica scaling under 10x traffic spikes are not explicitly detailed.",
+    "elements": [
+     "CDN",
+     "Web Application/API Gateway",
+     "Catalog & Search Container",
+     "Query Caching Manager",
+     "Product Index Adapter"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios at CDN and Redis under high concurrency"
+    ],
+    "tradeoffs": [
+     "Aggressive caching improves throughput but risks serving stale catalogue data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendation recomputation is decoupled through CQRS, background workers, and asynchronous queues. Recommendations are precomputed and cached in Redis, preventing background processing from impacting live catalogue browsing performance.",
+    "elements": [
+     "Recommendation Container",
+     "Recommendation Service",
+     "Cache Manager",
+     "Background Worker / Job Processing Container",
+     "Catalog & Search Container"
+    ],
+    "sensitivity_points": [
+     "Queue consumer concurrency and resource isolation for background jobs"
+    ],
+    "tradeoffs": [
+     "Precomputing recommendations trades real-time accuracy for minimal browsing latency impact"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The architecture incorporates message queues, circuit breakers, retries, and dead-letter queues via the background worker to handle shipping failures asynchronously. However, Checkout Level 3 depicts a direct synchronous HTTPS call to shipping.",
+    "elements": [
+     "Checkout & Order Container",
+     "Background Worker / Job Processing Container",
+     "External Integration Handler",
+     "DLQ Triage and Replay Manager",
+     "Third-Party Shipping Provider"
+    ],
+    "sensitivity_points": [
+     "Queue persistence reliability and circuit breaker timeout thresholds"
+    ],
+    "tradeoffs": [
+     "Asynchronous fulfillment improves checkout availability but delays immediate tracking confirmation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "While target regions are listed, the architecture provides no mechanisms for multi-region database replication, global traffic routing failover, cross-region state synchronization, or preventing data loss for PostgreSQL orders during a regional outage.",
+    "elements": [
+     "Web Application/API Gateway",
+     "Checkout & Order Container",
+     "Dedicated Data Store"
+    ],
+    "sensitivity_points": [
+     "Cross-region database replication latency and DNS failover propagation time"
+    ],
+    "tradeoffs": [
+     "Strict cross-region data consistency prevents data loss but significantly increases write latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Currency conversion is encapsulated behind an external Currency Exchange Rate Service and cached in Redis. Adding a currency requires configuration and exchange service updates, with minimal adjustments to checkout and pricing components.",
+    "elements": [
+     "Currency Exchange Rate Service",
+     "Checkout & Order Container",
+     "Query Caching Manager"
+    ],
+    "sensitivity_points": [
+     "Currency exchange rate precision and formatting configurability"
+    ],
+    "tradeoffs": [
+     "Externalizing exchange rates eases currency additions but introduces third-party dependency risks"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Recommendation Container enforces strict microservice boundaries using Clean Architecture and CQRS. Algorithm replacements are entirely confined to internal service logic and data repositories without altering external contracts or upstream containers.",
+    "elements": [
+     "Recommendation Container",
+     "Recommendation Service",
+     "Cache Manager",
+     "Data Repository"
+    ],
+    "sensitivity_points": [
+     "Stability of internal CQRS interfaces during algorithmic changes"
+    ],
+    "tradeoffs": [
+     "Modular Clean Architecture increases component boilerplate but isolates algorithmic evolution"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Security filtering at Envoy, Content Security Policy enforcement at the gateway, and dedicated data adapters mitigate OWASP Top-10 risks. However, a dedicated Web Application Firewall (AWS WAF) and comprehensive audit logging are not fully articulated.",
+    "elements": [
+     "Web Application/API Gateway",
+     "Security & Authentication Filter",
+     "Envoy Proxy Router",
+     "Customer & Reviews Container",
+     "Product Index Adapter"
+    ],
+    "sensitivity_points": [
+     "Rigorousness of input sanitization filters and parameterization in adapters"
+    ],
+    "tradeoffs": [
+     "Comprehensive deep-packet payload inspection increases ingress request latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "The Customer & Reviews Container specifically incorporates background Saga workflows for data retention and anonymization across services. However, coordinating distributed deletions across all independent container databases within 30 days lacks granular execution details.",
+    "elements": [
+     "Customer & Reviews Container",
+     "Customer Profile Domain",
+     "Background Worker Container",
+     "Background Worker / Job Processing Container"
+    ],
+    "sensitivity_points": [
+     "Orchestration reliability of distributed Saga workflows across disparate data stores"
+    ],
+    "tradeoffs": [
+     "Asynchronous deletion Sagas simplify compliance orchestration but require complex compensation handling"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Customer & Reviews Container",
+     "Customer Profile Domain",
+     "Background Worker Container"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Currency Exchange Rate Service",
+     "Checkout & Order Container",
+     "Query Caching Manager"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Third-Party Shipping Provider",
+     "Checkout & Order Container",
+     "Background Worker / Job Processing Container",
+     "External Integration Handler"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Container",
+     "Search and Browse API Controller",
+     "Search Service Engine",
+     "Query Caching Manager",
+     "Product Index Adapter"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Checkout & Order Container",
+     "Payment Gateway",
+     "External Payment Gateway",
+     "Tax Calculation Service",
+     "Dedicated Data Store"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Customer & Reviews Container",
+     "Reviews Domain"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Container",
+     "Recommendation Controller",
+     "Recommendation Service",
+     "Cache Manager"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Online Bookstore",
+     "Web Application/API Gateway",
+     "Catalog & Search Container",
+     "Checkout & Order Container",
+     "Recommendation Container",
+     "Background Worker / Job Processing Container"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "CDN",
+     "Query Caching Manager",
+     "Cache Manager",
+     "Product Index Adapter"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Online Bookstore",
+     "Web Application/API Gateway",
+     "Data Repository",
+     "External Integration Handler",
+     "DLQ Triage and Replay Manager"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Secret Management Service",
+     "Web Application/API Gateway",
+     "Security & Authentication Filter",
+     "Secrets and Credentials Manager",
+     "API Gateway"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

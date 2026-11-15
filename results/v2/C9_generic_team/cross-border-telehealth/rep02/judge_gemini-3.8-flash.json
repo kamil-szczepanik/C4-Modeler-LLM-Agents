@@ -1,0 +1,344 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "E-prescriptions and AI symptom checks are supported by Anti-Corruption Layer (ACL) and Inference Service. However, R-04 (consent per purpose) lacks a dedicated internal management mechanism, delegating to an external IdP. Video consultation handling is also delegated to an external Edge / Adaptive Media Relay without dedicated internal consultation services.",
+   "performance_efficiency": "Efficiency is supported by Regional Distributed Cache, Vault gRPC Handler with Protocol Buffers, and Asynchronous Task Worker. The Edge / Adaptive Media Relay handles stream throttling, though specific bitrate adaptation mechanisms to handle video below 300 kbit/s are not elaborated internally.",
+   "compatibility": "Compatibility is thoroughly addressed. The Anti-Corruption Layer (ACL) features a Pluggable Regional Adapter that directly accommodates US HL7 FHIR and divergent EU national standards, interfacing cleanly with external EU/US Pharmacies and AI Model Registry via gRPC.",
+   "usability": "Patients and Licensed Clinicians interact via API Gateway, with Offline Sync/Queue Container easing rural connectivity issues. However, concrete client applications (mobile/web interfaces) are omitted from the container model, and user feedback mechanisms for degraded consultation modes are not described.",
+   "reliability": "Reliability is well-supported by Fault Tolerance Handler, Custom Queue Manager, Dead-Letter Queue (DLQ), and Local Ephemeral Buffer / DLQ for telemetry. However, degrading video consultations below 300 kbit/s (R-06) is only nominally delegated to an external media relay without detailed fallback mechanisms.",
+   "security": "Security is addressed thoroughly. Cryptographic Vault enforces envelope encryption with Cloud KMS HSM; Data Residency Enforcer and Geo-DNS Router restrict regional traffic; and Database-Level Audit Triggers alongside Middleware Audit Interceptor guarantee tamper-resistant logging for HIPAA, GDPR, and EU MDR compliance.",
+   "maintainability": "The architecture exhibits high maintainability through modular segregation. The Anti-Corruption Layer separates external pharmacy formats via Pluggable Regional Adapter, Key Management Interface applies a wrapper pattern, and Inference Service is decoupled from core routing, though component nesting duplicates some container names.",
+   "portability": "The design deploys cleanly across target GCP regions europe-west3 and us-central1. Key Management Interface abstracts KMS via a wrapper pattern, though components like GCP Managed Database Instances and Session Management Component exhibit direct coupling to GCP-native infrastructure."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "Session Management and API Gateway provide stateless tokens and rate limiting, but media distribution relies on external relays with no defined horizontal autoscaling or media server orchestration for 5,000 EU streams.",
+    "elements": [
+     "API Gateway",
+     "Session Management",
+     "Edge / Adaptive Media Relay",
+     "Regional Distributed Cache"
+    ],
+    "sensitivity_points": [
+     "Session creation latency under peak concurrent joins",
+     "Media relay throughput capacity in europe-west3"
+    ],
+    "tradeoffs": [
+     "Delegating media handling externally simplifies the core but reduces elasticity control"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "At ~14 requests/second, the gRPC-based Inference Service with Protocol Buffers and asynchronous Middleware Audit Interceptor buffered by an ephemeral DLQ handles peak load well within 3 seconds.",
+    "elements": [
+     "API Gateway",
+     "Inference Service",
+     "Middleware Audit Interceptor",
+     "Local Ephemeral Buffer / DLQ",
+     "AI Model Registry"
+    ],
+    "sensitivity_points": [
+     "Non-blocking dispatch of audit logs during model inference",
+     "gRPC serialization overhead"
+    ],
+    "tradeoffs": [
+     "Buffering audit logs locally preserves inference latency but requires local DLQ drain guarantees"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The architecture incorporates Edge / Adaptive Media Relay for throttled streaming and a client-side Offline Sync/Queue Container with encrypted local storage, backoff, and checksums ensuring zero loss of clinical notes.",
+    "elements": [
+     "Edge / Adaptive Media Relay",
+     "Offline Sync/Queue Container",
+     "Local Storage",
+     "Custom Queue Manager"
+    ],
+    "sensitivity_points": [
+     "Adaptive bitrate threshold triggers",
+     "Client-side queue idempotency and storage limits"
+    ],
+    "tradeoffs": [
+     "Preserving clinical notes client-side increases local storage and conflict-resolution complexity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Only a single US region (us-central1) is targeted. Without a secondary US region, cross-zone disaster recovery plan, or automated rebuild process, recovering from complete regional outage within 1 hour while preserving residency is unaddressed.",
+    "elements": [
+     "Data Localization Router",
+     "Regional Databases",
+     "Cryptographic Vault",
+     "Data Residency Enforcer"
+    ],
+    "sensitivity_points": [
+     "Single cloud region dependency for US operations",
+     "RTO/RPO limits without multi-region deployment"
+    ],
+    "tradeoffs": [
+     "Strict regional residency prevents cross-region EU failover at the cost of US availability"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Anti-Corruption Layer specifically provides a Pluggable Regional Adapter component designed to isolate diverging national e-prescription formats and standards, confining all changes to a single modular adapter.",
+    "elements": [
+     "Anti-Corruption Layer (ACL)",
+     "Pluggable Regional Adapter",
+     "Fault Tolerance Handler"
+    ],
+    "sensitivity_points": [
+     "Adapter interface encapsulation",
+     "Decoupling internal e-prescription schemas from national standards"
+    ],
+    "tradeoffs": [
+     "Modular plugin abstraction adds an extra translation layer but isolates country changes"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "AI Model Registry stores versioned artifacts, while the Middleware Audit Interceptor intercepts and logs model version, inputs, and outputs to immutable audit collectors, ensuring complete traceability and easy runtime rollback.",
+    "elements": [
+     "Inference Service",
+     "AI Model Registry",
+     "Middleware Audit Interceptor",
+     "Telemetry/Audit Collector"
+    ],
+    "sensitivity_points": [
+     "Model version tagging in inference telemetry",
+     "Artifact immutability in the registry"
+    ],
+    "tradeoffs": [
+     "Comprehensive input/output telemetry capture increases storage overhead for regulatory compliance"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Data Localization Router uses stateless interceptor middleware and fail-closed residency policies, backed by region-bound Cloud KMS keys and database audit triggers. Fine-grained cross-region consent checks rely on external IdP boundary federation.",
+    "elements": [
+     "Data Localization Router",
+     "Stateless Interceptor Middleware",
+     "Data Residency Enforcer",
+     "Cloud KMS",
+     "Database-Level Audit Triggers"
+    ],
+    "sensitivity_points": [
+     "Fail-closed policy enforcement at edge interceptors",
+     "Cryptographic key isolation across regional boundaries"
+    ],
+    "tradeoffs": [
+     "Enforcing strict regional KMS boundaries complicates authorized cross-region data sharing workflows"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Redis regional distributed cache provides instant session revocation, and database audit triggers log modifications. However, purpose-based consent enforcement mechanisms for downstream research access or data exports are not explicitly architected.",
+    "elements": [
+     "Session Management",
+     "Regional Distributed Cache",
+     "Database-Level Audit Triggers",
+     "Regional Databases"
+    ],
+    "sensitivity_points": [
+     "Propagation delay of consent revocation across regional caches",
+     "Purpose-tagging within persistence layers"
+    ],
+    "tradeoffs": [
+     "Fast session revocation via Redis does not inherently filter asynchronous or offline research pipelines"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Cryptographic Vault",
+     "Cloud KMS",
+     "Regional Databases",
+     "GCP Managed Database Instances",
+     "Data Localization Router"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Data Localization Router",
+     "Geo-DNS Router",
+     "Stateless Interceptor Middleware",
+     "Data Residency Enforcer",
+     "Regional Databases",
+     "GCP Managed Database Instances",
+     "Region-Isolated Task Queues"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Inference Service",
+     "AI Model Registry",
+     "Middleware Audit Interceptor",
+     "Telemetry/Audit Collector"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Offline Sync/Queue Container",
+     "Local Storage",
+     "Custom Queue Manager",
+     "Asynchronous Task Worker",
+     "Region-Isolated Task Queues",
+     "Dead-Letter Queue (DLQ)"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patients",
+     "Licensed Clinicians",
+     "API Gateway",
+     "Session Management",
+     "Edge / Adaptive Media Relay"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Anti-Corruption Layer (ACL)",
+     "Pluggable Regional Adapter",
+     "EU/US Pharmacies & National E-Prescription Gateways",
+     "Asynchronous Task Worker"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Inference Service",
+     "AI Model Registry"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Consent & Identity Provider Boundary / External IdP & Federation Service",
+     "External IdP",
+     "Session Management"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Data Localization Router",
+     "Data Residency Enforcer",
+     "Regional Databases",
+     "Session Management"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Edge / Adaptive Media Relay",
+     "Offline Sync/Queue Container"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Inference Service",
+     "Middleware Audit Interceptor",
+     "Local Ephemeral Buffer / DLQ",
+     "Telemetry/Audit Collector",
+     "AI Model Registry"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Anti-Corruption Layer (ACL)",
+     "Pluggable Regional Adapter",
+     "EU/US Pharmacies & National E-Prescription Gateways"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

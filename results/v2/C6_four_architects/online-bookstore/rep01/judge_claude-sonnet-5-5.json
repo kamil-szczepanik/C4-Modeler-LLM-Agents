@@ -1,0 +1,364 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 3,
+   "portability": 2
+  },
+  "mean": 3.25,
+  "justifications": {
+   "functional_suitability": "Catalog & Search Service, Order & Checkout Service, Recommendation Service and the Customer SPA modules cover R-01, R-02 and R-04. Reviews have no backing service (only a DynamoDB reviews table read by Catalog). Multi-currency is not modelled. Recommendations are inconsistent with Amazon Personalize.",
+   "performance_efficiency": "Redis ElastiCache (Product Catalog Cache, Model Cache Manager), CloudFront-hosted SPAs, OpenSearch, Aurora Reader Instances, Connection Pooler, and SQS/EventBridge async processing support 1M MAU and fast loads. Minor gaps: no autoscaling or explicit 3G optimisation.",
+   "compatibility": "Shipping, payment, tax and Cognito integrations are shown over HTTPS/REST and OIDC in Order & Checkout Service and Async Worker. Gaps: Payment, Tax, Shipping and Notification are missing at container level, Personalize is replaced by a custom engine, and multi-currency is not handled.",
+   "usability": "Customer SPA modules and Admin SPA (Order & Support Dashboard, Catalog Management) serve both user groups, with Web Vitals and Error Boundaries. Gaps: no accessibility, localisation or currency-display handling, and reviews UI lacks a backend.",
+   "reliability": "Aurora Global Database, Reader Instances, SQS DLQ with redrive, Opossum circuit breakers, Saga orchestrator, Idempotency Manager, EventBridge Archive, Cross-Region Event Rule, and CloudWatch Alarms support 99.95%. Gaps: no explicit multi-AZ, failover or backup/RTO design.",
+   "security": "AWS WAF, Lambda Authorizer JWT validation, Cognito OIDC, RBAC Guard, KMS encryption, RLS, PII Masker, Signed URLs, bucket policy enforcer, Audit Logger and TLS cover OWASP and GDPR. Gaps: no explicit data-subject erasure or consent mechanism, and the Admin SPA has no MFA.",
+   "maintainability": "Microservices are separated by domain, with EventBridge decoupling and layered components. Gaps: inconsistent models (databases and external systems shown as components, mismatched DynamoDB and Redis cart ownership, broken relationships), a polyglot stack, and no shared contracts.",
+   "portability": "The design is deeply AWS-specific (Aurora, DynamoDB, ElastiCache, SQS, EventBridge, ADOT), though three regions are supported via Global Tables and cross-region rules. Containers and ECS Fargate help slightly. There are no abstraction layers or IaC."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 2,
+   "MOD-01": 2,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.4375,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 2.5,
+   "Modifiability": 3.0,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Customer SPA",
+     "CloudFront",
+     "AWS API Gateway",
+     "Catalog & Search Service",
+     "Redis ElastiCache",
+     "OpenSearch",
+     "Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio for catalogue pages",
+     "Aurora reader scaling and connection pooling",
+     "No explicit autoscaling defined for services"
+    ],
+    "tradeoffs": [
+     "Caching boosts latency but risks stale catalogue data",
+     "Microservices add gateway hops versus CDN-only delivery"
+    ],
+    "justification": "CDN-hosted SPA, Redis catalogue cache, OpenSearch and Aurora readers help, but there's no autoscaling, no CDN caching of API responses, and no multi-region read setup for 10x load; 95% under 2s on 3G is unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Recommendation Service",
+     "Model Cache Manager",
+     "Amazon DynamoDB",
+     "Async Worker",
+     "Redis ElastiCache"
+    ],
+    "sensitivity_points": [
+     "Recompute runs in-service, not isolated batch",
+     "Shared Redis between model cache and catalogue"
+    ],
+    "tradeoffs": [
+     "Precomputed store makes reads fast but freshness lags",
+     "Shared cache lowers cost but couples workloads"
+    ],
+    "justification": "Recommendations are read from DynamoDB with a cache, and browsing is separate from recommendations. But no offline batch recompute pipeline is described, and the engine runs scikit-learn in the request path. Isolation of recompute from the serving path is not explicit."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "elements": [
+     "Checkout Orchestrator Component",
+     "Shipping Provider APIs",
+     "Async Worker",
+     "Amazon EventBridge & SQS",
+     "DLQ"
+    ],
+    "sensitivity_points": [
+     "Orchestrator calls shipping synchronously with circuit breaker",
+     "Worker also handles shipping with retry and DLQ"
+    ],
+    "tradeoffs": [
+     "Sync label generation gives immediate feedback but couples checkout to shipping",
+     "Async deferral improves availability but delays tracking"
+    ],
+    "justification": "The async worker, SQS and DLQ can defer shipping, but the Checkout Orchestrator also calls shipping synchronously, with a circuit breaker and no explicit fallback to queue. The design is ambiguous, so an outage might fail checkout."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Aurora Global Database",
+     "Cross-Region Event Rule",
+     "Redis ElastiCache",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "No DNS/Route 53 failover or health checks defined",
+     "Aurora global failover promotion is not automated or specified"
+    ],
+    "tradeoffs": [
+     "Global DB gives low RPO but is costly and has replication lag",
+     "Active-passive simplifies consistency but extends RTO"
+    ],
+    "justification": "Aurora Global and cross-region event replication exist, but there's no global routing, no multi-region compute deployment, no Redis or OpenSearch replication, and no failover procedure. 'Global Tables' naming is inaccurate. Zero lost orders and 99.95% are unproven."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "elements": [
+     "Order & Checkout Service",
+     "Payment Gateway",
+     "Tax Calculation Service",
+     "Catalog & Search Service",
+     "Customer SPA"
+    ],
+    "sensitivity_points": [
+     "No dedicated pricing or currency component exists",
+     "Currency logic likely spread across catalogue, checkout and SPA"
+    ],
+    "tradeoffs": [
+     "Delegating to the gateway simplifies currency but limits control",
+     "Per-service logic is flexible but scatters changes"
+    ],
+    "justification": "Multi-currency is a constraint, yet the model has no pricing, currency or exchange-rate component or configuration mechanism. Changes would touch the catalogue, checkout, SPA and tax/payment integrations, so the change is not confined to pricing and payment."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Engine",
+     "API Router",
+     "Feature Extractor",
+     "Amazon DynamoDB",
+     "Customer SPA"
+    ],
+    "sensitivity_points": [
+     "Stable API contract between SPA and service",
+     "Data schema in DynamoDB coupling to the algorithm"
+    ],
+    "tradeoffs": [
+     "Encapsulated engine eases swapping but custom ML needs maintenance",
+     "Self-hosted engine versus the managed Personalize shown at context"
+    ],
+    "justification": "Recommendation logic is encapsulated in its own service behind a gateway route, with engine and feature extractor components. Replacement is localized unless the data schema changes. The context-level mention of Amazon Personalize is inconsistent with the container design."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "AWS WAF",
+     "API Gateway",
+     "Authentication & Authorization Middleware",
+     "Catalog & Search Service",
+     "API Controller Component",
+     "Reviews & Ratings Table"
+    ],
+    "sensitivity_points": [
+     "Review input validation and output encoding are not specified",
+     "Logging of blocked attacks is not shown"
+    ],
+    "tradeoffs": [
+     "WAF gives broad protection but risks false positives",
+     "Edge filtering is generic versus in-service validation"
+    ],
+    "justification": "WAF at the gateway and DTO validation in checkout help, but the Catalog service and the reviews path lack explicit validation, XSS sanitization or parameterized queries. There's no reviews service, and attack logging or SIEM is not described."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Amazon DynamoDB",
+     "Redis ElastiCache",
+     "Event Archive",
+     "Async Worker",
+     "Data Sanitizer / PII Masker"
+    ],
+    "sensitivity_points": [
+     "No deletion workflow or data inventory across stores",
+     "Immutable event archive and audit logs may retain PII"
+    ],
+    "tradeoffs": [
+     "Event archives support replay but conflict with erasure",
+     "Multiple data stores improve fit but complicate deletion"
+    ],
+    "justification": "PII is spread across Aurora, DynamoDB, Redis, S3, the event archive and third parties. Encryption and RLS exist, but there's no erasure orchestration, no verification, no propagation to external providers, and no backup handling. Only masking is present."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Row-Level Security & Encryption Module",
+     "Audit Logger Component",
+     "Data Sanitizer / PII Masker",
+     "SQS KMS Encryption",
+     "Amazon Aurora PostgreSQL"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Payment Gateway",
+     "Tax Calculation Service"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Provider APIs",
+     "Checkout Orchestrator Component",
+     "Task Processor",
+     "External Shipping APIs"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Service",
+     "Catalog Module",
+     "Search Controller",
+     "Search Indexer",
+     "Catalog Service",
+     "Product Catalog Cache Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Order & Checkout Service",
+     "Checkout & Cart Module",
+     "Cart Manager Component",
+     "Checkout Orchestrator Component",
+     "Idempotency Manager Component",
+     "Payment Gateway",
+     "Redis ElastiCache"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Reviews & Ratings Module",
+     "Customer Reviews & Ratings Table"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Display Module",
+     "Recommendation Engine",
+     "Amazon DynamoDB",
+     "Recommendation Store Table"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Aurora PostgreSQL Reader Instances",
+     "Redis ElastiCache",
+     "Amazon EventBridge & SQS",
+     "Async Worker",
+     "Amazon DynamoDB",
+     "Connection Pooler"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Customer SPA",
+     "Redis ElastiCache",
+     "Product Catalog Cache Component",
+     "Telemetry & Error Modules"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Aurora Storage Volume",
+     "Cross-Region Event Rule",
+     "General DLQ",
+     "CloudWatch Alarms",
+     "AWS Distro for OpenTelemetry"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "AWS API Gateway",
+     "API Router & WAF Integration",
+     "Authentication & Authorization Middleware",
+     "API Controller Component",
+     "Amazon Cognito",
+     "Authorization & RBAC Guard Component",
+     "Bucket Policy Enforcer",
+     "SQS KMS Encryption"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

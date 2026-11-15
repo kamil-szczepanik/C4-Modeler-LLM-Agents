@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(Patients_and_Clinicians, "Patients and Clinicians", "External users who access the platform for secure video consultations, e-prescriptions, and AI symptom checking.")
+System_Ext(External_Regional_Pharmacy_Networks_HIEs_and_AI_Model_Providers, "External Regional Pharmacy Networks, HIEs, and AI Model Providers", "External systems for handling e-prescriptions, health information exchange, and AI model inferences.")
+
+System_Boundary(Cross_Border_Telehealth_Platform, "Cross-Border Telehealth Platform") {
+    Container(GCP_Global_HTTPS_Load_Balancer_with_Georouting, "GCP Global HTTPS Load Balancer with Geo-routing", "GCP Global HTTPS Load Balancer", "Routes user traffic globally to appropriate regional systems based on geographic location.")
+    Container(Envoy_API_Gateway, "Envoy API Gateway", "Envoy Proxy, Google Cloud Armor", "Provides edge routing, security, and TLS termination for regional internal traffic.")
+    Container(Backend_Service_Consent_Policy_Service, "Backend Service & Consent & Policy Service", "GKE, Open Policy Agent (OPA)", "Manages backend business logic, relational data, FHIR records, consent, and access policies.")
+    Container(AI_Symptom_Checker_Service, "AI Symptom Checker Service", "FastAPI, GKE", "Provides AI-driven symptom analysis for patients.")
+    Container(SFU_Media_Relay, "SFU Media Relay", "LiveKit / Mediasoup, WebRTC", "Supports low-bandwidth video consultations with adaptive bitrate streaming.")
+    Container(Integration_Adapter_Container, "Integration Adapter Container", "Container, mTLS, HTTPS", "Handles interoperability and secure communication with external HIEs and pharmacies.")
+    ContainerDb(Cloud_SQL_for_PostgreSQL_Memorystore_for_Redis, "Cloud SQL for PostgreSQL & Memorystore for Redis", "Cloud SQL for PostgreSQL, Memorystore for Redis", "Stores relational data, FHIR resources, consent records, sessions, and WebRTC states.")
+    Container(GCP_Cloud_Storage_with_Object_Retention_WORM, "GCP Cloud Storage with Object Retention (WORM)", "GCP Cloud Storage", "Provides immutable object storage for AI audit logs and compliance.")
+}
+
+Rel(Patients_and_Clinicians, GCP_Global_HTTPS_Load_Balancer_with_Georouting, "Accesses video consultations, e-prescriptions, and AI symptom checker", "HTTPS")
+Rel(GCP_Global_HTTPS_Load_Balancer_with_Georouting, Envoy_API_Gateway, "Routes regional user traffic", "HTTPS/REST")
+Rel(Envoy_API_Gateway, Backend_Service_Consent_Policy_Service, "Forwards API requests and enforces policies", "gRPC over Istio mTLS")
+Rel(Envoy_API_Gateway, AI_Symptom_Checker_Service, "Sends symptom analysis requests", "gRPC over Istio mTLS")
+Rel(Patients_and_Clinicians, SFU_Media_Relay, "Streams video consultations", "UDP (ICE/STUN/TURN)")
+Rel(Backend_Service_Consent_Policy_Service, Cloud_SQL_for_PostgreSQL_Memorystore_for_Redis, "Reads and writes relational data, FHIR, consent, and session states", "SQL / Redis Protocol")
+Rel(AI_Symptom_Checker_Service, GCP_Cloud_Storage_with_Object_Retention_WORM, "Stores immutable AI audit logs", "GCP IAM / HTTPS")
+Rel(Integration_Adapter_Container, External_Regional_Pharmacy_Networks_HIEs_and_AI_Model_Providers, "Interoperates with external health networks and pharmacies", "mTLS / HTTPS")
+Rel(Backend_Service_Consent_Policy_Service, Integration_Adapter_Container, "Communicates via internal service mesh", "gRPC over Istio mTLS")
+
+@enduml

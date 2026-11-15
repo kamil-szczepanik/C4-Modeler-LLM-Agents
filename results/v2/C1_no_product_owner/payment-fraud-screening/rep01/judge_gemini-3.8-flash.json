@@ -1,0 +1,319 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Real-Time Scoring Service provides scoring decisions (R-01), Case Management Backend supports analyst review workflows (R-02), and Model Event Bus with Scoring Engine allows zero-downtime model and rule hot-reloading (R-03).",
+   "performance_efficiency": "Sub-50ms P99 latency at 3,000 TPS is achieved using compiled Go services, an in-memory Feature Store Cache Component, lightweight Go WebAssembly/ONNX scoring, and asynchronous audit dispatching via Messaging & Eventing to keep the synchronous path fast.",
+   "compatibility": "Integrates cleanly with external systems via explicit protocols: gRPC/HTTPS for Payment Gateway, mTLS for Card Networks & Tokenization Vault, REST for Core-Banking, and AWS Signer/KMS for the Model Training Environment.",
+   "usability": "Fraud analysts are supported via the Analyst Portal API Controller with MFA, RBAC, and masked card representations, though a dedicated client-side UI application container is not explicitly modeled.",
+   "reliability": "The Circuit Breaker / Fallback Component ensures payments are not blocked if scoring degrades (R-07). High availability is reinforced with decoupled SQS queues, dead-letter queues, and resilient managed AWS infrastructure.",
+   "security": "Meets PCI-DSS Level 1 constraints through WAF, tokenization scrubbers, masked data in Case Management, AWS KMS encryption, and tamper-evident 7-year retention via S3 Glacier with Object Lock.",
+   "maintainability": "Decoupled domain containers (Scoring vs. Case Management) and serverless operational components (Lambda, EventBridge, SQS) allow a small team of three engineers to maintain, deploy, and update services independently.",
+   "portability": "Services are containerized with ECS, but components are tightly coupled to AWS-proprietary services (DynamoDB Streams, EventBridge, S3 Glacier Object Lock, KMS), making multi-cloud portability challenging despite meeting the AWS target."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 3,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.0,
+   "Modifiability": 4.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "In-memory ONNX/WASM scoring and Go runtime on ECS support low latency at scale. However, synchronous token resolution and direct writes to DynamoDB during the request lifecycle present latency risks against the strict 50 ms P99 threshold.",
+    "elements": [
+     "API Gateway & Routing Layer",
+     "Real-Time Scoring Service",
+     "Scoring Engine Component",
+     "Feature Store Cache Component",
+     "Token Resolution Client Component"
+    ],
+    "sensitivity_points": [
+     "Network latency overhead of synchronous token resolution during scoring",
+     "In-memory execution overhead of ONNX and WebAssembly runtimes"
+    ],
+    "tradeoffs": [
+     "Local feature caching improves latency but risks transient feature staleness"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Real-Time Scoring Service and Case Management Backend are isolated containers with segregated data stores (DynamoDB vs RDS PostgreSQL). Asynchronous decoupling via SQS guarantees that analyst queries and portal load have zero performance impact on live scoring.",
+    "elements": [
+     "Case Management Backend",
+     "Case Management Database",
+     "Case Queue",
+     "Real-Time Scoring Service"
+    ],
+    "sensitivity_points": [
+     "Complete compute and database isolation between scoring and analyst workloads"
+    ],
+    "tradeoffs": [
+     "Maintaining dual datastores increases operational complexity for a small engineering team"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "While a circuit breaker component exists inside the scoring service, there is no edge-level fallback mechanism in the API Gateway or ALB if the entire scoring service container crashes, leaving requests potentially unhandled.",
+    "elements": [
+     "Circuit Breaker / Fallback Component",
+     "API Gateway & Routing Layer",
+     "Real-Time Scoring Service"
+    ],
+    "sensitivity_points": [
+     "Placement of fallback logic inside vs upstream of the failing service"
+    ],
+    "tradeoffs": [
+     "Default approval on failure preserves availability but increases short-term fraud risk"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "The design presents conflicting audit paths: the Scoring Service synchronously writes decision payloads to DynamoDB while also mentioning asynchronous batch publishing via SNS. If the synchronous DynamoDB path blocks or fails, decision latency will degrade.",
+    "elements": [
+     "Audit & Event Dispatcher Component",
+     "Audit Event Publisher",
+     "Audit & Decision Log Store",
+     "Audit SNS Topic"
+    ],
+    "sensitivity_points": [
+     "Coupling synchronous decision paths to audit datastore write latencies"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit buffering protects latency but risks log loss during hard crashes"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The EventBridge Model Event Bus broadcasts hot-reloading signals directly to the in-memory scoring engine. Model artifacts are cryptographically verified via AWS Signer/KMS, allowing atomic zero-downtime swaps and rapid rollbacks with version metadata included in outputs.",
+    "elements": [
+     "Model Event Bus",
+     "Scoring Engine Component",
+     "Model Training Environment",
+     "Real-Time Scoring Service"
+    ],
+    "sensitivity_points": [
+     "Atomic in-memory model replacement without dropping inflight evaluations"
+    ],
+    "tradeoffs": [
+     "Hot-reloading in memory increases container peak memory usage during model swaps"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "The architecture explicitly models ML model ingestion via EventBridge and AWS Signer, but lacks a dedicated rule configuration repository or business rules engine to author, evaluate, and dynamically reload fraud velocity rules without deploying new code.",
+    "elements": [
+     "Scoring Engine Component",
+     "Feature Store",
+     "Real-Time Scoring Service"
+    ],
+    "sensitivity_points": [
+     "Dynamic rule deployment path separate from full ML model artifact publishing"
+    ],
+    "tradeoffs": [
+     "Coupling rules to compiled binaries ensures type safety but slows rule updates"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Card data exposure is mitigated via the Tokenization & Masking Service Client ensuring analysts only access masked PAN data. However, the architecture defines no SIEM, behavior monitoring, or automated alerting mechanism to detect anomalous analyst access within 15 minutes.",
+    "elements": [
+     "Tokenization & Masking Service Client",
+     "Analyst Portal API Controller",
+     "Case Management Backend"
+    ],
+    "sensitivity_points": [
+     "Strict enforcement of masking boundaries in backend presentation layers"
+    ],
+    "tradeoffs": [
+     "Aggressive masking protects sensitive data but limits manual transaction verification depth"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Audit logs stream from DynamoDB to S3 Glacier with Object Lock (WORM compliance) for 7-year retention. Immutable records capture decision inputs, explanations, and model versions, and Glacier Flexible Retrieval fulfills requests well within the one-day window.",
+    "elements": [
+     "Audit & Decision Log Store",
+     "Audit Archival Worker",
+     "Long-Term Audit Archive"
+    ],
+    "sensitivity_points": [
+     "Immutability enforcement through S3 Object Lock retention policies"
+    ],
+    "tradeoffs": [
+     "Glacier retrieval introduces retrieval delays and egress fees to reduce storage costs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Go Routing & Tokenization Proxy",
+     "Card Networks & Tokenization Vault",
+     "Tokenization & Masking Service Client",
+     "AWS ALB & AWS WAF",
+     "Data & Audit Stores"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Audit & Decision Log Store",
+     "Audit Archival Worker",
+     "Long-Term Audit Archive"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Long-Term Audit Archive",
+     "Real-Time Scoring Service",
+     "Data & Audit Stores",
+     "Messaging & Eventing"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Audit Archival Worker",
+     "Messaging & Eventing",
+     "Case Management Backend",
+     "Data & Audit Stores"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Service",
+     "API Handler Component",
+     "Scoring Engine Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Backend",
+     "Workflow Engine Component",
+     "Analyst Portal API Controller",
+     "Case Repository Layer",
+     "Case Queue",
+     "Fraud Analyst"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model Event Bus",
+     "Scoring Engine Component",
+     "Model Training Environment"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "API Gateway & Routing Layer",
+     "Real-Time Scoring Service",
+     "Feature Store Cache Component",
+     "Scoring Engine Component",
+     "Audit & Event Dispatcher Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Go Routing & Tokenization Proxy",
+     "Token Resolution Client Component",
+     "Tokenization & Masking Service Client",
+     "Card Networks & Tokenization Vault"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit & Event Dispatcher Component",
+     "Audit & Decision Log Store",
+     "Audit Archival Worker",
+     "Long-Term Audit Archive"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Circuit Breaker / Fallback Component",
+     "Go Routing & Tokenization Proxy"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

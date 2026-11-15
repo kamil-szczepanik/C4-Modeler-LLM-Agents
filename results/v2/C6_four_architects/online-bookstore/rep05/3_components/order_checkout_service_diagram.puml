@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container(api_gateway, "API Gateway", "Reverse Proxy / API Gateway", "Routes read requests via internal ALBs.")
+
+Container_Boundary(order_checkout_service, "Order & Checkout Service") {
+    Component(cart_management_component, "Cart Management Component", "Spring MVC, Redis Cache", "Handles shopping cart state management.")
+    Component(checkout_orchestrator_component, "Checkout Orchestrator Component", "Spring Saga/Workflow Engine", "Orchestrates the secure checkout workflow.")
+    Component(payment_tax_integration_component, "Payment & Tax Integration Component", "Spring WebClient, Stripe, PayPal, Avalara, TaxJar", "Integrates with external payment and tax services.")
+    Component(shipping_integration_component, "Shipping Integration Component", "Spring WebClient, FedEx, UPS", "Requests shipment quotes and labels.")
+    Component(order_persistence_component, "Order Persistence Component", "Spring Data JPA, Aurora PostgreSQL", "Executes transactional writes for orders.")
+    Component(order_query_component, "Order Query Component", "Spring MVC, Aurora PostgreSQL read-replicas", "Handles read requests for order history.")
+    Component(order_event_publisher_component, "Order Event Publisher Component", "Spring Cloud Stream, Amazon SNS, Amazon SQS", "Publishes order-placed events to message brokers.")
+    Component(resilience_policy_component, "Resilience Policy Component", "Resilience4j", "Wraps external API calls with fault-tolerance patterns.")
+}
+
+ContainerDb(aurora_postgresql_database, "Aurora PostgreSQL Database", "Aurora PostgreSQL", "Database storing order data and history.")
+Container(amazon_sns_sqs, "Amazon SNS / SQS", "AWS SNS/SQS", "Message broker services for event distribution.")
+
+Rel(api_gateway, order_query_component, "Routes read requests", "HTTPS / REST via internal ALBs")
+Rel(checkout_orchestrator_component, payment_tax_integration_component, "Triggers synchronous auth captures", "Internal Java Method Calls")
+Rel(checkout_orchestrator_component, shipping_integration_component, "Requests shipment quotes and labels", "Internal Java Method Calls")
+Rel(checkout_orchestrator_component, resilience_policy_component, "Wraps external API calls with fault-tolerance", "Internal Java Method Calls")
+Rel(order_persistence_component, aurora_postgresql_database, "Executes transactional writes", "JDBC / TLS")
+Rel(order_query_component, aurora_postgresql_database, "Reads order history", "JDBC / TLS via read-replicas")
+Rel(order_event_publisher_component, amazon_sns_sqs, "Publishes order-placed events", "Spring Cloud Stream / JSON")
+
+@enduml

@@ -1,0 +1,32 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(FraudAnalysts, "Fraud Analysts", "Fraud analysts who interact with the case management interface to review suspicious payment reviews.")
+System_Ext(PaymentGateway, "Payment Gateway", "External system that sends card-not-present payment authorization requests.")
+
+System_Boundary(RealTimePaymentFraudScreening, "Real-Time Payment Fraud Screening") {
+    Container(ApiGatewayPaymentGatewayIntegrationContainer, "API Gateway / Payment Gateway Integration Container", "AWS ECS with Fargate, HTTPS/TLS 1.3, OpenAPI / AsyncAPI", "Handles incoming synchronous authorization requests from the payment gateway.")
+    Container(TokenizationMaskingProxyContainer, "Tokenization/Masking Proxy Container", "AWS ECS with Fargate", "Scrubs Primary Account Numbers (PAN) before forwarding data to ensure analysts never see full card numbers.")
+    Container(RealTimeScoringEngineContainer, "Real-Time Scoring Engine Container", "AWS ECS with Fargate, gRPC/REST", "Evaluates transactions synchronously within <50ms P99 latency and publishes decisions asynchronously.")
+    Container(CaseManagementContainer, "Case Management Container", "AWS ECS with Fargate, HTTPS/TLS 1.3", "Manages suspicious payment reviews and review tasks for fraud analysts.")
+    Container(ModelRuleRegistryServiceContainer, "Model & Rule Registry Service Container", "AWS ECS with Fargate", "Supplies immutable scoring models and rules to containers for zero-downtime updates.")
+    Container(AuditComplianceContainer, "Audit & Compliance Container", "AWS ECS with Fargate", "Consumes messages from SQS and stores tamper-evident logs in Amazon S3 Object Lock.")
+    ContainerDb(AmazonElastiCacheRedis, "Amazon ElastiCache (Redis)", "Amazon ElastiCache (Redis)", "Provides low-latency in-memory caching for local caching and sub-50ms P99 latency.")
+    ContainerDb(AmazonAurora, "Amazon Aurora", "Amazon Aurora", "Provides low-latency data storage.")
+    Container(AmazonSQSSNS, "Amazon SQS / SNS", "Amazon SQS / SNS", "Asynchronous event-driven messaging decoupling audit logging from synchronous payment paths.")
+    ContainerDb(AmazonS3ObjectLock, "Amazon S3 Object Lock", "Amazon S3 Object Lock", "Write-Once-Read-Many (WORM) storage satisfying 7-year tamper-evident audit requirements.")
+}
+
+Rel(PaymentGateway, ApiGatewayPaymentGatewayIntegrationContainer, "Sends authorization requests", "HTTPS/TLS 1.3")
+Rel(ApiGatewayPaymentGatewayIntegrationContainer, TokenizationMaskingProxyContainer, "Forwards requests for PAN scrubbing", "Internal API")
+Rel(TokenizationMaskingProxyContainer, RealTimeScoringEngineContainer, "Forwards scrubbed transaction data", "Internal API")
+Rel(RealTimeScoringEngineContainer, AmazonElastiCacheRedis, "Queries local cache for fast transaction evaluation", "Redis Protocol")
+Rel(RealTimeScoringEngineContainer, AmazonSQSSNS, "Publishes scoring decisions asynchronously", "AWS SDK")
+Rel(AmazonSQSSNS, AuditComplianceContainer, "Supplies messages for audit logging", "SQS Consumer")
+Rel(AuditComplianceContainer, AmazonS3ObjectLock, "Stores tamper-evident logs for 7 years", "AWS SDK")
+Rel(ModelRuleRegistryServiceContainer, RealTimeScoringEngineContainer, "Supplies immutable scoring models and rules", "Internal API")
+Rel(ModelRuleRegistryServiceContainer, CaseManagementContainer, "Supplies rules and models", "Internal API")
+Rel(FraudAnalysts, CaseManagementContainer, "Interacts with review tasks and suspicious payment reviews", "HTTPS/TLS 1.3")
+Rel(CaseManagementContainer, AmazonAurora, "Persists case and review data", "SQL")
+@enduml

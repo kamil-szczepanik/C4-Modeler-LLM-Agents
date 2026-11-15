@@ -1,0 +1,37 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(Patients, "Patients (EU/US)", "End-users accessing services via Patient Web/Mobile App.")
+Person(Clinicians, "Clinicians & Pharmacists (EU/US)", "Healthcare providers using the Clinician Portal.")
+
+System_Ext(ThirdPartyVideo, "Third-Party Video Infrastructure", "External video infrastructure for consultations.")
+System_Ext(AILLM, "AI LLM Provider", "External LLM provider powering the AI symptom checker.")
+System_Ext(PrescriptionGateways, "National E-Prescription Gateways & US Pharmacy Networks", "External systems handling local prescriptions.")
+
+System_Boundary(CrossBorderTelehealthPlatform, "Cross-Border Telehealth Platform") {
+    Container(PatientApp, "Patient Web/Mobile App", "Flutter / WASM", "Allows patients to access telehealth services and the AI symptom checker.")
+    Container(ClinicianPortal, "Clinician Portal", "React / TypeScript", "Allows healthcare providers to conduct consultations and manage patient records.")
+    Container(APIGateway, "API Gateway", "GCP Cloud Endpoints / API Gateway", "Routes regional traffic and validates OAuth2/JWT tokens.")
+    Container(CoreTelehealthService, "Core Telehealth Service", "Go / gRPC & REST", "Manages consultations and integrates with third-party video infrastructure.")
+    Container(ConsentIdentity, "Consent & Identity Container", "Independent regional IAM instances", "Enforces data residency and granular consents.")
+    Container(AISymptomService, "AI Symptom Service", "Python / FastAPI", "Interfaces with AI LLM Provider and logs versioned inputs/outputs.")
+    Container(EPrescriptionIntegrator, "E-Prescription Integrator", "Java / Spring Boot", "Translates data to HL7 FHIR (US) and national standards (EU).")
+    ContainerDb(RegionalStorageMessaging, "Regional Storage & Messaging", "GCP Cloud SQL (PostgreSQL) and Pub/Sub", "Provides isolated regional relational storage and event streaming.")
+    Container(RegionalCloudStorage, "Regional Cloud Storage", "GCP Cloud Storage", "Region-locked storage for immutable AI audit logs.")
+}
+
+Rel(Patients, APIGateway, "Accesses telehealth services via web/mobile app", "HTTPS / WebSockets")
+Rel(Clinicians, APIGateway, "Accesses clinician portal services", "HTTPS")
+Rel(APIGateway, CoreTelehealthService, "Routes regional traffic and validates tokens", "gRPC / REST")
+Rel(APIGateway, AISymptomService, "Routes symptom check requests", "gRPC / REST")
+Rel(APIGateway, ConsentIdentity, "Authenticates requests and verifies consents", "gRPC / REST")
+Rel(CoreTelehealthService, ThirdPartyVideo, "Facilitates video consultations", "WebRTC / HTTPS")
+Rel(CoreTelehealthService, EPrescriptionIntegrator, "Triggers e-prescription processing asynchronously", "GCP Pub/Sub")
+Rel(CoreTelehealthService, RegionalStorageMessaging, "Reads and writes relational consultation data", "PostgreSQL")
+Rel(AISymptomService, AILLM, "Sends diagnostic prompts and receives AI responses", "HTTPS")
+Rel(AISymptomService, RegionalCloudStorage, "Writes versioned inputs and outputs for audit logs", "HTTPS / Direct Write")
+Rel(EPrescriptionIntegrator, PrescriptionGateways, "Sends standardized e-prescriptions", "HTTPS / REST")
+Rel(EPrescriptionIntegrator, RegionalStorageMessaging, "Publishes and consumes prescription events", "GCP Pub/Sub")
+
+@enduml

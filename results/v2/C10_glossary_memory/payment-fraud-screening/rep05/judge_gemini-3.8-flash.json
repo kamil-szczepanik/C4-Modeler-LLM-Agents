@@ -1,0 +1,309 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively met: 'Execution & Scoring Component' provides three-way scoring, 'Case Management Container' supports analyst workflows, and 'Model Registry Container' facilitates zero-downtime model and rule deployments.",
+   "performance_efficiency": "The sub-50ms P99 target at 3,000 req/s is achieved using low-latency Go/Rust services, gRPC, Redis 'Feature Store Cache Component', and the asynchronous 'Audit & Persistence Dispatcher Component' backed by 'AWS RDS Proxy'.",
+   "compatibility": "Integration with external actors is well defined: 'Payment Gateway / Acquirer' over gRPC/HTTPS, 'Card Networks / Tokenization Vault' via mTLS using 'Token Resolution Handler', and standard IdP via OAuth2/SAML.",
+   "usability": "Every user persona is effectively accommodated: fraud analysts interact with the dedicated 'Case Management UI', data scientists interface with 'Model Registry API', and payment processors interface via standardized API Gateway endpoints.",
+   "reliability": "The 'Fallback Circuit Breaker Component' guards against scoring engine failures. However, fail-open mechanisms to prevent payment blockage during total scoring engine failure are missing inside the 'API Gateway / Ingress Container'.",
+   "security": "PCI-DSS Level 1 needs are well covered via 'Token Resolution Handler' tokenization, mTLS, and 7-year audit requirements using 'pgcrypto' with append-only tables and immutable cryptographic triggers in 'Amazon Aurora Serverless v2'.",
+   "maintainability": "Decomposition into distinct containers and components (scoring, case management, model registry) yields strong separation of concerns, high modularity, and operational independence suited for a small engineering team.",
+   "portability": "Well adapted to the target AWS eu-west-1 region. Relying heavily on proprietary managed services like Amazon Aurora Serverless v2 and AWS RDS Proxy slightly reduces platform portability to other environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.65625,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.0,
+   "Modifiability": 4.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Rust/Go engine, Redis caching, and async audit persistence support high throughput, but synchronous token resolution against external vaults in the critical path introduces latency jitter.",
+    "elements": [
+     "API Gateway / Ingress Container",
+     "Token Resolution Handler",
+     "Fraud Scoring Engine Container",
+     "Feature Aggregator Component",
+     "Caching Layer"
+    ],
+    "sensitivity_points": [
+     "Network latency of external tokenization vault calls during authorization routing"
+    ],
+    "tradeoffs": [
+     "Calling token vault synchronously improves security context but risks exceeding sub-50ms P99"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Scoring reads from Redis rather than Aurora, isolating fast-path decisions. However, analyst search queries and async audit writes share a single Aurora cluster without dedicated read replicas.",
+    "elements": [
+     "Case Management Container",
+     "Database & Storage",
+     "AWS RDS Proxy",
+     "Fraud Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Resource contention on Aurora primary between complex case queries and audit persistence"
+    ],
+    "tradeoffs": [
+     "A single Aurora cluster keeps infrastructure costs low but couples OLTP audit throughput with search performance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "The circuit breaker is situated inside the Fraud Scoring Engine rather than the API Gateway; if the scoring container completely crashes or becomes unreachable, ingress lacks an automated fallback path.",
+    "elements": [
+     "API Gateway / Ingress Container",
+     "Fraud Routing Client",
+     "Fallback Circuit Breaker Component",
+     "Fraud Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Placement of fallback logic downstream of container failure domains"
+    ],
+    "tradeoffs": [
+     "Internal engine circuit breaker simplifies logic but fails to protect against entire container crashes"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "The dispatcher persists audit records asynchronously, protecting immediate scoring latency. However, lacking an intermediate durable messaging queue (like SQS or Kafka), prolonged Aurora outages risk in-memory queue exhaustion and audit loss.",
+    "elements": [
+     "Audit & Persistence Dispatcher Component",
+     "Database & Storage",
+     "AWS RDS Proxy"
+    ],
+    "sensitivity_points": [
+     "Memory buffer capacity of the persistence dispatcher during database degradation"
+    ],
+    "tradeoffs": [
+     "In-process async dispatch avoids message broker operational overhead but compromises audit durability under sustained backpressure"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "MLflow model registry coupled with S3-backed memory caching enables zero-downtime hot-reloads of model artifacts and explicit version tagging on decisions.",
+    "elements": [
+     "Model Registry Container",
+     "Model Registry API",
+     "Model Storage Synchronizer",
+     "Execution & Scoring Component"
+    ],
+    "sensitivity_points": [
+     "Scoring engine atomic reload mechanism for S3 cached model artifacts"
+    ],
+    "tradeoffs": [
+     "Local memory caching of models ensures sub-millisecond evaluation but requires orchestrating updates across engine instances"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Rule updates are deployed through MLflow and synchronized without downtime, while Redis rate limiting handles velocity checks. However, explicit analyst rule authoring workflows are not clearly articulated.",
+    "elements": [
+     "Model Registry Container",
+     "Caching Layer",
+     "Rate Limiter Component",
+     "Execution & Scoring Component"
+    ],
+    "sensitivity_points": [
+     "Propagation delay of rule artifacts from registry to active scoring engines"
+    ],
+    "tradeoffs": [
+     "Managing rules via the MLflow pipeline unifies artifact deployment but may complicate rapid manual rule authoring by analysts"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Cardholder data is tokenized upstream so analysts never access PANs. However, the architecture defines no SIEM, audit log monitoring, or anomaly detection mechanism to generate the required 15-minute alert.",
+    "elements": [
+     "Case Management Container",
+     "Authentication Validator",
+     "Token Resolution Handler"
+    ],
+    "sensitivity_points": [
+     "Absence of real-time security event monitoring and alerting infrastructure"
+    ],
+    "tradeoffs": [
+     "Omitting a dedicated SIEM/monitoring service reduces cloud cost but misses rapid automated anomaly alerting requirements"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Aurora with pgcrypto triggers provides tamper-evident storage. However, retaining 7 years of high-volume decisions (~3,000 TPS) entirely in Aurora is cost-prohibitive within the 25k EUR budget and lacks cold-tier archival strategies.",
+    "elements": [
+     "Database & Storage",
+     "Amazon Aurora Serverless v2 DB Instance",
+     "Audit & Persistence Dispatcher Component"
+    ],
+    "sensitivity_points": [
+     "Aurora storage scalability and cost for multi-billion record retention"
+    ],
+    "tradeoffs": [
+     "Retaining all audit data in Aurora simplifies querying but severely strains storage budget over 7 years"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Card Networks / Tokenization Vault",
+     "Token Resolution Handler"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Audit & Persistence Dispatcher Component",
+     "Amazon Aurora Serverless v2 DB Instance"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Amazon Aurora Serverless v2 DB Instance",
+     "Caching Layer",
+     "API Gateway / Ingress Container"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Amazon Aurora Serverless v2 DB Instance",
+     "Caching Layer",
+     "API Gateway / Ingress Container"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine Container",
+     "Execution & Scoring Component",
+     "API Gateway / Ingress Container"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Container",
+     "Case Management UI",
+     "Case API Router",
+     "Analyst Action Service",
+     "Case Search & Filter Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model Registry Container",
+     "Model Registry API",
+     "Model Storage Synchronizer",
+     "Fraud Scoring Engine Container"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine Container",
+     "Execution & Scoring Component",
+     "Caching Layer",
+     "Feature Store Cache Component",
+     "AWS RDS Proxy"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Card Networks / Tokenization Vault",
+     "Token Resolution Handler",
+     "Amazon Aurora Serverless v2 DB Instance"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit & Persistence Dispatcher Component",
+     "Amazon Aurora Serverless v2 DB Instance"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Fallback Circuit Breaker Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

@@ -1,0 +1,334 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 2,
+   "security": 4,
+   "maintainability": 3,
+   "portability": 2
+  },
+  "mean": 2.875,
+  "justifications": {
+   "functional_suitability": "Fraud Scoring Engine (Rule Execution Engine, Hot-Swap Coordinator) covers R-01 and R-03; Case Management Backend with Workflow Orchestrator covers R-02. Gaps: the Rule Management Panel routes rule updates via Case Management Backend with no path to the engine, and the approve/decline/review response flow is unclear.",
+   "performance_efficiency": "Concrete mechanisms: Rust engine, In-Memory Feature Cache Client (redis), parallel Feature Assembler, 35ms timeout, async SQS/SNS publishing, partitioning. Gaps: Redis is missing from containers, no scaling or autoscaling for 3,000 TPS, and synchronous Postgres writes in the scoring path threaten the 50ms P99.",
+   "compatibility": "Payment Gateway uses gRPC/HTTPS, vault uses mTLS HTTPS, standard PostgreSQL and ONNX are used. Gaps: chargeback ingestion from Card Networks has no receiving container, and the Level 1 relationship to the vault is malformed. Compatibility with the gateway/acquirer is otherwise plausible.",
+   "usability": "Fraud Analyst UI has a Case Queue Router, Decision Action Form and WebSocket Client for real-time alerts, serving analysts well. Compliance Auditors are named in the context but no container or interface serves them, and the Rule Management Panel is unclear.",
+   "reliability": "SQS DLQs, async queues and RDS exist, but there is no fail-open fallback for R-07 (payments unblocked within 1 minute), no multi-AZ, replication or failover, and no redundancy for the scoring engine or cache. Single points of failure remain in the synchronous path.",
+   "security": "Strong mechanisms: Tokenization Proxy strips PANs, mTLS to the vault, redaction components and UI masking, SSE-KMS queues, and HMAC/Merkle chaining in the Audit & Cryptographic Service for tamper evidence. Gaps: no authentication/authorization (IdP, RBAC) for analysts and auditors, and no network segmentation or PCI scope detail.",
+   "maintainability": "Components are well decomposed with clear responsibilities (Workflow Orchestrator, Partition Manager, Decision Publisher). Weaknesses: a polyglot stack (Go, Rust, Node/Java) for three engineers, an ambiguous Node.js/Java choice, inconsistent component models (containers listed as components), and the Audit store modeled as a container holding Go services.",
+   "portability": "Fully AWS-bound (RDS, SQS/SNS, S3 Glacier, Lambda, CloudFront) with no abstraction layers or containerization/IaC described. Standard PostgreSQL, Redis protocol and ONNX offer some portability, and the brief targets only AWS eu-west-1."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 2,
+   "PERF-01": 3,
+   "PERF-02": 2,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.4375,
+  "by_quality_attribute": {
+   "Performance": 2.5,
+   "Availability": 2.5,
+   "Modifiability": 3.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "API Gateway / Ingestion Service",
+     "Fraud Scoring Engine",
+     "In-Memory Feature Cache Client",
+     "Scoring Orchestrator Component",
+     "Tokenization Proxy Component"
+    ],
+    "sensitivity_points": [
+     "Synchronous vault call in the request path adds latency",
+     "35ms timeout leaves little budget for tokenization",
+     "Cache client is not defined as a container"
+    ],
+    "tradeoffs": [
+     "Async audit publishing lowers latency but weakens synchronous durability",
+     "Rust/Go speed versus a three-engineer team's skills"
+    ],
+    "justification": "The Rust engine, Redis features, async publishing and a 35ms timeout are sound. But a synchronous vault call, a Redis cache absent from the containers, and the Gateway persisting to the audit store put P99 at risk. No scaling or sizing is shown."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "elements": [
+     "Case Management Backend",
+     "Audit & Decision Store",
+     "Fraud Scoring Engine",
+     "Fraud Analyst UI"
+    ],
+    "sensitivity_points": [
+     "Scoring and case queries share one RDS PostgreSQL instance",
+     "No read replica or caching for case queries",
+     "Scoring writes synchronously compete with analyst reads"
+    ],
+    "tradeoffs": [
+     "Single store simplifies operations but couples analyst load to scoring"
+    ],
+    "justification": "Analyst reads and scoring read/write the same Audit & Decision Store with no replica, cache or isolation. Analyst load can slow scoring. The S3/CloudFront UI is fine, but the backend path is unprotected."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "Scoring Orchestrator Component",
+     "Fraud Scoring Engine",
+     "API Gateway / Ingestion Service",
+     "Event Publisher Component"
+    ],
+    "sensitivity_points": [
+     "Timeout behavior is undefined: no fallback decision specified",
+     "Scoring engine redundancy not shown",
+     "Fallback decisions not audited by any defined path"
+    ],
+    "tradeoffs": [
+     "Fallback approve risks fraud; fallback decline blocks revenue"
+    ],
+    "justification": "A 35ms timeout exists, but no fallback decision path, rules or default policy is modeled. There is no redundancy or health checking for the scoring engine and no audit of fallback decisions. The 1-minute limit is not explicitly addressed."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "AWS SQS / SNS",
+     "Dead-Letter Queues (DLQ)",
+     "Amazon SNS Audit Topic",
+     "Audit & Decision Store",
+     "Decision Publisher"
+    ],
+    "sensitivity_points": [
+     "Scoring engine writes directly to the store synchronously",
+     "Gateway also persists decisions directly, a duplicate path",
+     "DLQ replay process not defined"
+    ],
+    "tradeoffs": [
+     "Eventual audit consistency versus decision latency",
+     "Duplicate audit paths increase complexity"
+    ],
+    "justification": "SNS/SQS with DLQs buffer audit events durably, so decisions can proceed. But direct synchronous PostgreSQL writes from the engine and gateway contradict the decoupling. A slow store could hurt latency. Replay and ordering for the hash chain are unaddressed."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "elements": [
+     "Model Ingestion & Hot-Swap Coordinator",
+     "Fraud Scoring Engine",
+     "Rule Execution Engine"
+    ],
+    "sensitivity_points": [
+     "Model version recording in the decision is not explicit",
+     "Rollback mechanism and model registry not shown",
+     "Model artifact source unspecified"
+    ],
+    "tradeoffs": [
+     "In-process hot-swap is fast but needs memory headroom for two models"
+    ],
+    "justification": "The arc-swap/ONNX hot-swap gives zero-downtime switching with lock-free reads. Rollback within 5 minutes is plausible, but no model registry or versioning is modeled and the model version is not shown in the audit record."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "elements": [
+     "Rule Management Panel Component",
+     "Rule Execution Engine",
+     "Case Management Backend",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "No path from the rule panel to the rule engine",
+     "No rule store, versioning or approval workflow",
+     "Applied rules not recorded in decisions"
+    ],
+    "tradeoffs": [
+     "Compiled rules are fast but harder to update at runtime"
+    ],
+    "justification": "A UI rule panel and a rule engine exist, but no rule repository or deployment path connects them. Compiled rules suggest redeployment. Nothing records which rules were applied for explainability. Hot-swap covers models only."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "Tokenization Proxy Component",
+     "Tokenization / Vault Provider",
+     "Tokenization Filter / Redaction Component",
+     "Fraud Analyst UI",
+     "Case Management Backend"
+    ],
+    "sensitivity_points": [
+     "Masking is done in the browser, which is untrusted",
+     "No authentication, RBAC or MFA modeled",
+     "No anomaly detection or alerting component"
+    ],
+    "tradeoffs": [
+     "Tokenizing at ingestion protects analysts but limits investigation detail"
+    ],
+    "justification": "PANs are tokenized at ingestion and the backend redacts data, so card numbers likely never reach analysts. But client-side masking is weak, and no identity management, access monitoring or 15-minute alerting exists. Detection is missing."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Audit & Cryptographic Service",
+     "Audit & Decision Store",
+     "Retention & Archival Worker",
+     "Amazon S3 Glacier"
+    ],
+    "sensitivity_points": [
+     "Inputs, model version and explanation not explicitly stored",
+     "Glacier retrieval and verification process undefined",
+     "Crypto service not wired to the Data Access Layer"
+    ],
+    "tradeoffs": [
+     "Glacier cuts cost but slows retrieval",
+     "Application-level chaining adds write complexity"
+    ],
+    "justification": "HMAC/Merkle chaining, partitioning and Glacier archiving address tamper evidence and 7-year retention. But the stored content (inputs, model version, explanation) is unspecified, and archive retrieval and chain verification are not modeled. Key management is absent."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "C-04": "partial",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "none"
+  },
+  "coverage": 0.45454545454545453,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Tokenization Proxy Component",
+     "Tokenization / Vault Provider",
+     "Tokenization Filter / Redaction Component",
+     "Amazon SQS Case Routing Queue"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Audit & Decision Store",
+     "Audit & Cryptographic Service",
+     "Retention & Archival Worker",
+     "Amazon S3 Glacier"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "AWS SQS / SNS",
+     "Amazon RDS PostgreSQL",
+     "Fraud Analyst UI"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Scoring API Controller",
+     "Rule Execution Engine",
+     "Feature Assembler",
+     "Scoring Orchestrator Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Backend",
+     "Workflow Orchestrator",
+     "Queue Consumer Service",
+     "Amazon SQS Case Routing Queue",
+     "Fraud Analyst UI",
+     "Case API Controller"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Model Ingestion & Hot-Swap Coordinator",
+     "Rule Management Panel Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Scoring Orchestrator Component",
+     "In-Memory Feature Cache Client",
+     "Feature Assembler",
+     "Fraud Scoring Engine",
+     "Decision Publisher"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Tokenization Proxy Component",
+     "Tokenization / Vault Provider",
+     "Tokenization Masking Component",
+     "Tokenization Filter / Redaction Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit & Decision Store",
+     "Audit & Cryptographic Service",
+     "Data Access Layer",
+     "Amazon RDS PostgreSQL"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

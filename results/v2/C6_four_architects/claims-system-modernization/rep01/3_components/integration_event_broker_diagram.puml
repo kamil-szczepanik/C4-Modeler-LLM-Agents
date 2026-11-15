@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Integration Event Broker container
+
+System_Ext(ClaimsCoreService, "Claims Core Service", ".NET 8 / C#")
+System_Ext(IntegrationSyncWorker, "Integration & Sync Worker", "Python / C# Azure Function")
+System_Ext(ApiGatewayBff, "API Gateway / BFF", "Node.js / Express")
+
+Container_Boundary(IntegrationEventBroker, "Integration Event Broker") {
+    Component(ClaimIngestionTopic, "Claim Ingestion Topic", "Azure Service Bus Topic", "Publishes domain events using CloudEvents JSON schema for asynchronous event-driven integration.")
+    Component(MainframeOutboxQueue, "Mainframe Outbox Queue", "Azure Service Bus Queue", "Consumes ordered messages using Service Bus Sessions for legacy synchronization.")
+    Component(DeadLetterHandler, "Dead-Letter Handler", "Azure Service Bus DLQ", "Handles failed message deliveries and exceptions for fault tolerance.")
+    Component(ReplayDeadLetterManager, "Replay & Dead-Letter Manager", "Azure Service Bus Management", "Manages message replays and dead-letter queue inspection.")
+    Component(AccessControlNamespaceAuthorization, "Access Control & Namespace Authorization", "Azure IAM / SAS / RBAC", "Secures access and manages authorization across the messaging namespace.")
+    Component(BrokerDiagnosticsMetricsPublisher, "Broker Diagnostics & Metrics Publisher", "Azure Monitor / App Insights", "Publishes broker diagnostics and metrics for observability.")
+}
+
+Rel(ClaimsCoreService, ClaimIngestionTopic, "Publishes domain events using CloudEvents JSON schema", "AMQP over TLS (TCP 5671)")
+Rel(IntegrationSyncWorker, MainframeOutboxQueue, "Consumes ordered messages using Service Bus Sessions", "AMQP over TLS (TCP 5671)")
+Rel(ApiGatewayBff, ClaimIngestionTopic, "Publishes direct customer/broker submission events", "AMQP over TLS")
+Rel(IntegrationEventBroker, IntegrationSyncWorker, "Pushes batched synchronization payloads", "AMQP over TLS")
+
+@enduml

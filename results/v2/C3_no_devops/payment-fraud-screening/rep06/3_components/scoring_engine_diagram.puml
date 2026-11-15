@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Scoring Engine container
+
+System_Ext(api_gateway, "API Gateway / Ingress Router", "Ingress router managing external traffic.")
+System_Ext(redis, "Amazon ElastiCache Redis", "In-memory store for sub-millisecond feature retrieval.")
+System_Ext(event_bridge, "Amazon EventBridge", "Serverless event bus for audit event streaming.")
+System_Ext(rule_service, "Rule & Model Distribution Service", "Service providing signed scoring rules and models.")
+
+Container_Boundary(scoring_engine, "Scoring Engine") {
+    Component(scoring_api_controller, "Scoring API Controller", "Go / net/http", "Handles ingress gRPC/HTTP2, token stripping, and circuit breaking.")
+    Component(feature_aggregator, "Feature Aggregator Component", "Go / Amazon ElastiCache Redis", "Concurrently fetches real-time features from Amazon ElastiCache Redis.")
+    Component(evaluation_engine, "Evaluation Engine Component", "Go / In-memory", "Evaluates rules and ML models in-memory using atomic pointer swaps.")
+    Component(audit_dispatcher, "Audit Dispatcher Component", "Go / AWS KMS / Amazon EventBridge", "Signs decision payloads via AWS KMS and publishes to Amazon EventBridge.")
+    Component(rule_synchronizer, "Rule Synchronizer Sub-Component", "Go / Rule & Model Distribution Service", "Cryptographically verifies and hot-reloads models from the Rule & Model Distribution Service.")
+}
+
+Rel(api_gateway, scoring_api_controller, "Enforces mTLS within private subnets via gRPC/HTTP2 over TLS 1.3.", "gRPC/HTTP2 over TLS 1.3")
+Rel(feature_aggregator, redis, "Fetches low-latency features using RESP protocol over private VPC with TLS and IAM auth.", "RESP / TLS / IAM")
+Rel(audit_dispatcher, event_bridge, "Streams cryptographically signed audit payloads asynchronously using HTTPS via AWS SDK with SigV4.", "HTTPS / SigV4")
+Rel(rule_synchronizer, rule_service, "Ingests signed scoring rules and models in the background.", "HTTPS")
+
+@enduml

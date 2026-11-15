@@ -1,0 +1,48 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patients, "Patients", "End-users accessing patient admissions, scheduling, and portal features.")
+Person(Clinicians, "Clinicians", "Medical professionals managing electronic medical records (EMR) and clinical workflows.")
+Person(BillingAdministrators, "Billing Administrators", "Administrative staff managing billing and financial transactions.")
+
+System_Ext(ExternalLabImagingSystems, "External Lab & Imaging Systems", "External systems providing laboratory and imaging data.")
+System_Ext(PaymentGatewayInsuranceClearinghouse, "Payment Gateway / Insurance Clearinghouse", "External systems for processing payments and insurance claims.")
+System_Ext(IdentityProviderIdP, "Identity Provider (IdP)", "External service handling authentication.")
+
+System_Boundary(ClinicManagementSystem, "Clinic Management System") {
+    Container(APIGateway, "API Gateway", "Kong / Nginx on Kubernetes", "Handles TLS termination, rate limiting, and JWT validation.")
+    Container(WebApplication, "Web Application", "React / Next.js", "Provides cross-platform user interfaces for patients, clinicians, and billing administrators.")
+    Container(PatientSchedulingMicroservice, "Patient & Scheduling Microservice", "Node.js / Spring Boot on Kubernetes", "Manages patient admissions and appointment scheduling.")
+    Container(EMRMicroservice, "EMR Microservice", "Node.js / Spring Boot on Kubernetes", "Manages electronic medical records (EMR) and clinical workflows.")
+    Container(BillingMicroservice, "Billing Microservice", "Node.js / Spring Boot on Kubernetes", "Handles billing and asynchronous payment transactions.")
+    Container(IntegrationService, "Integration Service", "Node.js / Spring Boot on Kubernetes", "Connects to external lab and imaging systems via HL7 FHIR APIs.")
+    ContainerDb(PostgreSQLDatabase, "PostgreSQL Database", "PostgreSQL (Multi-AZ)", "Persists primary transactional data with AES-256 encryption.")
+    ContainerDb(WORMAuditLogStore, "WORM Audit Log Store", "WORM Storage with HSM-backed KMS", "Stores tamper-proof audit trails with 10-year retention.")
+    Container(EventBroker, "Event Broker", "Apache Kafka / RabbitMQ", "Facilitates asynchronous event-driven messaging for billing and integration transactions.")
+    Container(IstioServiceMesh, "Istio Service Mesh", "Istio with SPIFFE/SPIRE", "Provides zero-trust mTLS, workload identity, and circuit breaking.")
+}
+
+Rel(Patients, WebApplication, "Accesses portal via browser", "HTTPS/TLS")
+Rel(Clinicians, WebApplication, "Accesses portal via browser", "HTTPS/TLS")
+Rel(BillingAdministrators, WebApplication, "Accesses portal via browser", "HTTPS/TLS")
+Rel(WebApplication, APIGateway, "Sends user requests", "HTTPS/TLS with OAuth2/OIDC")
+Rel(APIGateway, PatientSchedulingMicroservice, "Routes internal requests", "gRPC over mTLS")
+Rel(APIGateway, EMRMicroservice, "Routes internal requests", "gRPC over mTLS")
+Rel(APIGateway, BillingMicroservice, "Routes internal requests", "gRPC over mTLS")
+Rel(APIGateway, IntegrationService, "Routes internal requests", "gRPC over mTLS")
+Rel(IntegrationService, ExternalLabImagingSystems, "Exchanges clinical data", "HL7 FHIR APIs over HTTPS")
+Rel(BillingMicroservice, PaymentGatewayInsuranceClearinghouse, "Communicates asynchronously for payments", "TLS-secured AMQP/Kafka with envelope encryption")
+Rel(PatientSchedulingMicroservice, PostgreSQLDatabase, "Persists relational data", "AES-256 Encryption")
+Rel(EMRMicroservice, PostgreSQLDatabase, "Persists relational data", "AES-256 Encryption")
+Rel(BillingMicroservice, PostgreSQLDatabase, "Persists relational data", "AES-256 Encryption")
+Rel(PatientSchedulingMicroservice, WORMAuditLogStore, "Streams audit logs", "Direct Stream")
+Rel(EMRMicroservice, WORMAuditLogStore, "Streams audit logs", "Direct Stream")
+Rel(BillingMicroservice, WORMAuditLogStore, "Streams audit logs", "Direct Stream")
+Rel(BillingMicroservice, EventBroker, "Publishes and consumes billing events", "Apache Kafka / RabbitMQ")
+Rel(IntegrationService, EventBroker, "Publishes and consumes integration events", "Apache Kafka / RabbitMQ")
+
+@enduml

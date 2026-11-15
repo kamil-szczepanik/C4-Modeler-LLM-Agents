@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Billing Service container
+
+System_Ext(nginx_kong_api_gateway, "NGINX/Kong API Gateway", "API Gateway", "Routes incoming gRPC requests.")
+System_Ext(apache_kafka_event_broker, "Apache Kafka Event Broker", "Event streaming backbone", "Publishes and consumes domain events.")
+System_Ext(distributed_postgresql_database, "Distributed PostgreSQL Database", "Schema-per-service storage", "Persists transactional records.")
+System_Ext(redis, "Redis", "In-memory data store", "Stores idempotency keys.")
+System_Ext(external_clearinghouses_gateways, "External Clearinghouses/Gateways", "External Service", "Receives claims and processes payments.")
+
+Container_Boundary(billing_service, "Billing Service") {
+    Component(billing_controller, "BillingController", "gRPC facade component", "Routes incoming gRPC requests to the application logic.")
+    Component(invoice_manager, "InvoiceManager", "Spring bean", "Generates patient bills.")
+    Component(claim_processor, "ClaimProcessor", "Spring bean", "Handles insurance submissions.")
+    Component(payment_engine, "PaymentEngine", "Spring bean", "Manages payment gateway integration.")
+    Component(ledger_repository, "LedgerRepository", "Spring Data JPA persistence component", "Persists transactional records.")
+}
+
+Rel(nginx_kong_api_gateway, billing_controller, "Routes incoming gRPC requests", "gRPC with mTLS")
+Rel(billing_controller, invoice_manager, "Uses", "")
+Rel(billing_controller, claim_processor, "Uses", "")
+Rel(billing_controller, payment_engine, "Uses", "")
+Rel(invoice_manager, ledger_repository, "Uses", "")
+Rel(claim_processor, ledger_repository, "Uses", "")
+Rel(payment_engine, ledger_repository, "Uses", "")
+
+Rel(billing_service, apache_kafka_event_broker, "Publishes domain events InvoiceIssued, PaymentProcessed", "Spring Kafka via SASL/SCRAM")
+Rel(billing_service, distributed_postgresql_database, "Persists transactional records", "Spring Data JPA over AES-256 encrypted volumes")
+Rel(claim_processor, external_clearinghouses_gateways, "Submits claims and processes payments", "HTTPS/REST wrapped in Resilience4j circuit breakers")
+Rel(payment_engine, external_clearinghouses_gateways, "Submits claims and processes payments", "HTTPS/REST wrapped in Resilience4j circuit breakers")
+Rel(billing_service, redis, "Stores idempotency keys", "TCP/RESP")
+
+@enduml

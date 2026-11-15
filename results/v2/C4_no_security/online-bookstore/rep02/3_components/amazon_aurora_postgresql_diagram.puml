@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Amazon Aurora PostgreSQL container
+
+System_Ext(Order_Checkout_Service, "Order & Checkout Service", "External microservice")
+System_Ext(Catalog_Search_Service, "Catalog & Search Service", "External microservice")
+
+Container_Boundary(Amazon_Aurora_PostgreSQL, "Amazon Aurora PostgreSQL") {
+    Component(Primary_DB_Instance, "Primary DB Instance", "Amazon Aurora PostgreSQL", "Handles write operations for orders and catalog updates, ensuring strict ACID compliance.")
+    Component(Aurora_Replicas_Read_Scale, "Aurora Replicas (Read-Scale)", "Amazon Aurora PostgreSQL (Read-Only Nodes)", "1-15 read-only nodes distributed across availability zones for read-scaling.")
+    Component(Amazon_RDS_Proxy, "Amazon RDS Proxy", "AWS RDS Proxy", "Connection pooler intercepting requests from microservices to prevent connection exhaustion.")
+    Component(Aurora_Global_Database_Cluster, "Aurora Global Database Cluster", "AWS Aurora Global Database", "Asynchronous cross-region replication layer across us-east-1, eu-west-1, and ap-southeast-1 for low-latency reads and disaster recovery.")
+    Component(AWS_Secrets_Manager, "AWS Secrets Manager", "AWS Secrets Manager", "Manages and rotates database credentials to meet OWASP NFRs.")
+    Component(AWS_Backup, "AWS Backup", "AWS Backup", "Automated backup and retention policy manager configured for 35-day retention supporting GDPR/CCPA compliance.")
+}
+
+Rel(Order_Checkout_Service, Amazon_RDS_Proxy, "Connects to proxy endpoint", "JDBC / TCP")
+Rel(Catalog_Search_Service, Amazon_RDS_Proxy, "Connects to proxy endpoint", "JDBC / TCP")
+Rel(Amazon_RDS_Proxy, Primary_DB_Instance, "Routes write queries", "PostgreSQL Wire Protocol")
+Rel(Amazon_RDS_Proxy, Aurora_Replicas_Read_Scale, "Routes read queries", "PostgreSQL Wire Protocol")
+Rel(Primary_DB_Instance, Aurora_Global_Database_Cluster, "Performs cross-region storage replication", "AWS Aurora Storage Protocol")
+
+@enduml

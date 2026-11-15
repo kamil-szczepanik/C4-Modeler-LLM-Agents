@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Envoy API Gateway container
+
+System_Ext(DomainMicroservices, "Domain Microservices", "Spring Boot / Kubernetes / Istio", "Processes clinical and administrative logic.")
+System_Ext(RedisRateLimitStore, "Redis Rate Limit Store", "Multi-region Redis", "Multi-region replicated cluster for rate limiting.")
+System_Ext(IdentityProvider, "Identity Provider", "OAuth2 / OIDC", "Validates user identities and issues tokens.")
+System_Ext(ObservabilityStack, "Observability Stack", "Prometheus / Grafana / Jaeger", "Collects metrics, logs, and traces.")
+
+Container_Boundary(EnvoyAPIGateway, "Envoy API Gateway") {
+    Component(RouterComponent, "Router Component", "Envoy Routing Engine", "Handles dynamic ingress routing and virtual hosts.")
+    Component(ExternalAuthorizationFilter, "External Authorization Filter", "Envoy Ext-Authz / OPA", "Validates JWT tokens and scopes against the Identity Provider.")
+    Component(TrafficPriorityRateLimitingFilter, "Traffic Priority & Rate Limiting Filter", "Envoy Filter / Redis Backend", "Enforces tiered quotas using a Redis backend.")
+    Component(WASMSecuritySanitizationFilter, "WASM Security & Sanitization Filter", "Rust / WASM", "Performs real-time PII masking and sanitization.")
+    Component(TelemetryMetricsEmitter, "Telemetry & Metrics Emitter", "OpenTelemetry", "Exports traces and audit logs to the observability stack.")
+}
+
+Rel(RouterComponent, ExternalAuthorizationFilter, "Passes ingress requests for validation")
+Rel(ExternalAuthorizationFilter, TrafficPriorityRateLimitingFilter, "Passes authenticated requests for rate limiting")
+Rel(TrafficPriorityRateLimitingFilter, WASMSecuritySanitizationFilter, "Passes rate-limited requests for PII masking")
+Rel(WASMSecuritySanitizationFilter, DomainMicroservices, "Forwards sanitized traffic via gRPC over mTLS", "gRPC / mTLS")
+Rel(TrafficPriorityRateLimitingFilter, RedisRateLimitStore, "Fetches token counts via Redis Protocol / TCP", "Redis Protocol / TCP")
+Rel(ExternalAuthorizationFilter, IdentityProvider, "Validates tokens via gRPC", "gRPC")
+Rel(TelemetryMetricsEmitter, ObservabilityStack, "Exports logs and metrics via OTLP / gRPC", "OTLP / gRPC")
+
+@enduml

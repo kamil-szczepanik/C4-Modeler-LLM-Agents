@@ -1,0 +1,22 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(api_gateway, "API Gateway", "Entry point for client requests")
+System_Ext(kafka, "Apache Kafka (AWS MSK)", "Event streaming backbone deployed in Frankfurt")
+System_Ext(elasticsearch, "Elasticsearch", "Primary search datastore encrypted with AWS KMS")
+System_Ext(database, "Database", "Relational datastore encrypted with AWS KMS")
+
+Container_Boundary(catalogue_and_search_service, "Catalogue & Search Service") {
+    Component(catalogue_management_component, "Catalogue Management Component", "Spring Data JPA / PostgreSQL", "Service for item CRUD operations.")
+    Component(search_query_component, "Search Query Component", "High-level REST client service / Elasticsearch", "Executes low-latency searches against Elasticsearch.")
+    Component(search_indexer_component, "Search Indexer Component", "Spring Kafka consumer", "Handles asynchronous event synchronization with a Dead-Letter Queue (DLQ).")
+}
+
+Rel(api_gateway, catalogue_management_component, "gRPC with mTLS and JWT claims")
+Rel(api_gateway, search_query_component, "gRPC with mTLS")
+Rel(search_indexer_component, kafka, "Consumes domain events", "Avro over mTLS with DLQ")
+Rel(search_query_component, elasticsearch, "Executes search queries", "Internal VPC TCP with TLS 1.3")
+Rel(catalogue_management_component, database, "Reads/writes relational data", "JDBC over Internal VPC TCP with TLS 1.3")
+
+@enduml

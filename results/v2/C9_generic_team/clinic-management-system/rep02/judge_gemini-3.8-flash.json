@@ -1,0 +1,327 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.625,
+  "justifications": {
+   "functional_suitability": "Patient/EMR Service, Scheduling Service, and Billing Service cover core functions like clash checks and claim submission. However, explicit data stores and mechanisms for long-term retention (≥10 years) and EMR audit trail are omitted from the container and component levels.",
+   "performance_efficiency": "The sub-second P95 requirement is well supported using Distributed Cache (Clinical Data Cache Manager), CQRS in Scheduling Domain Service, and asynchronous event messaging via Message Broker. However, database query optimization cannot be assessed as persistent storage containers are missing.",
+   "compatibility": "Interoperability is thoroughly addressed: External Integration Client and Insurance Integration Adapter explicitly implement HL7 FHIR APIs over HTTPS to integrate with Lab/Imaging Systems and Third-party Insurance Gateways, supported by Schema Registry.",
+   "usability": "Patients, Doctors, and Billing Staff interact via API Gateway using REST and GraphQL. However, no user-facing presentation layers (e.g., patient portal, clinical web UI) are modeled to demonstrate how distinct user groups interface with the system.",
+   "reliability": "Fault tolerance is addressed via Circuit Breakers, Dead Letter Queues, and Outbox Processor. However, achieving 99.99% availability via hybrid active-active operations between on-prem-k8s and eu-central-1 lacks concrete data synchronization and failover mechanisms.",
+   "security": "Security is addressed well with External Identity Providers enforcing MFA, HashiCorp Vault for secrets, Envoy Proxy Sidecar for mTLS, and Falco & Trivy DaemonSets for runtime scanning. However, AES-256 storage encryption at rest is not concretely demonstrated due to missing storage containers.",
+   "maintainability": "Modular microservice architecture cleanly separates Patient/EMR Service, Scheduling Service, and Billing Service. Domain decoupling is reinforced by the Transactional Outbox pattern, Schema Registry, and OpenTelemetry Collector Sidecar for distributed tracing.",
+   "portability": "Containerized components running on Kubernetes Ingress and standard Kubernetes microservice workloads support deployment across on-prem-k8s and cloud. However, the hybrid multi-cluster deployment topology across eu-central-1 and on-prem is not explicitly specified or detailed."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 3,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.625,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.0,
+   "Modifiability": 4.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The architecture incorporates a dedicated Clinical Data Cache Manager in Redis designed specifically for sub-second EMR screen loads. However, the underlying persistent database is only referenced conceptually as database-per-service without defined query optimization or indexing strategies for cache-miss scenarios under concurrent load.",
+    "elements": [
+     "API Gateway",
+     "Kubernetes Ingress",
+     "Patient/EMR Service",
+     "EMR Controller",
+     "EMR Business Logic Handler",
+     "Cache Manager",
+     "Distributed Cache",
+     "Clinical Data Cache Manager"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in Redis under concurrent morning rounds read access",
+     "Read latency across EMR microservice and Redis cluster"
+    ],
+    "tradeoffs": [
+     "Cache TTL tuning balances data freshness against persistent database load"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Asynchronous ingestion via the Message Broker (Kafka/RabbitMQ) with patient_id partitioning decouples HL7 FHIR ingest from screen-rendering traffic. Circuit breakers protect external endpoints. However, specific consumer backpressure controls and database write throughput bottlenecks during peak ingestion are not fully detailed.",
+    "elements": [
+     "Patient/EMR Service",
+     "External Integration Client",
+     "Message Broker",
+     "Event Producer",
+     "Event Consumer",
+     "Schema Registry",
+     "Distributed Cache"
+    ],
+    "sensitivity_points": [
+     "Message Broker ingestion throughput and partitioning granularity",
+     "Decoupling of write ingestion pipelines from read-heavy clinical cache"
+    ],
+    "tradeoffs": [
+     "Asynchronous processing introduces eventual consistency between lab arrival and UI visibility"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "Although a hybrid topology (on-prem and eu-central-1) is stated in the brief, the architecture lacks cross-region traffic routing, global load balancing, and cross-site database replication mechanisms. Without explicit distributed state synchronization between hybrid sites, failover within one minute without data loss is unachievable.",
+    "elements": [
+     "API Gateway",
+     "Kubernetes Ingress",
+     "Patient/EMR Service",
+     "Scheduling Service",
+     "Billing Service"
+    ],
+    "sensitivity_points": [
+     "Hybrid multi-region database synchronization latency",
+     "Global DNS or ingress failover convergence speed"
+    ],
+    "tradeoffs": [
+     "Active-active hybrid consistency across on-prem and cloud increases network latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Billing Service implements a Transactional Outbox pattern alongside a Transaction Idempotency Store in Redis and dead-letter queues. These mechanisms prevent duplicate claim submissions upon retries, although concrete database HA failover mechanics are omitted at the container level.",
+    "elements": [
+     "Billing Service",
+     "Billing Processing Service",
+     "Insurance Integration Adapter",
+     "Distributed Cache",
+     "Transaction Idempotency Store",
+     "Message Broker",
+     "Dead Letter Queues (DLQs)"
+    ],
+    "sensitivity_points": [
+     "Idempotency key TTL and atomicity of outbox table writes",
+     "Failover detection speed of the underlying database service"
+    ],
+    "tradeoffs": [
+     "Idempotency verification overhead slightly increases end-to-end claim submission latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The design isolates third-party insurance communication into a dedicated Insurance Integration Adapter inside the Billing Service, fully separated from the Patient/EMR Service. Introducing a new clearinghouse requires changes strictly confined to the adapter component without touching core clinical services.",
+    "elements": [
+     "Billing Service",
+     "Billing Processing Service",
+     "Insurance Integration Adapter",
+     "Third-party Insurance Gateways"
+    ],
+    "sensitivity_points": [
+     "Clean adapter interface abstraction for external gateway protocol normalization",
+     "Strict boundary between billing domain logic and external integrations"
+    ],
+    "tradeoffs": [
+     "Adapter translation layers introduce minor computational overhead and maintenance cost"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "Modifications are restricted to the Patient/EMR Service (EMR Controller and Business Logic Handler). However, the architecture omits dedicated presentation components (UI is undefined), and audit trail mechanisms are only mentioned textually without a concrete component or data model for demographic auditing.",
+    "elements": [
+     "Patient/EMR Service",
+     "EMR Controller",
+     "EMR Business Logic Handler"
+    ],
+    "sensitivity_points": [
+     "Extensibility of patient demographic schema in EMR Business Logic Handler",
+     "Coupling between core domain models and audit emission pipelines"
+    ],
+    "tradeoffs": [
+     "Encapsulating audit trail logic within service handlers risks duplication across services"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Enforced MFA is defined across entry points and routed through External Identity Providers over HTTPS/OIDC. Falco DaemonSets and OpenTelemetry collectors monitor runtime security events. However, an automated alerting pipeline connecting security triggers to instant notifications within one minute is not explicitly detailed.",
+    "elements": [
+     "External Identity Providers",
+     "API Gateway",
+     "Kubernetes Ingress",
+     "Observability & Security Sidecars",
+     "Falco & Trivy DaemonSets",
+     "OpenTelemetry Collector Sidecar"
+    ],
+    "sensitivity_points": [
+     "Strict enforcement of MFA before session establishment at API Gateway",
+     "Latency of runtime anomaly detection in Falco daemonsets"
+    ],
+    "tradeoffs": [
+     "Mandatory MFA and ingress inspection add authentication processing latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "The architecture lacks a centralized, tamper-evident audit logging component or immutable archive mechanism (such as WORM storage or append-only ledgers). While basic sidecars and Dead Letter Queues exist, they do not guarantee 100% audited read capture or a compliant 10-year retention policy.",
+    "elements": [
+     "Patient/EMR Service",
+     "EMR Business Logic Handler",
+     "Observability & Security Sidecars",
+     "OpenTelemetry Collector Sidecar"
+    ],
+    "sensitivity_points": [
+     "Coverage of read access interception across all EMR endpoints",
+     "Immutability and write-once enforcement of the long-term audit store"
+    ],
+    "tradeoffs": [
+     "Auditing every read operation increases storage volumes and write I/O overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "none",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.6363636363636364,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "EMR Business Logic Handler",
+     "Kubernetes Ingress",
+     "Observability & Security Sidecars",
+     "HashiCorp Vault"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Clinic Management System"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none"
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "Patient/EMR Service",
+     "EMR Controller",
+     "EMR Business Logic Handler"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Service",
+     "Scheduling Controller",
+     "Scheduling Domain Service",
+     "Resource Lock Manager",
+     "Distributed Cache"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Patient/EMR Service",
+     "EMR Controller",
+     "EMR Business Logic Handler"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service",
+     "Billing Controller",
+     "Billing Processing Service",
+     "Insurance Integration Adapter",
+     "Third-party Insurance Gateways"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "External Identity Providers",
+     "HashiCorp Vault",
+     "Vault Server"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "none"
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Distributed Cache",
+     "Clinical Data Cache Manager",
+     "Cache Manager",
+     "Patient/EMR Service"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Lab/Imaging Systems",
+     "Patient/EMR Service",
+     "External Integration Client",
+     "Message Broker"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

@@ -1,0 +1,241 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 5
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "The 'Circulation & Cataloguing Container' and 'Digital Content Vendors' integration satisfy R-01. However, the data synchronization mechanism from the cataloguing service or Kafka stream into the 'Elasticsearch Container' is omitted, leaving catalogue search updates partially unaddressed.",
+   "performance_efficiency": "R-05 (<800ms search) is directly supported by the dedicated 'Elasticsearch Container' cluster using CQRS via 'Search Client'. Further efficiency is achieved through PgBouncer connection pooling, PostgreSQL read replicas, and asynchronous event processing via 'Kafka/Redpanda Event Streaming Container'.",
+   "compatibility": "External integration is thoroughly supported via the 'Digital Content Vendors / Third-Party E-Resource Providers' using OAuth2 and mTLS, alongside standards-based OpenID Connect integration with the 'EU-hosted Identity Provider (IdP)'.",
+   "usability": "While 'Library Patrons' are served by the 'Patron Portal' and its 'Web Frontend', there are no dedicated user interfaces or frontend components specified for 'Librarians/Circulation Staff' or 'Library Administrators' beyond raw backend API controllers.",
+   "reliability": "Reliability is well addressed through Patroni automated failover, PostgreSQL read replicas, Resilience4j circuit breakers in 'Business Logic Service', a multi-node Elasticsearch cluster, and automated snapshots via 'Snapshot Manager' to S3-compatible storage.",
+   "security": "Strict EU data residency is maintained via EU-localized storage and IdP. Perimeter WAF, end-to-end TLS 1.3, Istio mTLS, OAuth2/OIDC JWT handling, topic ACLs, 'pgaudit', and tamper-evident 'WORM Object Storage' provide complete security and accountability.",
+   "maintainability": "The architecture achieves good modularity using microservices, CQRS, and Kafka event-driven decoupling. However, the 'Audit & Event Tracking Container' component diagram erroneously nests the parent container and external containers as internal components, slightly obscuring modular boundaries.",
+   "portability": "The architecture is highly portable across cloud and on-premises environments, relying on cloud-native abstractions including 'Istio Service Mesh', Kubernetes Gateway, S3-compatible object storage APIs, and standard containerized runtimes (Node.js, Java)."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 3,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 5.0,
+   "Modifiability": 2.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Dedicated Elasticsearch 3-node cluster and CQRS read path bypass relational databases, while Redis rate limiting and Istio gateway efficiently manage high-volume search traffic.",
+    "elements": [
+     "CDN/WAF Edge Services",
+     "API Gateway",
+     "Patron Portal",
+     "Search Client",
+     "Elasticsearch Container",
+     "Search Index Engine"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster sizing and index shard distribution under high concurrency",
+     "Gateway routing and connection pooling overhead"
+    ],
+    "tradeoffs": [
+     "CQRS read-model separation increases infrastructure complexity to maintain sub-second latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "justification": "Catalogue updates are transactional in PostgreSQL and publish domain events to Kafka, but the architecture lacks an explicit indexing consumer component updating Elasticsearch.",
+    "elements": [
+     "Circulation & Cataloguing Container",
+     "PostgreSQL Database (Primary/Read Replica)",
+     "Kafka/Redpanda Event Streaming Container",
+     "Elasticsearch Container"
+    ],
+    "sensitivity_points": [
+     "Lag in asynchronous event consumption between Kafka and Elasticsearch"
+    ],
+    "tradeoffs": [
+     "Eventual consistency allows high write throughput but delays search index synchronization"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Elasticsearch 3-node clustering ensures high-availability search failover, while circulation transactions depend independently on PostgreSQL with Patroni automated failover and synchronous replication.",
+    "elements": [
+     "Elasticsearch Container",
+     "Search Index Engine",
+     "PostgreSQL Database (Primary/Read Replica)",
+     "Patroni",
+     "Circulation & Cataloguing Container"
+    ],
+    "sensitivity_points": [
+     "Patroni failover election timing and Elasticsearch replica shard reallocation"
+    ],
+    "tradeoffs": [
+     "Synchronous PostgreSQL replication prevents transaction loss but adds minor write latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Istio Service Mesh routing dynamically detects unhealthy Patron Portal instances and reroutes traffic, while stateless frontends preserve transactional integrity via PostgreSQL backends.",
+    "elements": [
+     "API Gateway",
+     "Istio Service Mesh Routing Handler",
+     "Patron Portal",
+     "PostgreSQL Database (Primary/Read Replica)"
+    ],
+    "sensitivity_points": [
+     "Service mesh health check intervals and circuit breaking thresholds"
+    ],
+    "tradeoffs": [
+     "Active health checking across mesh proxies consumes marginal background network overhead"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "External vendor integration lacks dedicated ingestion or adapter components; Level 2 omits vendor links and Patron Portal only handles token exchange, leaving cataloguing changes unisolated.",
+    "elements": [
+     "Digital Content Vendors / Third-Party E-Resource Providers",
+     "Patron Portal",
+     "Auth Handler",
+     "Circulation & Cataloguing Container"
+    ],
+    "sensitivity_points": [
+     "Coupling between external provider data schemas and core cataloguing services"
+    ],
+    "tradeoffs": [
+     "Direct integration without dedicated adapter microservices lowers component count but increases modification impact"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "Circulation business logic is hardcoded in Java Spring services without an externalized rules engine, dynamic configuration service, or policy store to modify loan rules at runtime.",
+    "elements": [
+     "Circulation & Cataloguing Container",
+     "Business Logic Service",
+     "Circulation Controller"
+    ],
+    "sensitivity_points": [
+     "Dependency on code redeployment for circulation policy and loan parameter adjustments"
+    ],
+    "tradeoffs": [
+     "Hardcoding rules in business services improves execution speed but sacrifices runtime modifiability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Strict EU data residency is structurally enforced via EU-hosted IdP, localized snapshot storage, EU WORM compliance archives, and internal mTLS network boundaries.",
+    "elements": [
+     "EU-hosted Identity Provider (IdP)",
+     "Audit & Event Tracking Container",
+     "WORM Object Storage",
+     "Snapshot Manager",
+     "PostgreSQL Database (Primary/Read Replica)"
+    ],
+    "sensitivity_points": [
+     "Geographic pinning of cloud storage buckets and identity provider hosting regions"
+    ],
+    "tradeoffs": [
+     "Restricting infrastructure strictly to EU regions prevents leveraging non-EU fallback failover zones"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "OAuth2/OIDC JWT claims validate patron identity at the gateway and portal, while unauthorized data queries and access are captured via pgaudit and Kafka-driven audit pipelines.",
+    "elements": [
+     "API Gateway",
+     "OAuth2/OIDC Authentication Engine",
+     "Patron Portal",
+     "PostgreSQL Database (Primary/Read Replica)",
+     "pgaudit",
+     "Audit & Event Tracking Container"
+    ],
+    "sensitivity_points": [
+     "Fine-grained object-level authorization enforcement in the backend data access layer"
+    ],
+    "tradeoffs": [
+     "Comprehensive pgaudit database logging guarantees compliance but increases I/O overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.6666666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "EU-hosted Identity Provider (IdP)",
+     "Snapshot Manager",
+     "WORM Object Storage",
+     "Analytics Event Consumer",
+     "Data Archival Service"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Circulation & Cataloguing Container",
+     "Circulation Controller",
+     "Primary Database",
+     "Digital Content Vendors / Third-Party E-Resource Providers"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Elasticsearch Container",
+     "Search Index Engine",
+     "Search Client",
+     "Patron Portal"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

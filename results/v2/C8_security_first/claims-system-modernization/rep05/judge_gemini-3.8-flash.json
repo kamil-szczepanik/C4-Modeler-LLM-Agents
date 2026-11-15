@@ -1,0 +1,330 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All functional requirements are thoroughly supported: Customer Portal Container enables online claims submission (R-01), Adjuster Web App Container provides dedicated adjuster tooling (R-02), and Routing Rules Manager combined with Claims Orchestrator Container enables granular, claim-type-by-claim-type migration (R-03).",
+   "performance_efficiency": "To beat the 5s mainframe latency and achieve sub-2s screen loads (R-05), the architecture employs Reference Data Cache Client (Redis), Client-Side Cache & State Manager (TanStack Query/IndexedDB), and asynchronous decoupling via Azure Service Bus and Transactional Outbox.",
+   "compatibility": "Coexistence with the COBOL/DB2 mainframe is handled by Legacy Mainframe Adapter Container using CICS/MQ translation over ExpressRoute. Azure Service Bus explicitly queues requests during the unextendable 23:00-05:00 batch window to prevent mainframe interference.",
+   "usability": "Both End Customers & Brokers and Claims Adjusters have purpose-built web interfaces. Adjuster Web App Container includes Draft Persistence Manager and optimistic UI patterns for productivity, though specific portal differentiations between brokers and customers are not detailed.",
+   "reliability": "R-04 consistency is rigorously ensured using Transactional Store Component with Outbox Table Component, MassTransit Saga Workflow Orchestrator, and State & Idempotency Manager in the mainframe adapter to guarantee exactly-once processing and zero data loss.",
+   "security": "Authentication Validator in API Gateway enforces Entra ID SSO via OIDC (R-07). mTLS Security Handler manages certificates and legacy RACF credentials over ExpressRoute, while Azure Key Vault securely manages customer keys and application secrets.",
+   "maintainability": "One-day rollback (R-06) is achieved via Routing Rules Manager, Azure App Configuration dynamic feature flags, and Versioned State Schema Component. Clear separation of concerns is maintained with an Anti-Corruption Layer (Legacy Mainframe Adapter Container).",
+   "portability": "The hybrid topology (azure-westeurope and on-premise) is cleanly mapped using containerized services (Azure Container Apps) and ExpressRoute. However, high coupling to proprietary Azure PaaS (App Configuration, Service Bus, Cosmos DB) restricts cloud-neutral portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "While Redis reference caching and UI client-side caching exist, the architecture lacks an explicit read-replication or proactive sync mechanism for active claim data residing primarily on the mainframe.",
+    "elements": [
+     "Reference Data Cache Client",
+     "Client-Side Cache & State Manager",
+     "Claims Orchestrator Container",
+     "Legacy Mainframe Adapter Container"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios for claim records residing on the legacy mainframe",
+     "Overhead of synchronous backend hops across hybrid ExpressRoute connections"
+    ],
+    "tradeoffs": [
+     "Serving stale cached adjuster data versus incurring 5-second synchronous mainframe roundtrips"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Asynchronous ingestion via Azure Service Bus and the Transactional Outbox pattern fully decouples frontend submissions from mainframe processing, buffering surges without impacting batch windows.",
+    "elements": [
+     "API Gateway",
+     "Claims Orchestrator Container",
+     "Azure Service Bus",
+     "Transactional Store Component",
+     "Outbox Table Component"
+    ],
+    "sensitivity_points": [
+     "Azure Service Bus queue depth capacity during month-end traffic spikes",
+     "Database write throughput under five-times ingestion load"
+    ],
+    "tradeoffs": [
+     "Immediate customer submission acceptance at the expense of eventual consistency with backend systems"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Azure Service Bus and the Transactional Outbox explicitly queue claims when the mainframe batch window is active, allowing continuous ingestion and automated deferred forwarding.",
+    "elements": [
+     "Azure Service Bus",
+     "Outbox Table Component",
+     "Workflow Orchestrator",
+     "Legacy Mainframe Adapter Container"
+    ],
+    "sensitivity_points": [
+     "Message time-to-live settings during extended six-hour batch windows",
+     "Reliability of outbox publisher relaying queued messages"
+    ],
+    "tradeoffs": [
+     "Maintained platform availability during batch windows trading off real-time mainframe confirmation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Saga orchestrator (MassTransit) combined with the Outbox table and dedicated State & Idempotency Manager in the adapter container guarantees exactly-once processing and robust reconciliation.",
+    "elements": [
+     "Workflow Orchestrator",
+     "Data Access Layer",
+     "Outbox Table Component",
+     "State & Idempotency Manager"
+    ],
+    "sensitivity_points": [
+     "Deterministic correlation IDs across legacy mainframe MQ/CICS and modern services",
+     "Storage performance of Cosmos DB idempotency records"
+    ],
+    "tradeoffs": [
+     "Strong exactly-once semantics achieved at the cost of additional idempotency datastore roundtrips"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Routing Rules Manager via Azure App Configuration, feature flags, versioned schemas, and an anti-corruption adapter allow declarative claim-type routing and instantaneous single-day rollbacks.",
+    "elements": [
+     "Routing Rules Manager",
+     "Azure App Configuration",
+     "Versioned State Schema Component",
+     "Legacy Mainframe Adapter Container"
+    ],
+    "sensitivity_points": [
+     "Propagation latency of feature flag changes across distributed gateway instances",
+     "Backward compatibility of schema versioning during rollback"
+    ],
+    "tradeoffs": [
+     "Dynamic routing flexibility introduces operational complexity in configuration management"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "UIs interact solely with the API Gateway and Orchestrator. The anti-corruption adapter decouples legacy boundaries, allowing retirement of the mainframe without changes to UI layers.",
+    "elements": [
+     "Customer Portal Container",
+     "Adjuster Web App Container",
+     "API Gateway",
+     "Claims Orchestrator Container",
+     "Legacy Mainframe Adapter Container"
+    ],
+    "sensitivity_points": [
+     "Strict adherence of UI contracts to domain APIs rather than mainframe schema models",
+     "Cutover completeness of Claims State Database as system of record"
+    ],
+    "tradeoffs": [
+     "Maintaining abstraction layer overhead throughout migration to avoid eventual frontend rewrites"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Authentication validator and domain rules engine enforce validation and audit logging, though granular broker-to-claim authorization (ABAC/RBAC) rules are not fully articulated.",
+    "elements": [
+     "Authentication Validator",
+     "Edge Routing Engine",
+     "Domain Service & Rules Engine",
+     "Audit Log Component"
+    ],
+    "sensitivity_points": [
+     "Enforcement of tenant/broker scoping claims inside OIDC access tokens",
+     "Completeness of immutable audit log generation on rejected requests"
+    ],
+    "tradeoffs": [
+     "Fine-grained runtime attribute checks increase request processing latency at the domain layer"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Authentication is centralized in Microsoft Entra ID; revoking access cuts off UI and API entry points. However, token caching and existing OIDC access token TTLs must be configured below 15 minutes.",
+    "elements": [
+     "Microsoft Entra ID",
+     "Authentication Validator",
+     "BFF API Route Handlers",
+     "mTLS Security Handler"
+    ],
+    "sensitivity_points": [
+     "Default access token expiration and Continuous Access Evaluation (CAE) support in Entra ID",
+     "Session invalidation propagation speed across the BFF layer"
+    ],
+    "tradeoffs": [
+     "Short-lived tokens improve revocation speed but increase authentication refresh overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Modern Insurance Platform",
+     "Legacy Mainframe",
+     "Legacy Mainframe Adapter Container",
+     "Claims Orchestrator Container"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Azure Service Bus",
+     "Legacy Mainframe",
+     "Legacy Mainframe Adapter Container"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Legacy Mainframe Adapter Container",
+     "Mainframe Protocol Adapter"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none"
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "End Customers & Brokers",
+     "Customer Portal Container",
+     "Claim Submission UI Controller",
+     "Attachment Upload Component",
+     "API Gateway"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Adjuster Web App Container",
+     "UI Presentation Layer",
+     "BFF API Route Handlers",
+     "Client-Side Cache & State Manager",
+     "Draft Persistence Manager"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "Edge Routing Engine",
+     "Routing Rules Manager",
+     "Azure App Configuration",
+     "Claims Orchestrator Container",
+     "Legacy Mainframe Adapter Container"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Outbox Table Component",
+     "Transactional Store Component",
+     "Data Access Layer",
+     "Workflow Orchestrator",
+     "Azure Service Bus",
+     "State & Idempotency Manager"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Reference Data Cache Client",
+     "Client-Side Cache & State Manager",
+     "UI Presentation Layer",
+     "Claims State Database"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Routing Rules Manager",
+     "Azure App Configuration",
+     "Workflow Orchestrator",
+     "Versioned State Schema Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Microsoft Entra ID",
+     "Authentication Validator",
+     "Auth Component",
+     "API Gateway"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

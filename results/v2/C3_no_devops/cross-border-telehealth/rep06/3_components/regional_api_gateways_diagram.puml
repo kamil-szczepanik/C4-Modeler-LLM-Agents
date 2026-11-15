@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component Diagram for Regional API Gateways
+
+Person(web_mobile_apps, "Web Application & Mobile Apps", "Clients accessing the telehealth platform.")
+System_Ext(core_telehealth_service, "Core Telehealth Service", "Handles video consultations, e-prescriptions, and telehealth logic.")
+System_Ext(ai_orchestrator, "AI Orchestrator", "Powers the AI symptom checker and related AI workflows.")
+
+Container_Boundary(regional_api_gateways, "Regional API Gateways") {
+    Component(global_https_load_balancer, "Global HTTPS Load Balancer", "Envoy-based, GCP Global HTTPS Load Balancer", "Provides low-latency edge TLS termination and regional routing.")
+    Component(gateway_authorization_filter, "Gateway Authorization Filter", "Custom HTTP Filter", "Forwards terminated HTTP/HTTPS requests and validates authorization.")
+    Component(rate_limiting_cost_control_throttle, "Rate Limiting & Cost-Control Throttle", "Memorystore for Redis Token Bucket", "Checks quota and rate limits to prevent API exhaustion.")
+    Component(grpc_reverse_proxy_router, "gRPC Reverse Proxy / Router", "gRPC over mTLS", "Routes external traffic internally using gRPC.")
+    Component(gcp_cloud_armor, "GCP Cloud Armor", "Google Cloud Armor WAF", "Enforces OWASP Top 10 protection, geo-fencing, and bot mitigation.")
+}
+
+Rel(web_mobile_apps, global_https_load_balancer, "Sends client requests and receives data", "HTTPS / WSS, TLS 1.3")
+Rel(global_https_load_balancer, gateway_authorization_filter, "Forwards terminated HTTP/HTTPS requests", "HTTP/2")
+Rel(gateway_authorization_filter, rate_limiting_cost_control_throttle, "Checks quota and rate limits", "In-memory / Redis lookup")
+Rel(gateway_authorization_filter, grpc_reverse_proxy_router, "Passes authenticated and authorized requests", "Internal IPC")
+Rel(rate_limiting_cost_control_throttle, grpc_reverse_proxy_router, "Passes authenticated and authorized requests", "Internal IPC")
+Rel(grpc_reverse_proxy_router, core_telehealth_service, "Routes external traffic internally", "gRPC over mTLS")
+Rel(grpc_reverse_proxy_router, ai_orchestrator, "Routes external traffic internally", "gRPC over mTLS")
+
+@enduml

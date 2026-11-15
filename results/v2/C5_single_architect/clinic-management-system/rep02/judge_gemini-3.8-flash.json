@@ -1,0 +1,342 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "All requirements are met: R-01 via 'Patient Registration Controller & Service', R-02 via 'Scheduling Engine' with distributed locks, R-03 via 'EMR Service' and 'Audit Trail Interceptor', and R-04 via 'Billing & Claims Service' with dedicated invoice and claims processors.",
+   "performance_efficiency": "The sub-second P95 requirement is directly addressed by 'EMR Cache Component' (Redis) for patient charts, offloading reads to PostgreSQL 'Read-Only Replica', connection pooling via 'PgBouncer', and asynchronous messaging with 'Apache Kafka'.",
+   "compatibility": "HL7 FHIR interoperability is thoroughly implemented via 'Integration Service (FHIR Adapter)', utilizing 'HAPI FHIR library', 'FHIR Request Transformer', and Camel routers to integrate external lab and imaging systems, alongside dedicated payment clearinghouse adapters.",
+   "usability": "While 'Patient' and 'Clinician / Receptionist' user roles are identified, user interface containers (web/mobile applications) are omitted from the container architecture, routing actors directly to 'API Gateway' without presenting dedicated client layers.",
+   "reliability": "High reliability is well-supported by 'Patroni' failover, 'CircuitBreakerMiddleware', and Redis replication. However, full active-active data synchronization across hybrid regions (on-prem Kubernetes and AWS eu-central-1) lacks concrete multi-master replication mechanisms.",
+   "security": "Meets HIPAA/GDPR constraints thoroughly: MFA and OAuth2 at 'API Gateway', AES-256 encryption at rest, transit encryption via mTLS/TLS 1.3, client-side encryption in Redis, and immutable logging using 'WORM Storage Engine' (S3 Object Lock).",
+   "maintainability": "Modular microservice separation isolates clinical, billing, and scheduling domains with loose coupling via 'Apache Kafka'. However, there is a minor inconsistency where 'Billing & Claims Service' is defined as Node.js at Level 2 but Spring Boot at Level 3.",
+   "portability": "Services leverage containerized, standard open-source technologies (Spring Boot, Kafka, PostgreSQL, Redis) adaptable to hybrid Kubernetes environments, though 'WORM Storage Engine' introduces specific cloud coupling to AWS S3 Object Lock."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The EMR Service incorporates a dedicated Redis caching component explicitly designed for sub-second chart loading, supplemented by PgBouncer connection pooling and read-only database replicas to satisfy the P95 load constraint under concurrent read spikes.",
+    "elements": [
+     "API Gateway",
+     "EMR Service",
+     "EMR API Controller",
+     "Clinical Record Manager",
+     "EMR Cache Component",
+     "Redis",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Redis cache hit ratio directly dictates EMR screen response times under concurrent load.",
+     "Connection pooling capacity in PgBouncer prevents database saturation during morning peak rounds."
+    ],
+    "tradeoffs": [
+     "Aggressive chart caching increases memory footprint and requires strict cache invalidation on updates."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "FHIR Adapter offloads incoming payloads to Apache Kafka asynchronously, preventing database write saturation. Decoupling ingestion from EMR query paths protects synchronous EMR screen retrieval performance during heavy lab ingestion bursts.",
+    "elements": [
+     "Integration Service (FHIR Adapter)",
+     "FHIR Ingress/Egress Router",
+     "Data Transformation & Mapping Engine",
+     "Kafka Event Publisher Component",
+     "Apache Kafka",
+     "EMR Service"
+    ],
+    "sensitivity_points": [
+     "Kafka partition throughput and consumer concurrency determine asynchronous FHIR ingestion rate."
+    ],
+    "tradeoffs": [
+     "Asynchronous event-driven ingestion introduces eventual consistency before lab results appear in EMR."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "While hybrid infrastructure and Patroni-based HA replicas are indicated, cross-site active-active database synchronization across on-prem and AWS with guaranteed zero data loss (RPO=0) and sub-minute failover across regions is not fully detailed.",
+    "elements": [
+     "PostgreSQL",
+     "Primary Database Instance",
+     "High Availability Replica",
+     "API Gateway",
+     "On-Premise K8s / AWS Infrastructure"
+    ],
+    "sensitivity_points": [
+     "WAN replication latency between on-premises and AWS eu-central-1 constrains synchronous replication."
+    ],
+    "tradeoffs": [
+     "Enforcing zero data loss across regions increases write latency on primary transactional operations."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Patroni automated standby failover and PgBouncer connection pooling recover database availability within 30 seconds, while circuit breakers in the Billing Service isolate downstream failures, though explicit claim idempotency mechanisms are not fully detailed.",
+    "elements": [
+     "Billing & Claims Service",
+     "BillingRepository",
+     "CircuitBreakerMiddleware",
+     "ClaimsProcessor",
+     "PostgreSQL",
+     "Connection Pooler",
+     "High Availability Replica"
+    ],
+    "sensitivity_points": [
+     "Patroni election timeout and heartbeat thresholds dictate database failover completion time.",
+     "Circuit breaker timeout configurations prevent thread exhaustion during database reconnection."
+    ],
+    "tradeoffs": [
+     "Aggressive failover detection thresholds increase the risk of split-brain in network partitions."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The PaymentAdapter component encapsulates all communication with external clearinghouses and gateways, completely isolating clearinghouse integration changes from the ClaimsProcessor, BillingService core logic, and the entirely independent EMR Service.",
+    "elements": [
+     "Billing & Claims Service",
+     "ClaimsProcessor",
+     "PaymentAdapter",
+     "Payment Gateway / Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Clean abstraction of external clearinghouse protocols within the PaymentAdapter boundary."
+    ],
+    "tradeoffs": [
+     "Maintaining a generic clearinghouse adapter layer introduces minor abstraction overhead for provider-specific features."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Patient demographic changes are strictly localized to Patient Registration Controller & Service, Data Access Repository, and the PostgreSQL schema. Audit interceptors automatically capture field updates without requiring cross-cutting architectural modifications.",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Patient Registration Controller & Service",
+     "Data Access Repository",
+     "PostgreSQL",
+     "Audit Service"
+    ],
+    "sensitivity_points": [
+     "Loose coupling between demographic data access layer and event-driven audit pipeline."
+    ],
+    "tradeoffs": [
+     "Schema migrations across relational tables require coordinated continuous deployment cycles."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The API Gateway's Authentication & Authorization Filter strictly enforces MFA and OAuth2, blocking single-factor authentication attempts. Audit interceptors log the failed attempt, though a dedicated real-time SIEM alerting mechanism is not explicitly modeled.",
+    "elements": [
+     "API Gateway",
+     "Authentication & Authorization Filter",
+     "Rate Limiting & Threat Protection Plugin",
+     "mTLS & Audit Logging Interceptor",
+     "Audit Service"
+    ],
+    "sensitivity_points": [
+     "Strict enforcement of token validation and MFA challenges at ingress gateway filter."
+    ],
+    "tradeoffs": [
+     "Centralized gateway authentication checks introduce minor latency overhead on every ingress request."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "EMR Service uses Spring AOP Audit Trail Interceptors to capture all read operations, dispatching them to the Audit Service and WORM Storage Engine (S3 Object Lock) managed by Retention Enforcement Manager for 10-year immutable retention.",
+    "elements": [
+     "EMR Service",
+     "Audit Trail Interceptor",
+     "Clinical Record Manager",
+     "Audit Service",
+     "WORM Storage Writer",
+     "Retention Enforcement Manager",
+     "Elasticsearch / WORM storage"
+    ],
+    "sensitivity_points": [
+     "AOP interception coverage guarantees zero unlogged data access paths in clinical workflows.",
+     "WORM storage retention lock policies ensure legal compliance against premature log pruning."
+    ],
+    "tradeoffs": [
+     "Auditing every record read operation generates high storage volume requiring dedicated retention infrastructure."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit Service",
+     "Audit Logging Engine",
+     "Audit & Compliance Interceptor",
+     "Kafka Security Interceptor Module",
+     "Client-Side Encryption/Decryption Middleware",
+     "WORM Storage Engine"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "High Availability Replica",
+     "Redis Replica Nodes",
+     "Routing & Load Balancing Engine",
+     "CircuitBreakerMiddleware",
+     "On-Premise K8s / AWS Infrastructure"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Retention Enforcement Manager",
+     "WORM Storage Engine",
+     "Backup & Archival Agent",
+     "Index Lifecycle Management (ILM) Engine"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Patient Registration Controller & Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Scheduling Engine",
+     "Cache & Lock Manager",
+     "Redis"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "Clinical Record Manager",
+     "Audit Trail Interceptor",
+     "Audit Service"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Service",
+     "BillingController",
+     "InvoiceManager",
+     "ClaimsProcessor",
+     "PaymentAdapter",
+     "Payment Gateway / Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Authentication & Authorization Filter",
+     "API Gateway",
+     "PostgreSQL",
+     "Client-Side Encryption/Decryption Middleware"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "High Availability Replica",
+     "Redis Replica Nodes",
+     "Routing & Load Balancing Engine",
+     "On-Premise K8s / AWS Infrastructure"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "EMR Cache Component",
+     "Redis",
+     "Read-Only Replica"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Service (FHIR Adapter)",
+     "FHIR Ingress/Egress Router",
+     "Data Transformation & Mapping Engine",
+     "FHIR Request Transformer",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

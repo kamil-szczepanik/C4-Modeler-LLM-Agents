@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Notification Worker Service container
+
+Container_Boundary(notification_worker_service, "Notification Worker Service") {
+    Component(Kafka_Consumer_Component, "Kafka Consumer Component", "Go, segmentio/kafka-go", "Consumes alert events from Apache Kafka via Avro/JSON over TLS.")
+    Component(Template_Engine_Component, "Template Engine Component", "Go, text/template", "Processes and renders raw events in-memory.")
+    Component(Dispatch_Adapter_Component, "Dispatch Adapter Component", "Go, net/http", "Dispatches outbound HTTPS notifications to external services via egress proxy.")
+    Component(Retry_DLQ_Manager_Component, "Retry & DLQ Manager Component", "Go", "Manages retry logic and publishes PII-scrubbed poison-pill events to DLQ topic.")
+}
+
+Container(Apache_Kafka_AWS_MSK, "Apache Kafka (AWS MSK)", "Apache Kafka / AWS MSK", "Provides reliable asynchronous event streaming.")
+Container(External_Notification_Service, "External Notification Service", "HTTPS", "External service delivering notifications to patrons and staff.")
+Container(AWS_Secrets_Manager, "AWS Secrets Manager", "AWS", "Stores secrets and credentials securely.")
+
+Rel(Kafka_Consumer_Component, Apache_Kafka_AWS_MSK, "Consumes alert events via Avro/JSON over TLS (mTLS + SCRAM-SHA-512)", "Avro/JSON over TLS")
+Rel(Kafka_Consumer_Component, Template_Engine_Component, "Passes raw events in-memory", "In-Memory")
+Rel(Template_Engine_Component, Dispatch_Adapter_Component, "Passes rendered payloads in-memory", "In-Memory")
+Rel(Dispatch_Adapter_Component, External_Notification_Service, "Dispatches outbound HTTPS notifications via egress proxy", "HTTPS")
+Rel(Retry_DLQ_Manager_Component, Apache_Kafka_AWS_MSK, "Publishes PII-scrubbed poison-pill events to DLQ topic over TLS", "TLS")
+
+@enduml

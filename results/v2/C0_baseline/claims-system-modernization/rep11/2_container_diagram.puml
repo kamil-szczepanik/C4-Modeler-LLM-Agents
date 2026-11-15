@@ -1,0 +1,47 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Insurance Claims Modernization Platform
+
+Person(Customers, "Customers", "End users who submit online claims.")
+Person(Brokers, "Brokers", "Intermediaries who submit and manage claims on behalf of customers.")
+Person(ClaimsAdjusters, "Claims Adjusters", "Internal staff who access web applications to review and process claims.")
+Person(OperationsManagers, "Operations Managers", "Internal staff managing operations and tracking dispute & exception dashboards.")
+
+System_Ext(LegacyCOBOLDB2Mainframe, "Legacy COBOL/DB2 Mainframe", "On-premises 30-year-old COBOL/DB2 mainframe acting as the system of record.")
+System_Ext(AzureAD, "Azure AD", "Identity provider handling OAuth 2.0 / OIDC authentication.")
+
+System_Boundary(InsuranceClaimsModernizationPlatform, "Insurance Claims Modernization Platform") {
+    Container(WebPortalSPA, "Web Portal (SPA)", "React hosted on Azure Static Web Apps", "Responsive user interface for customers and brokers.")
+    Container(AdjusterPortalSPA, "Adjuster Portal (SPA)", "React hosted on Azure Static Web Apps", "Responsive user interface for claims adjusters.")
+    Container(DisputeExceptionDashboard, "Dispute & Exception Dashboard", "React hosted on Azure Static Web Apps", "User interface for tracking disputes and exceptions.")
+    Container(ClaimsAPIBFF, "Claims API (BFF)", "Node.js / TypeScript in Azure Kubernetes Service (AKS)", "Backend-for-Frontend service managing requests and routing rules.")
+    Container(MainframeAdapter, "Mainframe Adapter", "Node.js / TypeScript in Azure Kubernetes Service (AKS)", "Adapter service communicating securely with the on-premise legacy mainframe.")
+    Container(FeatureFlagRoutingService, "Feature Flag / Routing Service", "Azure App Configuration", "Service managing dynamic claim-type routing and feature flags.")
+    Container(AzureServiceBus, "Azure Service Bus", "Azure Service Bus", "Asynchronous event-driven messaging platform.")
+    ContainerDb(AzureCosmosDB, "Azure Cosmos DB", "Azure Cosmos DB", "Low-latency read-model caching database.")
+    Container(AuditTrailStorage, "Audit Trail Storage", "Azure Blob Storage / SQL", "Storage for consuming immutable business audit trail events.")
+    Container(AzureKeyVault, "Azure Key Vault", "Azure Key Vault with Managed Identities", "Secret management service.")
+}
+
+Rel(Customers, WebPortalSPA, "Interact via HTTPS", "HTTPS (TLS 1.3)")
+Rel(Brokers, WebPortalSPA, "Interact via HTTPS", "HTTPS (TLS 1.3)")
+Rel(ClaimsAdjusters, AdjusterPortalSPA, "Interact via HTTPS", "HTTPS (TLS 1.3)")
+Rel(OperationsManagers, DisputeExceptionDashboard, "Interact via HTTPS", "HTTPS (TLS 1.3)")
+
+Rel(WebPortalSPA, ClaimsAPIBFF, "Communicate via REST", "REST over HTTPS with OAuth 2.0 / OIDC (Azure AD)")
+Rel(AdjusterPortalSPA, ClaimsAPIBFF, "Communicate via REST", "REST over HTTPS with OAuth 2.0 / OIDC (Azure AD)")
+Rel(DisputeExceptionDashboard, ClaimsAPIBFF, "Communicate via REST", "REST over HTTPS with OAuth 2.0 / OIDC (Azure AD)")
+
+Rel(ClaimsAPIBFF, AzureCosmosDB, "Read-model caching", "TCP/TLS")
+Rel(ClaimsAPIBFF, FeatureFlagRoutingService, "Fetches routing rules", "HTTPS")
+Rel(ClaimsAPIBFF, AzureServiceBus, "Publishes messages", "AMQP/HTTPS")
+Rel(MainframeAdapter, AzureServiceBus, "Syncs data", "AMQP/HTTPS")
+Rel(MainframeAdapter, LegacyCOBOLDB2Mainframe, "Communicates with on-premise legacy mainframe", "Mutually authenticated TLS (mTLS) over Azure ExpressRoute/VPN")
+Rel(ClaimsAPIBFF, AuditTrailStorage, "Consumes immutable events", "HTTPS / Internal Protocol")
+Rel(MainframeAdapter, AuditTrailStorage, "Consumes immutable events", "HTTPS / Internal Protocol")
+Rel(ClaimsAPIBFF, AzureKeyVault, "Retrieves secrets", "Managed Identities")
+Rel(MainframeAdapter, AzureKeyVault, "Retrieves secrets", "Managed Identities")
+
+@enduml

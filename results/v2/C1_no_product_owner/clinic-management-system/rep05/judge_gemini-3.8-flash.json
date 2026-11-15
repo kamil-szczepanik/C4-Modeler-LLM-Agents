@@ -1,0 +1,323 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All requirements (R-01 to R-04) are directly addressed by Core Services components: 'Patient Registry Component', 'Scheduling Engine', 'EMR Manager', and 'Billing Processor', complemented by the 'FHIR Interoperability Engine' and external clearinghouse integrations.",
+   "performance_efficiency": "Performance targets are supported by 'Envoy Proxy Engine', 'Connection Pooler & Routing Proxy', distributed 'CockroachDB', and 'Lightweight Edge Broker' (NATS). However, explicit read-caching mechanisms tailored to meet the sub-second P95 EMR screen load are absent.",
+   "compatibility": "Compatibility is thoroughly addressed by the 'FHIR Interoperability Engine' using Apache Camel and HAPI FHIR JPA to interface with 'External Laboratory & Imaging Systems' over HL7 FHIR, as well as external payment and insurance systems.",
+   "usability": "While all user groups are identified and route through the 'API Gateway', the architecture omits dedicated presentation-layer containers or UI components (e.g., patient portals or clinical web/mobile frontends) to address specific user interaction needs.",
+   "reliability": "Active-active 99.99% availability is robustly supported via 'Global Traffic Manager / WAF', 'Distributed SQL Engine' (multi-active CockroachDB), 'Cross-Site Replication Manager' (MirrorMaker 2), and 'Replication & Erasure Coding Manager' across hybrid regions.",
+   "security": "Enforces MFA via 'Authentication Engine', AES-256 at rest through 'Database Encryption Manager' and 'Key Management & Envelope Encryption Engine' with 'Enterprise KMS', audit trails sent to 'SIEM & Audit Platform', and 10-year retention via 'Policy & WORM Enforcer'.",
+   "maintainability": "Displays clear separation of concerns across microservices in 'Core Services', isolated integration components in 'FHIR Interoperability Engine', schema governance using 'Schema Registry', and loose coupling through the 'Event Dispatcher Component'.",
+   "portability": "Explicitly targets hybrid deployment ('on-prem-k8s' and 'eu-central-1') using portable, infrastructure-agnostic technologies including MinIO, CockroachDB, Keycloak, Envoy, and Kafka with 'Cross-Site Replication Manager' across environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Envoy and PgBouncer connection pooling efficiently manage concurrent ingress and database queries. CockroachDB handles distributed reads, though the lack of an explicit caching layer for complex clinical views may challenge sub-second P95 latency under high concurrency.",
+    "elements": [
+     "API Gateway",
+     "Envoy Proxy Engine",
+     "EMR Manager",
+     "Regional Databases",
+     "Connection Pooler & Routing Proxy",
+     "Distributed SQL Engine"
+    ],
+    "sensitivity_points": [
+     "Database connection pool sizing and relational query optimization for medical records."
+    ],
+    "tradeoffs": [
+     "Relying on database reads without distributed caching trades memory footprint for query latency."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Apache Camel and Kafka decouple high-volume FHIR payload ingestion from user workflows. Asynchronous event streaming and validation buffers absorb the burst of 10,000 results without degrading database or EMR interactive read performance.",
+    "elements": [
+     "FHIR Interoperability Engine",
+     "API Router & Validator Component",
+     "Transformation Engine Component",
+     "Message Brokers",
+     "Event Ingestion & Routing Engine",
+     "EMR Manager"
+    ],
+    "sensitivity_points": [
+     "Kafka partition capacity and asynchronous batching throughput in Camel routes."
+    ],
+    "tradeoffs": [
+     "Asynchronous decoupling ensures EMR performance but introduces slight eventual consistency for incoming lab records."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "Global Traffic Manager enables rapid traffic failover to on-premises. However, the regional databases explicitly utilize asynchronous encrypted replication between sites to reduce latency, making zero data loss (RPO=0) technically impossible during an abrupt cloud outage.",
+    "elements": [
+     "Global Traffic Manager / WAF",
+     "Regional Databases",
+     "Distributed SQL Engine",
+     "Message Brokers",
+     "Cross-Site Replication Manager"
+    ],
+    "sensitivity_points": [
+     "Replication synchronicity between on-prem and cloud sites across WAN boundaries."
+    ],
+    "tradeoffs": [
+     "Choosing asynchronous cross-region replication favors write latency over strict zero data loss."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "CockroachDB's distributed SQL engine leverages Raft consensus to re-elect leaseholders within seconds during a node failure. PgBouncer and Billing Processor support transparent retries with ACID transaction guarantees, preventing duplicate or lost insurance submissions.",
+    "elements": [
+     "Billing Processor",
+     "Connection Pooler & Routing Proxy",
+     "Regional Databases",
+     "Distributed SQL Engine"
+    ],
+    "sensitivity_points": [
+     "Raft leaseholder election timeouts and database client transaction retry configurations."
+    ],
+    "tradeoffs": [
+     "Multi-node distributed ACID consensus introduces write latency to guarantee zero claim duplication."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The modular Core Services architecture isolates billing logic from the EMR Manager, preventing any impact on clinical records. However, the absence of a distinct insurance adapter container means clearinghouse integration changes occur directly within the Billing Processor.",
+    "elements": [
+     "Billing Processor",
+     "Core Services",
+     "Payment Gateway and Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Coupling between internal billing business logic and external clearinghouse protocol interfaces."
+    ],
+    "tradeoffs": [
+     "Co-locating integration logic inside Billing Processor avoids extra containers but couples external protocols."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Changes are confined to the Patient Registry Component, CockroachDB table schema, and Confluent Schema Registry. The schema registry enforces compatibility while Spring Boot and CockroachDB support online schema migrations, easily deliverable within a single sprint.",
+    "elements": [
+     "Patient Registry Component",
+     "Regional Databases",
+     "Distributed SQL Engine",
+     "Schema Registry"
+    ],
+    "sensitivity_points": [
+     "Strict AVRO schema evolution compatibility and online relational database migration capabilities."
+    ],
+    "tradeoffs": [
+     "Enforcing centralized schema evolution governance requires coordinated deployment across registry and service models."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The Authentication Engine in Keycloak enforces multi-factor authentication, rejecting passwords lacking valid second factors. Failed attempts trigger the Audit Event Dispatcher to stream alerts via Syslog/Kafka to the SIEM platform in near real-time.",
+    "elements": [
+     "API Gateway",
+     "Authentication Filter",
+     "Identity & Access Management",
+     "Authentication Engine",
+     "Audit Event Dispatcher",
+     "SIEM & Audit Platform"
+    ],
+    "sensitivity_points": [
+     "Enforcement of non-bypassable MFA policies and real-time audit streaming latency."
+    ],
+    "tradeoffs": [
+     "Mandatory MFA adds login latency and user friction in exchange for compromised-credential protection."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Keycloak's Authorization Provider enforces fine-grained relationship policies. EMR Manager, database audit exporters, and object storage interceptors log 100% of read access, while Object Lock (WORM) and the SIEM platform guarantee tamper-evident retention beyond 10 years.",
+    "elements": [
+     "Authorization & RBAC Provider",
+     "EMR Manager",
+     "Audit Log Exporter",
+     "Policy & WORM Enforcer",
+     "Audit Logging Interceptor",
+     "SIEM & Audit Platform"
+    ],
+    "sensitivity_points": [
+     "Exhaustive capture of read-level operations and immutable WORM policy retention settings."
+    ],
+    "tradeoffs": [
+     "Auditing and archiving every individual medical read increases storage consumption and I/O overhead."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "none",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Regional Databases",
+     "Database Encryption Manager",
+     "Policy & WORM Enforcer",
+     "Identity & Access Management",
+     "SIEM & Audit Platform",
+     "Audit Log Exporter"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Global Traffic Manager / WAF",
+     "Distributed SQL Engine",
+     "Cross-Site Replication Manager",
+     "Replication & Erasure Coding Manager"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Encrypted Object Storage",
+     "Policy & WORM Enforcer"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Core Services",
+     "Patient Registry Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Core Services",
+     "Scheduling Engine"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Core Services",
+     "EMR Manager",
+     "SIEM & Audit Platform",
+     "Audit Log Exporter"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Core Services",
+     "Billing Processor",
+     "Payment Gateway and Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity & Access Management",
+     "Authentication Engine",
+     "Identity Provider (IdP)",
+     "Database Encryption Manager",
+     "Key Management & Envelope Encryption Engine",
+     "Enterprise KMS"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Global Traffic Manager / WAF",
+     "Distributed SQL Engine",
+     "Cross-Site Replication Manager",
+     "Replication & Erasure Coding Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Interoperability Engine",
+     "External Laboratory & Imaging Systems",
+     "API Router & Validator Component",
+     "Transformation Engine Component",
+     "FHIR Repository Adapter Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

@@ -1,0 +1,46 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Library Management System
+
+Person(PatronsStaff, "Library Patrons & Library Staff", "Primary users accessing self-service and circulation tools.")
+Person(AdminsAuditors, "Library Administrators & Library Auditors / Compliance Officers", "Stakeholders managing reporting and GDPR/EU audits.")
+
+System_Ext(DigitalContentVendorAPIs, "Digital Content Vendor APIs", "External system for e-books and digital items.")
+System_Ext(EUPaymentGateway, "EU Payment Gateway", "External system for processing fines and fees.")
+System_Ext(EUNotificationService, "EU Notification Service", "External system for due date reminders via SMTP/Push.")
+System_Ext(EURegulatoryComplianceAuditPortal, "EU Regulatory Compliance & Audit Portal", "External secure interface for auditors.")
+System_Ext(EUResidentLogAuditSink, "EU-Resident Log & Audit Sink", "External dependency for telemetry and compliance trails.")
+
+System_Boundary(LibraryManagementSystem, "Library Management System") {
+    Container(PatronWebMobileApp, "Patron Web/Mobile App", "React / React Native", "Frontend UI prioritizing WCAG 2.1 AA accessibility for patrons.")
+    Container(StaffDashboard, "Staff Dashboard", "Angular", "Administrative cataloging and branch operations interface.")
+    Container(SelfServiceCheckInOutKiosk, "Self-Service Check-In/Out Kiosk", "Electron / React", "Lightweight container supporting offline fallback.")
+    Container(APIGateway, "API Gateway", "Kong / Nginx", "Single entry point enforcing TLS, mTLS, and OAuth2.")
+    Container(CoreDomainServices, "Core Domain Services", "Java / Spring Boot", "Microservices handling circulation and cataloging.")
+    Container(SearchEngine, "Search Engine", "Elasticsearch", "Container guaranteeing <800ms response times (R-05).")
+    ContainerDb(DataStorage, "Data Storage", "PostgreSQL", "Transactional database hosted exclusively in the EU.")
+    Container(AsyncMessageBroker, "Async Message Broker", "Apache Kafka", "Decouples batch tasks and event distribution.")
+    Container(NotificationDispatcher, "Notification Dispatcher", "Python / FastAPI", "Service with rate-limiting and DLQ integration.")
+    Container(ObservabilityStack, "Observability Stack", "OpenTelemetry, Prometheus, Grafana", "Centralized observability stack routed to EU-Resident Log & Audit Sink.")
+}
+
+Rel(PatronsStaff, PatronWebMobileApp, "Accesses patron application via secure channels", "HTTPS / mTLS")
+Rel(PatronsStaff, StaffDashboard, "Accesses staff operations interface", "HTTPS / mTLS")
+Rel(PatronsStaff, SelfServiceCheckInOutKiosk, "Uses self-service kiosk for check-in/out", "HTTPS / mTLS")
+Rel(PatronWebMobileApp, APIGateway, "Routes requests through API gateway", "HTTPS")
+Rel(StaffDashboard, APIGateway, "Routes requests through API gateway", "HTTPS")
+Rel(SelfServiceCheckInOutKiosk, APIGateway, "Routes requests through API gateway", "HTTPS")
+Rel(APIGateway, CoreDomainServices, "Routes traffic to core services", "gRPC / HTTPS")
+Rel(APIGateway, SearchEngine, "Routes search queries", "gRPC / HTTPS")
+Rel(CoreDomainServices, DataStorage, "Persists transactional data", "SQL / JDBC")
+Rel(CoreDomainServices, AsyncMessageBroker, "Publishes domain events", "Apache Kafka Protocol")
+Rel(AsyncMessageBroker, NotificationDispatcher, "Consumes events for notifications", "Apache Kafka Protocol")
+Rel(NotificationDispatcher, EUNotificationService, "Sends notifications via external service", "SMTP/Push over TLS")
+Rel(ObservabilityStack, EUResidentLogAuditSink, "Routes system telemetry and audit logs", "Encrypted Log Stream")
+Rel(CoreDomainServices, ObservabilityStack, "Sends metrics and traces", "OpenTelemetry")
+Rel(NotificationDispatcher, ObservabilityStack, "Sends metrics and traces", "OpenTelemetry")
+Rel(APIGateway, ObservabilityStack, "Sends metrics and traces", "OpenTelemetry")
+
+@enduml

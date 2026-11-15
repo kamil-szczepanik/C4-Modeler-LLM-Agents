@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container_Boundary(claim_routing_service, "Claim Routing Service") {
+    Component(EventIngressRouter, "Event Ingress Router", "Apache Camel", "Dynamically directs incoming claims between legacy and modern pipelines.")
+    Component(RoutingRulesEngine, "Routing Rules Engine", "Apache Camel", "Evaluates routing logic for claim types.")
+    Component(FeatureFlagEvaluator, "Feature Flag Evaluator", "In-memory cache with short TTL", "Evaluates feature flags for claim migration status.")
+    Component(ModernPlatformDispatcher, "Modern Platform Dispatcher", "Apache Camel", "Dispatches claims to the modern processing pipeline.")
+    Component(MainframeFallbackDispatcher, "Mainframe Fallback Dispatcher", "Apache Camel", "Dispatches claims to the legacy mainframe pipeline.")
+    Component(DeadLetterAuditHandler, "Dead Letter & Audit Handler", "Apache Camel", "Handles failed messages and audit logging.")
+}
+
+System_Ext(PrimaryDatastore, "Primary Datastore", "Azure SQL Database")
+System_Ext(ClaimsProcessingService, "Claims Processing Service", "Modern processing platform")
+System_Ext(MainframeIntegrationAdapter, "Mainframe Integration Adapter", "IBM MQ / AMQP")
+System_Ext(AzureBlobStorageAuditService, "Azure Blob Storage / Audit Service", "Cloud Storage & Audit")
+
+Rel(EventIngressRouter, FeatureFlagEvaluator, "In-memory function call")
+Rel(FeatureFlagEvaluator, PrimaryDatastore, "JDBC/TLS")
+Rel(EventIngressRouter, ModernPlatformDispatcher, "Routes claim")
+Rel(ModernPlatformDispatcher, ClaimsProcessingService, "gRPC/HTTP")
+Rel(EventIngressRouter, MainframeFallbackDispatcher, "Routes claim")
+Rel(MainframeFallbackDispatcher, MainframeIntegrationAdapter, "AMQP/JMS via IBM MQ")
+Rel(DeadLetterAuditHandler, AzureBlobStorageAuditService, "HTTPS")
+
+@enduml

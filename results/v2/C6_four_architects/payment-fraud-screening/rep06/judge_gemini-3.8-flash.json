@@ -1,0 +1,324 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies all requirements: Fraud Scoring Engine handles real-time scoring (R-01), Case Management Backend and Analyst UI deliver case review workflows (R-02), and Model & Rule Registry Service with Model Hot-Swapper enables zero-downtime rule updates (R-03).",
+   "performance_efficiency": "Sub-50ms P99 at 3,000 TPS is well supported by Go-based Fraud Scoring Engine, in-memory feature queries via Redis Cluster / Amazon ElastiCache, and offloading audit writes asynchronously through Amazon SQS / SNS to Asynchronous Audit Worker.",
+   "compatibility": "Standard protocols ensure seamless integration: Payment Gateway connects via gRPC/HTTPS through API Gateway / Envoy, Fraud Analysts authenticate with external IdP / AWS Cognito via OIDC, and compliance exports integrate cleanly with AWS S3 Object Lock.",
+   "usability": "Fraud Analysts are well accommodated by a dedicated Analyst UI delivered via CloudFront and S3, supported by Case Controller and dynamic masking via Masking & Authorization Interceptor to hide full card data.",
+   "reliability": "Availability targets are met via API Gateway / Envoy's Circuit Breaker supporting fail-open operation to avoid blocking payments beyond 1 minute, Redis Sentinel failover, Aurora read replicas, and DLQ Handler for failed audit messages.",
+   "security": "PCI-DSS and 7-year auditability are thoroughly addressed by Tokenization Filter, Masking & Authorization Interceptor, AWS Secrets Manager with automatic credential rotation, TLS 1.3, and write-once compliance logging to AWS S3 Object Lock.",
+   "maintainability": "Clear container separation between Fraud Scoring Engine, Case Management Backend, and Model & Rule Registry Service minimizes coupling. The Model Hot-Swapper and transactional outbox patterns allow a three-engineer team to operate and deploy updates safely.",
+   "portability": "Tailored to AWS eu-west-1 using ECS Fargate, Lambda, and Aurora. Deep integration with proprietary services like S3 Object Lock, Secrets Manager, and AWS Cognito limits multi-cloud portability, though containerized workloads remain adaptable."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.9375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The Go-based scoring engine evaluates rules via embedded WebAssembly and in-memory Redis feature lookups. Decoupled asynchronous audit publishing over buffered channels ensures low latency well within 50 ms at 3,000 TPS.",
+    "elements": [
+     "API Gateway / Envoy",
+     "Fraud Scoring Engine",
+     "Scoring Evaluator",
+     "Feature Aggregator",
+     "Redis Cluster / Amazon ElastiCache"
+    ],
+    "sensitivity_points": [
+     "Redis cluster network latency and in-memory feature retrieval speed",
+     "Go channel buffer capacity preventing backpressure on scoring evaluator"
+    ],
+    "tradeoffs": [
+     "In-memory evaluation prioritized over synchronous database writes"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Scoring and case review traffic are completely isolated. Fraud scoring runs against Redis and in-memory engines, while analyst workflows interact through Spring Boot against Aurora PostgreSQL with read replica routing.",
+    "elements": [
+     "Analyst UI",
+     "Case Management Backend",
+     "PostgreSQL / Amazon Aurora",
+     "Read Replica Routing Component",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Separation of in-memory scoring path from relational database queries"
+    ],
+    "tradeoffs": [
+     "Read replicas add minor replication lag for analysts to preserve performance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Envoy provides circuit breaking with outlier detection and fail-open routing, avoiding payment blockage. However, auditing fallback decisions when the engine is unavailable relies on access logs rather than dedicated fallback audit emitters.",
+    "elements": [
+     "API Gateway / Envoy",
+     "Circuit Breaker",
+     "Access Logger",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Envoy circuit breaker threshold tuning for rapid sub-minute failure recovery"
+    ],
+    "tradeoffs": [
+     "Allowing payments on fail-open risks fraud exposure to prevent checkout disruption"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Audit events are emitted via buffered Go channels to an Amazon SNS/SQS pipeline decoupled from the scoring path. SQS and DLQ mechanics preserve events during downstream Lambda or S3 Object Lock degradation.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Audit Event Publisher",
+     "Amazon SQS / SNS",
+     "Asynchronous Audit Worker",
+     "DLQ Handler Component"
+    ],
+    "sensitivity_points": [
+     "SQS retention limits and buffer depths during extended S3 outages"
+    ],
+    "tradeoffs": [
+     "Asynchronous logging decouples latency from compliance storage availability"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Model Hot-Swapper performs atomic pointer swaps in memory without process restart or downtime. Models are pre-validated, compiled, and tagged with version metadata stored with each decision.",
+    "elements": [
+     "Model & Rule Registry Service",
+     "Model Compiler & Validator",
+     "Model Hot-Swapper",
+     "Fraud Scoring Engine",
+     "Scoring Evaluator"
+    ],
+    "sensitivity_points": [
+     "Thread-safe atomic pointer swaps ensure consistent model execution per transaction"
+    ],
+    "tradeoffs": [
+     "Local memory caching of models vs memory overhead across scoring instances"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "New rules and velocity checks are deployed through the Model & Rule Registry Service to Redis sliding window limiters and the scoring engine hot-swapper. Decisions explicitly capture evaluated rule tags.",
+    "elements": [
+     "Model & Rule Registry Service",
+     "Distribution Coordinator",
+     "Fraud Scoring Engine",
+     "Redis Cluster / Amazon ElastiCache",
+     "Sliding Window Rate Limiter"
+    ],
+    "sensitivity_points": [
+     "Coordination latency between registry distribution and scoring engine polling"
+    ],
+    "tradeoffs": [
+     "Dynamic rule distribution complexity versus zero-downtime execution speed"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "A Tokenization Filter and Masking & Authorization Interceptor enforce that plain PAN data is unreachable by analysts. Although access is logged via CloudTrail, automated alerting for anomalous analyst access within 15 minutes is not explicitly detailed.",
+    "elements": [
+     "Tokenization Filter",
+     "Masking & Authorization Interceptor",
+     "Case Management Backend",
+     "AWS Cognito",
+     "Audit Logging Bridge"
+    ],
+    "sensitivity_points": [
+     "Consistent masking rules enforced in interceptors before sending data to Analyst UI"
+    ],
+    "tradeoffs": [
+     "Data masking protects cardholder data but limits analyst visibility during triage"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The Asynchronous Audit Worker formats and writes decision payloads, model versions, and hash chains to AWS S3 Object Lock configured for 7-year WORM retention, enabling reproducible audit reports within one business day.",
+    "elements": [
+     "AWS S3 Object Lock",
+     "Asynchronous Audit Worker",
+     "S3 Exporter Component",
+     "Audit Ledger Component",
+     "Model & Rule Registry Service"
+    ],
+    "sensitivity_points": [
+     "Immutability policies on S3 Object Lock buckets and key retention duration"
+    ],
+    "tradeoffs": [
+     "Write-once storage cost versus long-term compliance audit reliability"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "AWS Secrets Manager / Parameter Store",
+     "Tokenization Filter",
+     "Masking & Authorization Interceptor",
+     "Listener & TLS Terminator",
+     "ext_authz"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "AWS S3 Object Lock",
+     "Asynchronous Audit Worker",
+     "Audit Ledger Component",
+     "Audit Event Publisher"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "gRPC Interface Controller",
+     "Scoring Evaluator",
+     "Feature Aggregator"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Analyst UI",
+     "Case Management Backend",
+     "Case Controller",
+     "Case Workflow Service",
+     "Case Repository",
+     "PostgreSQL / Amazon Aurora"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model & Rule Registry Service",
+     "Model Hot-Swapper",
+     "Distribution Coordinator",
+     "Model Compiler & Validator",
+     "Scoring Evaluator"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Redis Cluster / Amazon ElastiCache",
+     "In-Memory Token / Feature Index",
+     "gRPC Interface Controller",
+     "Secrets Caching Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Tokenization Filter",
+     "Masking & Authorization Interceptor",
+     "Listener & TLS Terminator"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Event Publisher",
+     "Asynchronous Audit Worker",
+     "Audit Formatter Component",
+     "S3 Exporter Component",
+     "AWS S3 Object Lock",
+     "Audit Ledger Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "API Gateway / Envoy",
+     "Circuit Breaker"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

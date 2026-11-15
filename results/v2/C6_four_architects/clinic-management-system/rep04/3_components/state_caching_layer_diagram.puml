@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the State Caching Layer container
+
+Container_Boundary(state_caching_layer, "State Caching Layer") {
+    Component(CacheRouterProxy, "Cache Router / Proxy", "Envoy Proxy (sidecar)", "Secures TCP/RESP traffic and enforces TLS termination, routing and invalidating session & EMR cache.")
+    Component(InMemoryStore, "In-Memory Store", "Redis Enterprise Core", "Core in-memory storage providing sub-second P95 performance for patient state and EMR.")
+    Component(AtRestEncryptionEngine, "At-Rest Encryption Engine", "Custom module with AES-256", "Secures sensitive PHI before persistence.")
+    Component(ReplicationSyncManager, "Replication & Sync Manager", "Redis Enterprise Active-Active CRDT Modules", "Enables WAN-optimized multi-region synchronization for 99.99% availability.")
+    Component(AuditTTLEnforcer, "Audit & TTL Enforcer", "Redis Functions / Lua Scripting", "Triggers audit logging for sensitive PHI cache accesses and enforces TTLs.")
+    Component(CacheWarmupHydrationWorker, "Cache Warmup & Hydration Worker", "Go background worker", "Fetches baseline clinical state and populates initial cache keys.")
+}
+
+Component(CoreClinicalSchedulingandBillingMicroservices, "Core Clinical, Scheduling, and Billing Microservices", "Microservices", "External microservices that query and invalidate session & EMR cache.")
+Component(KeyManagementServiceVaultCloudKMS, "Key Management Service (Vault / Cloud KMS)", "Vault / Cloud KMS", "Manages AES-256 keys for strict HIPAA/GDPR encryption.")
+Component(AuditLogStoreElasticsearch, "Audit Log Store (Elasticsearch)", "Elasticsearch", "Immutable storage for compliance and audit logging.")
+Component(DistributedRelationalDatabaseCockroachDB, "Distributed Relational Database (CockroachDB)", "CockroachDB", "Holds baseline clinical state.")
+
+Rel(CoreClinicalSchedulingandBillingMicroservices, CacheRouterProxy, "Queries and invalidates session & EMR cache", "TLS / RESP")
+Rel(InMemoryStore, AtRestEncryptionEngine, "Secures sensitive PHI before persistence", "Internal API")
+Rel(InMemoryStore, ReplicationSyncManager, "Replicates state changes across hybrid regions", "TLS / Redis Cluster Bus")
+Rel(AtRestEncryptionEngine, KeyManagementServiceVaultCloudKMS, "Retrieves and rotates data encryption keys", "gRPC / TLS")
+Rel(CacheRouterProxy, AuditTTLEnforcer, "Triggers audit logging for sensitive PHI cache accesses", "Internal Function Call")
+Rel(AuditTTLEnforcer, AuditLogStoreElasticsearch, "Streams compliance events", "gRPC / TLS")
+Rel(CacheWarmupHydrationWorker, DistributedRelationalDatabaseCockroachDB, "Fetches baseline clinical state", "SQL / TLS")
+Rel(CacheWarmupHydrationWorker, InMemoryStore, "Populates initial cache keys", "TCP / RESP")
+
+@enduml

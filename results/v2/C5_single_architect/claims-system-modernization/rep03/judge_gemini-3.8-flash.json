@@ -1,0 +1,314 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: Customer Portal enables online submissions (R-01), Adjuster Workspace provides adjuster workflows (R-02), and Claims Router / Strategy Selector in Claims Core Service directs claim types dynamically to modern workflows or the legacy system (R-03).",
+   "performance_efficiency": "The Adjuster Workspace isolates screen latency from the 5 s mainframe response by serving reads from an Async View Model Cache (Redis) kept current by an Event-Driven Sync Worker via Integration Message Broker, easily meeting the 2 s target (R-05).",
+   "compatibility": "The Anti-Corruption Layer (ACL) and Mainframe Anti-Corruption Client interoperate with the Legacy Mainframe via MQ and File Transfer, while API Gateway integrates with Microsoft Entra ID. Detailed handling of the 23:00-05:00 batch window constraints is minimally specified.",
+   "usability": "Distinct user groups are cleanly separated with tailored UIs: Customer Portal (Claim Submission UI and Claim Tracker Component) serves external users, while Adjuster Workspace (UI Shell) provides a dedicated high-efficiency interface for claims adjusters.",
+   "reliability": "Requirement R-04 is addressed using the Outbox Processor in Claims Core Service combined with Azure Service Bus Session Processor and Dead-Letter Subsystem, guaranteeing reliable at-least-once delivery, ordering, and duplicate detection without data loss.",
+   "security": "R-07 is satisfied via MSAL.js in the Customer Portal Authentication Controller and the Authentication & Authorization Filter in the API Gateway connecting to Entra ID. Accountability is supported by the Database Migration & Audit Log Component.",
+   "maintainability": "Claims Router / Strategy Selector allows instant rollback of specific claim types to the mainframe (R-06). Additionally, the external Anti-Corruption Layer isolates core services from costly mainframe schema modifications.",
+   "portability": "The hybrid topology (on-premises mainframe and Azure West Europe) is supported using Azure Container Apps, .NET Core microservices, and React SPAs. However, deep coupling to proprietary Azure PaaS services may challenge the team's limited cloud experience."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 4.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Adjuster Workspace uses an Async View Model Cache (Redis) populated asynchronously by Event-Driven Sync Worker via Service Bus, serving read requests in sub-second time without synchronous mainframe dependency.",
+    "elements": [
+     "Adjuster Workspace",
+     "BFF API Controller",
+     "Async View Model Cache",
+     "Event-Driven Sync Worker",
+     "Integration Message Broker"
+    ],
+    "sensitivity_points": [
+     "Cache hydration latency and eventual consistency delay between mainframe updates and Redis"
+    ],
+    "tradeoffs": [
+     "Trading immediate read consistency for sub-two-second screen loading performance"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Claim submissions are received asynchronously using Transactional Outbox and Service Bus queues. Mainframe ingestion can be buffered and throttled by the ACL without breaching the batch window.",
+    "elements": [
+     "API Gateway",
+     "Claims Core Service",
+     "Outbox Processor",
+     "Integration Message Broker",
+     "Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue storage capacity and consumer throttle rates during 5x peak"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission acceptance decouples peak load from legacy processing throughput"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Transactional Outbox pattern in Claims Core Service and Azure Service Bus queues decouple incoming submissions from mainframe availability, holding messages until the batch window completes.",
+    "elements": [
+     "Claims Core Service",
+     "Data Access Repository",
+     "Outbox Processor",
+     "Integration Message Broker",
+     "Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Durability of outbox database storage during extended mainframe unavailability"
+    ],
+    "tradeoffs": [
+     "Increased storage buffer requirements in exchange for continuous online submission availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The architecture incorporates Outbox Processor, Service Bus Sessions for ordered delivery, Dead-Letter Subsystem, and Migration & Audit temporal tables, ensuring failed syncs can be retried idempotently without loss or duplication.",
+    "elements": [
+     "Outbox Processor",
+     "Integration Message Broker",
+     "Dead-Letter Subsystem",
+     "Anti-Corruption Layer (ACL)",
+     "Migration & Audit Log Component"
+    ],
+    "sensitivity_points": [
+     "Idempotency key enforcement within the Anti-Corruption Layer and mainframe interface"
+    ],
+    "tradeoffs": [
+     "Processing complexity for dead-letter reprocessing versus zero-data-loss guarantee"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Claims Router / Strategy Selector routes claim types dynamically between modern workflow and legacy mainframe via ACL, enabling configuration-driven switch-back within a day without redesigning interfaces.",
+    "elements": [
+     "Claims Router / Strategy Selector",
+     "Mainframe Anti-Corruption Client",
+     "Anti-Corruption Layer (ACL)",
+     "Claim Workflow Engine"
+    ],
+    "sensitivity_points": [
+     "Dynamic routing rule configuration latency and deployment rollback complexity"
+    ],
+    "tradeoffs": [
+     "Routing abstraction overhead in exchange for rapid per-claim-type reversibility"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The UIs interface solely with the API Gateway and BFF layer. Decommissioning the mainframe requires only routing updates in Claims Router and retiring the ACL sync, leaving client applications intact.",
+    "elements": [
+     "Customer Portal",
+     "Adjuster Workspace",
+     "API Gateway",
+     "Claims Router / Strategy Selector",
+     "Claim Workflow Engine",
+     "Database"
+    ],
+    "sensitivity_points": [
+     "Completeness of domain data migration to Azure SQL Database before cutoff"
+    ],
+    "tradeoffs": [
+     "Upfront encapsulation costs via API Gateway/BFF preventing downstream UI rewrites"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The API Gateway features an Authentication & Authorization Filter, and the database has audit tables. However, fine-grained multi-tenant broker data boundary enforcement is not explicitly defined in the components.",
+    "elements": [
+     "API Gateway",
+     "Authentication & Authorization Filter",
+     "Claims Core Service",
+     "Migration & Audit Log Component"
+    ],
+    "sensitivity_points": [
+     "Consistent tenancy/broker attribute validation across API Gateway and Claims Core Service"
+    ],
+    "tradeoffs": [
+     "Centralized gateway auth filter versus defense-in-depth domain-level data authorization"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "SSO through Microsoft Entra ID ensures rapid token revocation for modern applications within 15 minutes, but the architecture does not specify how revocation synchronizes to the on-premises mainframe permissions.",
+    "elements": [
+     "Identity Provider",
+     "Authentication & Authorization Filter",
+     "API Gateway",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Access token TTL and lack of automated AD-to-mainframe RACF identity sync"
+    ],
+    "tradeoffs": [
+     "Cloud identity federation simplicity versus manual legacy mainframe account reconciliation"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Anti-Corruption Layer (ACL)",
+     "Mainframe Sync Publisher",
+     "Integration Staging Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Anti-Corruption Layer (ACL)",
+     "Mainframe Anti-Corruption Client"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer Portal",
+     "Claim Submission UI",
+     "API Gateway",
+     "Claim Submission Controller"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Workspace",
+     "UI Shell",
+     "BFF API Controller"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Claims Router / Strategy Selector",
+     "Claim Submission UI",
+     "Mainframe Anti-Corruption Client"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Integration Message Broker",
+     "Outbox Processor",
+     "Dead-Letter Subsystem",
+     "Session Processor",
+     "Claim Routing Topic"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Adjuster Workspace",
+     "BFF API Controller",
+     "Async View Model Cache",
+     "Event-Driven Sync Worker",
+     "Claim Read Model Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Claims Router / Strategy Selector",
+     "Mainframe Sync Publisher",
+     "Mainframe Anti-Corruption Client"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Identity Provider",
+     "Authentication Controller",
+     "Authentication & Authorization Filter"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

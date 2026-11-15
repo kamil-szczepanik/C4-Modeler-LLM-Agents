@@ -1,0 +1,339 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Search Module handles browsing/search (R-01), Cart/Order State Manager and Saga Orchestrator manage checkout (R-02), Reviews API Controller handles ratings (R-03), and Recommendation Scoring Engine provides recommendations (R-04). Compliance Workers and Forex/Currency Rate API directly address constraints.",
+   "performance_efficiency": "The design achieves 1M MAU and <2s latency via AWS CloudFront, Amazon ElastiCache (Redis) caching, AWS RDS Proxy pooling, Amazon Aurora Read Replicas, Request Aggregator BFF, and Background Pre-computation Workers for offloading intensive scoring.",
+   "compatibility": "External systems are thoroughly accommodated using standard REST/JSON over TLS 1.3. The Payment Gateway Adapter implements an Anti-Corruption Layer with idempotency keys, and the Fulfillment Integrator interfaces cleanly with Third-Party Shipping APIs.",
+   "usability": "Customers access the system via AWS CloudFront & S3 and API Gateway & BFF. However, administrative, compliance officer, and customer support user groups lack dedicated interface elements or operational channels to oversee catalog, orders, and GDPR/CCPA workflows.",
+   "reliability": "Uptime (99.95%) and fault tolerance are reinforced by Saga Orchestrator compensation workflows, Dead Letter Queues, Amazon S3 Cross-Region Replication, and Aurora Read Replicas. However, multi-region database failover mechanisms across the three specified AWS regions are not fully detailed.",
+   "security": "OWASP Top-10 mitigations and data privacy are addressed through AWS WAF at CloudFront and API Gateway, TLS 1.3, S3 Origin Access Control, and Compliance Workers executing cryptographic shredding, pgaudit tracking, and S3 immutable audit logs.",
+   "maintainability": "The system demonstrates high maintainability with clean bounded contexts across Catalog, Checkout, Reviews, Recommendations, and Compliance Workers. Decoupling is maintained via the Saga pattern, outbox publishers, and asynchronous AWS SNS/SQS event messaging.",
+   "portability": "Docker containers deployed to Amazon ECS/EKS ensure adaptability across the required AWS regions (us-east-1, eu-west-1, ap-southeast-1). However, heavy coupling to proprietary AWS primitives (CloudFront Functions, Step Functions, SQS/SNS) slightly limits portability outside AWS."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront edge caching, Request Aggregator in the BFF, ElastiCache, and Aurora Read Replicas effectively absorb peak read traffic. However, strict 3G payload limits depend on aggressive asset optimization not explicitly detailed at the edge.",
+    "elements": [
+     "AWS CloudFront & S3",
+     "API Gateway & BFF",
+     "Amazon ElastiCache",
+     "Catalog Container",
+     "Amazon Aurora/RDS"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios at CloudFront and ElastiCache under sudden traffic spikes",
+     "Payload size minimization by Request Aggregator for mobile 3G constraints"
+    ],
+    "tradeoffs": [
+     "Aggressive cache TTLs improve latency but increase risk of stale catalog and inventory views"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Heavy scoring calculations are completely offloaded to the Background Pre-computation Worker and ingested asynchronously via SQS. Precomputed scores are pushed to ElastiCache, isolating catalog and product browsing from computational overhead.",
+    "elements": [
+     "Recommendations Container",
+     "Background Pre-computation Worker",
+     "Cache and Rate Limiter Client",
+     "Amazon ElastiCache",
+     "AWS SQS/SNS"
+    ],
+    "sensitivity_points": [
+     "CPU and memory isolation of background worker nodes from storefront services",
+     "Redis throughput and eviction policies during bulk precomputed matrix updates"
+    ],
+    "tradeoffs": [
+     "Asynchronous batch pre-computation trades real-time personalization freshness for zero impact on browsing latency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Saga Orchestrator, Outbox Publisher, and SQS/SNS with Dead Letter Queues decouple order finalization from third-party shipping API availability. Orders are persisted transactionally in Aurora and shipping fulfillment tasks are reliably queued for retries.",
+    "elements": [
+     "Checkout Container",
+     "Saga Orchestrator",
+     "Outbox Publisher & DLQ",
+     "Fulfillment Integrator",
+     "AWS SQS/SNS",
+     "Amazon Aurora/RDS"
+    ],
+    "sensitivity_points": [
+     "Transactional reliability of Outbox Publisher writing to PostgreSQL alongside orders",
+     "Exponential backoff and retry thresholds before routing fulfillment tasks to DLQs"
+    ],
+    "tradeoffs": [
+     "Eventual consistency in fulfillment dispatch trades immediate tracking generation for uninterrupted checkout completion"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Although S3 cross-region replication is defined, the architecture specifies single-region constructs (single Aurora Writer, local RDS Proxy, local ElastiCache, and local SQS/SNS) without Aurora Global Database, multi-region container orchestration, or global failover routing mechanisms.",
+    "elements": [
+     "Amazon Aurora/RDS",
+     "AWS CloudFront & S3",
+     "AWS SQS/SNS",
+     "Amazon ElastiCache",
+     "Checkout Container"
+    ],
+    "sensitivity_points": [
+     "Absence of Aurora cross-region replication and automated RPO/RTO failover configurations",
+     "Inability of local message queues and caches to withstand full AWS regional outages"
+    ],
+    "tradeoffs": [
+     "Single-region primary database deployment avoids distributed cross-region write latency but sacrifices regional disaster recovery"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Support for a new currency is isolated to the external Forex/Currency Rate API integration, rate caching in ElastiCache, and the Payment Gateway Adapter designed as an Anti-Corruption Layer (ACL).",
+    "elements": [
+     "Forex/Currency Rate API",
+     "Checkout Container",
+     "Payment Gateway Adapter",
+     "Catalog Container",
+     "Amazon ElastiCache"
+    ],
+    "sensitivity_points": [
+     "Anti-Corruption Layer abstraction over third-party payment provider multi-currency capabilities",
+     "Consistency and invalidation of cached exchange rates in ElastiCache"
+    ],
+    "tradeoffs": [
+     "Using an external Forex API decouples currency logic but introduces external dependency risks"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Recommendation Scoring Engine and Background Pre-computation Worker are encapsulated within the Recommendations Container behind a clean REST contract and standard SQS event ingestion. Modifying or replacing the algorithm requires zero changes across other services.",
+    "elements": [
+     "Recommendations Container",
+     "Recommendation Scoring Engine",
+     "Background Pre-computation Worker",
+     "Recommendation API Router"
+    ],
+    "sensitivity_points": [
+     "Adherence of new algorithms to the established Recommendation API Router schema",
+     "Format stability of precomputed score matrices written to ElastiCache"
+    ],
+    "tradeoffs": [
+     "Encapsulating scoring within an independent container limits algorithm access to external real-time transactional data"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The architecture incorporates defense-in-depth with AWS WAF inspecting traffic at the edge, native Rate Limiting and Security Filtering at the API Gateway/BFF, parameterized queries through PostgreSQL wire protocols, and pgaudit monitoring via CloudWatch.",
+    "elements": [
+     "AWS WAF",
+     "AWS CloudFront & S3",
+     "API Gateway & BFF",
+     "Rate Limiter & Security Filter",
+     "Amazon Aurora/RDS"
+    ],
+    "sensitivity_points": [
+     "Edge WAF rule coverage for SQLi, XSS, and OWASP Top-10 signatures",
+     "Enforcement of strict query parameterization in Catalog and Reviews microservices"
+    ],
+    "tradeoffs": [
+     "Extensive edge packet inspection and WAF filtering increase request processing latency slightly"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "A dedicated Compliance Workers container orchestrated by AWS Step Functions executes multi-step deletion workflows. It coordinates across services, executes cryptographic shredding and batch anonymization in Aurora via a bulkhead connection pool, and logs to S3.",
+    "elements": [
+     "Compliance Workers",
+     "State Machine Orchestrator",
+     "Data Anonymizer and Exporter",
+     "Audit Log Emitter",
+     "Amazon Aurora/RDS",
+     "AWS SQS/SNS"
+    ],
+    "sensitivity_points": [
+     "Reliability of event distribution to Reviews and Recommendations for downstream redaction",
+     "Throughput and connection limits of the isolated database pool during mass deletion"
+    ],
+    "tradeoffs": [
+     "Bulkhead connection pools for anonymization safeguard online OLTP performance at the expense of slower compliance execution"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Compliance Workers",
+     "Data Anonymizer and Exporter",
+     "State Machine Orchestrator",
+     "Audit Log Emitter",
+     "Compliance Workflow Manager"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Forex/Currency Rate API",
+     "Payment Gateways",
+     "Search Module"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Third-Party Shipping APIs",
+     "Checkout Container",
+     "Fulfillment Integrator"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog Container",
+     "Search Module",
+     "Metadata Package",
+     "Inventory Module"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Checkout Container",
+     "Cart/Order State Manager",
+     "Payment Gateway Adapter",
+     "Saga Orchestrator",
+     "Payment Gateways"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Reviews Container",
+     "Reviews API Controller",
+     "Caching Manager"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendations Container",
+     "Recommendation Scoring Engine",
+     "Recommendation API Router",
+     "Background Pre-computation Worker",
+     "Event Ingestion Handler"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Amazon Aurora Read Replicas",
+     "AWS RDS Proxy",
+     "Amazon ElastiCache",
+     "AWS SQS/SNS",
+     "AWS CloudFront & S3"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "AWS CloudFront",
+     "Request Aggregator",
+     "Catalog Cache Manager",
+     "Caching Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Amazon S3 Replication Bucket",
+     "Amazon Aurora Read Replicas",
+     "CloudWatch Synthetics",
+     "Dead Letter Queues"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "AWS WAF",
+     "Rate Limiter & Security Filter",
+     "CloudFront Functions"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

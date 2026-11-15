@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening
+
+Person(fraud_analyst, "Fraud Analyst & Risk Manager", "Internal users reviewing flagged cases, handling disputes, and managing rules.")
+System_Ext(payment_gateway, "Payment Gateway / Core Processing System", "External system sending card-not-present payment authorization requests.")
+
+System_Boundary(fraud_screening_system, "Real-Time Payment Fraud Screening") {
+    Container(api_gateway, "API Gateway / Ingestion Service Container", "Go, Amazon ECS Fargate", "Handles high-concurrency ingestion and minimal GC pauses for incoming payment authorizations.")
+    Container(scoring_engine, "Real-Time Scoring Engine Container", "Rust / Java with GraalVM, Amazon ECS Fargate", "Powers ultra-low latency sub-50ms P99 responses for fraud scoring.")
+    Container(case_management, "Case Management Backend Container", "Amazon ECS Fargate", "Manages case workflows and interactions for fraud analysts.")
+    Container(fraud_spa, "Fraud Analyst SPA", "React on Amazon S3 / CloudFront", "Provides the user interface for fraud analysts to review cases.")
+    Container(deployment_pipeline, "Model/Rule Deployment Pipeline Container", "ArgoCD (GitOps), Amazon ECS Fargate", "Automates deployments of models and rules for the engineering team.")
+    Container(compliance_export, "Compliance Export Container", "AWS Lambda", "Handles compliance data exports via Amazon Athena.")
+    ContainerDb(primary_datastore, "Primary Operational Datastore", "Amazon Aurora PostgreSQL Serverless v2", "Manages transactional data within the budget.")
+    ContainerDb(audit_store, "Audit & Feature Store", "Amazon S3 with Object Lock", "Provides WORM-compliant, tamper-evident 7-year audit logging.")
+}
+
+Rel(payment_gateway, api_gateway, "Sends payment authorizations for fraud screening", "gRPC/REST over TLS")
+Rel(api_gateway, scoring_engine, "Forwards requests for real-time fraud scoring", "gRPC over TLS")
+Rel(fraud_analyst, fraud_spa, "Accesses case management UI", "HTTPS/REST")
+Rel(fraud_spa, case_management, "Sends API requests for case management and reviews", "HTTPS/REST")
+Rel(case_management, primary_datastore, "Reads and writes transactional data", "SQL over TLS")
+Rel(scoring_engine, audit_store, "Writes audit logs and features", "AWS SDK / HTTPS")
+Rel(compliance_export, audit_store, "Queries compliance data exports", "Amazon Athena")
+
+@enduml

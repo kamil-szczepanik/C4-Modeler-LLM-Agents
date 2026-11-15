@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway routing incoming traffic.")
+
+Container_Boundary(catalog_search_microservice, "Catalog & Search Microservice") {
+    Component(SearchController, "SearchController", "Spring MVC / gRPC", "Spring MVC component exposing gRPC endpoints for keyword and faceted searches.")
+    Component(CatalogQueryService, "CatalogQueryService", "Spring Service", "Spring Service orchestrating queries against AWS OpenSearch.")
+    Component(CatalogAdminController, "CatalogAdminController", "Spring MVC", "Spring MVC component handling administrative mutations with strict RBAC.")
+    Component(CatalogRepository, "CatalogRepository", "Spring Data JPA", "Spring Data JPA component managing writes and reads against AWS Aurora PostgreSQL.")
+    Component(InventoryConsumer, "InventoryConsumer", "Spring Kafka", "Spring Kafka consumer processing asynchronous inventory updates.")
+    Component(SearchAnalyticsService, "SearchAnalyticsService", "Spring Component", "Component capturing anonymous search telemetry asynchronously.")
+    
+    Component(AWS_OpenSearch, "AWS OpenSearch", "Managed Search Engine", "Managed search engine for typo-tolerant full-text search.")
+    Component(AWS_Aurora_PostgreSQL, "AWS Aurora PostgreSQL", "Relational Database", "Relational database for canonical book metadata.")
+    Component(AWS_MSK_Kafka, "AWS MSK (Kafka)", "Event Streaming Platform", "Event streaming platform for domain events (catalog.updated).")
+}
+
+Rel(api_gateway, SearchController, "Routes search and catalog requests", "gRPC over mTLS")
+Rel(api_gateway, CatalogAdminController, "Routes administrative mutations", "gRPC over mTLS with JWT validation")
+Rel(SearchController, CatalogQueryService, "Delegates search queries", "In-process")
+Rel(CatalogQueryService, AWS_OpenSearch, "Queries catalog data", "REST over HTTPS with TLS")
+Rel(CatalogRepository, AWS_Aurora_PostgreSQL, "Reads and writes canonical data", "JDBC with AWS KMS")
+Rel(InventoryConsumer, AWS_MSK_Kafka, "Consumes inventory update events", "AMQP/Kafka")
+Rel(CatalogAdminController, CatalogRepository, "Writes metadata", "JDBC")
+Rel(CatalogAdminController, AWS_MSK_Kafka, "Emits catalog.updated domain events", "Secured with AWS KMS")
+Rel(SearchAnalyticsService, SearchAnalyticsService, "Publishes anonymous telemetry asynchronously", "Async")
+
+@enduml

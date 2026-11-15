@@ -1,0 +1,336 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 2,
+   "security": 4,
+   "maintainability": 3,
+   "portability": 2
+  },
+  "mean": 2.875,
+  "justifications": {
+   "functional_suitability": "Real-Time Scoring Engine, Case Management Backend and Case Workflow Engine cover R-01 and R-02. Model & Rule Registry loads rules from S3, but no hot-reload or deployment mechanism is shown for R-03. The decision return path and the review routing to cases are unclear.",
+   "performance_efficiency": "ElastiCache feature store, Write-Through Ingestion Handler, asynchronous SQS audit emission and Fargate offer concrete mechanisms. But no autoscaling, capacity sizing for 3,000 TPS, or latency budget is given. API Gateway plus WAF hops risk the 50 ms P99.",
+   "compatibility": "REST/JSON with mTLS and OAuth2 toward the Payment Gateway, and SQS/SNS to Core Banking. However, Card Networks / Tokenization Vaults has no relationship at all, and the Core Banking integration is inconsistent between levels (SNS vs SQS, no consumer).",
+   "usability": "Fraud Analyst and Merchant Risk Manager use the Case Management Backend API Controller; the Auditor uses S3/Athena. But no UI container exists, and the SLA Metrics and KPI dashboards are not realised. The auditor console is a raw AWS console.",
+   "reliability": "Multi-AZ replication of Redis, an SQS DLQ and RDS Proxy help. But no fail-open fallback exists for scoring outages (R-07), nor scoring redundancy, circuit breaker, Aurora failover or multi-AZ for services. Standard queue audit events may be lost.",
+   "security": "mTLS, OAuth2, WAF, TLS 1.3, KMS CMK encryption, S3 Object Lock Compliance Mode, signed decision payloads from Audit Trail Emitter and RBAC are strong. Gaps: tokenization vault is not connected, the analyst card masking mechanism is absent, and the Audit Trail Emitter's audit is only via SQS.",
+   "maintainability": "Components are modular with clear responsibilities in Scoring Engine and Case Management Backend. Weaknesses: inconsistent technology choices (\"Node.js or Go\"), the Audit Logger duplicating audit writes, mixed-in persona and container elements in component diagrams, and inconsistent names (Amazon RDS Proxy).",
+   "portability": "Containers on ECS Fargate are portable, but the design is deeply tied to AWS-managed services (SQS, API Gateway, Aurora, S3 Object Lock, Athena) with no abstraction layers. The single region eu-west-1 matches the brief, and Terraform IaC is mentioned."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 2,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.40625,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 2.0,
+   "Modifiability": 2.5,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "AWS API Gateway",
+     "Real-Time Scoring Engine",
+     "Amazon ElastiCache (Redis)",
+     "Feature Aggregator Component"
+    ],
+    "sensitivity_points": [
+     "API Gateway plus WAF hop adds latency within a 50 ms budget",
+     "Redis lookup latency on the synchronous path",
+     "Fargate autoscaling for 3,000 rps"
+    ],
+    "tradeoffs": [
+     "Managed ingress eases operations but adds latency",
+     "Synchronous audit emission could cost latency"
+    ],
+    "justification": "In-memory features and Go scoring are plausible for 50 ms. But API Gateway overhead, no autoscaling, no capacity or load-test evidence, and unclear sync/async audit emission leave the P99 target unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "elements": [
+     "Case Management Backend",
+     "Amazon Aurora PostgreSQL",
+     "RDS Proxy",
+     "Real-Time Scoring Engine",
+     "Amazon SQS"
+    ],
+    "sensitivity_points": [
+     "Shared Aurora not used by scoring path",
+     "Separate Fargate services isolate compute",
+     "Dashboard queries on Aurora under load"
+    ],
+    "tradeoffs": [
+     "Async SQS decoupling isolates scoring but adds eventual consistency for cases"
+    ],
+    "justification": "Case management runs in a separate container and database; scoring only touches Redis and SQS, so analyst load cannot affect scoring. The 2 s case screens are plausible through RDS Proxy, though no read replicas are shown."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "Real-Time Scoring Engine",
+     "AWS API Gateway",
+     "Amazon ECS Fargate"
+    ],
+    "sensitivity_points": [
+     "No fallback decision path exists",
+     "Single scoring service on the critical path",
+     "ECS task restart time"
+    ],
+    "tradeoffs": [
+     "Simplicity and low budget versus no redundant fallback scorer"
+    ],
+    "justification": "No fallback path, default-decision policy, circuit breaker or multi-task redundancy is modeled. Fargate restart might recover within a minute, but fallback decisions would not be audited. The scenario's fallback response is unaddressed."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Audit Trail Emitter",
+     "Amazon SQS",
+     "Amazon S3",
+     "Audit Logger Component",
+     "Dead-Letter Queue"
+    ],
+    "sensitivity_points": [
+     "SQS buffers audit events asynchronously",
+     "Audit path through Case Management Backend",
+     "Standard queue may deliver duplicates"
+    ],
+    "tradeoffs": [
+     "Decoupling protects latency but audit relies on queue durability",
+     "Audit logging coupled to case backend availability"
+    ],
+    "justification": "SQS buffering decouples scoring from audit slowness, helping latency. But the audit path is ambiguous: S3 writes come from the scoring engine and from the Case Backend. There is no durable local outbox, and the DLQ is for analysis only, so lost audit records are a risk."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Model & Rule Registry Component",
+     "Amazon S3",
+     "Real-Time Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Registry downloads immutable versions from S3",
+     "No described hot-swap or canary mechanism",
+     "Model version recorded in decision payload not shown"
+    ],
+    "tradeoffs": [
+     "Immutable versioned artifacts ease rollback but need reload logic"
+    ],
+    "justification": "Immutable model artifacts in S3 support versioned rollback. But the swap mechanism, rolling deployment, 5-minute rollback and recording the model version in decisions are not explicit, so there are unaddressed risks."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "elements": [
+     "Rule Evaluation Component",
+     "Model & Rule Registry Component",
+     "Explainability Engine Component",
+     "Amazon S3"
+    ],
+    "sensitivity_points": [
+     "No analyst-facing rule authoring or approval workflow",
+     "Rule hot-reload not described",
+     "Rules-applied listing in decision not explicit"
+    ],
+    "tradeoffs": [
+     "Immutable rule artifacts are safe but slow rule authoring"
+    ],
+    "justification": "Registry loads rules from S3, and an explainability component exists. But no rule authoring or publishing path for analysts, no hot-reload and no per-decision rule naming is shown. Significant additions are needed."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "elements": [
+     "Case Management Backend",
+     "API Controller Component",
+     "Card Networks / Tokenization Vaults",
+     "Amazon S3",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Tokenization flow is not modeled internally",
+     "RBAC exists but no card masking is described",
+     "No anomaly detection or alerting component"
+    ],
+    "tradeoffs": [
+     "Tokenization offloaded to external vault reduces PCI scope but is unmodeled"
+    ],
+    "justification": "RBAC, OAuth2/OIDC, KMS encryption and an external tokenization vault help. But no explicit PAN masking or tokenization in the data flow, and no anomaly detection or alerting like GuardDuty or CloudTrail alerts within 15 minutes, are present."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Amazon S3",
+     "Object Lock & Vault Manager",
+     "Audit Trail Emitter",
+     "Athena Query Gateway",
+     "S3 Lifecycle Engine",
+     "Explainability Engine Component"
+    ],
+    "sensitivity_points": [
+     "Signed payloads in WORM storage with 7-year retention",
+     "Payload content must hold inputs, model version, explanation",
+     "Glacier Deep Archive retrieval time"
+    ],
+    "tradeoffs": [
+     "Cheap Deep Archive tiering versus slower retrieval",
+     "Object Lock Compliance Mode is immutable but irreversible"
+    ],
+    "justification": "Object Lock in Compliance Mode, signed payloads, lifecycle tiering and Athena support 7-year tamper-evident retrieval within a day. But payload content (inputs, model version, explanation) is unspecified, and the signature verification and Deep Archive restore path are not shown."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "C-04": "partial",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "none"
+  },
+  "coverage": 0.45454545454545453,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "AWS API Gateway",
+     "Edge Rate Limiter & WAF",
+     "Server-Side Encryption Engine",
+     "Card Networks / Tokenization Vaults"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Explainability Engine Component",
+     "Audit Trail Emitter",
+     "Object Lock & Vault Manager",
+     "Amazon S3",
+     "Audit Logger Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "AWS ECS Fargate",
+     "Amazon Aurora PostgreSQL",
+     "Amazon SQS",
+     "RDS Proxy"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Rule Evaluation Component",
+     "Feature Aggregator Component",
+     "Amazon ElastiCache (Redis)"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Backend",
+     "Case Workflow Engine Component",
+     "Event Consumer Component",
+     "API Controller Component",
+     "Amazon Aurora PostgreSQL",
+     "Amazon SQS"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Model & Rule Registry Component",
+     "Amazon S3"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Amazon ElastiCache (Redis)",
+     "Feature Aggregator Component",
+     "Write-Through Ingestion Handler",
+     "Real-Time Scoring Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Card Networks / Tokenization Vaults",
+     "Server-Side Encryption Engine",
+     "API Controller Component",
+     "Bucket Policy Enforcer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit Trail Emitter",
+     "Object Lock & Vault Manager",
+     "Explainability Engine Component",
+     "Audit Logger Component",
+     "Amazon S3"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

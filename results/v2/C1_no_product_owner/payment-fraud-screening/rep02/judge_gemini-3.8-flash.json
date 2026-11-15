@@ -1,0 +1,329 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 3,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 2,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.5,
+  "justifications": {
+   "functional_suitability": "All functional requirements are satisfied: 'Fraud Scoring Engine' handles scoring decisions (R-01), 'Case Management Service' with 'Case Workflow Engine' delivers analyst reviews (R-02), and 'Rule & Model Cache Manager' within 'Amazon ElastiCache Serverless' enables zero-downtime rule and model updates (R-03).",
+   "performance_efficiency": "'Fraud Scoring Engine' uses Rust and in-memory Redis caching for fast evaluation. However, directly writing decision logs to 'Amazon QLDB / S3 Object Lock' synchronously on the scoring critical path threatens the 50 ms P99 latency target at 3,000 authorizations per second due to ledger transaction throughput constraints.",
+   "compatibility": "The system integrates with 'Payment Gateway / Acquirer Systems' via standard gRPC/HTTPS and IdPs via OIDC/SAML. However, 'Card Networks / Tokenization Vaults' is defined in the context and container elements but lacks any active relationship or communication link with the internal containers.",
+   "usability": "'Fraud Analysts' are recognized and authenticated via the 'Identity Provider (IdP)' to access the 'Case Management Service'. However, no dedicated web client, UI application container, or analyst presentation interface is defined; analysts interact directly against the API layer.",
+   "reliability": "The architecture lacks a fail-open, circuit-breaking, or bypass mechanism at the 'Amazon API / Application Load Balancer (ALB)' or gateway level. Consequently, requirement R-07 (ensuring payments are not blocked for over 1 minute if scoring is unavailable) is not concretely addressed.",
+   "security": "Security is addressed thoroughly via 'Token Masking Filter' preventing analysts from viewing PANs (R-05), 'AWS KMS' envelope encryption, internal mTLS, IAM SigV4 access control, and immutable audit logs retained via 'Amazon QLDB' and 'Evidence Archive Component' with S3 Object Lock (R-06).",
+   "maintainability": "Clear segregation of duties between 'Fraud Scoring Engine' and 'Case Management Service'. Relying heavily on managed serverless components (ECS Fargate, Aurora Serverless v2, DynamoDB) appropriately matches the operational maintenance capacity of the three-engineer team.",
+   "portability": "The system is tailored precisely to AWS eu-west-1, but exhibits severe vendor lock-in through proprietary services like 'Amazon DynamoDB', 'Amazon QLDB', 'AWS KMS', and 'AWS IAM Identity Center', making adaptation or migration to other environments challenging."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.65625,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 2.0,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "Rust and ElastiCache offer high throughput, but the Fraud Scoring Engine directly dispatches audit logs to QLDB and S3 on the synchronous request path, creating severe latency bottlenecks that jeopardize the 50 ms P99 target at 3,000 TPS.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Amazon API / Application Load Balancer (ALB)",
+     "Amazon ElastiCache Serverless",
+     "Amazon QLDB / S3 Object Lock buckets"
+    ],
+    "sensitivity_points": [
+     "In-line QLDB/S3 writes on the scoring critical path",
+     "Network serialization overhead over gRPC and TLS"
+    ],
+    "tradeoffs": [
+     "Synchronous ledger writes improve immediate consistency but severely degrade P99 latency under heavy load"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management workloads run as an independent microservice backed by Aurora Serverless v2 and RDS Proxy. Scoring runs independently on Rust/ElastiCache, preventing heavy analyst queries from impacting the real-time scoring pipeline.",
+    "elements": [
+     "Amazon API / Application Load Balancer (ALB)",
+     "Fraud Scoring Engine",
+     "Case Management Service",
+     "Amazon Aurora Serverless v2",
+     "Amazon RDS Proxy"
+    ],
+    "sensitivity_points": [
+     "Connection pool saturation on Amazon RDS Proxy",
+     "Compute isolation between scoring and review workloads"
+    ],
+    "tradeoffs": [
+     "Running dedicated services increases operational management overhead for a small team but isolates workload interference"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture provides no fallback or stand-in scoring mechanism if the Fraud Scoring Engine crashes. The ALB simply routes to the service with no secondary degradation strategy or fallback audit recording, risking blocked transactions beyond one minute.",
+    "elements": [
+     "Amazon API / Application Load Balancer (ALB)",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Absence of circuit breakers or fallback routing at ALB",
+     "Lack of an automated stand-in authorization path"
+    ],
+    "tradeoffs": [
+     "Fail-open fallback prioritizes availability over fraud risk but requires dedicated fallback auditing mechanisms"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "While Case Management uses SQS for audit decoupling, Fraud Scoring Engine dispatches logs directly to QLDB and S3. If QLDB or S3 slows down or fails, scoring requests will either stall or lose audit logs.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Audit Logger Component",
+     "Amazon QLDB / S3 Object Lock buckets"
+    ],
+    "sensitivity_points": [
+     "Direct synchronous coupling between scoring engine and audit datastores",
+     "Absence of message queues in the scoring engine audit path"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit buffering reduces immediate audit persistence guarantees but prevents payment pipeline stalling"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Wasm/AST rule evaluator dynamically syncs models from ElastiCache without restarts, and decision journals record model metadata. However, explicit automated rollback orchestration within the 5-minute requirement is not specified in the model.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Evaluation Pipeline Component",
+     "Amazon ElastiCache Serverless",
+     "Amazon QLDB / S3 Object Lock buckets"
+    ],
+    "sensitivity_points": [
+     "Wasm/AST rule and model hot-reloading latency",
+     "Cache invalidation propagation across ElastiCache shards"
+    ],
+    "tradeoffs": [
+     "Decoupled in-memory model syncing allows zero-downtime updates but introduces transient multi-node version divergence"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The architecture supports zero-downtime rule updates via ElastiCache sync to the Wasm/AST rule engine, with DynamoDB handling velocity counters and QLDB recording audit trails that capture executed rules.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Evaluation Pipeline Component",
+     "Amazon ElastiCache Serverless",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "DynamoDB lookup latency for stateful velocity counters",
+     "Wasm runtime rule execution overhead"
+    ],
+    "tradeoffs": [
+     "DynamoDB on-demand lookups increase external network calls but enable real-time distributed velocity rules"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Token masking filters and KMS envelope encryption effectively prevent analysts from accessing raw PANs. However, the architecture lacks explicit UEBA, SIEM, or automated anomaly detection to alert on compromised account behavior within 15 minutes.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Case Management Service",
+     "Token Masking Filter",
+     "AWS KMS",
+     "Audit Export & Verification Worker"
+    ],
+    "sensitivity_points": [
+     "Enforcement coverage of the Token Masking Filter",
+     "Absence of real-time behavioral anomaly detection (UEBA/SIEM)"
+    ],
+    "tradeoffs": [
+     "Client-side masking prevents credential exposure but requires developer discipline across all serialization paths"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Amazon QLDB maintains a tamper-evident transaction journal, paired with 7-year S3 Object Lock WORM storage. The serverless Audit Export & Verification Worker provides hash chain verification and rapid extraction within one working day.",
+    "elements": [
+     "Amazon QLDB / S3 Object Lock buckets",
+     "Transaction Ledger Component",
+     "Evidence Archive Component",
+     "Audit Export & Verification Worker"
+    ],
+    "sensitivity_points": [
+     "Cryptographic verification speed of QLDB ledger blocks",
+     "S3 Object Lock retention policy immutability"
+    ],
+    "tradeoffs": [
+     "Maintaining dual storage (QLDB ledger plus S3 Object Lock) raises storage costs but guarantees auditability"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "none"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Card Networks / Tokenization Vaults",
+     "AWS KMS (Key Management Service)",
+     "Hardware Security Module (HSM) Interface Component",
+     "Token Masking Filter",
+     "Encryption Middleware",
+     "Amazon QLDB / S3 Object Lock buckets"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Audit / Compliance Archive",
+     "Amazon QLDB / S3 Object Lock buckets",
+     "Transaction Ledger Component",
+     "Evidence Archive Component",
+     "Audit Export & Verification Worker"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Amazon ElastiCache Serverless",
+     "Amazon DynamoDB and Amazon Aurora Serverless v2",
+     "Amazon DynamoDB",
+     "Amazon Aurora Serverless v2"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Amazon ElastiCache Serverless",
+     "Amazon DynamoDB and Amazon Aurora Serverless v2",
+     "Amazon QLDB / S3 Object Lock buckets",
+     "AWS KMS (Key Management Service)"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Request Handler Component",
+     "Evaluation Pipeline Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Fraud Analysts",
+     "Case Management Service",
+     "Case API Handler",
+     "Case Workflow Engine"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Evaluation Pipeline Component",
+     "Amazon ElastiCache Serverless",
+     "Rule & Model Cache Manager"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Request Handler Component",
+     "Evaluation Pipeline Component",
+     "Amazon ElastiCache Serverless",
+     "Rule & Model Cache Manager",
+     "Amazon DynamoDB"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Card Networks / Tokenization Vaults",
+     "Case API Handler",
+     "Token Masking Filter",
+     "Encryption Middleware",
+     "AWS KMS (Key Management Service)"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Logger Component",
+     "Amazon QLDB / S3 Object Lock buckets",
+     "Transaction Ledger Component",
+     "Evidence Archive Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

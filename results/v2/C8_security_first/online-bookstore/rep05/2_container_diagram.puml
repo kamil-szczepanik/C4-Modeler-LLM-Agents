@@ -1,0 +1,47 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Online Bookstore System
+
+Person(Customers, "Customers", "Shoppers/Readers browsing the catalogue and purchasing books globally.")
+Person(Store_Administrators, "Store Administrators", "Administrators managing the online bookstore system with MFA.")
+Person(Content_Marketing_Managers, "Content/Marketing Managers", "Managers overseeing content and marketing within the bookstore system.")
+
+System_Ext(Stripe_PayPal, "Stripe / PayPal", "Payment Gateway for processing secure multi-currency transactions.")
+System_Ext(FedEx_UPS, "FedEx / UPS", "Shipping Provider APIs for managing order deliveries.")
+System_Ext(AWS_Cognito_Auth0, "AWS Cognito / Auth0", "Identity Provider for user authentication and authorization.")
+System_Ext(AWS_SES_SendGrid, "AWS SES / SendGrid", "Notification Service for sending transactional and system emails.")
+
+System_Boundary(Online_Bookstore_System, "Online Bookstore System") {
+    Container(Single_Page_Application, "Single Page Application", "React / TypeScript, Amazon S3 + CloudFront CDN", "Provides catalogue browsing, secure checkout, customer reviews, and personalized recommendations.")
+    Container(Amazon_CloudFront_API_Gateway_ALB, "Amazon CloudFront / API Gateway / ALB", "AWS CloudFront, AWS API Gateway, ALB, Route 53", "Edge layer routing incoming traffic and securing entry points.")
+    Container(Catalog_Search_Service, "Catalog & Search Service", "Go, Node.js, Python / FastAPI, AWS ECS Fargate, Elasticsearch", "Handles catalogue browsing and keyword catalogue search.")
+    Container(Checkout_Payment_Service, "Checkout & Payment Service", "Go, Node.js, Python / FastAPI, AWS ECS Fargate, Redis", "Manages secure checkout, multi-currency transactions, and cart state locking.")
+    Container(Recommendation_Service, "Recommendation Service", "Go, Node.js, Python / FastAPI, AWS ECS Fargate", "Provides personalized recommendations to customers.")
+    ContainerDb(Amazon_Aurora_PostgreSQL_Global_Database, "Amazon Aurora PostgreSQL Global Database", "Amazon Aurora PostgreSQL", "Provides multi-region active-active replication and persistent data storage.")
+    Container(Amazon_SQS_SNS, "Amazon SQS / SNS", "Amazon SQS, Amazon SNS", "Handles asynchronous messaging for shipping events and service decoupling.")
+}
+
+Rel(Customers, Single_Page_Application, "Browses catalogue, manages cart, and places orders", "HTTPS (REST / GraphQL)")
+Rel(Store_Administrators, Single_Page_Application, "Manages store settings and catalogue data", "HTTPS (REST / GraphQL)")
+Rel(Content_Marketing_Managers, Single_Page_Application, "Manages content and marketing campaigns", "HTTPS (REST / GraphQL)")
+
+Rel(Single_Page_Application, Amazon_CloudFront_API_Gateway_ALB, "Sends API requests through edge routing", "HTTPS (REST / GraphQL)")
+
+Rel(Amazon_CloudFront_API_Gateway_ALB, Catalog_Search_Service, "Routes requests to catalogue and search backend", "HTTPS, gRPC (internal service mesh)")
+Rel(Amazon_CloudFront_API_Gateway_ALB, Checkout_Payment_Service, "Routes requests to checkout backend", "HTTPS, gRPC (internal service mesh)")
+Rel(Amazon_CloudFront_API_Gateway_ALB, Recommendation_Service, "Routes requests to recommendation backend", "HTTPS, gRPC (internal service mesh)")
+
+Rel(Catalog_Search_Service, Amazon_Aurora_PostgreSQL_Global_Database, "Reads and writes catalogue data", "SQL over TLS")
+Rel(Checkout_Payment_Service, Amazon_Aurora_PostgreSQL_Global_Database, "Reads and writes order and transaction data", "SQL over TLS")
+Rel(Recommendation_Service, Amazon_Aurora_PostgreSQL_Global_Database, "Reads user interaction and product data", "SQL over TLS")
+
+Rel(Checkout_Payment_Service, Amazon_SQS_SNS, "Publishes asynchronous shipping and order events", "AMQP / AWS SQS/SNS")
+
+Rel(Checkout_Payment_Service, Stripe_PayPal, "Processes secure payments", "HTTPS")
+Rel(Checkout_Payment_Service, FedEx_UPS, "Coordinates order fulfillment and shipping", "HTTPS")
+Rel(Checkout_Payment_Service, AWS_Cognito_Auth0, "Validates authentication and authorization tokens", "OAuth2/OIDC")
+Rel(Checkout_Payment_Service, AWS_SES_SendGrid, "Sends transactional emails", "HTTPS")
+
+@enduml

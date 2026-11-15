@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalyst, "Fraud Analyst", "Reviews cases and manages fraud rules via internal reporting tooling.")
+Person(RiskManager, "Risk Manager", "Monitors risk metrics and system performance via internal tooling.")
+Person(ComplianceAuditOfficer, "Compliance & Audit Officer", "Ensures regulatory compliance and audits historical transaction logs.")
+
+System_Ext(PaymentGatewayCoreProcessingSystem, "Payment Gateway / Core Processing System", "Sends card-not-present payment authorization requests.")
+System_Ext(ExternalCardholderDataEnvironmentCDETokenizationVault, "External Cardholder Data Environment (CDE) / Tokenization Vault", "Resolves tokens securely via APIs to ensure raw PANs never enter application memory.")
+System_Ext(AWSS3ObjectLock, "AWS S3 Object Lock", "Provides WORM-compliant tamper-evident storage for 7-year auditability.")
+System_Ext(DynamicRuleModelRegistry, "Dynamic Rule & Model Registry", "Stores cryptographically signed rules and models hot-loaded via AWS KMS.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(ScoringEngineContainer, "Scoring Engine Container", "Rust / Tokio, AWS ECS Fargate", "Handles high-throughput, low-latency real-time fraud scoring for payment authorizations.")
+    Container(CaseManagementContainer, "Case Management Container", "Node.js / TypeScript, AWS ECS Fargate", "Supports administrative workflows and fraud analyst case reviews.")
+    Container(FallbackScoringContainer, "Fallback Scoring Container", "Python / FastAPI, AWS ECS Fargate", "Executes simplified heuristic rules during primary outages.")
+    Container(AuditReportingContainer, "Audit Reporting Container", "Node.js / TypeScript, AWS ECS Fargate", "Provides audit reporting and compliance oversight tools.")
+}
+
+Rel(PaymentGatewayCoreProcessingSystem, ScoringEngineContainer, "Sends payment authorization requests", "gRPC/REST over TLS 1.3 with mTLS and OAuth2/JWT")
+Rel(ScoringEngineContainer, ExternalCardholderDataEnvironmentCDETokenizationVault, "Resolves tokens securely", "Secure APIs")
+Rel(ScoringEngineContainer, DynamicRuleModelRegistry, "Cryptographically validates and hot-loads signed rules", "AWS KMS and ECDSA P-256")
+Rel(ScoringEngineContainer, AWSS3ObjectLock, "Writes decision inputs, model versions, and explanations", "AWS Firehose / S3 API")
+Rel(ScoringEngineContainer, FallbackScoringContainer, "Routes to fallback during primary outages", "Internal HTTP/JSON via AWS Service Discovery")
+Rel(FraudAnalyst, CaseManagementContainer, "Interacts for case reviews and management", "HTTPS Web UI")
+Rel(RiskManager, CaseManagementContainer, "Monitors risk metrics", "HTTPS Web UI")
+Rel(ComplianceAuditOfficer, AuditReportingContainer, "Interacts for compliance audits and reporting", "HTTPS Web UI")
+Rel(AuditReportingContainer, AWSS3ObjectLock, "Audits historical transaction logs and compliance data", "AWS SDK / S3 API")
+
+@enduml

@@ -1,0 +1,319 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 2,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "All requirements are addressed: 'EMR Service' covers patient registration, demographics, and medical records; 'Scheduling Service' handles appointments and resource allocation; 'Billing Service' interfaces with 'Third-Party Billing Gateways'; and 'Event Broker Cluster' with 'WORM Enforcement Engine' ensures comprehensive auditability.",
+   "performance_efficiency": "The sub-second P95 load target is directly targeted by the 'Redis Enterprise Cache Engine' implementing caching patterns for demographics and schedules. Asynchronous processing via 'Event Broker Cluster' and streaming parsers in 'HL7 FHIR Worker' ensure scalable, low-latency execution.",
+   "compatibility": "Interoperability is thoroughly supported via 'HL7 FHIR Worker' connecting to 'HL7 FHIR-Compliant Lab/Imaging Systems', 'Authentication & Token Validation Component' integrating with 'External Identity Providers (IdPs)' via OIDC, and 'Schema Registry' enforcing event compatibility across distributed services.",
+   "usability": "The architecture lumps 'Patients, Clinicians, and Administrative Staff' together connecting directly to the 'API Gateway Container'. It fails to model any user-facing clients, clinical portals, patient portals, or mobile interfaces suited to distinct user needs.",
+   "reliability": "'Circuit Breaker & DLQ Handler' and 'Transactional Outbox Dispatcher' provide fault tolerance, while 'Local Disk Buffers' prevent telemetry loss. However, active-active cross-region data synchronization between on-prem-k8s and eu-central-1 is missing to guarantee 99.99% availability.",
+   "security": "HIPAA/GDPR compliance is supported by 'Authentication & Token Validation Component' (MFA/OAuth2), 'Fluentbit' PII/PHI masking, and 'WORM Enforcement Engine'. However, the mandatory AES-256 encryption at rest specification is not explicitly detailed in storage or database components.",
+   "maintainability": "Separation of concerns is cleanly executed across domain services ('EMR Service', 'Scheduling Service', 'Billing Service'). Maintainability is reinforced by 'Storage Abstraction Layer', event schema management via 'Schema Registry', and distributed observability with 'Prometheus & OpenTelemetry'.",
+   "portability": "Portability across hybrid targets (on-prem-k8s and AWS eu-central-1) is enabled through standard Kubernetes abstractions, 'Storage Abstraction Layer' (S3 API), and containerized microservices, though specific cloud-to-on-prem cluster deployment mechanisms are not fully elaborated."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 2.5,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Redis Enterprise caching and an ingress gateway support sub-second reads. However, caching is described mainly for demographics and schedules, leaving clinical EMR database read scalability under-specified.",
+    "elements": [
+     "API Gateway Container",
+     "Ingress Proxy & Routing Component",
+     "Caching Container",
+     "Redis Enterprise Cache Engine",
+     "EMR Service"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio on EMR clinical records under concurrent load",
+     "Redis connection multiplexing efficiency during traffic spikes"
+    ],
+    "tradeoffs": [
+     "In-memory caching improves read latency but increases cache invalidation complexity"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Asynchronous HL7 FHIR worker with streaming parsers, outbox pattern, and Kafka decoupling completely insulates the synchronous EMR service from ingestion spikes.",
+    "elements": [
+     "Integration Service Container",
+     "HL7 FHIR Worker",
+     "Circuit Breaker & DLQ Handler",
+     "Event Bus / Message Broker Container",
+     "Event Broker Cluster"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer lag and partition allocation during 10,000 payload bursts",
+     "Streaming JSON parser memory footprint under high ingestion rates"
+    ],
+    "tradeoffs": [
+     "Asynchronous decoupling guarantees ingest resilience but delays real-time visibility in EMR"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "Although the target deployment specifies hybrid cloud regions, the architecture fails to define active-active cross-site synchronization, multi-region data replication, or automated traffic failover mechanisms.",
+    "elements": [
+     "API Gateway Container",
+     "Ingress Proxy & Routing Component",
+     "Domain Containers",
+     "Event Bus / Message Broker Container"
+    ],
+    "sensitivity_points": [
+     "Cross-region data replication latency between on-premises and eu-central-1",
+     "Absence of global server load balancing during cloud site failure"
+    ],
+    "tradeoffs": [
+     "Active-active replication prevents downtime but risks cross-site write conflicts"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Idempotency tracking in Redis and the Transactional Outbox pattern support safe claim retries, but primary database clustering and crash-recovery semantics are omitted.",
+    "elements": [
+     "Billing Service",
+     "Rate Limiting & Session Management Component",
+     "Transactional Outbox Dispatcher",
+     "Event Broker Cluster"
+    ],
+    "sensitivity_points": [
+     "Idempotency key TTL configuration in Redis during database failovers",
+     "Transactional outbox atomic write consistency during primary node crashes"
+    ],
+    "tradeoffs": [
+     "Strict idempotency checks prevent duplicate claims but increase write path latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Billing Service is isolated from the EMR Service, ensuring EMR remains untouched. However, clearinghouse integration logic is embedded directly within Billing Service rather than an independent adapter container.",
+    "elements": [
+     "Domain Containers",
+     "Billing Service",
+     "Third-Party Billing Gateways"
+    ],
+    "sensitivity_points": [
+     "Coupling of billing domain rules with third-party clearinghouse protocols"
+    ],
+    "tradeoffs": [
+     "Monolithic billing service simplifies deployment but complicates provider protocol updates"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Changes are confined to the EMR Service and the Schema Registry. Schema compatibility enforcement in Kafka guarantees seamless evolution without breaking dependent consumers.",
+    "elements": [
+     "EMR Service",
+     "Event Bus / Message Broker Container",
+     "Schema Registry",
+     "Event Broker Cluster"
+    ],
+    "sensitivity_points": [
+     "Schema compatibility rules enforced by Schema Registry across services"
+    ],
+    "tradeoffs": [
+     "Enforcing strict schema compatibility slows sprint delivery but prevents breaking downstream consumers"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The API Gateway delegates MFA enforcement to External Identity Providers via OIDC, blocking password-only logins, while Fluentbit aggregates security audit logs in real time.",
+    "elements": [
+     "API Gateway Container",
+     "Ingress Proxy & Routing Component",
+     "Authentication & Token Validation Component",
+     "External Identity Providers (IdPs)",
+     "Fluentbit"
+    ],
+    "sensitivity_points": [
+     "IdP token introspection latency and reliability at API Gateway",
+     "Edge log buffer durability when streaming security alerts"
+    ],
+    "tradeoffs": [
+     "External IdP delegation centralizes MFA policy but creates an external operational dependency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Kafka and WORM storage guarantee immutable, 10-year audit logging. However, fine-grained relationship-based access control or break-glass policies for non-treating clinicians are not modeled.",
+    "elements": [
+     "EMR Service",
+     "Event Broker Cluster",
+     "File/Document Storage Container",
+     "WORM Enforcement Engine",
+     "Data Archival & Purging Container"
+    ],
+    "sensitivity_points": [
+     "Fine-grained policy decision enforcement on read operations",
+     "Storage volume growth with 100% read audit trail over 10 years"
+    ],
+    "tradeoffs": [
+     "Logging every read ensures regulatory compliance but generates immense telemetry volume"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.6818181818181818,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Fluentbit",
+     "Circuit Breaker & DLQ Handler",
+     "WORM Enforcement Engine",
+     "Secret Manager"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Clinic Management System",
+     "Circuit Breaker & DLQ Handler",
+     "Local Disk Buffers (EmptyDir)"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Data Archival & Purging Container",
+     "Archival Extractor Worker",
+     "Checksum Validator",
+     "WORM Storage Client",
+     "File/Document Storage Container",
+     "WORM Enforcement Engine",
+     "Event Broker Cluster"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "EMR Service",
+     "Caching Container",
+     "Redis Enterprise Cache Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Scheduling Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "Event Broker Cluster"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Billing Service",
+     "Third-Party Billing Gateways"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "API Gateway Container",
+     "External Identity Providers (IdPs)",
+     "Ingress Proxy & Routing Component",
+     "Authentication & Token Validation Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Clinic Management System"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Caching Container",
+     "Redis Enterprise Cache Engine"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "HL7 FHIR-Compliant Lab/Imaging Systems",
+     "Integration Service Container",
+     "HL7 FHIR Worker"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

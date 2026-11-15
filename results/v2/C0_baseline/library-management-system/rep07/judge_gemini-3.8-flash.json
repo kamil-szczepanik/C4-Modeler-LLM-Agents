@@ -1,0 +1,239 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "The architecture addresses R-01 and the brief via the Cataloguing Component for physical and digital assets, the Circulation Component for circulation logic, the Vendor Ingestion Service for digital content, and the Circulation & Admin Workspace for self-service portals.",
+   "performance_efficiency": "To achieve R-05 (<800ms search), a dedicated Search Container employs Elasticsearch with fuzzy and faceted indexing. Performance is further supported by client caching in the SPA, Redis rate limiting in the API Gateway, and asynchronous processing via the Async Event Broker.",
+   "compatibility": "Interoperability is well supported: the Integration Container interfaces with EU Payment Gateway using HTTPS with HMAC verification, Vendor Ingestion Service ingests external vendor content via SFTP/HTTPS, and asynchronous notifications are sent to the external Notification Service.",
+   "usability": "The Single Page Application serves all designated user groups. It provides self-service portal capabilities to Library Patrons through the Catalog & Search Component, while supplying dedicated staff workflows via the Circulation & Admin Workspace for Librarians and Administrators.",
+   "reliability": "Reliability is enforced through the transactional Outbox Pattern Component, dead-letter queues in the Integration Container, and the Async Event Broker deployed via Strimzi Operator across 3 EU availability zones with KRaft metadata consensus.",
+   "security": "EU data residency constraints are addressed via EU-hosted PostgreSQL and EU-isolated VPCs. Security is enforced with OAuth2/OIDC JWT in the Security and Context Propagation Component, internal mTLS, HMAC webhook validation, and immutable logging via the Audit and Compliance Component.",
+   "maintainability": "The architecture displays clear separation of concerns across specialized containers (Core Domain, Search, Integration). Maintainability is reinforced by modular components, DDD principles, the Outbox Pattern Component, and Avro contract enforcement with the Confluent Schema Registry.",
+   "portability": "The system utilizes standard containerized technologies (Spring Boot, Node.js, React, Elasticsearch) and Kubernetes orchestration via the Strimzi Operator. Portability across EU cloud environments is achievable, though orchestration specifications for the remaining application containers are left generic."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 3,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.90625,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 4.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Dedicated Elasticsearch cluster decoupled from transactional workloads handles search requests via API Gateway, easily meeting sub-800ms latency under peak concurrent loads.",
+    "elements": [
+     "API Gateway",
+     "Search Container",
+     "Search Service",
+     "Search Index"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster sizing and indexing shard configuration",
+     "Connection pooling and network latency between API Gateway and Search Service"
+    ],
+    "tradeoffs": [
+     "Resource overhead of dedicated search infrastructure versus transactional DB simplicity"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "CQRS separation using transactional outbox and Kafka asynchronously updates Elasticsearch without locking core catalogue tables, maintaining fast search while indexing updates well within 5 minutes.",
+    "elements": [
+     "Core Domain Container",
+     "Outbox Pattern Component",
+     "Async Event Broker",
+     "Search Service",
+     "Search Index"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer lag and Elasticsearch index refresh intervals",
+     "Outbox poller frequency and transactional overhead"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of search index versus immediate read-after-write consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Elasticsearch clustering provides shard replication for search node failover, while complete separation of Search and Core Domain containers ensures loan transactions remain fully operational.",
+    "elements": [
+     "Search Container",
+     "Search Index",
+     "Core Domain Container",
+     "Circulation Component"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch replica count and primary shard failover duration",
+     "Decoupled service fault boundaries"
+    ],
+    "tradeoffs": [
+     "Replication storage overhead in Elasticsearch versus single-node availability risk"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Stateless SPA served via Nginx and managed by an API Gateway supports seamless multi-instance failover, though client-side active session state handling during mid-transaction failures requires careful retry policies.",
+    "elements": [
+     "Single Page Application (SPA)",
+     "API Gateway",
+     "Edge Router and Security Filter"
+    ],
+    "sensitivity_points": [
+     "API Gateway health check frequency and failover routing thresholds",
+     "Statelessness of client session tokens"
+    ],
+    "tradeoffs": [
+     "Client-side retry complexity versus server-side session affinity overhead"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Integration Container isolates third-party provider concerns using a dedicated Vendor Ingestion Service with Zod schema validation, confining ingestion format changes entirely to this component.",
+    "elements": [
+     "Integration Container",
+     "Vendor Ingestion Service",
+     "Outbox Dispatcher Component"
+    ],
+    "sensitivity_points": [
+     "Schema normalization extensibility inside Vendor Ingestion Service",
+     "Decoupling of vendor payloads from internal domain events"
+    ],
+    "tradeoffs": [
+     "Additional transformation layer maintenance versus direct catalogue ingestion"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "Circulation logic is packaged inside a Spring Boot domain component without an explicit dynamic rules engine or configuration store, likely requiring code modifications or redeployment for distinct rule sets.",
+    "elements": [
+     "Core Domain Container",
+     "Circulation Component"
+    ],
+    "sensitivity_points": [
+     "Absence of externalized rule management engine in domain container",
+     "Extensibility of circulation policies via configuration"
+    ],
+    "tradeoffs": [
+     "Compile-time domain logic reliability versus runtime policy configuration flexibility"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Data residency is strictly enforced across all architecture tiers through EU-isolated VPCs, EU-hosted PostgreSQL, multi-AZ Kafka deployment in the EU, and an EU-specific payment gateway.",
+    "elements": [
+     "Core Domain Container",
+     "EU-hosted PostgreSQL",
+     "Async Event Broker",
+     "EU Payment Gateway"
+    ],
+    "sensitivity_points": [
+     "Network isolation and strict egress filtering on the EU VPC",
+     "Third-party external service data processing locations"
+    ],
+    "tradeoffs": [
+     "Regional hosting restriction costs versus regulatory GDPR compliance"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Spring Security OAuth2/OIDC JWT context propagation enforces patron-level authorization checks, while Audit and Compliance append-only tables record security events and unauthorized access attempts.",
+    "elements": [
+     "API Gateway",
+     "Security and Context Propagation Component",
+     "Circulation Component",
+     "Audit and Compliance Component"
+    ],
+    "sensitivity_points": [
+     "Fine-grained access control policy enforcement in domain services",
+     "Tamper-resistant append-only audit log persistence"
+    ],
+    "tradeoffs": [
+     "Latency incurred by authorization validation and audit writes versus security assurance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Core Domain Container",
+     "Apache Kafka",
+     "EU Payment Gateway"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Cataloguing Component",
+     "Vendor Ingestion Service",
+     "Catalog & Search Component",
+     "Core Domain Container",
+     "Integration Container"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Container",
+     "Search Service",
+     "Search Index",
+     "Catalog & Search Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

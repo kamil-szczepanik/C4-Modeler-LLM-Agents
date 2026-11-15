@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Real-Time Scoring Engine container
+
+# External elements interacting with the container
+Component(api_gateway, "API Gateway / Ingestion Service", "External Gateway", "Forwards screening requests via gRPC with mTLS (TLS 1.3).")
+Component(explainability_service, "Explainability Service", "External Service", "Provides SHAP values.")
+Component_Ext(amazon_sqs, "Amazon SQS", "AWS SQS", "Publishes tamper-evident audit logs.")
+
+Container_Boundary(real_time_scoring_engine, "Real-Time Scoring Engine") {
+    Component(grpc_inbound_listener, "gRPC Inbound Listener", "Tonic / Rust", "Handling incoming screening requests.")
+    Component(decision_logic_coordinator, "Decision Logic Coordinator", "Rust", "Orchestrates execution flow, rules, and circuit-breaker fallback logic.")
+    Component(feature_assembler, "Feature Assembler", "Async Redis client over TCP / Rust", "Retrieves features using async Redis client over TCP.")
+    Component(model_evaluator, "Model Evaluator", "ONNX Runtime with C-bindings (`ort` crate) / Rust", "Executes ONNX Runtime models via C-bindings with memory zeroization.")
+    Component(audit_dispatcher, "Audit Dispatcher", "AWS SDK / Rust", "Signs SQS audit payloads via HMAC-SHA256 and dispatches logs.")
+}
+
+Rel(api_gateway, grpc_inbound_listener, "Forwards screening requests via gRPC with mTLS (TLS 1.3)", "gRPC / mTLS")
+Rel(grpc_inbound_listener, decision_logic_coordinator, "Passes parsed screening requests", "In-process")
+Rel(decision_logic_coordinator, feature_assembler, "Retrieves features via Async TCP (Redis)", "Async TCP")
+Rel(decision_logic_coordinator, model_evaluator, "Evaluates models via FFI / C-bindings", "FFI")
+Rel(decision_logic_coordinator, explainability_service, "Requests SHAP values via gRPC / REST", "gRPC / REST")
+Rel(decision_logic_coordinator, audit_dispatcher, "Triggers audit log dispatch", "In-process")
+Rel(audit_dispatcher, amazon_sqs, "Publishes tamper-evident audit logs via AWS SDK", "AWS SDK / SQS")
+
+@enduml

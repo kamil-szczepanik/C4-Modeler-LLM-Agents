@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Emr Engine container
+
+Person_Ext(core_api_service, "Core API Service", "External caller to the EMR Engine")
+System_Ext(external_systems, "External Systems", "External systems for lab and imaging payloads")
+
+Container_Boundary(emr_engine, "EMR Engine") {
+    Component(emr_controller, "EMR Controller", "Spring REST / gRPC", "Facade handling ingress for the EMR Engine.")
+    Component(clinical_record_service, "Clinical Record Service", "Spring Boot, ABAC, Resilience4j", "Domain logic, validation, ABAC, and circuit breakers.")
+    Component(hl7_fhir_transformer, "HL7 FHIR Transformer", "HAPI FHIR, Spring WebFlux", "Reactive payload serialization and HL7 FHIR transformation.")
+    Component(audit_interceptor, "Audit Interceptor", "Chronicle Queue", "Event publisher for cryptographic non-repudiation.")
+    Component(postgresql_cluster, "PostgreSQL Cluster", "PostgreSQL, AES-256, LUKS", "Primary data store for patient records.")
+    Component(redis, "Redis", "Redis, In-memory encryption", "Hot patient data cache with TTL.")
+    Component(audit_logging_sidecar, "Audit Logging Sidecar", "Sidecar Proxy", "Sidecar proxy for immutable logging.")
+}
+
+Rel(core_api_service, emr_controller, "Transmits requests via gRPC over TLS with mTLS.", "gRPC / mTLS")
+Rel(emr_controller, clinical_record_service, "Delegates domain logic", "Internal")
+Rel(clinical_record_service, postgresql_cluster, "Persists patient records via TCP.", "TCP")
+Rel(clinical_record_service, redis, "Caches EMR data via TCP.", "TCP")
+Rel(audit_interceptor, audit_logging_sidecar, "Dispatches signed audit events.", "IPC / Local")
+Rel(hl7_fhir_transformer, external_systems, "Exchanges lab and imaging payloads via HL7 FHIR REST APIs.", "REST / HTTPS")
+Rel(emr_controller, hl7_fhir_transformer, "Delegates transformation", "Internal")
+Rel(clinical_record_service, audit_interceptor, "Triggers audit events", "Internal")
+
+@enduml

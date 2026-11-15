@@ -1,0 +1,331 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Catalogue Microservice handles browse/search via Amazon OpenSearch; Checkout & Cart Microservice supports carts and secure transactions; Review & Rating Microservice covers 5-star reviews; Recommendation Microservice provides 'Customers also bought' suggestions; and Localization Service handles multi-currency.",
+   "performance_efficiency": "Performance and scalability are explicitly tackled: CloudFront edge delivery, Lambda@Edge, OpenSearch indexing, Redis and DAX caching, PgBouncer pooling, and asynchronous messaging via Amazon SQS enable handling 1M MAU and achieving sub-2s page loads on 3G.",
+   "compatibility": "External integration is well-defined: Checkout & Cart Microservice integrates with Payment Gateway and Third-Party Shipping APIs via Amazon SQS and REST/HTTPS. Multi-currency and regional needs are handled via Currency & Translation Resolver Component and Geo-Router Component.",
+   "usability": "Shoppers and Vendors & Admins are cleanly served through tailored modules in the Single Page Application, backed by the Vendor Portal Microservice and Catalogue Browser. However, distinct interfaces or accessibility guidelines for varied end-user devices are minimally detailed.",
+   "reliability": "A high 99.95% uptime target is supported via Multi-AZ PostgreSQL, DynamoDB Global Tables, Dead Letter Queues (DLQ) in Amazon SQS, circuit breakers in Notification Dispatcher Component, and fallback routines in Cache & Fallback Manager.",
+   "security": "Addressed thoroughly: AWS WAF Rule Engine mitigates OWASP Top-10; Service Mesh Proxy enforces zero-trust mTLS; AWS Secrets Manager & KMS protect secrets/data at rest; PostgreSQL implements Row-Level Security (RLS); and MFA and tokenized payments ensure PCI/GDPR/CCPA alignment.",
+   "maintainability": "Well-decomposed microservices architecture using ECS Fargate, decoupled by API Gateway & WAF, gRPC/mTLS, and Amazon SQS queues. Level 3 components show strong separation of concerns, such as dedicated controllers, orchestrators, and persistence wrappers.",
+   "portability": "Targets AWS regions well through ECS Fargate, Lambda@Edge, and DynamoDB Global Tables. While Dockerized services and standard databases (PostgreSQL) facilitate migration, there is heavy coupling to proprietary AWS-native services like App Mesh, SQS, and Lambda@Edge."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront CDN, OpenSearch, and containerized ECS services support horizontal scaling and caching for read-heavy catalogue traffic. However, strict 2-second budgets over 3G depend heavily on SPA bundle sizes and asset optimization.",
+    "elements": [
+     "Single Page Application",
+     "API Gateway & WAF",
+     "Catalogue Microservice",
+     "Amazon OpenSearch"
+    ],
+    "sensitivity_points": [
+     "CloudFront edge caching efficiency and hit ratios",
+     "OpenSearch query latency under high concurrent load"
+    ],
+    "tradeoffs": [
+     "Read replica cost versus catalogue query latency during traffic surges"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The recommendation microservice is isolated from catalogue browsing. Its internal Redis cache, Fallback Manager, and asynchronous architecture ensure continuous catalogue browsing performance even during batch scoring runs.",
+    "elements": [
+     "Recommendation Microservice",
+     "Cache & Fallback Manager",
+     "Scoring Engine",
+     "Catalogue Microservice"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in the Recommendation Microservice Redis layer",
+     "CPU isolation between offline scoring and real-time inference"
+    ],
+    "tradeoffs": [
+     "Serving stale recommendations to protect frontend response times"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Checkout & Cart service publishes shipping dispatches asynchronously to Amazon SQS with Dead Letter Queues, completely decoupling checkout transactions from downstream shipping API downtime.",
+    "elements": [
+     "Checkout & Cart Microservice",
+     "Fulfillment & Payment Publisher Component",
+     "Amazon SQS & Dead Letter Queues",
+     "Third-Party Shipping APIs"
+    ],
+    "sensitivity_points": [
+     "SQS queue retention and retry backoff policies for partner APIs"
+    ],
+    "tradeoffs": [
+     "Asynchronous fulfillment visibility traded against immediate checkout completion"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Although DynamoDB Global Tables provide multi-region support, core transactional order ledgers rely on RDS PostgreSQL configured only for Multi-AZ within a single region, lacking automated cross-region database failover without order loss.",
+    "elements": [
+     "Localization Service",
+     "Checkout & Cart Microservice",
+     "PostgreSQL",
+     "DynamoDB Client"
+    ],
+    "sensitivity_points": [
+     "RPO and RTO of cross-region PostgreSQL replication",
+     "Global DNS and edge traffic steering convergence speed"
+    ],
+    "tradeoffs": [
+     "Consistency in transactional databases traded against multi-region automated failover"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Currency handling is localized in the Lambda@Edge Currency & Translation Resolver and injected via custom headers. Changes are localized, though adjustments to payment gateway payloads and cart components are still required.",
+    "elements": [
+     "Localization Service",
+     "Currency & Translation Resolver Component",
+     "Origin Request Transformer Component",
+     "Checkout & Cart Microservice"
+    ],
+    "sensitivity_points": [
+     "Standardized currency schema propagation across microservices"
+    ],
+    "tradeoffs": [
+     "Edge-based header translation simplicity versus backend conversion auditability"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Recommendation Microservice cleanly encapsulates algorithm variants behind an Experiment Router and Scoring Engine. Standardized gRPC interfaces ensure changes remain entirely internal with zero blast radius.",
+    "elements": [
+     "Recommendation Microservice",
+     "Experiment Router",
+     "Scoring Engine",
+     "Recommendation API Controller"
+    ],
+    "sensitivity_points": [
+     "Adherence to uniform contract interfaces between router and scoring engine"
+    ],
+    "tradeoffs": [
+     "Interface abstraction overhead versus flexibility in swapping algorithm implementations"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Inbound requests are inspected by AWS WAF Rule Engine and AWS Shield before reaching downstream services. Internal communication enforces mTLS via AWS App Mesh and parameterized database queries across services.",
+    "elements": [
+     "AWS WAF Rule Engine",
+     "API Gateway & WAF",
+     "Service Mesh Proxy",
+     "Catalogue Microservice",
+     "Review & Rating Microservice"
+    ],
+    "sensitivity_points": [
+     "Regular updating of managed WAF rule sets against OWASP Top-10 vectors"
+    ],
+    "tradeoffs": [
+     "Inspection latency added by WAF rules versus injection protection depth"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "The architecture lacks a centralized privacy coordinator or saga mechanism to propagate deletion requests across distributed datastores (PostgreSQL, DynamoDB, OpenSearch, S3 error logs) within statutory deadlines.",
+    "elements": [
+     "Checkout & Cart Microservice",
+     "Review & Rating Microservice",
+     "Vendor Portal Microservice",
+     "Catalogue Microservice"
+    ],
+    "sensitivity_points": [
+     "Traceability of PII across distributed relational and NoSQL databases"
+    ],
+    "tradeoffs": [
+     "Data deletion compliance complexity versus microservice datastore autonomy"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Cookie & Preference Manager Component",
+     "Catalogue API Controller"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Localization Service",
+     "Currency & Translation Resolver Component",
+     "Origin Request Transformer Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Third-Party Shipping APIs",
+     "Checkout & Cart Microservice",
+     "Fulfillment & Payment Publisher Component",
+     "External Payment Gateway & Third-Party Shipping APIs"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalogue Microservice",
+     "Catalogue API Controller",
+     "Search & Indexing Engine",
+     "Amazon OpenSearch",
+     "Feature Modules"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Checkout & Cart Microservice",
+     "Cart Management Component",
+     "Checkout Orchestrator Component",
+     "Payment Gateway",
+     "Fulfillment & Payment Publisher Component",
+     "Feature Modules"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Review & Rating Microservice",
+     "Review Controller",
+     "Review Service",
+     "DynamoDB Client",
+     "Feature Modules"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Engine",
+     "Recommendation Microservice",
+     "Recommendation API Controller",
+     "Scoring Engine",
+     "Cache & Fallback Manager"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Catalogue Microservice",
+     "Checkout & Cart Microservice",
+     "Recommendation Microservice",
+     "Review & Rating Microservice",
+     "Amazon OpenSearch",
+     "Amazon SQS & Dead Letter Queues"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Single Page Application",
+     "Routing & Shell Component",
+     "Persistence & Sync Middleware",
+     "Localization Service"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "PostgreSQL",
+     "Amazon SQS & Dead Letter Queues",
+     "Cache & Fallback Manager",
+     "DynamoDB Client"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "API Gateway & WAF",
+     "AWS WAF Rule Engine",
+     "Service Mesh Proxy",
+     "PostgreSQL",
+     "AWS Secrets Manager & KMS"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

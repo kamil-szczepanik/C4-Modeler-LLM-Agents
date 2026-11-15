@@ -1,0 +1,36 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patients, "Patients", "End users who access the system for admissions, scheduling, and personal records.")
+Person(ClinicalStaff, "Clinical Staff", "Healthcare professionals who manage patient EMRs, appointments, and clinical workflows.")
+Person(BillingAdministrators, "Billing Administrators", "Administrative staff responsible for managing billing, invoices, and financial operations.")
+
+System_Ext(ExternalLabs, "External Labs", "External laboratory systems that exchange clinical data.")
+System_Ext(ImagingSystems, "Imaging Systems", "External diagnostic imaging systems that integrate with the platform.")
+System_Ext(IdentityProviderIdP, "Identity Provider (IdP)", "External OAuth2/OIDC service for multi-factor authentication and session management.")
+
+System_Boundary(ClinicManagementSystem, "Clinic Management System") {
+    Container(APIGatewayFHIRFacadeContainer, "API Gateway / FHIR Facade Container", "Apache Camel / custom FHIR facade", "Routes incoming traffic, translates HL7 FHIR APIs, and interfaces with external systems.")
+    Container(SecurityAuthProxyContainer, "Security/Auth Proxy Container", "OAuth2 / OpenID Connect", "Handles authentication, authorization, and secure access proxying.")
+    Container(DomainServicesContainers, "Domain Services Containers", "Microservices, gRPC / REST over TLS", "Encapsulates core business logic for Patient/EMR, Scheduling, and Billing.")
+    Container(AsyncEventBusContainer, "Async Event Bus Container", "Kafka / RabbitMQ", "Enables asynchronous decoupling and high throughput message passing between services.")
+    Container(BackgroundWorkerContainerandDatabaseMigrationInitContainers, "Background Worker Container and Database Migration Init-Containers", "Kubernetes Jobs / Init-Containers", "Handles background tasks and automated database schema migrations.")
+    Container(ObservabilityStack, "Observability Stack", "Prometheus, Grafana, OpenTelemetry", "Provides centralized metrics, monitoring, and distributed tracing.")
+    Container(SecretManagementSidecar, "Secret Management Sidecar", "HashiCorp Vault", "Secures AES-256 encryption keys and application credentials.")
+}
+
+Rel(Patients, APIGatewayFHIRFacadeContainer, "Interact with the system via HTTPS and OAuth2", "HTTPS (TLS 1.3), OAuth2/OIDC")
+Rel(ClinicalStaff, APIGatewayFHIRFacadeContainer, "Access clinical operations and EMR management", "HTTPS (TLS 1.3), OAuth2/OIDC")
+Rel(BillingAdministrators, APIGatewayFHIRFacadeContainer, "Manage billing and financial workflows", "HTTPS (TLS 1.3), OAuth2/OIDC")
+Rel(APIGatewayFHIRFacadeContainer, SecurityAuthProxyContainer, "Validate requests and authenticate sessions", "OAuth2 / OpenID Connect")
+Rel(APIGatewayFHIRFacadeContainer, DomainServicesContainers, "Route traffic to domain microservices", "gRPC / REST over TLS")
+Rel(DomainServicesContainers, AsyncEventBusContainer, "Publish and consume asynchronous events", "Kafka / RabbitMQ")
+Rel(APIGatewayFHIRFacadeContainer, ExternalLabs, "Communicate using HL7 FHIR APIs", "HTTPS, HL7 FHIR")
+Rel(APIGatewayFHIRFacadeContainer, ImagingSystems, "Exchange medical imaging and clinical data", "HTTPS, HL7 FHIR")
+Rel(SecurityAuthProxyContainer, IdentityProviderIdP, "Authenticate users against external IdP", "OAuth2 / OIDC")
+Rel(DomainServicesContainers, SecretManagementSidecar, "Retrieve encryption keys and secrets", "HashiCorp Vault API")
+
+@enduml

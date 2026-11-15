@@ -1,0 +1,339 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "Search (Amazon OpenSearch Service), checkout (Order & Checkout Service), and recommendations (Recommendation Service) are addressed. However, customer reviews lack backend persistence or service support (only present in the Single Page Application UI), and fulfillment mechanisms for electronic books mentioned in the brief are absent.",
+   "performance_efficiency": "Sub-2-second loads and scalability for 1M MAU are supported via AWS CloudFront, Amazon OpenSearch Service for indexing, Amazon ElastiCache (Redis) clustering, Amazon RDS Proxy, and asynchronous decoupling with AWS EventBridge and Amazon SQS.",
+   "compatibility": "Standard external interfaces are explicitly established, including Payment Integration Component interfacing with Stripe/PayPal APIs, Fulfillment Client Component integrating with third-party Shipping Provider APIs, and Identity Provider integration via OIDC/Cognito.",
+   "usability": "Customer and Administrator personas are both supported through the Single Page Application. The frontend provides specialized modules for catalog search, cart checkout, and consent management (CMP Framework), though administrative moderation workflows lack dedicated internal interfaces.",
+   "reliability": "High availability (99.95%) is achieved through Amazon Route 53 multi-region health checks, Amazon Aurora Multi-AZ replication with Amazon RDS Proxy, Amazon DocumentDB multi-AZ clustering, Fallback Heuristic Provider circuit breakers, and Amazon SQS Dead-Letter Queues.",
+   "security": "Security requirements and OWASP Top-10 mitigations are met via AWS WAF, JWT Authorizer Component, gRPC over mTLS, AWS Secrets Manager with automatic rotation, AWS KMS envelope encryption, and edge CMP Framework for GDPR/CCPA consent compliance.",
+   "maintainability": "The system decomposes cleanly into domain services (Catalog, Order & Checkout, Recommendation) deployed as independent Amazon ECS Fargate tasks using event-driven communication. However, several C4 component models conflate infrastructure services as child components of application containers.",
+   "portability": "The architecture directly fulfills the multi-region AWS mandate across us-east-1, eu-west-1, and ap-southeast-1 managed via Amazon Route 53 Traffic Flow. However, tight coupling to proprietary services (Amazon DocumentDB, EventBridge, KMS) limits adaptability outside AWS."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.65625,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 2.0,
+   "Modifiability": 4.5,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "AWS CloudFront, S3 hosting, Amazon OpenSearch, and ElastiCache offload heavy traffic effectively. However, strict 3G bundle budget controls and database write capacity under 10x traffic bursts require careful auto-scaling configuration.",
+    "elements": [
+     "AWS CloudFront & Amazon S3",
+     "Amazon Route 53",
+     "Amazon OpenSearch Service",
+     "Amazon ElastiCache",
+     "Catalog Service",
+     "AWS API Gateway"
+    ],
+    "sensitivity_points": [
+     "Edge cache hit ratios on CloudFront for catalog metadata",
+     "OpenSearch cluster sizing during concurrent keyword query bursts"
+    ],
+    "tradeoffs": [
+     "Aggressive edge caching increases performance but risks catalog data staleness"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendation recomputation is decoupled via S3 batch model loading, asynchronous EventBridge/SQS queues, and low-latency Redis caching with circuit breakers, preventing interference with catalog browsing.",
+    "elements": [
+     "Recommendation Service",
+     "Amazon ElastiCache (Redis)",
+     "Amazon S3",
+     "AWS EventBridge / SQS",
+     "Fallback Heuristic Provider"
+    ],
+    "sensitivity_points": [
+     "Isolation of batch ML model loading from real-time Redis reads"
+    ],
+    "tradeoffs": [
+     "Serving cached or fallback recommendations sacrifices personalization accuracy for latency guarantees"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The Checkout Orchestrator invokes the Fulfillment Client synchronously during checkout via Java method calls. Without an asynchronous queue or outbox pattern buffering shipping requests, shipping provider downtime directly threatens checkout completion.",
+    "elements": [
+     "Order & Checkout Service",
+     "Checkout Orchestrator Component",
+     "Fulfillment Client Component",
+     "Shipping Provider"
+    ],
+    "sensitivity_points": [
+     "Synchronous integration points with external third-party shipping APIs"
+    ],
+    "tradeoffs": [
+     "Synchronous fulfillment simplifies immediate tracking generation but couples external availability to checkout"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Route 53 routes traffic across regions, but Aurora PostgreSQL and DocumentDB lack specified cross-region replication (e.g., Aurora Global Database). An outage in us-east-1 leads to database unavailability or lost uncommitted orders.",
+    "elements": [
+     "Amazon Route 53",
+     "Amazon Aurora PostgreSQL",
+     "Amazon DocumentDB",
+     "Order & Checkout Service",
+     "AWS API Gateway"
+    ],
+    "sensitivity_points": [
+     "Cross-region database replication latency and automated failover capabilities"
+    ],
+    "tradeoffs": [
+     "Cross-region active-active persistence avoids failover downtime but introduces high replication costs and complexity"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Order & Checkout Service and external Payment Gateway natively isolate currency handling. Adding JPY requires minimal localized configuration changes in the checkout and payment integration components.",
+    "elements": [
+     "Order & Checkout Service",
+     "Payment Integration Component",
+     "Payment Gateway"
+    ],
+    "sensitivity_points": [
+     "Payment Gateway multi-currency configuration and schema flexibility in Order persistence"
+    ],
+    "tradeoffs": [
+     "Relying on external gateway multi-currency handling simplifies development but couples fees to provider rates"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Recommendation Service is fully encapsulated behind gRPC/REST interfaces, loading models from S3 and exposing decoupled endpoints. Algorithm changes remain entirely isolated within the service container.",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Engine",
+     "Model Loader / Feature Store Client",
+     "Amazon S3"
+    ],
+    "sensitivity_points": [
+     "Independence of internal ML scoring pipeline from client API contracts"
+    ],
+    "tradeoffs": [
+     "Decoupled microservice isolation adds deployment overhead but guarantees zero impact on external components"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Layered security is implemented with AWS WAF at CloudFront and API Gateway, input sanitization in the Catalog API Controller and OpenSearch, and ORM/parameterized queries via Spring Data JPA.",
+    "elements": [
+     "AWS WAF",
+     "AWS API Gateway",
+     "Catalog API Controller",
+     "Search & Browse Engine",
+     "Order Repository Component"
+    ],
+    "sensitivity_points": [
+     "Up-to-date WAF rule sets and strict parameter sanitization across input controllers"
+    ],
+    "tradeoffs": [
+     "In-depth inspection and sanitization add slight latency to ingress request processing"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "Although the SPA includes a CMP framework, there is no personal data management or distributed deletion orchestration across Cognito, Aurora, DocumentDB, and immutable EventBridge 30-day archives.",
+    "elements": [
+     "AWS WAF & CMP Framework",
+     "Identity Provider",
+     "Amazon Aurora PostgreSQL",
+     "Amazon DocumentDB",
+     "AWS EventBridge / SQS"
+    ],
+    "sensitivity_points": [
+     "Capability to scrub PII across microservice stores and immutable event archives"
+    ],
+    "tradeoffs": [
+     "Comprehensive event archival aids disaster recovery but complicates right-to-be-forgotten compliance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "AWS WAF & CMP Framework",
+     "Telemetry Publisher",
+     "AWS Secrets Manager and KMS"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Payment Gateway",
+     "Order & Checkout Service"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Provider",
+     "Order & Checkout Service",
+     "Fulfillment Client Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Module",
+     "Catalog Service",
+     "Catalog API Controller",
+     "Search & Browse Engine",
+     "Catalog Data Repository",
+     "Amazon DocumentDB",
+     "Amazon OpenSearch Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Checkout & Cart Module",
+     "Order & Checkout Service",
+     "Checkout Orchestrator Component",
+     "Payment Integration Component",
+     "Order Repository Component",
+     "Payment Gateway",
+     "Amazon Aurora PostgreSQL"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Recommendations & Reviews Module"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendations & Reviews Module",
+     "Recommendation Service",
+     "Recommendation Engine",
+     "Model Loader / Feature Store Client",
+     "Cache Manager",
+     "Amazon ElastiCache",
+     "AWS EventBridge / SQS"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Amazon Route 53",
+     "AWS API Gateway",
+     "Rate Limiter & Throttling Module",
+     "Amazon Aurora PostgreSQL",
+     "Aurora Read Replica",
+     "Amazon RDS Proxy",
+     "Amazon ElastiCache",
+     "Amazon DocumentDB",
+     "AWS EventBridge / SQS"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "AWS CloudFront & Amazon S3",
+     "Amazon ElastiCache",
+     "Amazon OpenSearch Service",
+     "Amazon RDS Proxy",
+     "DNS Resolver Engine"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Traffic Flow Engine",
+     "Health Checking Probe Fleet",
+     "Replication Manager",
+     "Persistence & Replication Engine",
+     "Dead-Letter Queues",
+     "Fallback Heuristic Provider"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "AWS WAF",
+     "AWS WAF & CMP Framework",
+     "JWT Authorizer Component",
+     "AWS Secrets Manager and KMS",
+     "KMS Crypto Client"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

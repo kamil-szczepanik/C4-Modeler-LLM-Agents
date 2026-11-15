@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening
+
+Person(FraudAnalyst, "Fraud Analyst", "Internal user who accesses case management tools to review and manage fraud cases.")
+Person(RiskOperationsManager, "Risk Operations Manager", "Internal user who manages risk operations and oversight.")
+Person(FraudModelDataScientist, "Fraud Model Data Scientist", "Internal user who develops and updates fraud detection models.")
+
+System_Ext(ShopperCardholder, "Shopper / Cardholder", "External entity initiating card-not-present payment transactions.")
+System_Ext(MerchantPaymentGateway, "Merchant / Payment Gateway", "External entity submitting payment authorizations for real-time fraud scoring.")
+
+System_Boundary(RealTimePaymentFraudScreening, "Real-Time Payment Fraud Screening") {
+    Container(AWSALBAPIGateway, "AWS ALB / API Gateway", "AWS ALB / API Gateway", "Ingress point for incoming traffic and API routing.")
+    Container(RealTimeScoringEngine, "Real-Time Scoring Engine", "Go, Amazon ECS Fargate", "Evaluates payment authorizations to provide sub-50ms automated fraud decisions.")
+    ContainerDb(AmazonElastiCacheRedis, "Amazon ElastiCache (Redis)", "Redis", "Feature store and cache providing ultra-low latency access to feature vectors.")
+    Container(CaseManagementAnalyticsAPI, "Case Management & Analytics API", "Backend service", "Backend service supporting case management tools for analysts and risk managers.")
+    Container(FrontendWebApp, "Frontend Web App", "React SPA", "User interface for analysts and risk managers to review cases and metrics.")
+    ContainerDb(AmazonRDSPostgreSQL, "Amazon RDS PostgreSQL", "Amazon RDS PostgreSQL", "Manages persistent relational data for case management and application state.")
+    Container(AmazonS3withObjectLockandAWSKMS, "Amazon S3 with Object Lock and AWS KMS", "Amazon S3, AWS KMS", "Tamper-evident audit log storage ensuring 7-year auditability and PCI-DSS compliance.")
+    Container(AWSKinesisDataStreamsAmazonSQS, "AWS Kinesis Data Streams / Amazon SQS", "AWS Kinesis Data Streams / Amazon SQS", "Handles asynchronous event processing across the system architecture.")
+}
+
+Rel(MerchantPaymentGateway, AWSALBAPIGateway, "Sends payment authorizations for scoring", "HTTPS")
+Rel(AWSALBAPIGateway, RealTimeScoringEngine, "Routes incoming scoring requests", "HTTP/2")
+Rel(RealTimeScoringEngine, AmazonElastiCacheRedis, "Retrieves feature vectors", "RESP")
+Rel(RealTimeScoringEngine, AmazonS3withObjectLockandAWSKMS, "Writes tamper-evident audit logs", "HTTPS")
+Rel(FraudAnalyst, FrontendWebApp, "Accesses case management tools", "HTTPS")
+Rel(FrontendWebApp, CaseManagementAnalyticsAPI, "Makes API requests for case management and analytics", "HTTPS")
+Rel(CaseManagementAnalyticsAPI, AmazonRDSPostgreSQL, "Reads and writes persistent case data", "TCP/SQL")
+
+@enduml

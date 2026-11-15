@@ -1,0 +1,245 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "R-01 is thoroughly addressed via 'Circulation & Catalogue Microservice', 'Cataloguing & Inventory UI Module', and 'Digital Content Providers'. Circulation workflows and patron self-service needs are completely satisfied across dedicated portals and microservices.",
+   "performance_efficiency": "The sub-800ms search target (R-05) is directly enabled by dedicated 'Elasticsearch' data nodes and query analyzers. 'PgBouncer Connection Pooler Sidecar', read-only replicas, and event decoupling via 'Message Broker' prevent transactional bottlenecks.",
+   "compatibility": "Comprehensive integration mechanisms are detailed via 'API Gateway' supporting SAML/OIDC for 'Academic Identity Providers', REST with mTLS and OAuth2 for 'Payment Gateway' and 'Digital Content Providers', and webhooks for the notification gateway.",
+   "usability": "'Patron Self-Service Portal' and 'Librarian Management Portal' provide tailored UIs with accessibility wrappers and offline support. However, 'Library Administrators' lack a dedicated administrative UI container, interacting directly with the 'API Gateway'.",
+   "reliability": "High reliability is ensured via Resilience4j circuit breakers in 'Circulation & Catalogue Microservice', 'Retry & Fallback Manager' with DLQs in 'Notification Dispatcher', Kafka partition replication, and offline fallback queueing at the circulation desk.",
+   "security": "EU data residency constraints are enforced across EU-pinned PostgreSQL, Elasticsearch, and gateways. Robust security includes TLS 1.3, mTLS, WAF, OAuth2/OIDC, method-level RBAC, telemetry PII scrubbing, and PCI-DSS isolation via payment iFrames.",
+   "maintainability": "High maintainability is achieved through clear microservice separation ('Search Microservice', 'Circulation & Catalogue Microservice', 'Notification Dispatcher'), well-defined bounded contexts, independent data stores, and modular frontend architectures.",
+   "portability": "The architecture relies on standard, containerized runtimes (Spring Boot, Node.js, React) and portable protocols. Explicit pinning to 'AWS RDS/Aurora EU-Central' in the 'Database Layer' slightly reduces cloud-agnostic portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 5.0,
+   "Modifiability": 2.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The dedicated Elasticsearch cluster with distributed data nodes and read-isolated Search Microservice directly provides sub-800ms full-text retrieval under concurrent load without contention on primary transactional storage.",
+    "elements": [
+     "API Gateway",
+     "Search Microservice",
+     "Elasticsearch",
+     "PgBouncer Connection Pooler Sidecar"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch shard sizing and replica count across EU availability zones",
+     "PgBouncer connection pool limits under peak query hydration"
+    ],
+    "tradeoffs": [
+     "Near-real-time index eventual consistency traded against low search latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalogue updates are asynchronously published via Kafka to the search microservice consumer, fully decoupling cataloguing write workloads from real-time patron search queries and ensuring search indexes refresh within seconds.",
+    "elements": [
+     "Circulation & Catalogue Microservice",
+     "Message Broker",
+     "Search Microservice",
+     "Elasticsearch Client Adapter"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer lag in Search Microservice during bulk catalogue ingest",
+     "Elasticsearch index refresh interval settings"
+    ],
+    "tradeoffs": [
+     "Immediate search availability traded for reduced write latency via asynchronous message buffering"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Elasticsearch data nodes replicate across EU availability zones, while circulation workloads run completely independently on the PostgreSQL primary node, preventing search index failures from impacting circulation transactions.",
+    "elements": [
+     "Elasticsearch",
+     "Search Microservice",
+     "Circulation & Catalogue Microservice",
+     "PostgreSQL Primary Node"
+    ],
+    "sensitivity_points": [
+     "Cluster quorum and replica shard allocation in Elasticsearch",
+     "Circuit breaker threshold in Edge Router when querying Search Microservice"
+    ],
+    "tradeoffs": [
+     "Additional infrastructure cost for multi-node replicas versus high availability guarantees"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Patron Self-Service Portal is a stateless React SPA served independently, with user sessions handled via standard tokens and API Gateway routing, allowing immediate failover without session loss.",
+    "elements": [
+     "Patron Self-Service Portal",
+     "API Gateway",
+     "Edge Router",
+     "Auth & Session Manager Component"
+    ],
+    "sensitivity_points": [
+     "Stateless session token handling at the API Gateway edge",
+     "Health check responsiveness for routing traffic away from failed portal hosts"
+    ],
+    "tradeoffs": [
+     "Token renewal overhead traded for seamless multi-instance stateless failover"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "External digital content providers connect directly through the API Gateway, but the architecture lacks an explicit pluggable provider adapter component in the cataloguing microservice to isolate new provider integrations.",
+    "elements": [
+     "API Gateway",
+     "Digital Content Providers",
+     "Circulation & Catalogue Microservice"
+    ],
+    "sensitivity_points": [
+     "Coupling of digital provider protocols within API Gateway routing and core services"
+    ],
+    "tradeoffs": [
+     "Direct gateway integration reduces architectural complexity but increases maintenance effort for new providers"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "Circulation business rules reside in the Circulation & Catalogue Service Layer with no dedicated rule engine or externalized dynamic rule configuration mechanism defined to alter loan policies at runtime.",
+    "elements": [
+     "Circulation & Catalogue Microservice",
+     "Service Layer",
+     "REST Controllers"
+    ],
+    "sensitivity_points": [
+     "Hardcoded loan policies within the service layer requiring rebuilds to change rules"
+    ],
+    "tradeoffs": [
+     "Simpler service implementation traded off against runtime configuration flexibility"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "All persistence, messaging, and compute tiers are explicitly pinned to EU infrastructure (AWS RDS EU-Central, EU-hosted Elasticsearch, and EU Kafka partitions) satisfying strict EU-only data residency requirements.",
+    "elements": [
+     "Database Layer",
+     "Elasticsearch",
+     "Message Broker",
+     "EU Notification Gateway"
+    ],
+    "sensitivity_points": [
+     "Strict regional binding of cloud data volumes and messaging queues",
+     "Egress filtering to enforce data retention strictly within EU borders"
+    ],
+    "tradeoffs": [
+     "Restricting data flows solely to EU infrastructure limits cross-region multi-cloud redundancy"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "The API Gateway and Spring Security enforce JWT validation and role-based access control, but the design specifies RBAC rather than attribute-based or ownership-based access control to prevent cross-patron record inspection.",
+    "elements": [
+     "API Gateway",
+     "Security Validator",
+     "REST Controllers",
+     "Audit Logging Service"
+    ],
+    "sensitivity_points": [
+     "Granular ownership validation logic in controller @PreAuthorize annotations",
+     "Comprehensive audit capture of unauthorized access attempts at the perimeter"
+    ],
+    "tradeoffs": [
+     "Strict per-request ownership evaluation introduces minor latency overhead during record retrieval"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Database Layer",
+     "Elasticsearch",
+     "PostgreSQL Primary Node",
+     "PostgreSQL Read-Only Replica",
+     "Data Nodes",
+     "Replication Controller"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Circulation & Catalogue Microservice",
+     "Cataloguing & Inventory UI Module",
+     "Digital Content Providers",
+     "Catalogue & Search Client Component",
+     "Service Layer",
+     "Persistence Layer"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Microservice",
+     "Elasticsearch",
+     "Search Controller",
+     "Elasticsearch Client Adapter",
+     "Routing and Coordination Node",
+     "Data Nodes",
+     "Inverted Index & Analyzer Pipeline"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

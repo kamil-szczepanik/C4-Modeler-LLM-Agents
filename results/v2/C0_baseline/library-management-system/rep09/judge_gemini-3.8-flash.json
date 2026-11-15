@@ -1,0 +1,244 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 and the brief via 'Catalog & Circulation Service', 'Catalog Indexer Component', and 'Dashboard & Circulation View'. Physical and digital cataloguing, circulation workflows, and patron self-service portals are explicitly implemented across the web portal, core services, and async workers.",
+   "performance_efficiency": "Requirement R-05 (< 800 ms p99 search) is directly addressed through a dedicated 'Search Container' powered by Elasticsearch, gateway-level caching via 'Rate Limiting & Caching Component' with Redis, client-side caching via 'State & API Client', and 'PgBouncer' connection pooling.",
+   "compatibility": "External interoperability is well-defined: standard OIDC/OAuth2 protocols interface with 'EU Identity Provider (IdP)', REST/HTTPS integrates with 'EU Payment Gateway', and HTTPS/SMTP standard protocols integrate with 'EU Notification Service' via dedicated integration clients.",
+   "usability": "All target users (Patrons, Librarians, Administrators) are provided dedicated interfaces within 'Web App / Admin Portal' using 'Patron Search Component' and role-based 'Dashboard & Circulation View'. Specific accessibility mechanisms (e.g., WCAG for patrons) are omitted.",
+   "reliability": "High reliability is ensured via 'Replication Manager' (Patroni automated failover) and 'Read-Replica Instance' in 'Database Container', Resilience4j circuit breakers in 'Payment Integration Client', and dead-letter handling via 'DLQ Publisher Component' in 'Async Worker Container'.",
+   "security": "Addresses the EU residency constraint by deploying exclusively to EU regions. Enforces TLS 1.3, internal mTLS, token validation in 'Authentication & Authorization Filter', 'WAF & Threat Protection Plugin', and GDPR-compliant audit logging via PostgreSQL's 'Audit Logging Extension' (pg_audit).",
+   "maintainability": "Displays clean modular decomposition separating edge routing, UI, synchronous core logic, asynchronous operations, and search indexing into loosely coupled containers and components with distinct responsibilities and standard interfaces (REST, gRPC, AMQP).",
+   "portability": "All components are containerized (Node.js, Spring Boot, Python, Elasticsearch, PostgreSQL) and target Kubernetes environments across EU cloud providers (OVHcloud, AWS Frankfurt/Ireland), ensuring environmental adaptability and preventing cloud provider lock-in."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 3,
+   "MOD-02": 3,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 5.0,
+   "Modifiability": 3.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture combines a dedicated multi-node Elasticsearch cluster for low-latency full-text queries with Redis-backed caching at the API Gateway and React Query client caching, directly satisfying the sub-800 ms P99 search requirement under peak load.",
+    "elements": [
+     "API Gateway",
+     "Rate Limiting & Caching Component",
+     "Search Container",
+     "Index & Query Engine (Elasticsearch Core)",
+     "State & API Client"
+    ],
+    "sensitivity_points": [
+     "Redis cache hit ratio during traffic bursts",
+     "Elasticsearch index shard sizing and query latency"
+    ],
+    "tradeoffs": [
+     "Memory overhead for caching versus backend search cluster sizing"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Elasticsearch supports near-real-time indexing within seconds, and bulk indexing is isolated from relational cataloging. However, explicit cache invalidation mechanisms for gateway-cached search results upon catalog updates are not detailed.",
+    "elements": [
+     "Catalog & Circulation Service",
+     "Search Indexer Client",
+     "Catalog Indexer Component",
+     "Index & Query Engine (Elasticsearch Core)",
+     "Rate Limiting & Caching Component"
+    ],
+    "sensitivity_points": [
+     "Index refresh interval and indexing queue throughput",
+     "Cache eviction latency between Core Services and API Gateway Redis"
+    ],
+    "tradeoffs": [
+     "Immediate search consistency versus index write performance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Elasticsearch is deployed as a multi-node cluster handling node failovers without query interruption. Circulation and loan workflows operate independently against the PostgreSQL primary with Patroni failover, preventing loan transaction loss.",
+    "elements": [
+     "Search Container",
+     "Index & Query Engine (Elasticsearch Core)",
+     "Core Services Container",
+     "Database Container",
+     "Replication Manager"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch replica shard count per index",
+     "Cluster rebalancing overhead during unexpected node loss"
+    ],
+    "tradeoffs": [
+     "Cluster node redundancy costs versus failover latency guarantees"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Web App / Admin Portal instances are stateless and fronted by the API Gateway dispatcher, allowing immediate rerouting upon portal instance failure. Transaction state remains safely managed in the database.",
+    "elements": [
+     "Routing & Dispatcher Component",
+     "API Gateway",
+     "Web App / Admin Portal",
+     "Core Services Container",
+     "Relational Storage Engine"
+    ],
+    "sensitivity_points": [
+     "Gateway health-check frequency and dead-instance detection speed",
+     "Statelessness of client sessions across portal replicas"
+    ],
+    "tradeoffs": [
+     "Aggressive health check polling versus network overhead"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "The architecture lacks a specialized integration adapter for external digital content or e-book vendors. Ingestion and cataloging logic are bundled inside the monolithic Catalog & Circulation Service, requiring direct modifications to core service logic.",
+    "elements": [
+     "Catalog & Circulation Service",
+     "Core Services Container"
+    ],
+    "sensitivity_points": [
+     "Coupling between external e-book vendor protocols and internal catalog models"
+    ],
+    "tradeoffs": [
+     "Centralized business logic simplicity versus extensible provider plug-in modularity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "Although administrators have a portal view for configuration, there is no distinct rules engine, policy engine, or external configuration store detailed in Core Services. Circulation rules are embedded in Java code.",
+    "elements": [
+     "Dashboard & Circulation View",
+     "Catalog & Circulation Service",
+     "Core Services Container"
+    ],
+    "sensitivity_points": [
+     "Absence of dynamic rule definition schema or rule execution engine"
+    ],
+    "tradeoffs": [
+     "Hardcoded circulation business logic versus flexible rule engine complexity"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Data residency is strictly enforced across all layers: EU Cloud Infrastructure, local PostgreSQL storage with EU availability zone replication, EU IdP, EU Payment Gateway, and EU-designated logging services.",
+    "elements": [
+     "EU Cloud Infrastructure",
+     "Database Container",
+     "Relational Storage Engine",
+     "EU Identity Provider (IdP)",
+     "Centralized Log & Metrics Aggregator"
+    ],
+    "sensitivity_points": [
+     "Exclusion of non-EU SaaS dependencies and endpoints",
+     "Regional boundary enforcement in container deployment"
+    ],
+    "tradeoffs": [
+     "Restricting cloud vendor regions versus global service availability"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The API Gateway extracts and verifies tokens, while Spring Security validates claims and enforces fine-grained authorization. Unauthorized access attempts are rejected and logged via Fluentbit and pg_audit.",
+    "elements": [
+     "Authentication & Authorization Filter",
+     "Claims Transformation Component",
+     "Authentication & Security Module",
+     "Fluentbit Sidecar",
+     "Audit Logging Extension"
+    ],
+    "sensitivity_points": [
+     "Fine-grained patron record ownership checks in Spring Security",
+     "Synchronous audit trail completeness via pg_audit and Fluentbit"
+    ],
+    "tradeoffs": [
+     "Granular authorization check overhead versus API latency"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "EU Cloud Infrastructure",
+     "Database Container",
+     "Relational Storage Engine",
+     "Replication Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Catalog & Circulation Service",
+     "Catalog Indexer Component",
+     "Index & Query Engine (Elasticsearch Core)",
+     "Relational Storage Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Container",
+     "Index & Query Engine (Elasticsearch Core)",
+     "Search Indexer Client",
+     "Rate Limiting & Caching Component",
+     "State & API Client"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

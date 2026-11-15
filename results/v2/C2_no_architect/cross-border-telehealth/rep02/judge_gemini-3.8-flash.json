@@ -1,0 +1,331 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Video Streaming Container satisfies R-01; Local Pharmacy Integration Containers with FHIR Adapter handle R-02; AI Symptom Checker Container provides care urgency for R-03; and Consent & Identity Management Container manages purpose-based consent for R-04.",
+   "performance_efficiency": "Adaptive bitrate streaming in WebRTC Media Server and Server-Sent Events in Triage Controller explicitly address low-bandwidth constraints (<300 kbit/s). Asynchronous processing via Audit Log Emitter (Kafka) offloads persistence. However, specific regional caching and autoscaling mechanisms are not detailed.",
+   "compatibility": "The FHIR Adapter within Local Pharmacy Integration Containers directly implements HL7 FHIR (US) and national EU e-prescription standards for Local Pharmacy Networks. Additionally, Regional Health Authorities/Auditors interface via dedicated read-only gateways.",
+   "usability": "Patients and Licensed Clinicians are clearly supported across consultation, prescription, and triage workflows via Regional API Gateways and WebRTC Media Server. Degraded-mode support improves low-bandwidth accessibility, though client applications and patient self-service consent interfaces are only modeled as generic actors.",
+   "reliability": "Degraded-mode operation below 300 kbit/s is handled by the WebRTC Media Server. Event Publisher incorporates retries and dead-letter queues, while Telemetry and Monitoring Agent tracks Quality of Experience metrics across regions.",
+   "security": "Security is thoroughly designed: Policy Enforcement Engine (OPA) enforces regional data residency and consent, AI Inference Engine uses Confidential VMs (AMD SEV-SNP), Regional WORM Storage Buckets enforce EU MDR audit compliance, and mTLS via Istio protects communications.",
+   "maintainability": "The architecture exhibits high modularity with clear separation of concerns (e.g., separating Prescription Router, FHIR Adapter, and Event Publisher). Asynchronous decoupled integrations via Kafka and GCP Pub/Sub ensure low component coupling and ease of maintenance.",
+   "portability": "The architecture targets GCP GKE across europe-west3 and us-central1 using containerized services and Istio. However, it relies heavily on proprietary GCP-managed capabilities such as GCP Cloud Storage WORM, Cloud KMS, and Binary Authorization, creating cloud vendor lock-in."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 2.5,
+   "Modifiability": 4.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "GKE and WebRTC media servers support video sessions, but stateful media server scaling, signaling overhead, and session establishment concurrency under peak join rates lack explicit mechanisms.",
+    "elements": [
+     "Regional API Gateways",
+     "Video Streaming Container",
+     "WebRTC Media Server"
+    ],
+    "sensitivity_points": [
+     "WebRTC media server capacity and stateful connection autoscaling limits"
+    ],
+    "tradeoffs": [
+     "Dynamic WebRTC scaling vs infrastructure compute costs during idle periods"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "The workload of ~14 requests/second is moderate and easily handled by FastAPI and in-memory inference on Confidential VMs, though audit logging to WORM storage must be asynchronous to prevent latency spikes.",
+    "elements": [
+     "API Gateway Container",
+     "AI Symptom Checker Container",
+     "Triage Controller",
+     "AI Inference Engine",
+     "Audit Logger"
+    ],
+    "sensitivity_points": [
+     "Confidential VM in-memory model inference execution time"
+    ],
+    "tradeoffs": [
+     "Confidential computing memory isolation vs slight virtualization performance penalty"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "WebRTC adaptive bitrate streaming explicitly accommodates low-bandwidth connections (<300 kbit/s), but clinical notes management and consultation state persistence are not detailed in the architecture.",
+    "elements": [
+     "Video Streaming Container",
+     "WebRTC Media Server",
+     "Telemetry and Monitoring Agent"
+    ],
+    "sensitivity_points": [
+     "Bitrate degradation threshold without dropping media and data sessions"
+    ],
+    "tradeoffs": [
+     "Video frame dropping vs audio and clinical session continuity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The deployment topology specifies only one US region (us-central1). A full outage of this region cannot be recovered locally within 1 hour without moving data to the EU, violating data residency constraints.",
+    "elements": [
+     "API Gateway Container",
+     "Regional WORM Storage Buckets",
+     "GCP us-central1"
+    ],
+    "sensitivity_points": [
+     "Single-region deployment vulnerability for US health data residency"
+    ],
+    "tradeoffs": [
+     "Single-region operational simplicity vs disaster recovery resiliency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Local Pharmacy Integration Container isolates transformation logic inside the FHIR Adapter and delegates routing via the Prescription Router, confining new country-specific standards to a dedicated adapter.",
+    "elements": [
+     "Local Pharmacy Integration Containers",
+     "Prescription Router",
+     "FHIR Adapter"
+    ],
+    "sensitivity_points": [
+     "Abstraction level of the FHIR Adapter for varying national payload standards"
+    ],
+    "tradeoffs": [
+     "Adapter encapsulation vs maintaining diverse regional integration libraries"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "GCP Binary Authorization cryptographically verifies model weights, and the Audit Logger records inputs and model versions to regional WORM storage. Rollback mechanisms rely on standard GKE container rollout controls.",
+    "elements": [
+     "AI Symptom Checker Container",
+     "AI Inference Engine",
+     "Audit Logger",
+     "Regional WORM Storage Buckets"
+    ],
+    "sensitivity_points": [
+     "Model version tagging in the inference payload logged to WORM storage"
+    ],
+    "tradeoffs": [
+     "Strict immutable logging of every inference vs WORM storage accumulation"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The API Gateway's Policy Enforcement Engine and Fine-Grained Consent Manager evaluate zero-trust residency and consent rules via OPA at runtime, blocking cross-region access and immutably recording attempts.",
+    "elements": [
+     "API Gateway Container",
+     "Policy Enforcement Engine",
+     "Consent & Identity Management Container",
+     "Fine-Grained Consent Manager",
+     "Audit Log Emitter"
+    ],
+    "sensitivity_points": [
+     "OPA policy synchronization across regions without leaking cross-border health records"
+    ],
+    "tradeoffs": [
+     "Synchronous policy evaluation per request vs API gateway request latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Consent updates are processed in the Fine-Grained Consent Manager and enforced synchronously at runtime by OPA. Revocations take effect immediately (well within 24 hours) and are immutably logged via Kafka to WORM storage.",
+    "elements": [
+     "Consent & Identity Management Container",
+     "Fine-Grained Consent Manager",
+     "Audit Log Emitter",
+     "Regional WORM Storage Buckets"
+    ],
+    "sensitivity_points": [
+     "Propagation and cache-invalidation latency for OPA policy decision points"
+    ],
+    "tradeoffs": [
+     "Immediate cache invalidation consistency vs policy engine throughput"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "API Gateway Container",
+     "Policy Enforcement Engine",
+     "Consent & Identity Management Container",
+     "Fine-Grained Consent Manager",
+     "Regional WORM Storage Buckets"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Regional API Gateways",
+     "Policy Enforcement Engine",
+     "Fine-Grained Consent Manager",
+     "Regional WORM Storage Buckets",
+     "Encryption Manager"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Regional WORM Storage Buckets",
+     "AI Inference Engine",
+     "Audit Logger"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Video Streaming Container",
+     "WebRTC Media Server",
+     "Triage Controller"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patients",
+     "Licensed Clinicians",
+     "Video Consultation Service",
+     "Video Streaming Container",
+     "WebRTC Media Server"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Local Pharmacy Integration Containers",
+     "Prescription Router",
+     "FHIR Adapter",
+     "Local Pharmacy Networks"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Service",
+     "AI Symptom Checker Container",
+     "Triage Controller",
+     "AI Inference Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Consent Management Engine",
+     "Consent & Identity Management Container",
+     "Fine-Grained Consent Manager",
+     "Policy Enforcement Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Policy Enforcement Engine",
+     "Fine-Grained Consent Manager",
+     "Regional WORM Storage Buckets",
+     "Encryption Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Video Consultation Service",
+     "Video Streaming Container",
+     "WebRTC Media Server"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Audit Logger",
+     "Regional WORM Storage Buckets",
+     "AI Inference Engine"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Local Pharmacy Integration Containers",
+     "FHIR Adapter",
+     "Local Pharmacy Networks"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

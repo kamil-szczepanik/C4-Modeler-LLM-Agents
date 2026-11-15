@@ -1,0 +1,324 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 3,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 2,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.5,
+  "justifications": {
+   "functional_suitability": "Patient Registry Component, Scheduling & Resource Component (clash checks), EMR Management Component with audit interceptor, and Billing & Claims Component cover R-01 to R-04. Gaps: insurance claim submission is only implied, and the Public Health export flow is not detailed.",
+   "performance_efficiency": "Mechanisms include Redis clash checks and rate limiting, EMR View Engine local caching and virtualized rendering, Kafka async events, and load balancing in the Routing Router. Missing: server-side EMR caching, explicit scaling policies, and any link to the <1 s P95 target.",
+   "compatibility": "FHIR API Facade Component (HAPI FHIR), HL7 v2 to FHIR Adapter (Camel), and FHIR over HTTPS to Lab & Imaging Systems match R-08. IdP via OIDC and gateway integrations are covered. Minor gap: the imaging-specific DICOM path is absent.",
+   "usability": "Patient Portal and Staff Dashboard serve all personas, with role-based views (Auth & RBAC Module), a WebSocket Reconnection Manager, and draft preservation. Gaps: no dedicated admin/compliance interface, no accessibility or mobile considerations, and the volatile drafts are lost on a crash.",
+   "reliability": "Only the WebSocket Reconnection Manager, Kafka async buffering, and WORM object storage are present. There is no active-active deployment, failover, replication, backup/DR, or multi-region design, despite the 99.99% target. The Redis and Kafka components are single, unspecified dependencies.",
+   "security": "IdP OIDC/SAML with MFA, Authentication & Authorization Filter, mTLS via Istio, httpOnly cookies, KMS encryption with WORM Object Lock, JWE envelope encryption on Kafka, Audit & Compliance Interceptor with immutable logs, and Break-Glass Authorization (OPA) match the brief well.",
+   "maintainability": "Clear containers and components with distinct responsibilities, an API Gateway, a service mesh, event-driven decoupling via Kafka, and a separate Interoperability container. Minor gaps: Core Services is one coarse container, and the technology choices are loose (Go / Java, Kafka / RabbitMQ).",
+   "portability": "Kubernetes with Istio, Kong/Envoy, and S3-compatible storage support hybrid use. However, AWS KMS ties encryption to one provider, and there is no explicit deployment view, IaC, or on-prem/eu-central-1 mapping."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 3,
+   "MOD-02": 3,
+   "PERF-01": 3,
+   "PERF-02": 2,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.40625,
+  "by_quality_attribute": {
+   "Performance": 2.5,
+   "Availability": 2.0,
+   "Modifiability": 3.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "EMR View Engine",
+     "API Gateway",
+     "EMR Management Component",
+     "Staff Dashboard (SPA)"
+    ],
+    "sensitivity_points": [
+     "Cache freshness versus current data",
+     "No server-side EMR cache or read replicas shown",
+     "Gateway auth validation adds per-request latency"
+    ],
+    "tradeoffs": [
+     "Local caching speeds loads but risks stale data",
+     "Cold-tiering saves cost but slows old records"
+    ],
+    "justification": "Client caching and virtualized rendering help, and the gateway scales. But there is no EMR read-path cache, replicas, or performance targets, and the P95 under 1 s for 500 concurrent users is unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "elements": [
+     "Interoperability & Analytics Gateway Container",
+     "FHIR API Facade Component",
+     "HL7 v2 to FHIR Adapter Component",
+     "Kafka",
+     "EMR Management Component"
+    ],
+    "sensitivity_points": [
+     "HAPI JPA server write throughput under burst",
+     "Shared database contention with EMR reads",
+     "No ingestion queue or backpressure shown"
+    ],
+    "tradeoffs": [
+     "Audit interception adds overhead to ingestion",
+     "Isolation of the gateway versus data consistency"
+    ],
+    "justification": "A separate FHIR gateway exists, but the path from ingestion to EMR visibility is undefined. There is no buffering, bulk loading, or workload isolation, and the gateway has no stated connection to the EMR store, so the 10 minute target and EMR P95 are at risk."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "API Gateway",
+     "Core Clinical & Billing Services",
+     "PostgreSQL",
+     "Kafka",
+     "S3-compatible object storage"
+    ],
+    "sensitivity_points": [
+     "Database replication mode between sites",
+     "Failover routing mechanism undefined",
+     "Kafka cross-site replication"
+    ],
+    "tradeoffs": [
+     "Synchronous replication prevents loss but adds latency",
+     "Active-active improves uptime but increases complexity"
+    ],
+    "justification": "The hybrid target is stated, but no global traffic management, cross-site database replication, or failover is modeled. No-data-loss and 1-minute recovery are not demonstrated, and the Istio and gateway are not shown as multi-site."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Billing & Claims Component",
+     "PostgreSQL",
+     "Kafka",
+     "Payment Gateway / Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Synchronous clearinghouse call during DB failure",
+     "No idempotency key or outbox pattern shown",
+     "Database failover time"
+    ],
+    "tradeoffs": [
+     "Synchronous pre-validation is simple but fragile",
+     "Retries risk duplicates without idempotency"
+    ],
+    "justification": "Claims are processed synchronously with no stated retry, outbox, idempotency, or database HA and failover. Kafka exists but is not tied to claims, so avoiding lost or duplicate claims and 30 s recovery are unaddressed."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Billing & Claims Component",
+     "Core Clinical & Billing Services",
+     "Payment Gateway / Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Clearinghouse logic embedded in the Billing component",
+     "No adapter or abstraction for payers"
+    ],
+    "tradeoffs": [
+     "A shared billing module is simple but couples changes",
+     "Separate adapters add flexibility but more components"
+    ],
+    "justification": "Billing is a separate component from the EMR, so changes are largely isolated. But there is no clearinghouse adapter or port abstraction, so a new integration would modify the Billing component itself, within a monolithic container."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "elements": [
+     "Patient Registry Component",
+     "Scheduling & Intake Controller",
+     "Audit & Compliance Interceptor Component",
+     "Staff Dashboard (SPA)"
+    ],
+    "sensitivity_points": [
+     "Audit interceptor may be field-agnostic or need changes",
+     "Schema migration in shared PostgreSQL",
+     "FHIR mapping may need updates"
+    ],
+    "tradeoffs": [
+     "Shared data model eases change but couples components",
+     "Central audit reduces effort but is limited to FHIR"
+    ],
+    "justification": "The change touches the registry, the UI intake controller, and probably the audit and FHIR mapping, around three to four components. No schema-driven forms or generic audit are shown. Feasible within the limit but with risk."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "Identity Provider (IdP)",
+     "Authentication & Authorization Filter",
+     "Auth & RBAC Module",
+     "Audit & Telemetry Interceptor"
+    ],
+    "sensitivity_points": [
+     "IdP must enforce MFA",
+     "Alert latency path not defined",
+     "Token validation at gateway"
+    ],
+    "tradeoffs": [
+     "Delegating to the IdP reduces effort but adds a dependency",
+     "Strict auth adds latency"
+    ],
+    "justification": "The IdP with OIDC/SAML and gateway token validation is a sound base for MFA. But MFA is not explicitly stated, and there is no failed-login detection or alerting mechanism for the 1-minute alert."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Break-Glass Authorization Component",
+     "Audit & Compliance Interceptor Component",
+     "EMR Management Component",
+     "S3-compatible object storage",
+     "Kafka"
+    ],
+    "sensitivity_points": [
+     "Audit coverage limited to the FHIR path",
+     "Treatment-relationship policy checks not shown for the EMR",
+     "Immutable audit store and retention not specified"
+    ],
+    "tradeoffs": [
+     "Strong audit logging adds write overhead",
+     "Break-glass flexibility versus strict access control"
+    ],
+    "justification": "There is OPA break-glass, immutable audit logging, and WORM storage for records. But the audit interceptor is in the FHIR gateway, not on the core EMR reads. The audit store and 10-year retention are unspecified, and the treating-relationship policy is not shown."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "none",
+   "C-03": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "none",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.5909090909090909,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Audit & Compliance Interceptor Component",
+     "Break-Glass Authorization Component",
+     "Audit & Telemetry Interceptor",
+     "API Gateway",
+     "Regulatory Registry"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "EMR Management Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Registry Component",
+     "Scheduling & Intake Controller",
+     "Core Clinical & Billing Services"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling & Resource Component",
+     "Scheduling & Intake Controller"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Management Component",
+     "Audit & Compliance Interceptor Component",
+     "EMR View Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Billing & Claims Component",
+     "Payment Gateway"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Authentication & Authorization Filter",
+     "EMR Management Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "none",
+    "elements": []
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "EMR View Engine"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Interoperability & Analytics Gateway Container",
+     "FHIR API Facade Component",
+     "HL7 v2 to FHIR Adapter Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

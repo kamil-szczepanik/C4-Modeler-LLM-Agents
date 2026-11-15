@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalysts_RiskManagers, "Fraud Analysts & Risk Managers", "Internal users accessing the system for case reviews and rule updates.")
+System_Ext(PaymentGateway_Acquirer, "Payment Gateway / Acquirer", "External system sending authorization requests via REST/gRPC.")
+System_Ext(AWSCognito, "AWS Cognito", "Identity provider handling OAuth2/OIDC and MFA.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(AWSApplicationLoadBalancerALB, "AWS Application Load Balancer (ALB)", "AWS ALB", "Ingress layer providing low-latency routing without API Gateway overhead.")
+    Container(ScoringEngine, "Scoring Engine", "Java (Spring Boot / gRPC) on AWS ECS on Fargate", "Stateless scoring engine meeting <50ms P99 latency at 3,000 TPS.")
+    Container(CaseManagementService, "Case Management Service", "Node.js / React on AWS ECS on Fargate", "Case management UI ensuring analysts never access raw card data.")
+    ContainerDb(AmazonDynamoDB, "Amazon DynamoDB", "Amazon DynamoDB", "Low-latency feature store for transaction evaluation.")
+    Container(AWSS3ObjectLock, "AWS S3 Object Lock", "AWS S3 Object Lock", "Tamper-evident 7-year audit storage replacing QLDB to minimize operational overhead.")
+}
+
+Rel(PaymentGateway_Acquirer, AWSApplicationLoadBalancerALB, "Sends synchronous authorization requests", "gRPC/HTTPS over mTLS")
+Rel(FraudAnalysts_RiskManagers, AWSCognito, "Authenticates via OAuth2 and MFA", "OAuth2/OIDC")
+Rel(FraudAnalysts_RiskManagers, CaseManagementService, "Accesses case management for case reviews and rule updates", "HTTPS, TLS 1.3")
+Rel(AWSApplicationLoadBalancerALB, ScoringEngine, "Routes scoring and authorization traffic", "gRPC/HTTPS")
+Rel(AWSApplicationLoadBalancerALB, CaseManagementService, "Routes case management UI and API traffic", "HTTPS")
+Rel(ScoringEngine, AmazonDynamoDB, "Retrieves low-latency transaction features", "TCP")
+Rel(ScoringEngine, AWSS3ObjectLock, "Streams asynchronous tamper-evident audit logs", "AWS API")
+
+@enduml

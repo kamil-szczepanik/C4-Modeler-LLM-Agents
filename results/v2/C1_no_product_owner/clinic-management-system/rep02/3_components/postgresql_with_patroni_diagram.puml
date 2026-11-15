@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the PostgreSQL with Patroni container
+
+System_Ext(Microservices, "Patient & Scheduling Service, EMR Core Service, Billing & Integration Service", "Microservices accessing the database")
+System_Ext(S3_MinIO, "WORM-compliant S3 / MinIO", "Stores encrypted backups for 10-year retention")
+
+Container_Boundary(postgresql_patroni, "PostgreSQL with Patroni") {
+    Component(PostgreSQL_Instance, "PostgreSQL Instance", "PostgreSQL 15+", "Primary datastore ensuring active-passive high availability failover and handling encrypted SQL queries.")
+    Component(Patroni_Daemon, "Patroni Daemon", "Patroni Daemon", "Manages high availability failover and coordinates cluster state.")
+    Component(Distributed_Configuration_Store_Etcd, "Distributed Configuration Store (Etcd)", "Etcd", "Maintains cluster consensus and leader lock.")
+    Component(PgBouncer, "PgBouncer", "PgBouncer", "Connection pooling to handle high concurrent service loads from microservices.")
+    Component(pgBackRest, "pgBackRest", "pgBackRest", "Backup and disaster recovery tool for continuous WAL archiving and backups.")
+    Component(Prometheus_Exporters, "Prometheus Exporters", "Prometheus Exporters", "Sidecar components for monitoring replication lag and connection pool saturation.")
+}
+
+Rel(Microservices, PgBouncer, "Encrypted SQL queries over TLS", "TCP 6432")
+Rel(PgBouncer, PostgreSQL_Instance, "Local socket or TLS-encrypted SQL", "TCP 5432")
+Rel(Patroni_Daemon, Distributed_Configuration_Store_Etcd, "Consensus and leader lock", "HTTPS/gRPC")
+Rel(Distributed_Configuration_Store_Etcd, Patroni_Daemon, "Consensus and leader lock", "HTTPS/gRPC")
+Rel(PostgreSQL_Instance, pgBackRest, "Continuous WAL archiving and backups", "Encrypted File Transfer")
+Rel(pgBackRest, S3_MinIO, "Stores encrypted backups for 10-year retention", "HTTPS/S3 API")
+
+@enduml

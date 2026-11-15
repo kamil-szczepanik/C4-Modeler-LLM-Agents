@@ -1,0 +1,38 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Modern Claims Platform
+
+Person(Customer, "Customer", "Policyholders who submit online claims via the web portal.")
+Person(Broker, "Broker", "Insurance brokers who submit and assist with claims on behalf of customers.")
+Person(Claims_Adjuster, "Claims Adjuster", "Internal staff responsible for fast claim handling and processing.")
+Person(Finance_Compliance_Auditor, "Finance/Compliance Auditor", "Auditors who review audit logs and ensure compliance.")
+
+System_Ext(Legacy_Mainframe_Claims_System, "Legacy Mainframe Claims System", "On-premises COBOL/DB2 system acting as the enduring system of record.")
+System_Ext(Azure_Active_Directory, "Azure Active Directory", "Identity Provider providing Single Sign-On and RBAC enforcement.")
+
+System_Boundary(Modern_Claims_Platform, "Modern Claims Platform") {
+    Container(API_Gateway, "API Gateway", "Azure API Management", "Manages incoming requests and secures access with OIDC JWT tokens.")
+    Container(Customer_Portal_Adjuster_Web_App, "Customer Portal & Adjuster Web App", "Azure Container Apps / React", "Responsive UI for customers, brokers, and adjusters meeting sub-2s performance constraint.")
+    Container(Claims_Domain_Services, "Claims Domain Services", "Azure Container Apps / .NET Core", "Domain microservices for incremental claim type migration.")
+    Container(Integration_Anti_Corruption_Layer, "Integration & Anti-Corruption Layer", "Azure Service Bus", "Handles asynchronous messaging with transactional outbox pattern to ensure zero data loss.")
+    ContainerDb(Claims_Audit_Store, "Claims Audit Store", "Azure Cosmos DB", "Append-only, immutable business event auditing and PII encryption.")
+    Container(Mainframe_Adapter, "Mainframe Adapter", "Azure Container Apps / .NET Core", "Bridges integration layer messages to the legacy mainframe via custom TCP/LU6.2.")
+}
+
+Rel(Customer, API_Gateway, "Sends API requests and accesses portals", "HTTPS (TLS 1.3) with OIDC JWT tokens")
+Rel(Broker, API_Gateway, "Sends API requests and accesses portals", "HTTPS (TLS 1.3) with OIDC JWT tokens")
+Rel(Claims_Adjuster, API_Gateway, "Sends API requests and accesses web app", "HTTPS (TLS 1.3) with OIDC JWT tokens")
+Rel(Finance_Compliance_Auditor, API_Gateway, "Accesses audit logs and compliance views", "HTTPS (TLS 1.3) with OIDC JWT tokens")
+
+Rel(API_Gateway, Customer_Portal_Adjuster_Web_App, "Routes traffic to frontend applications", "HTTPS")
+Rel(API_Gateway, Claims_Domain_Services, "Routes traffic to backend domain services", "HTTPS")
+
+Rel(Claims_Domain_Services, Claims_Audit_Store, "Writes audit events and business data", "HTTPS (Document API)")
+Rel(Claims_Domain_Services, Integration_Anti_Corruption_Layer, "Publishes domain events", "AMQP (Azure Service Bus)")
+
+Rel(Integration_Anti_Corruption_Layer, Mainframe_Adapter, "Transfers integration messages", "AMQP")
+Rel(Mainframe_Adapter, Legacy_Mainframe_Claims_System, "Bridges traffic over Azure ExpressRoute/IPsec VPN with mTLS", "Custom TCP/LU6.2 bridging")
+
+@enduml

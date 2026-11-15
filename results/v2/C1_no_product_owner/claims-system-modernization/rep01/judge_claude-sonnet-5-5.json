@@ -1,0 +1,328 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 2,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 3,
+   "portability": 2
+  },
+  "mean": 2.875,
+  "justifications": {
+   "functional_suitability": "Claims Portal serves submission (R-01) and adjusters (R-02); Migration Router Component supports per-type routing (R-03). Gaps: no explicit adjuster workflow service, no per-claim-type migration rules store, and no rollback switch. Claim Management is only generically described.",
+   "performance_efficiency": "Service Bus decouples from mainframe batch, and AKS scales elastically. But no caching or read model for the 5s mainframe latency versus the 2s adjuster screens (R-05); the '<2s' claim is only asserted in descriptions. Resource Governor is marginally relevant.",
+   "compatibility": "Mainframe is reached via Integration & Sync Engine with IBM MQ client, VPN/ExpressRoute and mTLS, and AD via OIDC/SAML. Inconsistencies: Legacy Mainframe Adapter uses SOAP over HTTP while the Mainframe Adapter uses MQ; no anti-corruption or batch-window handling detail.",
+   "usability": "Claims Portal (React) serves both customers/brokers and adjusters via HTTPS, with Authentication Client for SSO. But there is no separate adjuster UI or channel, no broker-specific interface, and no accessibility, status feedback or notification elements.",
+   "reliability": "Outbox Pattern Component, Sync Ledger Table, Service Bus queuing, Resilience4j and point-in-time recovery support R-04. Gaps: no explicit idempotency/deduplication, no per-claim-type rollback to mainframe within a day (R-06), no HA/DR or multi-region redundancy described.",
+   "security": "AD SSO via OIDC, Azure API Management with Security Policy Enforcer, mTLS/TLS 1.3, Managed Identities, RBAC/ABAC Security Policy Component, and Audit & Fallback Log with Temporal Tables. Minor gaps: no secrets management, WAF or explicit token validation flow.",
+   "maintainability": "Clear decomposition: Portal, APIM, Core, Integration & Sync Engine, State Store; Migration Router and adapters isolate legacy. Gaps: Core has two overlapping mainframe adapters, Sync Engine shares State Store, and no component relationships to the broader flow; rollback (R-06) is not explicit.",
+   "portability": "Hybrid is acknowledged via ExpressRoute and on-prem mainframe, and AKS/Spring Boot containers are portable. However, heavy reliance on Azure-specific services (APIM, Service Bus, SQL MI, Managed Identity) with no abstraction, and no IaC or deployment views."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 3,
+   "MOD-01": 3,
+   "MOD-02": 4,
+   "PERF-01": 2,
+   "PERF-02": 3,
+   "SEC-01": 2,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.5,
+  "by_quality_attribute": {
+   "Performance": 2.5,
+   "Availability": 3.5,
+   "Modifiability": 3.5,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "elements": [
+     "Claims Portal",
+     "Azure API Management",
+     "Claims Modernization Core",
+     "Legacy Mainframe Adapter Component",
+     "State Store"
+    ],
+    "sensitivity_points": [
+     "Synchronous SOAP call to mainframe in request path",
+     "No cache or read model for mainframe data"
+    ],
+    "tradeoffs": [
+     "Freshness versus latency without a replicated read model"
+    ],
+    "justification": "No cache, read replica or async prefetch is defined. The adapter uses synchronous SOAP with Resilience4j, so a 5 s mainframe answer could block the screen. The State Store might hold synced data, but this is not explicit."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Integration & Sync Engine",
+     "Claims Modernization Core",
+     "Azure Kubernetes Service",
+     "Azure Service Bus",
+     "State Store"
+    ],
+    "sensitivity_points": [
+     "Queue drain rate into mainframe",
+     "Service Bus throttling and batch window overlap"
+    ],
+    "tradeoffs": [
+     "Elastic intake versus delayed mainframe visibility"
+    ],
+    "justification": "AKS scaling and Service Bus buffering decouple intake from the mainframe. The Resource Governor isolates workloads. But no explicit autoscaling, rate limiting or batch-window drain control is defined, and the synchronous adapter path is a risk."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "elements": [
+     "Azure Service Bus",
+     "Integration & Sync Engine",
+     "Outbox Pattern Component",
+     "State Store",
+     "Claim Management Component"
+    ],
+    "sensitivity_points": [
+     "Queue retention and dead-letter settings",
+     "Outbox relay recovery after window"
+    ],
+    "tradeoffs": [
+     "Eventual consistency versus continued availability"
+    ],
+    "justification": "Claims are persisted transactionally and the outbox publishes them to Service Bus, which decouples intake from the mainframe batch window. Forwarding afterwards is plausible. Retry and drain policy are not detailed."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Outbox Pattern Component",
+     "Sync Ledger Table",
+     "Audit & Fallback Log",
+     "Sync Orchestrator",
+     "Integration & Sync Engine"
+    ],
+    "sensitivity_points": [
+     "Idempotency on the mainframe side is unspecified",
+     "Watermark and ledger update atomicity"
+    ],
+    "tradeoffs": [
+     "Strong exactly-once guarantee versus a mainframe interface change"
+    ],
+    "justification": "The outbox, sync ledger and audit log support reconciliation, but no idempotency keys, deduplication or reconciliation process are explicit. At-least-once delivery could process claims twice on the mainframe. Risk remains unaddressed."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Migration Router Component",
+     "Legacy Mainframe Adapter Component",
+     "Mainframe Adapter",
+     "Sync Orchestrator"
+    ],
+    "sensitivity_points": [
+     "Migration rules storage and toggle mechanism",
+     "Mainframe interface change per claim type"
+    ],
+    "tradeoffs": [
+     "Routing flexibility versus data ownership complexity per claim type"
+    ],
+    "justification": "The Migration Router routes by migration rules, which suits per-type migration and switch-back. But rule configuration, data back-synchronization on rollback and the mainframe change budget are not addressed explicitly."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "elements": [
+     "Claims Portal",
+     "Azure API Management",
+     "Claims Modernization Core",
+     "Legacy Mainframe Adapter Component",
+     "State Store"
+    ],
+    "sensitivity_points": [
+     "Data migration and cutover of the system of record",
+     "Router and adapter removal"
+    ],
+    "tradeoffs": [
+     "Facade indirection versus extra latency and complexity"
+    ],
+    "justification": "UIs are isolated behind API Management and the core, so removing the mainframe adapter does not touch the frontends. The State Store can become the system of record. Data cutover is not detailed."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "elements": [
+     "Security Policy Component",
+     "Azure API Management",
+     "Security Policy Enforcer",
+     "Audit & Fallback Log"
+    ],
+    "sensitivity_points": [
+     "No broker-to-customer ownership rule defined",
+     "Mainframe-side authorization unaddressed"
+    ],
+    "tradeoffs": [
+     "Fine-grained ABAC versus policy complexity"
+    ],
+    "justification": "RBAC/ABAC and an audit log exist, but no broker-customer data scoping is specified. Denial recording is only implied. Access control inside the mainframe is not covered, so 'no unauthorized access in either system' is not assured."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Active Directory",
+     "Authentication Client",
+     "Azure API Management",
+     "Legacy Mainframe Adapter Component"
+    ],
+    "sensitivity_points": [
+     "Token lifetime and session revocation",
+     "Mainframe credentials separate from AD"
+    ],
+    "tradeoffs": [
+     "Short token lifetimes versus more re-authentication load"
+    ],
+    "justification": "SSO via OIDC against AD revokes access to the new platform when the account is disabled, bounded by token lifetime. Mainframe access is via a service adapter, so users are not directly exposed. Revocation time and mainframe identity propagation are unspecified."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "full"
+  },
+  "coverage": 0.6363636363636364,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Legacy Mainframe System",
+     "Migration Router Component",
+     "Legacy Mainframe Adapter Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Integration & Sync Engine",
+     "Resource Governor"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Integration & Sync Engine",
+     "Mainframe Adapter",
+     "Legacy Mainframe Adapter Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Azure API Management",
+     "Security Policy Enforcer",
+     "State Store"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Claims Portal",
+     "Azure API Management",
+     "Claim Ingestion Component",
+     "Claims Modernization Core"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Portal",
+     "Frontend UI",
+     "Claims Modernization Core",
+     "Claim Management Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Migration Router Component",
+     "Claim Management Component",
+     "Legacy Mainframe Adapter Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Outbox Pattern Component",
+     "Sync Ledger Table",
+     "Integration & Sync Engine",
+     "Stored Procedure Gateway"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "State Store",
+     "Claims Portal",
+     "Frontend UI",
+     "Claim Operational Table"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Migration Router Component",
+     "Audit & Fallback Log",
+     "Temporal Tables / Change Tracking"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Active Directory",
+     "Authentication Client",
+     "Azure API Management",
+     "Claims Portal"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

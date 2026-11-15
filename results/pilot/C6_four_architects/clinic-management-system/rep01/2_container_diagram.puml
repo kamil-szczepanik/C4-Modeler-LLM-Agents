@@ -1,0 +1,56 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patients, "Patients", "Patients who interact with the clinic for admissions, scheduling, and records.")
+Person(Clinical_Staff, "Clinical Staff", "Medical professionals who manage electronic medical records and patient care.")
+Person(Hospital_Administrators, "Hospital Administrators", "Administrators who oversee operations, billing, and system management.")
+
+System_Ext(External_Lab__Imaging__and_HIE_Systems, "External Lab, Imaging, and HIE Systems", "External medical systems providing lab and imaging data.")
+System_Ext(Compliance_Archival_Gateway___WORM_Object_Storage, "Compliance Archival Gateway & WORM Object Storage", "Manages cold storage writes and 10-year data retention mandates.")
+
+System_Boundary(Clinic_Management_System, "Clinic Management System") {
+    Container(PWA_Client_Container, "PWA Client Container", "Nginx, IndexedDB, Progressive Web App", "Client-side container running the progressive web application.")
+    Container(API_Gateway_Container, "API Gateway Container", "Kong/Envoy", "Handles ingress, routing, and OAuth2/OIDC authentication.")
+    Container(Hybrid_VPN_Gateway_Container, "Hybrid VPN Gateway Container", "WireGuard", "Provides secure hybrid VPN connectivity across on-premise and AWS environments.")
+    Container(Patient___EMR_Service, "Patient & EMR Service", "Node.js, Docker, Kubernetes", "Core microservice for managing patient data and electronic medical records.")
+    Container(Scheduling_Service, "Scheduling Service", "Node.js, Docker, Kubernetes", "Core microservice for handling appointment and clinical scheduling.")
+    Container(Billing_Service, "Billing Service", "Node.js, Docker, Kubernetes", "Core microservice for processing medical billing and financial operations.")
+    Container(HL7_FHIR_Adapter_Container, "HL7 FHIR Adapter Container", "Node.js, Docker, Kubernetes", "Exchanges lab and imaging payloads with external health systems.")
+    Container(DICOM___Document_Processing_Container, "DICOM & Document Processing Container", "Node.js, Docker, Kubernetes", "Processes medical imaging and documents.")
+    Container(Secure_File_Transfer_Container, "Secure File Transfer Container", "SFTP/FTPS, PGP", "Handles secure file transfers with external partners.")
+    Container(Tenant_Context___Authorization_Proxy_Container, "Tenant Context & Authorization Proxy Container", "Open Policy Agent", "Enforces fine-grained authorization and tenant context isolation.")
+    Container(Data_Encryption___Key_Management_Container, "Data Encryption & Key Management Container", "PKCS#11, HSM", "Manages data encryption keys and hardware security module integrations.")
+    Container(Audit___Compliance_Sidecar_Container, "Audit & Compliance Sidecar Container", "Kubernetes Sidecar", "Streams cryptographic audit logs to WORM storage.")
+    ContainerDb(PostgreSQL_Container_cluster, "PostgreSQL Container cluster", "CloudNativePG", "Multi-master transactional database cluster.")
+    ContainerDb(Redis_Container_tier, "Redis Container tier", "Redis Enterprise", "Active-active caching and distributed locking tier.")
+    Container(Apache_Kafka_StatefulSet, "Apache Kafka StatefulSet", "Apache Kafka", "Event sourcing and message streaming platform.")
+    Container(RabbitMQ_Container_cluster, "RabbitMQ Container cluster", "RabbitMQ", "Messaging broker for transient domain events.")
+    ContainerDb(Elasticsearch_Containers, "Elasticsearch Containers", "Elasticsearch", "Search and CQRS read model storage.")
+    ContainerDb(ClickHouse_Analytics_Engine, "ClickHouse Analytics Engine", "ClickHouse", "Analytics engine for reporting and operational insights.")
+    Container(MinIO_Object_Storage_Gateway_Container, "MinIO Object Storage Gateway Container", "MinIO", "Object storage gateway for unstructured clinical data.")
+    Container(Envoy_Service_Mesh_Container, "Envoy Service Mesh Container", "Envoy", "Manages service-to-service mTLS 1.3 communication.")
+    Container(Observability_Collector_Container, "Observability Collector Container", "OpenTelemetry, Prometheus", "Collects system metrics, traces, and logs.")
+}
+
+Rel(Patients, API_Gateway_Container, "Routes user actions and demographic payloads", "HTTPS")
+Rel(Clinical_Staff, API_Gateway_Container, "Routes user actions and demographic payloads", "HTTPS")
+Rel(Hospital_Administrators, API_Gateway_Container, "Routes user actions and demographic payloads", "HTTPS")
+Rel(PWA_Client_Container, API_Gateway_Container, "Routes user actions and demographic payloads via HTTPS", "HTTPS")
+Rel(API_Gateway_Container, Patient___EMR_Service, "Dispatches routing and authenticates requests", "OAuth2/OIDC, gRPC")
+Rel(API_Gateway_Container, Scheduling_Service, "Dispatches routing and authenticates requests", "OAuth2/OIDC, gRPC")
+Rel(API_Gateway_Container, Billing_Service, "Dispatches routing and authenticates requests", "OAuth2/OIDC, gRPC")
+Rel(Patient___EMR_Service, PostgreSQL_Container_cluster, "Executes transactional queries and EMR search", "SQL / gRPC")
+Rel(Patient___EMR_Service, Redis_Container_tier, "Executes distributed locking and caching", "gRPC")
+Rel(Patient___EMR_Service, Elasticsearch_Containers, "Executes EMR search and read model queries", "gRPC")
+Rel(Scheduling_Service, PostgreSQL_Container_cluster, "Executes transactional queries", "SQL / gRPC")
+Rel(Billing_Service, PostgreSQL_Container_cluster, "Executes transactional queries", "SQL / gRPC")
+Rel(Patient___EMR_Service, Apache_Kafka_StatefulSet, "Publishes and consumes domain events", "Asynchronous Messaging")
+Rel(Patient___EMR_Service, RabbitMQ_Container_cluster, "Publishes and consumes transient events", "Asynchronous Messaging")
+Rel(Patient___EMR_Service, HL7_FHIR_Adapter_Container, "Exchanges lab and imaging payloads with external health systems", "HTTPS/REST")
+Rel(HL7_FHIR_Adapter_Container, External_Lab__Imaging__and_HIE_Systems, "Exchanges health data interoperability payloads", "HTTPS/REST")
+Rel(Audit___Compliance_Sidecar_Container, Compliance_Archival_Gateway___WORM_Object_Storage, "Streams cryptographic audit logs", "TLS 1.3")
+
+@enduml

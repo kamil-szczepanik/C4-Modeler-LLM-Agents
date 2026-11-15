@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(Customer_Broker, "Customer / Broker", "External actors submitting claims online.")
+Person(Claims_Adjuster, "Claims Adjuster", "Internal users handling claims via the new web application.")
+
+System_Ext(Legacy_Mainframe, "Legacy Mainframe", "On-premises COBOL/DB2 system of record.")
+System_Ext(Anti_Corruption_Layer_ACL, "Anti-Corruption Layer (ACL)", "Isolation layer mitigating mainframe schema volatility.")
+System_Ext(Identity_Provider, "Identity Provider", "Microsoft Entra ID / OpenID Connect handling authentication.")
+
+System_Boundary(Modern_Claims_Platform, "Modern Claims Platform") {
+    Container(Customer_Portal, "Customer Portal", "Azure Static Web Apps / React", "Enables online claims submission for customers and brokers.")
+    Container(Adjuster_Workspace, "Adjuster Workspace", "Azure Container Apps / .NET Core", "Allows internal users to handle claims via the new web application.")
+    Container(API_Gateway, "API Gateway", "Azure Container Apps / .NET Yit", "Routes client requests to internal services and orchestrates communication.")
+    Container(Claims_Core_Service, "Claims Core Service", "Azure Container Apps / .NET Core", "Handles core business logic and claims processing.")
+    Container(Integration_Message_Broker, "Integration Message Broker", "Azure Service Bus", "Ensures reliable at-least-once asynchronous message delivery.")
+    ContainerDb(Database, "Database", "Azure SQL Database / EF Core", "Relational storage supporting CQRS read models.")
+}
+
+Rel(Customer_Broker, Customer_Portal, "Submits claims online", "HTTPS")
+Rel(Claims_Adjuster, Adjuster_Workspace, "Handles claims workflows", "HTTPS/WSS")
+Rel(Customer_Portal, API_Gateway, "API requests", "HTTPS/WSS")
+Rel(Adjuster_Workspace, API_Gateway, "API requests", "HTTPS/WSS")
+Rel(API_Gateway, Claims_Core_Service, "Routes claims requests", "gRPC/HTTP")
+Rel(API_Gateway, Adjuster_Workspace, "Direct routing or callbacks", "gRPC/HTTP")
+Rel(API_Gateway, Identity_Provider, "Authenticates users", "OpenID Connect")
+Rel(Identity_Provider, API_Gateway, "Token validation", "OpenID Connect")
+Rel(Claims_Core_Service, Integration_Message_Broker, "Publishes and consumes messages", "AMQP")
+Rel(Integration_Message_Broker, Claims_Core_Service, "Delivers messages", "AMQP")
+Rel(Integration_Message_Broker, Anti_Corruption_Layer_ACL, "Forwards integration events", "AMQP")
+Rel(Anti_Corruption_Layer_ACL, Legacy_Mainframe, "Synchronizes data with system of record", "MQ/File Transfer")
+Rel(Claims_Core_Service, Database, "Reads and writes claim data", "EF Core / TDS")
+
+@enduml

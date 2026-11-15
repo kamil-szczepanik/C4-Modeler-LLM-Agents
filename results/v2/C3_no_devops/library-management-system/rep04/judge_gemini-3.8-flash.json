@@ -1,0 +1,237 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "Cataloguing Manager and Core Circulation & Cataloguing Service address R-01 and circulation, while Patron Portal satisfies self-service needs. However, specific mechanisms dedicated to managing digital items (e.g., access rights or file hosting) are not detailed.",
+   "performance_efficiency": "The dedicated Search Service using Elasticsearch, Redis rate-limiting in API Gateway, PgBouncer connection pooling, and PostgreSQL Read Replica directly ensure the sub-800 ms 99th-percentile search response time target (R-05) is met under load.",
+   "compatibility": "The Integration Service provides an External Adapter Layer and Webhook Ingress supporting REST/SOAP over mTLS, cleanly integrating external Identity Provider, Payment Gateway, Notification Service, and Inter-Library Loan Network.",
+   "usability": "Every user group is served: Library Patrons use the Patron Portal featuring WCAG 2.1 AA accessibility, while Circulation Staff and Administrators operate the dedicated Staff Dashboard.",
+   "reliability": "RabbitMQ Quorum Queues with Dead-Letter Exchange ensure durable messaging, WAL archiving enables PITR, PostgreSQL Read Replica supports redundancy, and Axios with opossum provides circuit breakers for external service failures.",
+   "security": "EU data residency is enforced in PostgreSQL 16 Primary Database and EU-Resident Object Store. Security Context Interceptor, Kong WAF, HashiCorp Vault, mTLS, TLS 1.3, and pgaudit thoroughly address security requirements.",
+   "maintainability": "The architecture exhibits modular decomposition into bounded contexts (Search Service, Reporting Service, Core Circulation & Cataloguing Service), decoupled by asynchronous RabbitMQ events and well-structured internal components.",
+   "portability": "Containers rely on open, portable technologies (Spring Boot, Python, React, PostgreSQL, MinIO), avoiding proprietary cloud lock-in while respecting EU residency. Container orchestration platform details are not explicitly defined."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.65625,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 3.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Elasticsearch dedicated Search Service, Redis-backed rate limiting, and API Gateway route search queries separately from transactional workloads, supporting sub-800ms P99 responses. However, search index clustering and replica sizing are not explicitly detailed.",
+    "elements": [
+     "API Gateway",
+     "Routing Engine",
+     "Rate Limiting & Throttling Module",
+     "Search Service",
+     "Query Processor"
+    ],
+    "sensitivity_points": [
+     "Search latency is sensitive to Elasticsearch cluster sizing and shard replication"
+    ],
+    "tradeoffs": [
+     "Elasticsearch index resource allocation trades off infrastructure cost against query latency under load"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Cataloguing updates are decoupled from queries via RabbitMQ domain events, consumed asynchronously by Indexing Consumer into Elasticsearch. This isolates search traffic from writes, easily meeting the 5-minute index propagation window.",
+    "elements": [
+     "Core Circulation & Cataloguing Service",
+     "Cataloguing Manager",
+     "Transaction Event Publisher",
+     "RabbitMQ",
+     "Indexing Consumer",
+     "Search Service"
+    ],
+    "sensitivity_points": [
+     "Search freshness depends on RabbitMQ consumer throughput and indexing batch size"
+    ],
+    "tradeoffs": [
+     "Asynchronous event-driven indexing trades immediate catalog consistency for write isolation and high search throughput"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Circulation transactions rely on PostgreSQL and are unaffected by Search node failures. However, while Elasticsearch naturally supports clustering, specific cluster resilience, shard replicas, and automatic failover under 1 minute are not detailed in the model.",
+    "elements": [
+     "Search Service",
+     "Core Circulation & Cataloguing Service",
+     "Circulation Engine",
+     "PostgreSQL",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Search availability depends on Elasticsearch replica shard distribution across surviving cluster nodes"
+    ],
+    "tradeoffs": [
+     "Maintaining Elasticsearch replica shards trades node memory and storage overhead for failover speed"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Patron Portal is a client-side React SPA served independently, with Kong/Nginx API Gateway handling upstream ingress and routing. Core circulation retains transactional integrity via PostgreSQL with pessimistic locking; losing one client host does not compromise transactions.",
+    "elements": [
+     "API Gateway",
+     "Patron Portal",
+     "Core Circulation & Cataloguing Service",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Client availability depends on upstream load balancer health checks and multi-instance gateway routing"
+    ],
+    "tradeoffs": [
+     "Stateless SPA and gateway decoupling improves failover resilience but adds ingress network hops"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Integration Service provides a dedicated External Adapter Layer, Webhook Ingress, and BullMQ worker specifically to encapsulate third-party connectors. Adding an e-book provider is confined to this container and adapter layer without touching core services.",
+    "elements": [
+     "Integration Service",
+     "External Adapter Layer",
+     "Outbound Sync Worker",
+     "Webhook Ingress & Reconciliation Controller"
+    ],
+    "sensitivity_points": [
+     "Modifiability depends on clean abstraction boundaries in the External Adapter Layer"
+    ],
+    "tradeoffs": [
+     "Encapsulating integrations in an external adapter layer trades cross-service latency for loose coupling"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "Circulation Engine in the Spring Boot service encapsulates loans, checkouts, and fines, but there is no rule engine, configuration service, or tenant/library policy mechanism documented to adjust rules at runtime without redeploying code.",
+    "elements": [
+     "Core Circulation & Cataloguing Service",
+     "Circulation Engine"
+    ],
+    "sensitivity_points": [
+     "Runtime rule adaptability is sensitive to externalizing business policies from compiled Java code"
+    ],
+    "tradeoffs": [
+     "Hardcoding business rules in application logic simplifies code structure but sacrifices operational modifiability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The context enforces EU-only data residency, supported by EU-resident PostgreSQL, sovereign MinIO object store, and internal RabbitMQ quorum queues. However, external notification gateways, IdP, and payment systems require ongoing operational controls to ensure complete regional confinement.",
+    "elements": [
+     "PostgreSQL 16 Primary Database",
+     "EU-Resident Object Store",
+     "MinIO",
+     "RabbitMQ",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Residency compliance depends on contractual and physical EU hosting of third-party external integrations"
+    ],
+    "tradeoffs": [
+     "Restricting all storage and external gateways to EU regions trades vendor flexibility for compliance"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "API Gateway performs JWT validation, and Core Circulation contains a Security Context Interceptor enforcing authenticated execution contexts. PostgreSQL enforces Row-Level Security and pgaudit, ensuring access isolation and audit logging against unauthorized record disclosure.",
+    "elements": [
+     "API Gateway",
+     "Authentication & Authorization Plugin",
+     "Security Context Interceptor",
+     "Circulation Engine",
+     "PostgreSQL 16 Primary Database"
+    ],
+    "sensitivity_points": [
+     "Access control relies on claims propagation between Security Context Interceptor and Row-Level Security"
+    ],
+    "tradeoffs": [
+     "Enforcing Row-Level Security and detailed pgaudit logging trades query latency for fine-grained authorization"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "PostgreSQL 16 Primary Database",
+     "EU-Resident Object Store",
+     "Audit & Analytics Queue",
+     "MinIO"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Core Circulation & Cataloguing Service",
+     "Cataloguing Manager",
+     "Catalogue & Inventory Module"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Service",
+     "Query Processor",
+     "Search API Controller",
+     "Catalog & Search Interface"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

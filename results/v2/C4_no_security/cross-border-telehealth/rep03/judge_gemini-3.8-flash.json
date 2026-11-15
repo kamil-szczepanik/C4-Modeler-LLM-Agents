@@ -1,0 +1,336 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All functional requirements (R-01 to R-04) are addressed by explicit containers and components, including WebRTC Video Module and Core Telehealth Service for consultations, Pharmacy Integration Gateway for e-prescriptions, AI Inference Wrapper for symptom checking, and Consent & Profile Management Service for per-purpose consent.",
+   "performance_efficiency": "The architecture leverages asynchronous processing via GCP Cloud Pub/Sub, gRPC IPC, and edge routing via Cloud Endpoints Envoy Router. However, concrete mechanisms to achieve degraded mode operation specifically below 300 kbit/s (such as audio-only downscaling) are only superficially mentioned in WebRTC Video Module.",
+   "compatibility": "Pharmacy Integration Gateway featuring Routing & Mediation Engine and Adapter Registry directly addresses R-08 by handling HL7 FHIR and EU national standards alongside FHIR Interoperability Schema. Integration with Regional Identity Providers (eIDAS, OIDC) and AI Symptom Checker Engine is explicitly modeled.",
+   "usability": "Clear dedicated entry points serve all required user groups: Flutter Patient Mobile/Web App serves patients, Clinician Portal with Clinician UI supports clinicians, and Audit Endpoint Handler provides secure access for Regional Health Authorities and Auditors.",
+   "reliability": "High reliability is supported by Dead Letter Topics in GCP Cloud Pub/Sub, client-side offline storage via State & Local Storage Manager, and regional redundancy. However, precise failover and degradation mechanics for sub-300 kbit/s streams in WebRTC Video Module lack architectural detail.",
+   "security": "R-05, R-07, GDPR, and HIPAA are rigorously addressed: GCP GKE Regional Clusters and Cloud SQL PostgreSQL Databases isolate regional data, Audit Log Publisher ensures MDR traceability, and Authentication and Authorization Handler alongside Audit Endpoint Handler enforce mTLS, signed JWTs, and OIDC.",
+   "maintainability": "High modularity and low coupling are achieved across microservices. Pharmacy Integration Gateway separates integration logic via Adapter Registry and Routing & Mediation Engine, while Consent & Profile Management Service and Core Telehealth Service maintain clear domain boundaries and single responsibilities.",
+   "portability": "The architecture explicitly targets the specified GCP regions (europe-west3, us-central1) using GCP GKE Regional Clusters, containerized workloads, and cloud-managed components like Cloud SQL PostgreSQL Databases, ensuring adaptability across the designated deployment environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 3,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.0,
+   "Modifiability": 4.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "WebRTC peer-to-peer streaming offloads media traffic, and regional GKE clusters scale session orchestration. However, TURN/STUN relay autoscaling and media fallback infrastructure are not explicitly detailed to guarantee under 10s join times at peak.",
+    "elements": [
+     "WebRTC Video Module",
+     "GCP API Gateway",
+     "Core Telehealth Service",
+     "GCP GKE Regional Clusters"
+    ],
+    "sensitivity_points": [
+     "Signaling throughput of Core Telehealth Service under concurrent session joins",
+     "Regional TURN/STUN relay bandwidth and latency under peak load"
+    ],
+    "tradeoffs": [
+     "Peer-to-peer WebRTC reduces server load but relies on client network quality"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Handling ~14 requests per second is modest for GKE and FastAPI microservices. Low-latency gRPC calls and asynchronous audit logging via Cloud Pub/Sub ensure recommendations easily return well under the 3-second target.",
+    "elements": [
+     "GCP API Gateway",
+     "Core Telehealth Service",
+     "AI Inference Wrapper",
+     "GCP Cloud Pub/Sub"
+    ],
+    "sensitivity_points": [
+     "Inference execution latency in Model Execution Engine",
+     "Decoupling audit logging from the synchronous inference request path"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging improves response times but risks eventual consistency for audit records"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The client app includes local SQLite caching and low-bandwidth WebRTC support. Clinician notes persist independently in the portal. However, an automated codec degradation or audio-only fallback protocol below 300 kbit/s is not formally defined.",
+    "elements": [
+     "Flutter Patient Mobile/Web App",
+     "State & Local Storage Manager",
+     "WebRTC Video Module",
+     "Clinician Portal"
+    ],
+    "sensitivity_points": [
+     "Client-side adaptive bitrate switching and codec negotiation",
+     "Offline synchronization reliability between local storage and backend"
+    ],
+    "tradeoffs": [
+     "Aggressive media degradation preserves call connectivity at the cost of video fidelity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The architecture provisions only one US region (us-central1). Data residency prevents US traffic and data from failing over to europe-west3. Without a secondary US region or automated multi-region DR topology, US outage recovery within 1 hour is unachievable.",
+    "elements": [
+     "GCP GKE Regional Clusters",
+     "Cloud SQL PostgreSQL Databases",
+     "GCP API Gateway"
+    ],
+    "sensitivity_points": [
+     "Single-region dependency within the US jurisdiction",
+     "Strict regulatory prohibition on cross-border data transfer during outages"
+    ],
+    "tradeoffs": [
+     "Strict regional residency prevents geo-redundant cross-border failover, drastically increasing outage risks"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Pharmacy Integration Gateway utilizes Apache Camel with a modular Adapter Registry and Routing Engine. Adding a country-specific standard requires implementing a new adapter without modifying canonical schemas or core consultation workflows.",
+    "elements": [
+     "Pharmacy Integration Gateway",
+     "Routing & Mediation Engine",
+     "Adapter Registry"
+    ],
+    "sensitivity_points": [
+     "Canonical prescription data model extensibility",
+     "Isolation of country-specific serialization logic inside individual adapters"
+    ],
+    "tradeoffs": [
+     "Canonical translation layer adds mapping overhead but completely isolates domain services"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "Audit Log Publisher captures traceability data and model versions for MDR compliance. However, the architecture omits model versioning mechanisms, canary routing, or runtime rollback procedures within the AI Inference Wrapper.",
+    "elements": [
+     "AI Inference Wrapper",
+     "Model Execution Engine",
+     "Audit Log Publisher",
+     "GCP Cloud Pub/Sub"
+    ],
+    "sensitivity_points": [
+     "Model execution metadata tracking in audit payloads",
+     "Absence of runtime blue-green or traffic splitting deployment controls"
+    ],
+    "tradeoffs": [
+     "Immutable audit logs ensure post-hoc traceability but do not provide runtime rollback mechanisms"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The Consent & Profile Management Service implements cross-border access validation and logs access attempts. Databases use Row-Level Security. However, the federated query mechanism across isolated regional database clusters is not fully articulated.",
+    "elements": [
+     "Consent & Profile Management Service",
+     "Profile Manager",
+     "GCP API Gateway",
+     "Cloud SQL PostgreSQL Databases"
+    ],
+    "sensitivity_points": [
+     "Enforcement of consent evaluation prior to cross-region database queries",
+     "Row-level security policy accuracy across regional schemas"
+    ],
+    "tradeoffs": [
+     "Synchronous consent evaluation guarantees compliance but introduces cross-region query latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Consent updates are processed by the Consent Controller and immediately audited via Pub/Sub. However, the architecture does not specify downstream research pipelines or asynchronous revocation propagation mechanisms to prove research data access ceases.",
+    "elements": [
+     "Consent & Profile Management Service",
+     "Consent Controller",
+     "Audit Event Publisher",
+     "GCP Cloud Pub/Sub"
+    ],
+    "sensitivity_points": [
+     "Immediate propagation of revoked consent to all read paths",
+     "Audit trail immutability for compliance verification"
+    ],
+    "tradeoffs": [
+     "Centralized consent evaluation prevents unauthorized sharing but requires tight integration with data consumers"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "GCP GKE Regional Clusters",
+     "Cloud SQL PostgreSQL Databases",
+     "Consent & Profile Management Service",
+     "Cloud Endpoints Envoy Router"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "GCP GKE Regional Clusters",
+     "Cloud SQL PostgreSQL Databases",
+     "Regional Topics"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Engine",
+     "AI Inference Wrapper",
+     "Audit Log Publisher"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Flutter Patient Mobile/Web App",
+     "State & Local Storage Manager",
+     "WebRTC Video Module",
+     "Dead Letter Topics"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Flutter Patient Mobile/Web App",
+     "Clinician Portal",
+     "WebRTC Video Module",
+     "Core Telehealth Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Prescription Dispatcher",
+     "Pharmacy Integration Gateway",
+     "Routing & Mediation Engine",
+     "Adapter Registry",
+     "Pharmacies and National Pharmacy Networks (EU) / US Pharmacy Systems"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "AI Symptom Checker Engine",
+     "AI Inference Wrapper",
+     "AI Symptom-Check Coordinator",
+     "Model Execution Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Consent & Profile Management Service",
+     "Consent Controller",
+     "Profile Manager",
+     "Consent & Audit Schema"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "GCP GKE Regional Clusters",
+     "Cloud SQL PostgreSQL Databases",
+     "Regional Topics",
+     "Profile Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Flutter Patient Mobile/Web App",
+     "State & Local Storage Manager",
+     "WebRTC Video Module"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Audit Log Publisher",
+     "AI Symptom-Check Coordinator",
+     "AI Symptom Checker Engine"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Pharmacy Integration Gateway",
+     "Adapter Registry",
+     "FHIR Interoperability Schema",
+     "Pharmacies and National Pharmacy Networks (EU) / US Pharmacy Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

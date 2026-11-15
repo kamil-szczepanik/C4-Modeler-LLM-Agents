@@ -1,0 +1,334 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "The system addresses all functional requirements via Catalog & Search Component, Cart & Checkout Component, Payment Gateway, and Recommendation Engine. However, dedicated review aggregation and rating management components are vaguely subsumed under catalog/recommendation elements without explicit backend domain entities.",
+   "performance_efficiency": "Performance targets are achieved through Amazon CloudFront CDN distribution, API Gateway native response caching, Amazon ElastiCache Redis for recommendations, and asynchronous processing via Amazon SQS and EventBridge. High-throughput reads/writes are managed efficiently using Amazon DynamoDB and Aurora PostgreSQL read replicas.",
+   "compatibility": "External integrations are comprehensively addressed: Payment Gateway, Third-Party Shipping Provider, and Tax & Compliance Service connect via REST/TLS with circuit breakers. Multi-currency and localization constraints are directly handled by Localization & Template Engine Component and Cart & Checkout Component.",
+   "usability": "All specified personas are served through dedicated interfaces: Customer (Shopper) and Book Reviewer interact with the responsive Single-Page Application (SPA), while Store Administrator uses the specialized Admin Back-Office App featuring tailored modules like Order Fulfillment Dashboard and Catalog Management Module.",
+   "reliability": "High availability (99.95% target) is supported by Aurora PostgreSQL Multi-AZ replication, Outbox Dispatcher Component, and Amazon SQS queues with Dead Letter Queues (DLQs). Circuit breakers isolate external dependencies. However, explicit multi-region active-active routing mechanisms (e.g., Route 53 latency routing) are omitted.",
+   "security": "OWASP Top-10 and compliance are mitigated via Routing and WAF Controller, Amazon Cognito, Authentication & RBAC Guard, and mTLS via AWS Service Connect. GDPR/CCPA constraints are enforced by User & Compliance Component, Privacy Filter Middleware, and Consent & PII Sanitizer Middleware.",
+   "maintainability": "High maintainability is demonstrated through clean domain separation into Core Services, Recommendation Engine, and Notification Worker. Event-driven decoupling via Amazon EventBridge, Schema Registry & Validation, and clear NestJS and React component modularity ensure low coupling and high testability.",
+   "portability": "The architecture thoroughly targets AWS with containerized ECS Fargate deployments adaptable across the required regions. However, deep coupling to proprietary managed services like Amazon EventBridge, DynamoDB, and Cognito creates vendor lock-in, limiting replaceability of the cloud infrastructure."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "CloudFront and API Gateway caching absorb static traffic, but catalog search relies directly on Aurora PostgreSQL without a dedicated search cluster, risking bottlenecks under 10x peak traffic.",
+    "elements": [
+     "Amazon CloudFront",
+     "API Gateway",
+     "Routing and WAF Controller",
+     "Catalog & Search Component",
+     "Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio on API Gateway and CloudFront",
+     "Read replica scalability on Aurora PostgreSQL"
+    ],
+    "tradeoffs": [
+     "Aggressive edge caching improves response time but increases risk of stale catalog data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendation computation is completely decoupled into a standalone ECS container, storing precomputed recommendations in DynamoDB and ElastiCache, isolating catalog browsing performance.",
+    "elements": [
+     "Recommendation Engine",
+     "Recommendation Logic Service",
+     "Amazon DynamoDB",
+     "Amazon ElastiCache",
+     "Core Services"
+    ],
+    "sensitivity_points": [
+     "Offloaded batch inference workload isolation",
+     "In-memory cache hit rates in ElastiCache"
+    ],
+    "tradeoffs": [
+     "Precomputing recommendations saves query latency but requires additional storage in DynamoDB"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The transactional outbox pattern and asynchronous EventBridge/SQS queues decouple shipping fulfillment from checkout, allowing orders to succeed and shipping calls to retry independently.",
+    "elements": [
+     "Cart & Checkout Component",
+     "Outbox Dispatcher Component",
+     "Amazon EventBridge",
+     "Amazon SQS",
+     "Third-Party Shipping Provider"
+    ],
+    "sensitivity_points": [
+     "Reliability of Outbox Dispatcher polling",
+     "SQS dead-letter queue retry policies"
+    ],
+    "tradeoffs": [
+     "Asynchronous shipping improves checkout availability but delays immediate tracking number generation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Although multi-region deployment is listed in the brief, the architecture lacks global DNS routing (Route 53), Aurora Global Database, and DynamoDB Global Tables configurations for regional failover.",
+    "elements": [
+     "API Gateway",
+     "Core Services",
+     "Aurora PostgreSQL",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "Cross-region replication latency",
+     "DNS failover automation without manual intervention"
+    ],
+    "tradeoffs": [
+     "Multi-region active-active deployment ensures high availability but increases replication costs and data conflicts"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Multi-currency support is modularized within the Cart & Checkout Component and Notification Worker localization service, requiring minimal configuration and localized currency conversion changes.",
+    "elements": [
+     "Cart & Checkout Component",
+     "Catalog Browser Component",
+     "Localization & Template Engine Component",
+     "Payment Gateway"
+    ],
+    "sensitivity_points": [
+     "Exchange rate update mechanisms",
+     "Currency support across external payment gateways"
+    ],
+    "tradeoffs": [
+     "Centralized currency conversion simplifies logic but creates coupling across pricing components"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Recommendation Engine is encapsulated in an independent container; replacing the collaborative filtering algorithm in Recommendation Logic Service requires zero changes to external services.",
+    "elements": [
+     "Recommendation Engine",
+     "Recommendation Logic Service",
+     "Experimentation Router",
+     "Model & Feature Store Client"
+    ],
+    "sensitivity_points": [
+     "Input and output contract stability of the Recommendation Engine API",
+     "Feature store schema flexibility"
+    ],
+    "tradeoffs": [
+     "Service encapsulation isolates algorithms but adds inter-service communication overhead"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "AWS WAF inspects OWASP Top-10 payloads, API Gateway validates schemas, React auto-escapes UI elements against XSS, and NestJS parameterized queries prevent SQL injection.",
+    "elements": [
+     "Routing and WAF Controller",
+     "Authentication and Authorization Handler",
+     "API Gateway",
+     "Single-Page Application (SPA)",
+     "Core Services"
+    ],
+    "sensitivity_points": [
+     "WAF rule maintenance and false positive rates",
+     "Strictness of API Gateway input schema validation"
+    ],
+    "tradeoffs": [
+     "Deep payload inspection enhances security but introduces minor request processing latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "User & Compliance Component manages GDPR/CCPA enforcement, backed by PII sanitization in telemetry and recommendation services, though distributed hard-deletion across all stores lacks an explicit orchestrated workflow.",
+    "elements": [
+     "User & Compliance Component",
+     "Privacy Filter Middleware",
+     "Consent & PII Sanitizer Middleware",
+     "Preference & Consent Validator Component",
+     "Amazon EventBridge"
+    ],
+    "sensitivity_points": [
+     "Comprehensive discovery of PII across datastores",
+     "Propagation latency of deletion events across queues"
+    ],
+    "tradeoffs": [
+     "Synchronous data deletion guarantees verification but increases cross-service coordination complexity"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "User & Compliance Component",
+     "Privacy Filter Middleware",
+     "Preference & Consent Validator Component",
+     "Consent & PII Sanitizer Middleware",
+     "Audit & Telemetry Interceptor"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Catalog Browser Component",
+     "Cart & Checkout Component",
+     "Localization & Template Engine Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Third-Party Shipping Provider",
+     "Amazon EventBridge",
+     "Order Fulfillment Dashboard"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Catalog Browser Component",
+     "Catalog & Search Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Checkout Controller Component",
+     "Cart & Checkout Component",
+     "ShoppingCarts Table",
+     "OrderQueue",
+     "Payment Gateway"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Book Reviewer",
+     "Single-Page Application (SPA)",
+     "Recommendation UI Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation UI Component",
+     "Recommendation Engine",
+     "Recommendation Logic Service",
+     "Recommendations Table",
+     "Amazon ElastiCache"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Core Services",
+     "Amazon DynamoDB",
+     "Aurora PostgreSQL",
+     "Amazon EventBridge",
+     "Amazon SQS",
+     "Amazon ElastiCache"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Single-Page Application (SPA)",
+     "Frontend Bucket",
+     "Routing and WAF Controller"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Aurora PostgreSQL",
+     "Aurora Replication Agent",
+     "OrderDLQ",
+     "NotificationDLQ",
+     "AnalyticsDLQ"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Routing and WAF Controller",
+     "Authentication and Authorization Handler",
+     "Authentication & RBAC Guard"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

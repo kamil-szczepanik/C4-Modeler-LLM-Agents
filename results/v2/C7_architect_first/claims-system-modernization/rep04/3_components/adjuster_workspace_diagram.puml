@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(ClaimsAdjuster, "Claims Adjuster", "Claims adjuster processing insurance claims.")
+System_Ext(MicrosoftEntraID, "Microsoft Entra ID", "Provides identity and authentication services.")
+System_Ext(ClaimsIntegrationService, "Claims Integration Service", "Downstream worker service hosted in Azure Container Apps.")
+
+Container_Boundary(AdjusterWorkspace, "Adjuster Workspace") {
+    Component(UIControllerRazorPages, "UI Controller / Razor Pages", "ASP.NET Core MVC", "Handles user interaction and renders views [HTTPS].")
+    Component(ClaimProcessingFacade, "Claim Processing Facade", "C# service", "Orchestrates workflow, caching, business metrics emission, and audit logging.")
+    Component(LocalClaimCache, "Local Claim Cache", "IMemoryCache", "Mitigates 5-second mainframe latency via short-TTL cached claim states.")
+    Component(IntegrationClient, "Integration Client", "gRPC client", "Communicates securely with backend services.")
+    Component(AuthHandler, "Auth Handler", "ASP.NET Core Security Middleware", "Integrates with Microsoft Entra ID via OpenID Connect (OIDC).")
+}
+
+Rel(ClaimsAdjuster, UIControllerRazorPages, "Interacts to process claims", "HTTPS/REST")
+Rel(UIControllerRazorPages, ClaimProcessingFacade, "Invokes business logic", "In-Process")
+Rel(ClaimProcessingFacade, LocalClaimCache, "Reads and writes cached claim states", "In-Process")
+Rel(ClaimProcessingFacade, IntegrationClient, "Requests backend data", "In-Process")
+Rel(IntegrationClient, ClaimsIntegrationService, "Fetches claim data", "gRPC over HTTP/2 with TLS 1.3")
+Rel(AuthHandler, MicrosoftEntraID, "Authenticates users", "OpenID Connect (OIDC)")
+
+@enduml

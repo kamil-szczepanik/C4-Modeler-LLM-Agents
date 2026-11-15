@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Payment & Currency Service container
+
+Container_Boundary(payment_and_currency_service, "Payment & Currency Service") {
+    Component(PaymentController, "Payment Controller", "ASP.NET Core Web API", "Handling incoming routing requests.")
+    Component(TransactionManagerComponent, "Transaction Manager Component", "C# MediatR / Entity Framework Core", "Managing payment execution and idempotency.")
+    Component(StripePayPalGatewayAdapter, "Stripe & PayPal Gateway Adapter", "C# HTTP Client", "Abstracting third-party payment providers.")
+    Component(CurrencyExchangeComponent, "Currency Exchange Component", ".NET background service", "Managing multi-currency conversions.")
+    Component(PaymentAuditTokenizationComponent, "Payment Audit & Tokenization Component", ".NET Core security middleware", "Handling PCI-DSS data sanitization.")
+    Component(WebhookReceiverComponent, "Webhook Receiver Component", "ASP.NET Core Web API", "Ingesting asynchronous payment provider events.")
+}
+
+System_Ext(StripePayPal, "Stripe/PayPal", "External payment providers")
+System_Ext(AmazonRDS, "Amazon RDS (PostgreSQL)", "Relational database for ledger and audit logs")
+System_Ext(AmazonElastiCache, "Amazon ElastiCache (Redis)", "In-memory cache for exchange rates")
+System_Ext(AmazonSQS, "Amazon SQS", "Message queue for asynchronous payment events")
+
+Rel(PaymentController, TransactionManagerComponent, "Invokes command handlers", "In-process")
+Rel(TransactionManagerComponent, StripePayPalGatewayAdapter, "Executes payment calls", "HTTPS Egress")
+Rel(TransactionManagerComponent, PaymentAuditTokenizationComponent, "Forwards sanitized records", "In-process")
+Rel(PaymentAuditTokenizationComponent, AmazonRDS, "Persists ledger and audit logs", "ADO.NET / TLS")
+Rel(CurrencyExchangeComponent, AmazonElastiCache, "Reads/writes cached rates", "Redis Protocol over TCP")
+Rel(StripePayPal, WebhookReceiverComponent, "Delivers asynchronous notifications", "HTTPS Ingress")
+Rel(WebhookReceiverComponent, AmazonSQS, "Publishes raw payment events", "AWS SDK / HTTPS")
+
+@enduml

@@ -1,0 +1,45 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(LibraryPatrons, "Library Patrons (Members)", "Library members who interact with the self-service portals to borrow items and manage their accounts.")
+Person(Librarians, "Librarians / Circulation Staff", "Staff members who manage circulation, cataloguing, and patron assistance.")
+Person(LibraryAdministrators, "Library Administrators", "Administrators responsible for managing system configuration, users, and overall library operations.")
+
+System_Ext(ExternalIdentityProvider, "External Identity Provider (IdP)", "External system used for authenticating users via OIDC.")
+System_Ext(ThirdPartyPaymentGateway, "Third-Party Payment Gateway", "External service used for processing fines securely.")
+System_Ext(DigitalContentRepositories, "Digital Content Repositories", "External repositories used for fulfilling digital items.")
+
+System_Boundary(LibraryManagementSystem, "Library Management System") {
+    Container(PatronPortal, "Patron Portal", "React.js SPA", "Self-service portal for library patrons to search catalogues and manage accounts.")
+    Container(LibrarianBackoffice, "Librarian Back-office", "Next.js Web App", "Back-office web application for librarians and circulation staff.")
+    Container(ApiGateway, "API Gateway", "NGINX / Envoy", "Manages incoming traffic, routing requests to appropriate backend services.")
+    Container(CatalogueService, "Catalogue Service", "Java / Spring Boot", "Manages physical and digital item cataloguing and search functionalities.")
+    Container(CirculationService, "Circulation Service", "Node.js / Express", "Manages check-outs, returns, and transactional circulation data.")
+    Container(EventBroker, "Event Broker", "Apache Kafka / RabbitMQ", "Provides asynchronous event-driven messaging to decouple workflows.")
+    ContainerDb(PostgreSQLDatabase, "PostgreSQL Database", "PostgreSQL (EU-hosted)", "Stores transactional circulation data.")
+    ContainerDb(Elasticsearch, "Elasticsearch", "Elasticsearch (EU-hosted)", "Provides high-performance search capabilities with sub-800ms response times.")
+}
+
+Rel(LibraryPatrons, PatronPortal, "Interacts with the self-service portal", "HTTPS")
+Rel(Librarians, LibrarianBackoffice, "Interacts with the back-office application", "HTTPS")
+Rel(LibraryAdministrators, LibrarianBackoffice, "Manages system via back-office application", "HTTPS")
+
+Rel(PatronPortal, ApiGateway, "Sends API requests", "HTTPS, OAuth2/OIDC with JWTs")
+Rel(LibrarianBackoffice, ApiGateway, "Sends API requests", "HTTPS, OAuth2/OIDC with JWTs")
+
+Rel(ApiGateway, CatalogueService, "Routes catalogue queries", "mTLS via Istio Service Mesh")
+Rel(ApiGateway, CirculationService, "Routes circulation requests", "mTLS via Istio Service Mesh")
+
+Rel(CatalogueService, PostgreSQLDatabase, "Reads and writes catalogue data", "Encrypted connection with AES-256")
+Rel(CirculationService, PostgreSQLDatabase, "Reads and writes circulation data", "Encrypted connection with AES-256")
+Rel(CatalogueService, Elasticsearch, "Indexes search data", "Encrypted connection with AES-256")
+
+Rel(CatalogueService, EventBroker, "Publishes search and cataloguing events", "TLS-encrypted event streams")
+Rel(CirculationService, EventBroker, "Publishes check-out workflows", "TLS-encrypted event streams")
+
+Rel(ApiGateway, ExternalIdentityProvider, "Authenticates users", "OIDC over HTTPS")
+Rel(CirculationService, ThirdPartyPaymentGateway, "Processes fines", "REST/HTTPS with mTLS")
+Rel(CatalogueService, DigitalContentRepositories, "Fulfills digital items", "LTI/API")
+
+@enduml

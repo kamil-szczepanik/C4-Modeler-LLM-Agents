@@ -1,0 +1,313 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively addressed: 'Customer Web Portal' handles online submissions (R-01), 'Adjuster Web Application' supports adjuster workflows (R-02), and the 'Migration Operations Dashboard' combined with 'Routing Engine Component' manages gradual, claim-type migration (R-03).",
+   "performance_efficiency": "Sub-2s screen loads despite 5s mainframe responses (R-05) are achieved via 'Claim Data Access Repository' holding local read models, supplemented by 'Mainframe Abstraction Layer' and asynchronous messaging via 'Azure Service Bus'. Specific coordination with the 23:00-05:00 batch window could be more explicit.",
+   "compatibility": "Interoperability with 'Legacy Mainframe System' is handled via 'Mainframe Adapter Component' over VPN with mTLS. 'Backpressure & Throttling Controller Component' mitigates mainframe overload, respecting constraints on mainframe modification frequency. However, specific DB2/batch synchronization interfaces remain high-level.",
+   "usability": "Each persona is provisioned with tailored interfaces: 'End Customers and Brokers' utilize 'Customer Web Portal', 'Claims Adjusters' interact via 'Adjuster UI', and operations staff configure migrations through 'Migration Dashboard UI'.",
+   "reliability": "R-04 is thoroughly satisfied: 'Outbox Processor Component' guarantees at-least-once delivery, 'Session Manager Component' enforces message ordering, and 'Dead-Letter Monitor Component' handles poisoned messages, preventing any claim loss or duplicate processing.",
+   "security": "SSO requirement R-07 is satisfied via 'Corporate Active Directory / Entra ID' using OIDC/SAML. Perimeter security and data integrity are enforced with 'Azure Key Vault', mTLS, and signed JWTs used by 'Claim Router & Integration Worker'.",
+   "maintainability": "Requirement R-06 is directly satisfied: 'Migration Control API' and 'Claim Context & Routing Component' allow rapid claim-type rollback using dynamic feature flags. Using a modular monolith for 'Claims Core API Service' suits the team's limited cloud experience.",
+   "portability": "The hybrid deployment target is supported across on-premises and azure-westeurope using 'Claim Router & Integration Worker'. Tight integration with proprietary services ('Azure Service Bus', 'Azure Key Vault') slightly limits cloud portability, though it aligns with the target environment."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Claim Data Access Repository maintains local read models in Azure SQL, and Mainframe Abstraction Layer decouples UI from slow mainframe responses. However, partial sync latency for uncached attributes is not fully detailed.",
+    "elements": [
+     "Adjuster UI",
+     "Claim Handling API",
+     "Mainframe Abstraction Layer",
+     "Claim Data Access Repository"
+    ],
+    "sensitivity_points": [
+     "Cache freshness and read-model synchronization latency with the mainframe"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of claim data versus sub-2-second screen rendering"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Incoming submissions are decoupled via Azure Service Bus, where Backpressure & Throttling Controller and Session Manager throttle integration traffic to the mainframe, insulating the nightly batch window.",
+    "elements": [
+     "Claims Core API Service",
+     "Messaging Publisher",
+     "Azure Service Bus",
+     "Backpressure & Throttling Controller Component",
+     "Claim Router & Integration Worker"
+    ],
+    "sensitivity_points": [
+     "Queue capacity and throttling rate limits during peak submission bursts"
+    ],
+    "tradeoffs": [
+     "Asynchronous downstream synchronization delays traded for immediate submission acceptance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Submissions are buffered in Azure Service Bus and managed by Claim Router & Integration Worker using an Outbox Processor, allowing uninterrupted web intake while deferring mainframe ingestion until after batch windows.",
+    "elements": [
+     "Customer Web Portal",
+     "Claims Core API Service",
+     "Azure Service Bus",
+     "Claim Router & Integration Worker",
+     "Outbox Processor Component"
+    ],
+    "sensitivity_points": [
+     "Azure Service Bus message retention limits during prolonged mainframe batch outages"
+    ],
+    "tradeoffs": [
+     "Delayed mainframe reflection traded for continuous customer intake availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Outbox Processor Component, Azure Service Bus DLQ monitoring, and Session Manager prevent loss and ensure ordered retries. However, detailed two-way reconciliation and duplicate detection logic on the mainframe interface lack explicit depth.",
+    "elements": [
+     "Outbox Processor Component",
+     "Dead-Letter Monitor Component",
+     "Session Manager Component",
+     "Claim Router & Integration Worker"
+    ],
+    "sensitivity_points": [
+     "Idempotency enforcement across hybrid cloud and legacy mainframe boundaries"
+    ],
+    "tradeoffs": [
+     "Operational complexity of manual DLQ reconciliation versus automated compensatory transactions"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Claim Context & Routing Component, Routing Engine Component, and Migration Operations Dashboard allow feature-flagged claim routing per claim type, enabling instant one-day switchback without altering UI components or requiring frequent mainframe schema changes.",
+    "elements": [
+     "Migration Dashboard UI",
+     "Migration Control API",
+     "Claim Context & Routing Component",
+     "Routing Engine Component"
+    ],
+    "sensitivity_points": [
+     "Granularity of dynamic routing configuration and rollback feature toggles"
+    ],
+    "tradeoffs": [
+     "Routing engine architectural complexity traded for operational rollback speed"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Customer Web Portal and Adjuster UI interact exclusively with Claims Core API Service and Claim Handling API. Decommissioning the mainframe only requires retiring the Integration Worker without modifying user-facing presentation layers.",
+    "elements": [
+     "Customer Web Portal",
+     "Adjuster Web Application",
+     "Claims Core API Service",
+     "Mainframe Abstraction Layer",
+     "Claim Router & Integration Worker"
+    ],
+    "sensitivity_points": [
+     "Strict adherence to abstraction boundaries in the core business API layer"
+    ],
+    "tradeoffs": [
+     "Indirection overhead in application layers traded for clean legacy decommissioning"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Authentication via Entra ID/MSAL is modeled, but fine-grained authorization, multi-tenant broker scoping, and object-level permission enforcement mechanisms are not explicitly detailed in the component specifications.",
+    "elements": [
+     "Authentication Component",
+     "Corporate Active Directory / Entra ID",
+     "Claim Handling API",
+     "Claims Domain Service"
+    ],
+    "sensitivity_points": [
+     "Enforcement of resource-based authorization checks in domain services"
+    ],
+    "tradeoffs": [
+     "Centralized IAM authentication traded for complex domain-level relationship authorization"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Modern applications integrate with Corporate Active Directory via OIDC/SAML for centralized token revocation. However, access propagation or synchronization to the legacy mainframe system within 15 minutes is not addressed.",
+    "elements": [
+     "Corporate Active Directory / Entra ID",
+     "Adjuster Web Application",
+     "Legacy Mainframe System"
+    ],
+    "sensitivity_points": [
+     "Token expiration/revocation propagation time across hybrid cloud and on-premises environments"
+    ],
+    "tradeoffs": [
+     "Standard stateless JWT lifetime tradeoffs versus real-time revocation across hybrid systems"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe System",
+     "Claim Router & Integration Worker",
+     "Claims Core API Service"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Mainframe Adapter Component",
+     "Mainframe Abstraction Layer"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "End Customers and Brokers",
+     "Customer Web Portal",
+     "Claim Submission Form Component",
+     "Claim Submission Controller"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Adjuster Web Application",
+     "Adjuster UI",
+     "Claim Handling API"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Migration Operations Dashboard",
+     "Migration Dashboard UI",
+     "Migration Control API",
+     "Migration Audit Service",
+     "Routing Engine Component",
+     "Claim Context & Routing Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Azure Service Bus",
+     "Outbox Processor Component",
+     "Session Manager Component",
+     "Dead-Letter Monitor Component",
+     "Claim Router & Integration Worker"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Adjuster UI",
+     "Mainframe Abstraction Layer",
+     "Claim Data Access Repository"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Claim Context & Routing Component",
+     "Migration Control API",
+     "Migration Dashboard UI",
+     "Outbox Processor Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Corporate Active Directory / Entra ID",
+     "Authentication Component",
+     "Customer Web Portal",
+     "Adjuster Web Application"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

@@ -1,0 +1,46 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Doctors, "Doctors", "Medical professionals who manage patient admissions, electronic medical records, and clinical workflows.")
+Person(Nurses, "Nurses", "Healthcare staff who assist with patient care, scheduling, and updating medical records.")
+Person(Receptionists, "Receptionists", "Administrative staff who handle patient scheduling, front-desk admissions, and initial registration.")
+Person(BillingSpecialists, "Billing Specialists", "Financial staff who manage patient billing, payments, and insurance claims.")
+
+System_Ext(ExternalLabImagingSystems, "External Lab & Imaging Systems", "Third-party clinical systems providing laboratory and imaging data.")
+System_Ext(PaymentGatewayInsuranceClearinghouse, "Payment Gateway / Insurance Clearinghouse", "External financial processors handling claims and billing payments.")
+System_Ext(EnterpriseIdentityProvider, "Enterprise Identity Provider", "Handles multi-factor authentication and single sign-on via OAuth2/OIDC.")
+System_Ext(ThirdPartyNotificationService, "Third-Party Notification Service", "Manages patient SMS and email reminders.")
+
+System_Boundary(ClinicManagementSystem, "Clinic Management System") {
+    Container(WebApplicationFrontend, "Web Application Frontend", "React / TypeScript, served via CDN/Nginx", "Delivers sub-second UI performance for users accessing the clinic platform.")
+    Container(APIGateway, "API Gateway", "Kong / Nginx", "Handles TLS termination, multi-factor access enforcement, and routes incoming traffic.")
+    Container(CoreServicesContainer, "Core Services Container", "Node.js / Java Spring Boot", "Executes modular microservices for clinical operations, scheduling, and publishes events.")
+    Container(EMRAuditService, "EMR & Audit Service", "Java Spring Boot", "Manages electronic medical records and audit trails, ensuring HIPAA and GDPR compliance.")
+    Container(BillingInsuranceIntegrationWorker, "Billing & Insurance Integration Worker", "Node.js / Java", "Consumes messages from the message broker to transmit claims to payment gateways.")
+    Container(AsyncMessageBroker, "Async Message Broker", "Apache Kafka / RabbitMQ", "Provides decoupled, resilient asynchronous messaging between microservices.")
+    ContainerDb(PostgreSQLPrimaryDB, "PostgreSQL Primary DB", "PostgreSQL with multi-region active-active setup and AES-256 encryption", "Primary relational database for transactional data storage.")
+    ContainerDb(WORMcompliantstorage, "WORM-compliant storage", "WORM-compliant storage", "Secure archive store to meet the 10-year data retention mandate and compliance requirements.")
+}
+
+Rel(Doctors, WebApplicationFrontend, "Accesses clinical operations and EMR", "HTTPS")
+Rel(Nurses, WebApplicationFrontend, "Accesses patient admissions and records", "HTTPS")
+Rel(Receptionists, WebApplicationFrontend, "Handles patient scheduling and admissions", "HTTPS")
+Rel(BillingSpecialists, WebApplicationFrontend, "Manages patient billing and claims", "HTTPS")
+
+Rel(WebApplicationFrontend, APIGateway, "Calls API endpoints via HTTPS", "HTTPS")
+Rel(APIGateway, EnterpriseIdentityProvider, "Enforces OAuth2/OIDC authentication", "OAuth2/OIDC over HTTPS")
+Rel(APIGateway, CoreServicesContainer, "Routes requests", "Internal gRPC/REST")
+Rel(APIGateway, EMRAuditService, "Routes EMR requests", "Internal gRPC/REST")
+
+Rel(EMRAuditService, ExternalLabImagingSystems, "Exchanges clinical data and test results", "HL7 FHIR APIs")
+Rel(CoreServicesContainer, AsyncMessageBroker, "Publishes domain events", "AMQP / Kafka protocol")
+Rel(BillingInsuranceIntegrationWorker, AsyncMessageBroker, "Consumes claims events", "AMQP / Kafka protocol")
+Rel(BillingInsuranceIntegrationWorker, PaymentGatewayInsuranceClearinghouse, "Transmits claims and billing data", "HTTPS/REST")
+
+Rel(CoreServicesContainer, PostgreSQLPrimaryDB, "Reads and writes transactional data", "SQL over TLS")
+Rel(EMRAuditService, WORMcompliantstorage, "Stores audit logs and archived records", "Secure Storage Protocol")
+
+@enduml

@@ -1,0 +1,56 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Library Management System
+
+Person(Patrons, "Library Patrons", "Students and public users accessing self-service portals.")
+Person(Staff, "Librarians / Circulation Staff", "Staff managing item cataloguing and circulation workflows.")
+Person(Admins, "Library Administrators", "Personnel managing system reporting, inventory, and budgets.")
+
+System_Ext(PaymentGateway, "Payment Gateway", "External payment processing (Adyen/Stripe EU).")
+System_Ext(DigitalContentProviders, "Digital Content Providers", "External e-Book Vendors providing digital content.")
+System_Ext(NotificationService, "Notification Service", "External service for sending system notifications.")
+System_Ext(IdentityProvider, "Identity Provider", "Authentication and identity management (Keycloak/Auth0 EU).")
+
+System_Boundary(LMS, "Library Management System") {
+    Container(PatronPortal, "Patron Self-Service Portal", "Web/Mobile App", "Provides self-service capabilities for library patrons.")
+    Container(CirculationDashboard, "Circulation Management Dashboard", "Web App", "Dashboard for librarians and circulation staff to manage circulation workflows.")
+    Container(AdminConsole, "Administration Console", "Web App", "Console for library administrators to manage reporting, inventory, and budgets.")
+    Container(ApiGateway, "API Gateway", "NGINX / Kong", "Handles TLS termination, WAF policies, and routing for all incoming traffic.")
+    Container(CatalogService, "Catalog & Search Service", "Spring Boot, Elasticsearch", "Manages catalogue queries and search operations.")
+    Container(CirculationService, "Circulation & Loan Service", "Node.js / Express", "Manages item circulation, loans, and transactional state.")
+    Container(ReportingService, "Reporting & Analytics Service", "Python / FastAPI", "Handles reporting and analytics workloads.")
+    Container(NotificationDispatcher, "Notification Dispatcher", "Go", "Dispatches asynchronous notifications.")
+    ContainerDb(PostgresDB, "PostgreSQL Database", "PostgreSQL 15", "Stores transactional state and analytics data.")
+    Container(RabbitMQ, "RabbitMQ", "Message Broker", "Facilitates asynchronous event-driven messaging.")
+}
+
+Rel(Patrons, ApiGateway, "Accesses self-service portal", "HTTPS / WAF-protected")
+Rel(Staff, ApiGateway, "Accesses circulation dashboard", "HTTPS / WAF-protected")
+Rel(Admins, ApiGateway, "Accesses administration console", "HTTPS / WAF-protected")
+
+Rel(ApiGateway, CatalogService, "Routes requests", "HTTP/2 reverse proxy")
+Rel(ApiGateway, CirculationService, "Routes requests", "HTTP/2 reverse proxy")
+Rel(ApiGateway, ReportingService, "Routes requests", "HTTP/2 reverse proxy")
+
+Rel(PatronPortal, IdentityProvider, "Authenticates users", "OIDC / OAuth 2.0 over HTTPS with PKCE")
+Rel(CirculationDashboard, IdentityProvider, "Authenticates users", "OIDC / OAuth 2.0 over HTTPS with PKCE")
+Rel(AdminConsole, IdentityProvider, "Authenticates users", "OIDC / OAuth 2.0 over HTTPS with PKCE")
+
+Rel(CatalogService, CirculationService, "Interservice communication", "gRPC over TLS 1.3 / mTLS")
+Rel(CirculationService, ReportingService, "Interservice communication", "gRPC over TLS 1.3 / mTLS")
+Rel(ReportingService, NotificationDispatcher, "Interservice communication", "gRPC over TLS 1.3 / mTLS")
+
+Rel(CatalogService, RabbitMQ, "Publishes and consumes events", "AMQP over TLS 1.3")
+Rel(CirculationService, RabbitMQ, "Publishes and consumes events", "AMQP over TLS 1.3")
+Rel(NotificationDispatcher, RabbitMQ, "Consumes notification events", "AMQP over TLS 1.3")
+
+Rel(CirculationService, PostgresDB, "Reads and writes transactional data", "SQL / PostgreSQL protocol")
+Rel(ReportingService, PostgresDB, "Queries analytics data from read-replicas", "SQL / PostgreSQL protocol")
+
+Rel(CirculationService, PaymentGateway, "Processes payments", "REST / HTTPS over TLS 1.3")
+Rel(CatalogService, DigitalContentProviders, "Accesses digital content", "REST / HTTPS over TLS 1.3")
+Rel(NotificationDispatcher, NotificationService, "Sends notifications", "REST / HTTPS over TLS 1.3")
+
+@enduml

@@ -1,0 +1,325 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively addressed: 'Scoring Engine' scores authorizations (R-01), 'Case Management App' handles analyst investigations (R-02), and 'Model Executor' running Wasmtime alongside 'Model Registry Client' enables dynamic zero-downtime rule and model hot-reloading (R-03).",
+   "performance_efficiency": "The sub-50ms P99 target at 3,000 rps is supported by high-performance Rust microservices in 'Scoring Engine', gRPC over HTTP/2 via 'VPC Link Integration', an in-memory 'Hot Cache Layer' (Redis), and asynchronous offloading via 'Audit & Streaming Pipeline'.",
+   "compatibility": "The architecture cleanly integrates with 'Payment Gateway / Acquirer' over mTLS REST/gRPC, standard IdPs via OIDC/OAuth2 bearer tokens using 'Native JWT Authorizer', and standard analytics tools using 'Athena Query Interface' and 'AWS Glue Data Catalog'.",
+   "usability": "Both 'Fraud Analyst' and 'Risk / Compliance Officer' have dedicated entry points through 'Case API Controller' and 'Athena Query Interface'. However, no dedicated web frontend container is defined; users connect directly to backend API controllers.",
+   "reliability": "While components like 'DynamoDB on-demand' and 'Amazon ECS Fargate' provide high availability, the architecture lacks an explicit fallback or fail-open mechanism in 'AWS API Gateway' to ensure payments are unblocked within 1 minute if scoring becomes unavailable (R-07).",
+   "security": "PCI-DSS and audit mandates are well supported via 'Native JWT Authorizer', mTLS, Wasm sandboxing, and tamper-evident retention with 'S3 Object Lock Policy Engine'. However, the PAN tokenization and encryption mechanism is only briefly mentioned as an ingress boundary without concrete vaulting components.",
+   "maintainability": "Well-suited for a three-engineer team. Clear modular separation between scoring, case workflows, and auditing. Extensive use of managed serverless infrastructure ('Fargate', 'DynamoDB', 'ElastiCache Serverless', 'Athena') minimizes maintenance toil, and Wasm modularity simplifies model updates.",
+   "portability": "The design is tailored specifically to AWS eu-west-1, heavily leveraging proprietary AWS services (Kinesis, DynamoDB, S3 Object Lock, Athena, API Gateway). While WebAssembly provides runtime portability for scoring logic, migrating infrastructure across cloud providers would require substantial re-architecting."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The Rust-based Tokio engine, Wasm runtime, and ElastiCache Redis hot cache minimize latency, but synchronous DynamoDB lookups and API Gateway hops could risk P99 sub-50ms latency under 3,000 RPS.",
+    "elements": [
+     "AWS API Gateway",
+     "Scoring Engine",
+     "Ingress Coordinator",
+     "Feature Assembler",
+     "Model Executor",
+     "Hot Cache Layer",
+     "Historical Feature Store"
+    ],
+    "sensitivity_points": [
+     "Latency of synchronous DynamoDB lookups during feature assembly",
+     "API Gateway VPC link network transit overhead at high concurrency"
+    ],
+    "tradeoffs": [
+     "Serverless Redis and DynamoDB simplify operations but introduce tail-latency variance"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management workloads run on separate ECS Fargate tasks and dedicated DynamoDB/S3 storage, completely isolating analyst query traffic from the real-time scoring data path.",
+    "elements": [
+     "Case Management App",
+     "Case API Controller",
+     "Case Orchestrator Service",
+     "Case & Audit Read Store",
+     "Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Strict process and database isolation between scoring engine and case management"
+    ],
+    "tradeoffs": [
+     "Duplicating case data into DynamoDB increases storage costs to protect scoring performance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture lacks a defined fallback or circuit-breaking mechanism at the API Gateway or edge to approve or bypass authorizations when the scoring engine crashes.",
+    "elements": [
+     "AWS API Gateway",
+     "HTTP Route Resolver",
+     "VPC Link Integration",
+     "Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Absence of edge-level fallback policy when scoring engine backend fails"
+    ],
+    "tradeoffs": [
+     "Keeping API Gateway stateless reduces complexity but omits offline fallback scoring rules"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Audit logs are published asynchronously via an in-memory Audit Dispatcher to Amazon Kinesis, buffering records if long-term S3 storage degrades without blocking scoring decisions.",
+    "elements": [
+     "Audit Dispatcher",
+     "Audit & Streaming Pipeline",
+     "Amazon Kinesis Data Streams",
+     "Amazon Kinesis Firehose",
+     "Audit Storage"
+    ],
+    "sensitivity_points": [
+     "Kinesis stream buffer retention window during prolonged downstream S3 outages"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit emission decouples scoring latency but relies on local memory buffers"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Wasmtime-based Model Executor explicitly enables zero-downtime hot reloading of signed Wasm binaries fetched by the Model Registry Client without restarting container infrastructure.",
+    "elements": [
+     "Model Executor",
+     "Model Registry Client",
+     "Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Wasm binary verification overhead during in-memory module swap"
+    ],
+    "tradeoffs": [
+     "WebAssembly sandbox ensures fast safe reloads but limits model execution primitives"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Dynamic rule and feature updates are ingested sub-second via Kinesis consumers into the hot cache layer, though analyst rule compilation and validation workflows are not fully detailed.",
+    "elements": [
+     "Cache Invalidation & Sync Worker",
+     "Hot Cache Layer",
+     "Feature Assembler",
+     "Model Executor"
+    ],
+    "sensitivity_points": [
+     "Propagation delay across distributed Redis cache nodes"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of cache invalidation enables rapid updates but risks brief evaluation skews"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "PAN tokenization at the API Gateway prevents clear-text card exposure to analysts, but no SIEM, anomaly detection, or automated alerting mechanisms are modeled to detect compromised accounts within 15 minutes.",
+    "elements": [
+     "AWS API Gateway",
+     "Case API Controller",
+     "External IdP",
+     "Notification / Alerting Service"
+    ],
+    "sensitivity_points": [
+     "Coverage of audit telemetry for rapid detection of credential compromise"
+    ],
+    "tradeoffs": [
+     "Delegating auth entirely to external IdP simplifies operations but delays local behavioral threat detection"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Audit Storage implements S3 Object Lock in Compliance Mode for tamper-evident retention, lifecycle transitions to S3 Glacier, and querying via AWS Glue and Athena well within one day.",
+    "elements": [
+     "Audit Storage",
+     "S3 Bucket (Data Partition)",
+     "S3 Object Lock Policy Engine",
+     "S3 Glacier Flexible Retrieval",
+     "AWS Glue Data Catalog",
+     "Athena Query Interface"
+    ],
+    "sensitivity_points": [
+     "Partitioning strategy and Athena query execution performance over Glacier archives"
+    ],
+    "tradeoffs": [
+     "Glacier tiering substantially reduces storage costs while easily meeting single-day retrieval SLAs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "none"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "AWS API Gateway",
+     "VPC Link Integration"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Compliance & Audit Archival Storage",
+     "Audit & Streaming Pipeline",
+     "Audit Storage",
+     "S3 Bucket (Data Partition)",
+     "S3 Object Lock Policy Engine",
+     "Audit & Evidence Proxy"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Hot Cache Layer",
+     "Historical Feature Store",
+     "S3 Glacier Flexible Retrieval",
+     "Athena Query Interface"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Hot Cache Layer",
+     "Historical Feature Store",
+     "Container Infrastructure",
+     "Athena Query Interface"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "Ingress Coordinator",
+     "Model Executor"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management App",
+     "Case API Controller",
+     "Case Orchestrator Service",
+     "Case & Audit Read Store"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model Executor",
+     "Model Registry Client",
+     "Cache Invalidation & Sync Worker"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "AWS API Gateway",
+     "VPC Link Integration",
+     "Scoring Engine",
+     "Ingress Coordinator",
+     "Feature Assembler",
+     "Hot Cache Layer",
+     "Model Executor"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "AWS API Gateway",
+     "VPC Link Integration",
+     "Amazon Kinesis Data Streams"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Dispatcher",
+     "Audit & Streaming Pipeline",
+     "Audit Storage",
+     "S3 Object Lock Policy Engine",
+     "Audit & Evidence Proxy"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

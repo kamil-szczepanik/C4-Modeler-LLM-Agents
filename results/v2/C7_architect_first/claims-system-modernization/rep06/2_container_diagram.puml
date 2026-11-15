@@ -1,0 +1,38 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Insurance Claims Modernization
+
+Person(Customers_and_Brokers, "Customers and Brokers", "External users submitting claims online.")
+Person(Claims_Adjusters, "Claims Adjusters", "Internal users managing claims in the new web application.")
+
+System_Ext(Legacy_Mainframe, "Legacy Mainframe", "On-premises COBOL/DB2 system of record.")
+System_Ext(Identity_Provider, "Identity Provider", "Azure Active Directory (Entra ID) handling authentication.")
+System_Ext(Anti_Corruption_Layer_ACL, "Anti-Corruption Layer (ACL)", "Buffering proxy service protecting the legacy mainframe.")
+
+System_Boundary(Insurance_Claims_Modernization, "Insurance Claims Modernization") {
+    Container(Web_Portal_SPA, "Web Portal (SPA)", "React, TypeScript, Azure Static Web Apps", "Customer and broker portal for submitting and viewing claims.")
+    Container(Adjuster_Workspace, "Adjuster Workspace", "Web Application", "Web application handling adjuster claims processing workflows.")
+    Container(API_Gateway_Router, "API Gateway / Router", "YARP reverse proxy", "Manages feature flags, routing, rate-limiting, and circuit breakers.")
+    Container(Claims_Core_Service, "Claims Core Service", "Spring Boot, Java, Azure Container Apps", "Domain-driven modular monolith processing online claims and workflows.")
+    Container(Integration_Sync_Engine, "Integration & Sync Engine", "Apache Kafka, Azure Service Bus", "Handles message durability and event streams for hybrid synchronization.")
+    ContainerDb(Azure_SQL_Database, "Azure SQL Database", "Azure SQL Database, Azure Managed Identity, TDE", "Modern isolated persistence layer for migrated claims.")
+    Container(Audit_Activity_Trail_Service, "Audit & Activity Trail Service", "Dedicated Microservice", "Tracks user actions across workflows.")
+}
+
+Rel(Customers_and_Brokers, Web_Portal_SPA, "Accesses claims portal", "HTTPS")
+Rel(Claims_Adjusters, Adjuster_Workspace, "Processes claims", "HTTPS")
+Rel(Web_Portal_SPA, API_Gateway_Router, "Sends API requests", "TLS 1.3 / OAuth 2.0 / OIDC")
+Rel(Adjuster_Workspace, API_Gateway_Router, "Sends API requests", "TLS 1.3 / OAuth 2.0 / OIDC")
+Rel(API_Gateway_Router, Claims_Core_Service, "Routes traffic based on feature flags", "HTTPS")
+Rel(API_Gateway_Router, Legacy_Mainframe, "Routes unmigrated traffic", "HTTPS / mTLS")
+Rel(Claims_Core_Service, Azure_SQL_Database, "Reads and writes claim data", "Azure Managed Identity / TDE")
+Rel(Claims_Core_Service, Integration_Sync_Engine, "Publishes and consumes events", "AMQP / Kafka Protocol")
+Rel(Integration_Sync_Engine, Anti_Corruption_Layer_ACL, "Communicates with legacy systems", "mTLS over IPsec VPN/ExpressRoute")
+Rel(Anti_Corruption_Layer_ACL, Legacy_Mainframe, "Synchronizes data with system of record", "mTLS over IPsec VPN/ExpressRoute")
+Rel(Claims_Core_Service, Audit_Activity_Trail_Service, "Logs user actions", "REST / Internal Messaging")
+Rel(Web_Portal_SPA, Identity_Provider, "Authenticates users", "OAuth 2.0 / OpenID Connect")
+Rel(Adjuster_Workspace, Identity_Provider, "Authenticates users", "OAuth 2.0 / OpenID Connect")
+
+@enduml

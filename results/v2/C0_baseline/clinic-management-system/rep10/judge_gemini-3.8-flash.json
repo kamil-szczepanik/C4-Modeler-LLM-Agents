@@ -1,0 +1,328 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: Scheduling Service handles appointments with Clash Service for resource clashes; EMR Service provides clinical workflows; Billing & Claims Service manages claims and payments; and PostgreSQL with PostgreSQL Archive covers patient data retention.",
+   "performance_efficiency": "The sub-second P95 target is supported by EMR Rendering Module, local JWT validation in API Gateway, Redis in-memory locks, asynchronous RabbitMQ event processing, and PgBouncer connection pooling.",
+   "compatibility": "Integration Service explicitly employs Apache Camel and FHIR Translation Engine to interoperate over HL7 FHIR and mTLS with External Laboratory & Imaging System and External Insurance Clearinghouses.",
+   "usability": "Persona-based UI Composition Engine within Web Application tailors responsive interfaces specifically for Patients, Clinicians, Administrative Staff, Billing Officers, and Auditors, supported by Notification Service for omni-channel alerts.",
+   "reliability": "Active-active 99.99% availability is supported by Patroni/PgBouncer, RabbitMQ Quorum Queues, DLQ workers, and Resilience4j circuit breakers, though hybrid multi-region database replication mechanics are not explicitly modeled.",
+   "security": "MFA, RBAC/ABAC, and WAF are enforced at ingress. HashiCorp Vault manages secrets and encryption keys. PostgreSQL supports pgaudit and AES-256 at rest, alongside comprehensive audit logging across services.",
+   "maintainability": "Microservices (EMR, Billing & Claims, Scheduling, Integration) exhibit high modularity and low coupling, utilizing transactional outbox patterns, asynchronous messaging via RabbitMQ, and domain-driven design separation.",
+   "portability": "Containerized components (Envoy, Go, Spring Boot, PostgreSQL with CloudNativePG) readily adapt to on-prem-k8s and cloud environments, though hybrid synchronization between on-prem and eu-central-1 is lightly detailed."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.0,
+   "Modifiability": 4.5,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The Go-based EMR Service, PgBouncer pooling, and local Envoy JWT validation minimize latency. However, medical record reads hit PostgreSQL directly without dedicated caching, which could risk sub-second P95 under heavier concurrent read spikes.",
+    "elements": [
+     "EMR Rendering Module",
+     "Edge Ingress Router",
+     "Local JWT Validation Module",
+     "EMR API Controller",
+     "Data Access Repository",
+     "PostgreSQL Engine"
+    ],
+    "sensitivity_points": [
+     "Database connection pool sizing under simultaneous clinician read bursts",
+     "Efficiency of local JWT validation without remote token introspection"
+    ],
+    "tradeoffs": [
+     "Direct database reads guarantee fresh data at the cost of database CPU load"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Incoming HL7 FHIR payloads are decoupled through the Integration Service and RabbitMQ Quorum Queues. Asynchronous background workers ingest and persist results without degrading EMR API Controller response times for interactive clinicians.",
+    "elements": [
+     "Integration Service",
+     "FHIR Translation Engine",
+     "RabbitMQ Quorum Queues",
+     "EMR Service",
+     "Data Access Repository"
+    ],
+    "sensitivity_points": [
+     "RabbitMQ queue depth and consumer concurrency during peak ingestion",
+     "PostgreSQL write throughput during batch ingestion of lab results"
+    ],
+    "tradeoffs": [
+     "Asynchronous event streaming ensures UI responsiveness but introduces slight eventual consistency for results"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "While Patroni provides local database failover, the architecture lacks cross-region active-active data replication, global traffic routing, and state synchronization mechanisms between on-premises k8s and eu-central-1 to guarantee zero data loss within 1 minute.",
+    "elements": [
+     "API Gateway",
+     "PostgreSQL Engine",
+     "Patroni",
+     "Built-in Raft Storage Backend"
+    ],
+    "sensitivity_points": [
+     "Latency and network partitioning between hybrid cloud regions",
+     "Cross-region database replication lag affecting RPO and RTO"
+    ],
+    "tradeoffs": [
+     "Strict zero data loss requires synchronous cross-region replication, increasing transaction write latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Idempotency keys cached in Redis prevent duplicate billing submissions. Patroni coordinates PostgreSQL failover within 30 seconds, while Transactional Outbox and Resilience4j circuit breakers safely retry in-flight transactions.",
+    "elements": [
+     "Billing & Claims Service",
+     "Claim Generation Component",
+     "Redis",
+     "PostgreSQL Engine",
+     "Patroni",
+     "Retry & DLQ Worker"
+    ],
+    "sensitivity_points": [
+     "Patroni failover and leader election timeout configuration",
+     "Consistency of idempotency key validation in Redis during DB failover"
+    ],
+    "tradeoffs": [
+     "Idempotency verification in Redis adds slight write latency to claim submissions"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Integration Service isolates clearinghouse communication using Apache Camel and FHIR adapters. Changes are strictly encapsulated within the Integration Service without touching the EMR Service or billing business logic.",
+    "elements": [
+     "Integration Service",
+     "FHIR Translation Engine",
+     "Billing & Claims Service",
+     "RabbitMQ Quorum Queues"
+    ],
+    "sensitivity_points": [
+     "Standardization of internal domain events decoupled from external clearinghouse FHIR formats"
+    ],
+    "tradeoffs": [
+     "Mediation layer adds an extra network hop but guarantees domain service isolation"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are cleanly bounded within three components: Persona-based UI Composition Engine, EMR Service Data Access Repository, and PostgreSQL Engine/Audit extensions. Automated audit trail logging limits modifications to the schema and UI layer.",
+    "elements": [
+     "Persona-based UI Composition Engine",
+     "EMR API Controller",
+     "Data Access Repository",
+     "Audit & Compliance Logger",
+     "PostgreSQL Engine"
+    ],
+    "sensitivity_points": [
+     "Tight coupling between UI forms and underlying clinical data entity models"
+    ],
+    "tradeoffs": [
+     "Maintaining column-level encrypted fields requires updating data mapping and migration scripts"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The system context mandates OAuth 2.0/OIDC step-up MFA and edge JWT validation. However, the architecture omits a dedicated identity provider container, authentication failure counters, and real-time security alerting components for the one-minute alert requirement.",
+    "elements": [
+     "API Gateway",
+     "Edge Ingress Router",
+     "Local JWT Validation Module",
+     "HashiCorp Vault",
+     "Audit Device"
+    ],
+    "sensitivity_points": [
+     "Revocation propagation speed across distributed Envoy gateways using local JWT validation"
+    ],
+    "tradeoffs": [
+     "Local token validation reduces latency but delays recognition of revoked compromised credentials"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Patient consent policies are enforced by the Consent Manager before read execution. Audit trails are asynchronously emitted to pgaudit and long-term storage, supported by PostgreSQL Archive (FDW) satisfying the 10-year retention rule.",
+    "elements": [
+     "EMR API Controller",
+     "Patient Consent & Preference Manager",
+     "Audit & Compliance Logger",
+     "Security and Audit Extensions",
+     "PostgreSQL Archive"
+    ],
+    "sensitivity_points": [
+     "Overhead of logging every read operation on high-volume EMR endpoints",
+     "Durability and immutability guarantees of long-term archive storage"
+    ],
+    "tradeoffs": [
+     "Comprehensive read auditing increases storage overhead and write amplification"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Patient Consent & Preference Manager",
+     "Audit & Compliance Logger",
+     "Security and Audit Extensions",
+     "HashiCorp Vault"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "PostgreSQL Engine",
+     "Quorum Queues",
+     "Built-in Raft Storage Backend"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "PostgreSQL Archive",
+     "Notification Orchestrator Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Scheduling Service",
+     "Web Application"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Service",
+     "Clash Service",
+     "In-Memory Data Store Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "Clinical Workflow Engine",
+     "Audit & Compliance Logger",
+     "EMR Rendering Module"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Service",
+     "Claim Generation Component",
+     "Claim Tracking Component",
+     "External Insurance Clearinghouses"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Session and Auth Handler",
+     "Local JWT Validation Module",
+     "PostgreSQL Database",
+     "HashiCorp Vault",
+     "TLS Termination & Encryption Proxy Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "PostgreSQL Engine",
+     "Quorum Queues",
+     "Built-in Raft Storage Backend"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "EMR Rendering Module",
+     "EMR API Controller",
+     "Redis"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Service",
+     "FHIR Translation Engine",
+     "FHIR Serialization Mapper",
+     "External Laboratory & Imaging System"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

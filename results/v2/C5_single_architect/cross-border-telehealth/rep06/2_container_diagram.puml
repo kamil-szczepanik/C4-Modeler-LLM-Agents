@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Cross-Border Telehealth Platform
+
+Person(Patients_Clinicians, "Patients & Clinicians", "External users interacting with the platform for video consultations, e-prescriptions, and symptom checking.")
+
+System_Ext(National_Pharmacy_Networks_EU___US_Pharmacy_Systems, "National Pharmacy Networks (EU) & US Pharmacy Systems", "External systems for processing e-prescriptions.")
+System_Ext(AI_Model_Provider___LLM_API, "AI Model Provider / LLM API", "External service for powering the AI symptom checker.")
+System_Ext(Third_Party_Identity_Providers___Payment_Gateways, "Third-Party Identity Providers & Payment Gateways", "External systems providing authentication and cross-border billing capabilities.")
+
+System_Boundary(Cross_Border_Telehealth_Platform, "Cross-Border Telehealth Platform") {
+    Container(Global_Load_Balancer_with_Cloud_Armor, "Global Load Balancer with Cloud Armor", "Google Cloud Global Load Balancer & Cloud Armor", "Routes traffic, enforces regional pinning, and provides DDoS protection.")
+    Container(API_Gateway___BFF, "API Gateway / BFF", "Go, gRPC/REST", "Handles regional boundary checks, client routing, and exposes APIs to clients.")
+    Container(Core_Telehealth_Service, "Core Telehealth Service", "Node.js / TypeScript", "Manages user profiles, appointments, and consent (R-04).")
+    Container(Video_Consultation_Service, "Video Consultation Service", "Golang / WebRTC SFU (LiveKit)", "Manages real-time video with low-bandwidth degradation.")
+    Container(AI_Orchestrator, "AI Orchestrator", "Python, FastAPI", "Integrates with external LLMs and handles traceability for symptom checking.")
+    Container(E_Prescription_Integrator, "E-Prescription Integrator", "Java / Spring Boot", "Translates data for national EU standards and US HL7 FHIR.")
+    ContainerDb(Data_Storage, "Data Storage", "Cloud SQL (PostgreSQL), Cloud Storage, Cloud Bigtable", "Provides region-locked primary databases, object storage, and immutable audit logs.")
+}
+
+Rel(Patients_Clinicians, Global_Load_Balancer_with_Cloud_Armor, "Accesses platform features and video consultations", "HTTPS and WebSockets with geo-routing")
+Rel(Global_Load_Balancer_with_Cloud_Armor, API_Gateway___BFF, "Routes regional traffic", "HTTPS")
+Rel(API_Gateway___BFF, Core_Telehealth_Service, "Manages user profiles and appointments", "gRPC over mTLS via Istio")
+Rel(API_Gateway___BFF, Video_Consultation_Service, "Connects clients for real-time video", "gRPC over mTLS via Istio")
+Rel(API_Gateway___BFF, AI_Orchestrator, "Sends requests for AI symptom analysis", "gRPC over mTLS via Istio")
+Rel(API_Gateway___BFF, E_Prescription_Integrator, "Requests e-prescription processing", "gRPC over mTLS via Istio")
+Rel(Core_Telehealth_Service, Data_Storage, "Reads and writes user data and consent", "PostgreSQL / Cloud SQL")
+Rel(AI_Orchestrator, AI_Model_Provider___LLM_API, "Queries external LLM for symptom analysis", "HTTPS/REST")
+Rel(AI_Orchestrator, Data_Storage, "Writes AI traceability logs", "Cloud Bigtable")
+Rel(E_Prescription_Integrator, National_Pharmacy_Networks_EU___US_Pharmacy_Systems, "Submits e-prescriptions securely segregated by region", "HL7 FHIR (US) and national standards (EU)")
+Rel(Cross_Border_Telehealth_Platform, Third_Party_Identity_Providers___Payment_Gateways, "Processes authentication and cross-border billing", "HTTPS webhooks")
+
+@enduml

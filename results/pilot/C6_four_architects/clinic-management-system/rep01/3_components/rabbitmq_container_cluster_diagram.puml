@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the RabbitMQ Container cluster container
+
+System_Ext(scheduling_billing_service, "Scheduling Service & Billing Service", "Node.js, Docker, Kubernetes")
+System_Ext(audit_compliance_sidecar, "Audit & Compliance Sidecar Container", "Container")
+System_Ext(observability_collector, "Observability Collector Container", "OpenTelemetry, Prometheus")
+System_Ext(hashicorp_vault, "HashiCorp Vault", "Secret Management")
+
+Container_Boundary(rabbitmq_cluster, "RabbitMQ Container cluster") {
+    Component(quorum_queues, "Quorum Queues", "RabbitMQ 3.12+ with Raft consensus", "Provides active-active fault-tolerant message routing and storage for transient clinical events.")
+    Component(federation_shovel, "Federation and Shovel Plugins", "RabbitMQ Plugins", "Guarantees seamless cross-region transient event replication between on-premise and AWS eu-central-1.")
+    Component(dead_letter_exchanges, "Dead Letter Exchanges", "RabbitMQ AMQP", "Forwards unacknowledged or expired payloads to the Audit & Compliance Sidecar Container.")
+    Component(prometheus_plugin, "Prometheus Plugin", "HTTP/Prometheus scrape", "Exposes broker runtime metrics to the Observability Collector Container.")
+    Component(cluster_operator, "Cluster Operator", "Kubernetes Operator / HashiCorp Vault", "Automates TLS certificate and credential rotation.")
+}
+
+Rel(scheduling_billing_service, quorum_queues, "Publishes/consumes transient clinical events", "AMQP 0-9-1, MQTT over TLS 1.3")
+Rel(dead_letter_exchanges, audit_compliance_sidecar, "Forwards unacknowledged or expired payloads", "AMQP")
+Rel(cluster_operator, hashicorp_vault, "Automates TLS certificate and credential rotation", "HTTPS")
+Rel(prometheus_plugin, observability_collector, "Exposes broker runtime metrics", "HTTP/Prometheus scrape")
+
+@enduml

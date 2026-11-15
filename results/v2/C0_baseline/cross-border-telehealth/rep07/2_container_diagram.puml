@@ -1,0 +1,58 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Cross-Border Telehealth Platform
+
+Person(Patients_EU_US, "Patients (EU / US)", "Patients located in the EU and the US seeking video consultations, AI symptom checks, and e-prescriptions.")
+Person(Licensed_Clinicians, "Licensed Clinicians", "Medical professionals providing video consultations and issuing e-prescriptions to patients.")
+Person(Platform_Administrators, "Platform Administrators", "Personnel responsible for managing the platform, auditing, and ensuring regulatory compliance.")
+Person(Local_Pharmacy_Staff, "Local Pharmacy Staff", "Pharmacy personnel receiving and fulfilling e-prescriptions.")
+Person(Billing_ специалистов, "Billing Specialists", "Personnel managing platform financial transactions and billing.")
+
+System_Ext(Local_Pharmacies, "Local Pharmacies", "Regional pharmacy networks receiving and fulfilling e-prescriptions.")
+System_Ext(AI_Symptom_Checker_Engine, "AI Symptom Checker Engine", "Engine providing real-time urgency assessment for patient symptoms.")
+System_Ext(Notification_Gateway, "Notification Gateway", "Gateway handling asynchronous alerts for low-bandwidth users.")
+System_Ext(Identity_Providers, "Identity Providers", "Authentication systems including EU eIDAS and US OAuth Providers.")
+
+System_Boundary(Cross_Border_Telehealth_Platform, "Cross-Border Telehealth Platform") {
+    Container(Web_Applications, "Web Applications", "Flutter / HTML5 / CSS", "Cross-platform web rendering for patients, clinicians, and administrators.")
+    Container(Native_Mobile_Apps, "Native Mobile Apps", "Flutter", "Native mobile applications for patients and clinicians.")
+    Container(Global_External_HTTPS_Load_Balancers, "Global External HTTP(S) Load Balancers", "GCP Global HTTP(S) Load Balancer", "Routes global incoming traffic to regional endpoints.")
+    
+    System_Boundary(GKE_Regional_Clusters, "GKE Regional Clusters") {
+        Container(Regional_API_Gateways, "Regional API Gateways", "Kong / GCP API Gateway", "Validates OAuth2/OIDC JWTs, verifies cryptographic consent tokens, and routes regional traffic.")
+        Container(Consultation_Service, "Consultation Service", "Go / Node.js", "Manages consultation logic and WebRTC signaling.")
+        Container(Media_Relay_SFU_Container, "Media Relay / SFU Container", "LiveKit / Mediasoup", "Handles real-time video consultation streams and media relay.")
+        Container(Consent_Management_Service, "Consent Management Service", "Go / Node.js", "Manages patient and clinical consent records.")
+        Container(Prescription_Interoperability_Service, "Prescription & Interoperability Service", "Java / Spring Boot", "Transmits e-prescriptions using HL7 FHIR and national standards.")
+        Container(AI_Inference_Orchestrator, "AI Inference Orchestrator", "Python / FastAPI", "Orchestrates AI symptom checker interactions and logs audit data.")
+        Container(Regional_TURN_STUN_Relays, "Regional TURN/STUN Relays", "Google Cloud TURN/STUN", "Provides media relay and bandwidth adaptation for rural and low-bandwidth users.")
+        ContainerDb(Regional_Cloud_Spanner, "Regional Cloud Spanner", "GCP Cloud Spanner", "Provides regional transactional data storage with data residency enforcement.")
+        ContainerDb(Regional_BigQuery, "Regional BigQuery", "GCP BigQuery", "Stores immutable AI audit logs and interaction histories.")
+    }
+}
+
+Rel(Patients_EU_US, Web_Applications, "Accesses telehealth platform functionality", "HTTPS")
+Rel(Patients_EU_US, Native_Mobile_Apps, "Accesses telehealth platform functionality", "HTTPS / gRPC")
+Rel(Licensed_Clinicians, Web_Applications, "Manages consultations and prescribes care", "HTTPS")
+Rel(Platform_Administrators, Web_Applications, "Monitors and configures platform compliance and operations", "HTTPS")
+Rel(Web_Applications, Global_External_HTTPS_Load_Balancers, "Sends user requests", "HTTPS")
+Rel(Native_Mobile_Apps, Global_External_HTTPS_Load_Balancers, "Sends user requests", "HTTPS / gRPC")
+Rel(Global_External_HTTPS_Load_Balancers, Regional_API_Gateways, "Routes traffic to regional deployment zones", "HTTPS")
+Rel(Regional_API_Gateways, Consultation_Service, "Forwards API requests and validates tokens", "gRPC over mTLS")
+Rel(Regional_API_Gateways, Consent_Management_Service, "Forwards consent requests and validates tokens", "gRPC over mTLS")
+Rel(Regional_API_Gateways, Prescription_Interoperability_Service, "Forwards prescription requests and validates tokens", "gRPC over mTLS")
+Rel(Regional_API_Gateways, AI_Inference_Orchestrator, "Forwards symptom analysis requests", "gRPC over mTLS")
+Rel(Consultation_Service, Media_Relay_SFU_Container, "Manages WebRTC signaling and media flow", "gRPC / WebRTC")
+Rel(Media_Relay_SFU_Container, Regional_TURN_STUN_Relays, "Routes media streams for low-bandwidth users", "STUN / TURN / WebRTC")
+Rel(Prescription_Interoperability_Service, Local_Pharmacies, "Transmits e-prescriptions", "HL7 FHIR / National Standards over mTLS")
+Rel(AI_Inference_Orchestrator, AI_Symptom_Checker_Engine, "Queries symptom check logic", "HTTPS / gRPC")
+Rel(AI_Inference_Orchestrator, Regional_BigQuery, "Logs AI interactions and model versions", "Google Cloud Client Libraries")
+Rel(Consultation_Service, Regional_Cloud_Spanner, "Reads and writes transactional data", "JDBC / Cloud Spanner API")
+Rel(Consent_Management_Service, Regional_Cloud_Spanner, "Persists cryptographic consent tokens", "JDBC / Cloud Spanner API")
+Rel(Prescription_Interoperability_Service, Regional_Cloud_Spanner, "Stores prescription records", "JDBC / Cloud Spanner API")
+Rel(Regional_API_Gateways, Identity_Providers, "Authenticates users via OAuth2/OIDC", "OAuth2 / OIDC")
+Rel(Consultation_Service, Notification_Gateway, "Sends asynchronous alerts", "Asynchronous Pub/Sub")
+
+@enduml

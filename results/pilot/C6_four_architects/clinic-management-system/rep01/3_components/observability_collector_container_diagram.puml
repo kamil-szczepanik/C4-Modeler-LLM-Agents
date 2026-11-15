@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Observability Collector Container container
+
+System_Ext(Application_Pods, "Application Pods", "External application pods")
+System_Ext(Apache_Kafka_StatefulSet, "Apache Kafka StatefulSet", "External Kafka cluster")
+System_Ext(Prometheus_TSDB, "Prometheus TSDB", "External Prometheus TSDB")
+System_Ext(eu_central_1_Backend, "eu-central-1 Backend", "External compliance audit backend")
+System_Ext(External_SIEM_System, "External SIEM System", "External SIEM monitoring system")
+
+Container_Boundary(Observability_Collector_Container, "Observability Collector Container") {
+    Component(OpenTelemetry_Collector, "OpenTelemetry Collector", "OpenTelemetry Collector Engine", "Primary internal telemetry ingestion, processing, and export engine.")
+    Component(Receivers_Layer, "Receivers Layer", "OTLP, Prometheus scraping, fluent-bit, Kafka Consumer Receiver", "Ingests data via OTLP (gRPC/HTTP), Prometheus scraping, fluent-bit logs, and Apache Kafka StatefulSet.")
+    Component(Processing_Layer, "Processing Layer", "OTel Processor Framework", "Includes batching, memory limiters, data scrubbing, Geo-Routing, Dynamic Sampling, Schema Validation, and Tenant Isolation Tagging.")
+    Component(Exporters_Layer, "Exporters Layer", "gRPC / HTTP Exporters", "Routes telemetry to Prometheus TSDB, Elasticsearch, ClickHouse, and remote SIEM backends.")
+    Component(Prometheus_Alertmanager, "Prometheus Alertmanager", "Prometheus Alertmanager", "Internal Alerting and Rule Evaluation Engine.")
+    Component(Persistent_Queue_File_Storage_Extension, "Persistent Queue (File Storage Extension)", "File Storage Extension", "Guarantees data durability during network partitions.")
+    Component(mTLS_Credential_Manager, "mTLS Credential Manager", "mTLS & W3C Trace Context", "Manages automated certificate rotation for outbound gRPC exporters.")
+    Component(Configuration_Hot_Reload_Controller, "Configuration Hot-Reload Controller", "Kubernetes ConfigMap Controller", "Enables zero-downtime updates via Kubernetes ConfigMap.")
+}
+
+Rel(Application_Pods, Receivers_Layer, "Forwards logs and metrics via fluent-bit and OTLP (gRPC/HTTP)", "fluent-bit / OTLP")
+Rel(Apache_Kafka_StatefulSet, Receivers_Layer, "Pulls raw telemetry events during peak loads", "Kafka Protocol")
+Rel(Exporters_Layer, Prometheus_TSDB, "Routes processed performance metrics locally via secure gRPC", "secure gRPC")
+Rel(Exporters_Layer, eu_central_1_Backend, "Forwards compliance audit traces via gRPC over the Hybrid VPN Gateway Container", "gRPC")
+Rel(Prometheus_Alertmanager, External_SIEM_System, "Triggers immediate alerts via webhook over mTLS", "Webhook/mTLS")
+
+@enduml

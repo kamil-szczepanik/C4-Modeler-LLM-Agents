@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Component(Core Clinical Microservice, "Core Clinical Microservice", "External Container", "Invokes KMS API Gateway Component.")
+
+Container_Boundary(key_management_service, "Key Management Service") {
+    Component(KMSAPI-GatewayComponent, "KMS API Gateway Component", "Go", "Standardized ingress interface for cryptographic requests.")
+    Component(CryptoEngine, "Crypto Engine", "Go", "Executes envelope encryption primitives with in-process ephemeral memory.")
+    Component(KeyLifecycleManager, "Key Lifecycle Manager", "Go, HashiCorp Vault SDK / Raft", "Manages automated key rotation, Master Keys (KEKs), and secure shredding.")
+    Component(Audit&AccessControlEnforcer, "Audit & Access Control Enforcer", "Open Policy Agent (OPA) / Istio", "Validates mTLS identities and logs key access immutably.")
+    Component(HSMIntegrationLayer, "HSM Integration Layer", "PKCS#11", "Abstracts hardware security module interactions for root keys.")
+    Component(KeyReplicationSynchronizer, "Key Replication Synchronizer", "HashiCorp Vault SDK / Raft", "Handles secure cross-region and cross-cluster replication.")
+}
+
+Component(CockroachDBEncrypted, "CockroachDB (Encrypted)", "SQL over TLS", "Stores encrypted key material.")
+Component(AuditLogStore, "Audit Log Store", "Kafka", "Receives tamper-resistant audit logs.")
+
+Rel(Core Clinical Microservice, KMSAPI-GatewayComponent, "Invokes via gRPC over mTLS", "gRPC / mTLS")
+Rel(KMSAPI-GatewayComponent, CryptoEngine, "Delegates requests to")
+Rel(KeyLifecycleManager, HSMIntegrationLayer, "Interacts via PKCS#11 / gRPC", "PKCS#11 / gRPC")
+Rel(KeyLifecycleManager, KeyReplicationSynchronizer, "Uses via gRPC over mTLS", "gRPC / mTLS")
+Rel(KeyLifecycleManager, CockroachDBEncrypted, "Reads/writes encrypted key material using SQL over TLS", "SQL over TLS")
+Rel(Audit&AccessControlEnforcer, AuditLogStore, "Streams access logs via Kafka", "Kafka")
+
+@enduml

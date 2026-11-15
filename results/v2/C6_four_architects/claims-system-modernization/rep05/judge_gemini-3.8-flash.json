@@ -1,0 +1,338 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "All functional requirements are explicitly addressed: Claim Submission Feature Module serves customers/brokers (R-01), Adjuster Workbench Module serves adjusters (R-02), and Routing & Feature Flag Dispatcher along with Claim Routing Engine manages incremental claim type migration (R-03).",
+   "performance_efficiency": "Sub-2s response despite 5s mainframe latency (R-05) is directly enabled by Read-Through Cache (Azure Cache for Redis), client-side caching in Adjuster Workbench Module (TanStack Query), and asynchronous decoupled event processing via Message Broker.",
+   "compatibility": "Interoperability is thoroughly established via On-Premise Integration Agent (CICS/DB2 connectors, Apache Camel), Anti-Corruption Layer (Model Transformer), and Active Directory integration via MSAL.js and JWT Validation Policy Engine (R-07), respecting mainframe change constraints.",
+   "usability": "Distinct user personas (Customers, Brokers, Claims Adjusters) are explicitly served via dedicated frontend components: Claim Submission Feature Module and Adjuster Workbench Module within Claims Web App, supported by client-side validation and optimistic UI updates.",
+   "reliability": "Guarantees no lost or duplicate claims (R-04) via Transactional Outbox Pattern, State & Deduplication Ledger (Cosmos DB), Session Processor (FIFO ordering), DLQ Manager, Circuit Breaker & Retry Manager, and Audit & Reconciliation Worker.",
+   "security": "Security covers SSO with Active Directory using MSAL.js and JWT Validation Policy Engine (R-07), edge protection via SSL/TLS Termination & WAF, Azure RBAC, and tamper-evident auditing via Azure SQL Ledger Component.",
+   "maintainability": "Clear modular separation with Anti-Corruption Layer and Outbox Pattern. Rapid rollback within one day (R-06) is facilitated by Schema Versioning & Temporal Component (temporal tables) and Routing & Feature Flag Dispatcher.",
+   "portability": "Adheres well to the hybrid topology (azure-westeurope and on-prem-mainframe) using On-Premise Integration Agent. However, deep coupling to proprietary Azure platform services (Azure SQL Ledger, Service Bus features) slightly impairs infrastructure replaceability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.90625,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The architecture incorporates Redis read-through caching and TanStack Query client caching to decouple adjusters from mainframe response times. However, for initial cache misses on mainframe-resident data, synchronous retrieval via the ACL could still exceed the 2-second target without explicit prefetching.",
+    "elements": [
+     "Claims Web App",
+     "Adjuster Workbench Module",
+     "Read-Through Cache",
+     "Claims Core Service",
+     "Anti-Corruption Layer",
+     "On-Premise Integration Agent"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios for open adjuster claims",
+     "Mainframe latency during synchronous read fallbacks"
+    ],
+    "tradeoffs": [
+     "Data freshness versus sub-2-second UI response time"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Online submissions are ingested via Claims Core Service and buffered using the Transactional Outbox pattern and Azure Service Bus queues. This decouples peak submission load from the mainframe, allowing throttling into the mainframe to protect the nightly batch window.",
+    "elements": [
+     "API Gateway / Edge",
+     "Claims Core Service",
+     "Modern Claims Database",
+     "Outbox Event Publisher",
+     "Message Broker",
+     "On-Premise Integration Agent"
+    ],
+    "sensitivity_points": [
+     "Queue depth and message retention limits during peak spikes",
+     "Rate of batch forwarding into the legacy system"
+    ],
+    "tradeoffs": [
+     "Eventual consistency on mainframe versus immediate customer acceptance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "During the batch window, the Transactional Outbox and Azure Service Bus store incoming submissions reliably. The On-Premise Integration Agent uses circuit breakers and local state storage to buffer transfers until the mainframe reopens, ensuring zero submission loss.",
+    "elements": [
+     "Claims Core Service",
+     "Modern Claims Database",
+     "Message Broker",
+     "On-Premise Integration Agent",
+     "Circuit Breaker & Retry Manager",
+     "Local State Store"
+    ],
+    "sensitivity_points": [
+     "Local state storage capacity on the on-premise integration agent",
+     "Circuit breaker reset timing post-batch window"
+    ],
+    "tradeoffs": [
+     "Holding submissions in queues versus synchronous confirmation from system of record"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The architecture features a dedicated Audit & Reconciliation Worker comparing modern and legacy databases, a State & Deduplication Ledger in the ACL, and Azure Service Bus DLQs/sessions to prevent lost claims or duplicate processing.",
+    "elements": [
+     "Audit & Reconciliation Worker",
+     "Discrepancy Analyzer",
+     "State & Deduplication Ledger",
+     "Message Broker",
+     "Modern Claims Database",
+     "On-Premise Integration Agent"
+    ],
+    "sensitivity_points": [
+     "Frequency and throughput of reconciliation batch runs",
+     "Idempotency keys across legacy and modern transactions"
+    ],
+    "tradeoffs": [
+     "Background reconciliation overhead versus immediate distributed two-phase commit"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Claim type migration and rollback are managed via feature flag dispatchers in the Web App, APIM, and Anti-Corruption Layer, paired with Azure SQL temporal tables for point-in-time rollback, requiring no structural mainframe changes beyond generic adapter interfaces.",
+    "elements": [
+     "Feature Flag / Claim Type Resolver",
+     "Routing & Feature Flag Dispatcher",
+     "Claim Routing Engine",
+     "Anti-Corruption Layer",
+     "Modern Claims Database"
+    ],
+    "sensitivity_points": [
+     "Centralized coordination of feature flags across UI, gateway, and ACL",
+     "Granularity of legacy data transformation mapping per claim type"
+    ],
+    "tradeoffs": [
+     "Routing complexity in the ACL versus ease and safety of rollback"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Claims Web App interacts entirely with modern backend APIs exposed via the API Gateway. The mainframe is abstracted behind the Claims Core Service and Anti-Corruption Layer, allowing mainframe decommission without modifying adjuster or customer UIs.",
+    "elements": [
+     "Claims Web App",
+     "API Gateway / Edge",
+     "Claims Core Service",
+     "Anti-Corruption Layer",
+     "Modern Claims Database"
+    ],
+    "sensitivity_points": [
+     "Completeness of API contracts separating UI from backend storage details",
+     "Clean removal of ACL proxy code upon project completion"
+    ],
+    "tradeoffs": [
+     "Initial abstraction layer overhead versus long-term front-end stability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Security is addressed at the edge via JWT validation and in the Claims Core Service via Validation & Policy components and JPA domain queries. However, specific broker tenancy isolation or claim ownership attribute-based access control (ABAC) rules are not fully detailed.",
+    "elements": [
+     "API Gateway / Edge",
+     "JWT Validation Policy Engine",
+     "Claims Core Service",
+     "Validation & Policy Component",
+     "Claim Processing Domain Service"
+    ],
+    "sensitivity_points": [
+     "Enforcement of broker identity claims against customer policy ownership records",
+     "Audit logging completeness for unauthorized access attempts"
+    ],
+    "tradeoffs": [
+     "Fine-grained data authorization checks on every read versus query latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Single sign-on is centralized via Active Directory and MSAL.js/OIDC. Revoking access in Active Directory disables new token issuance. However, without explicit mention of Continuous Access Evaluation (CAE) or short token TTLs, existing bearer JWTs could remain valid beyond 15 minutes.",
+    "elements": [
+     "Active Directory",
+     "Authentication Wrapper",
+     "API Gateway / Edge",
+     "JWT Validation Policy Engine"
+    ],
+    "sensitivity_points": [
+     "Access token time-to-live (TTL) configuration in Active Directory",
+     "Token revocation and session invalidation propagation across APIM"
+    ],
+    "tradeoffs": [
+     "Frequent token validation/refresh calls versus API gateway authorization caching"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "full",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Anti-Corruption Layer",
+     "On-Premise Integration Agent",
+     "Audit & Reconciliation Worker",
+     "Mainframe Data Reader"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Anti-Corruption Layer",
+     "Model Transformer",
+     "On-Premise Integration Agent",
+     "Mainframe Protocol Adapter"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Claims Web App",
+     "Claim Submission Feature Module",
+     "API Gateway / Edge",
+     "Claim Submission Controller",
+     "Claims Core Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Claims Web App",
+     "Adjuster Workbench Module",
+     "Claims Core Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Feature Flag / Claim Type Resolver",
+     "Claim Routing Engine",
+     "Anti-Corruption Layer",
+     "Routing & Feature Flag Dispatcher"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "State & Deduplication Ledger",
+     "Outbox Event Publisher",
+     "Outbox Event Dispatcher Component",
+     "Local State Store",
+     "Session Processor",
+     "Dead-Letter Queue Manager",
+     "Audit & Reconciliation Worker",
+     "Discrepancy Analyzer"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Read-Through Cache",
+     "Redis In-Memory Data Store",
+     "Read-Through Cache Component",
+     "Adjuster Workbench Module",
+     "Response Caching Policy Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Feature Flag / Claim Type Resolver",
+     "Claim Routing Engine",
+     "Routing & Feature Flag Dispatcher",
+     "Schema Versioning & Temporal Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Active Directory",
+     "Authentication Wrapper",
+     "JWT Validation Policy Engine",
+     "API Gateway / Edge"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

@@ -1,0 +1,331 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 5
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively supported: Patient Management covers R-01, Scheduling Engine with Redis Distributed Lock Manager addresses R-02 clash checks, EMR Core with Go Audit Logging Container fulfills R-03, and Billing & Claims with Apache Camel Integration Service addresses R-04.",
+   "performance_efficiency": "Sub-second EMR retrieval is achieved via PostgreSQL Read-Replica Cluster isolating analytical queries from PostgreSQL Primary Instance, Redis Data Caching Module, PgBouncer Connection Pooler, and asynchronous non-blocking logging via Go Audit Logging Container with Batch Writer Engine.",
+   "compatibility": "External interoperability requirements are directly fulfilled by Apache Camel Integration Service, featuring the FHIR Ingestion Route Component for HL7 FHIR over HTTPS and Payment & Clearinghouse Adapter Component connecting external payment gateways and insurance clearinghouses.",
+   "usability": "All user personas connect via React SPA & Patient Portal BFF. However, Level 3 focuses exclusively on Patient Portal SPA and BFF components, leaving specific UI workflows for Clinicians, Receptionists, and Billing Specialists undescribed.",
+   "reliability": "High availability is supported by Patroni HA Orchestration, pgBackRest backups, and Camel Dead-Letter & Resilience Handler. However, active-active multi-region writes across on-prem-k8s and eu-central-1 are not fully realized with primary-replica PostgreSQL.",
+   "security": "Robust security is enforced via Identity Provider MFA, Kong Auth Plugin, Istio Service Mesh mTLS, HashiCorp Vault Transit Secrets Engine for AES-256 encryption at rest, and Go Audit Logging Container archiving to WORM Object Storage.",
+   "maintainability": "Decomposition into specialized microservices and adapters like Spring Boot Core Services and Apache Camel Integration Service promotes modularity. Minor modeling flaws exist where external containers (Redis, Superset) are miscategorized as internal components of Camel.",
+   "portability": "The architecture addresses the hybrid deployment (on-prem-k8s and eu-central-1) cleanly through containerized services, Istio Service Mesh cross-cluster mTLS, and HashiCorp Vault Enterprise Replication synchronizing keys between on-prem and cloud regions."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 4.0,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "PgBouncer and read replicas isolate operational queries, but caching is restricted to non-PHI data in Redis. Decrypting clinical records dynamically via HashiCorp Vault Transit Engine over HTTPS introduces network latency overhead that could challenge sub-second P95 targets under high concurrency.",
+    "elements": [
+     "React SPA & Patient Portal BFF",
+     "Kong API Gateway",
+     "Istio Service Mesh",
+     "Spring Boot Core Services",
+     "HashiCorp Vault",
+     "PostgreSQL",
+     "Redis"
+    ],
+    "sensitivity_points": [
+     "Transit encryption latency per clinical field decryption over REST",
+     "Connection pool saturation on PgBouncer during morning login bursts"
+    ],
+    "tradeoffs": [
+     "Centralized Vault encryption enhances PHI security but adds latency overhead"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Apache Camel decouples incoming FHIR message bursts using resilience and dead-letter components, while PostgreSQL read replicas isolate EMR reads from write-heavy ingestion. However, Camel relies on an external Kafka cluster mentioned only in component descriptions rather than as a primary container.",
+    "elements": [
+     "Apache Camel Integration Service",
+     "FHIR Ingestion Route Component",
+     "Dead-Letter & Resilience Handler Component",
+     "PostgreSQL",
+     "Spring Boot Core Services"
+    ],
+    "sensitivity_points": [
+     "Throughput of batch write operations to PostgreSQL primary",
+     "Backpressure handling across the Camel ingestion pipeline"
+    ],
+    "tradeoffs": [
+     "Asynchronous FHIR ingestion protects read performance at the expense of immediate EMR consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "PostgreSQL relies on Patroni with etcd and streaming WAL replication across hybrid cloud and on-premise clusters. Because cross-region replication is asynchronous to maintain latency, guaranteeing zero data loss (RPO=0) during an unexpected cloud region failure cannot be assured without multi-region synchronous replication.",
+    "elements": [
+     "PostgreSQL",
+     "HA Orchestration",
+     "HashiCorp Vault",
+     "Enterprise Replication Component",
+     "Istio Service Mesh"
+    ],
+    "sensitivity_points": [
+     "WAN latency impact on cross-site database replication",
+     "Quorum formation in Patroni etcd across hybrid cloud boundaries"
+    ],
+    "tradeoffs": [
+     "Asynchronous replication avoids WAN write latency but risks data loss during failover"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Patroni with etcd provides automated primary database failover well under 30 seconds. Camel includes an Idempotency & Deduplication Engine backed by Redis alongside circuit breakers and dead-letter queues, ensuring in-flight claims can be safely retried without duplication or loss.",
+    "elements": [
+     "HA Orchestration",
+     "Connection Pooler",
+     "PostgreSQL Primary Instance",
+     "Apache Camel Integration Service",
+     "Idempotency & Deduplication Engine",
+     "Dead-Letter & Resilience Handler Component"
+    ],
+    "sensitivity_points": [
+     "Failover detection timeout configuration in Patroni etcd",
+     "Atomic state verification in Redis for claim deduplication"
+    ],
+    "tradeoffs": [
+     "Strict idempotency checks add minor processing latency to prevent duplicate claim submission"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Integration logic is completely decoupled from core domain services. Adding a new clearinghouse requires changes only within the Payment & Clearinghouse Adapter Component in the Apache Camel Integration Service, leaving the Spring Boot Core Services and EMR subsystems entirely unaffected.",
+    "elements": [
+     "Apache Camel Integration Service",
+     "Payment & Clearinghouse Adapter Component",
+     "EIP Mediator Component"
+    ],
+    "sensitivity_points": [
+     "Standardized internal canonical schema for claim representations in Camel",
+     "Modularity of adapter interfaces for third-party protocols"
+    ],
+    "tradeoffs": [
+     "Canonical message translation introduces transformation overhead to gain modular decoupling"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Changes are confined to the Patient Portal SPA/BFF, the Patient Management Spring component (with JPA AttributeConverters), and database migration. The Go Audit Logging container receives structured audit events asynchronously without requiring domain-level code refactoring.",
+    "elements": [
+     "React SPA & Patient Portal BFF",
+     "Patient Management",
+     "Data-Access Encryption Interceptor",
+     "PostgreSQL Primary Instance",
+     "Go Audit Logging Container"
+    ],
+    "sensitivity_points": [
+     "Flexibility of the JPA AttributeConverter schema for encrypted demographic attributes",
+     "Dynamic schema compatibility in the audit logging payload pipeline"
+    ],
+    "tradeoffs": [
+     "Field-level encryption modifications require coordinated updates between JPA entities and database schema"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Authentication is delegated to an external IdP enforcing mandatory MFA via OIDC/SAML. The Kong API Gateway Auth Plugin enforces strict token verification at the perimeter, blocking requests lacking second-factor completion and dispatching security events via the Analytics Exporter to the Go Audit Logging Container.",
+    "elements": [
+     "Identity Provider",
+     "Kong API Gateway",
+     "Auth Plugin",
+     "Analytics Exporter",
+     "Go Audit Logging Container"
+    ],
+    "sensitivity_points": [
+     "Enforcement of perimeter token validation before internal routing",
+     "Latency of real-time security event streaming to the audit logger"
+    ],
+    "tradeoffs": [
+     "Perimeter authentication verification adds slight ingress latency to enhance zero-trust security"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The Security/Masking Interceptor enforces authorization policies for medical record access. Every access event is streamed through the Event-Driven Audit Component to the Go Audit Logging Container, which writes to PostgreSQL and archives to immutable WORM Object Storage with Object Lock for 10-year compliance.",
+    "elements": [
+     "Security/Masking Interceptor",
+     "Event-Driven Audit Component",
+     "Go Audit Logging Container",
+     "Archival & Policy Manager",
+     "WORM Object Storage (MinIO/S3)"
+    ],
+    "sensitivity_points": [
+     "Completeness of interception hooks on all EMR query paths",
+     "Retention policy lock immutability on WORM storage targets"
+    ],
+    "tradeoffs": [
+     "Synchronous audit verification prevents unauthorized access but marginally degrades read throughput"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Transform and Masking Plugin",
+     "Security/Masking Interceptor",
+     "Event Validation & Sanitizer",
+     "Semantic Layer & RLS Engine",
+     "Audit & Monitoring"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "HA Orchestration",
+     "PostgreSQL Read-Replica Cluster",
+     "Istio Service Mesh"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Backup Daemon",
+     "Archival & Policy Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Management",
+     "Patient Portal SPA",
+     "Patient Portal BFF"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Engine",
+     "Distributed Lock Manager"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Core",
+     "Event-Driven Audit Component",
+     "Go Audit Logging Container"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims",
+     "Payment & Clearinghouse Adapter Component",
+     "Apache Camel Integration Service"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider",
+     "Auth Plugin",
+     "Data-Access Encryption Interceptor",
+     "Transit Secrets Engine Component",
+     "Backup Daemon"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "HA Orchestration",
+     "PostgreSQL Read-Replica Cluster",
+     "Istio Service Mesh",
+     "Enterprise Replication Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "EMR Core",
+     "PostgreSQL Read-Replica Cluster",
+     "Data Caching Module"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Ingestion Route Component",
+     "Apache Camel Integration Service",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

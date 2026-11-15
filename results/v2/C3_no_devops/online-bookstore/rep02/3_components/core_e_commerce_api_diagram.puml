@@ -1,0 +1,34 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(Amazon_API_Gateway, "Amazon API Gateway", "External gateway")
+System_Ext(Amazon_ElastiCache_Redis, "Amazon ElastiCache (Redis)", "External cache system")
+System_Ext(Amazon_Aurora_PostgreSQL, "Amazon Aurora PostgreSQL", "External database")
+System_Ext(Recommendation_Service, "Recommendation Service", "External service")
+System_Ext(Amazon_SQS, "Amazon SQS", "External queue")
+System_Ext(Amazon_EventBridge, "Amazon EventBridge", "External event bus")
+
+Container_Boundary(core_ecommerce_api, "Core E-Commerce API") {
+    Component(Catalog_Controller_Service, "Catalog Controller & Service", "NestJS", "Handles catalog browsing and product-related business logic.")
+    Component(Cart_Checkout_Engine, "Cart & Checkout Engine", "NestJS", "Manages shopping carts and secure checkout operations.")
+    Component(Currency_Conversion_Provider, "Currency Conversion Provider", "NestJS", "Handles multi-currency transactions and exchange rate computations.")
+    Component(Feature_Flag_Module, "Feature Flag Module", "AWS AppConfig / Unleash SDK", "Manages dynamic feature toggles across the application.")
+    Component(Idempotency_Interceptor, "Idempotency Interceptor", "NestJS / Redis", "Ensures idempotency for critical API requests using distributed locks.")
+    Component(Payment_Shipping_Gateway_Adapters, "Payment & Shipping Gateway Adapters", "NestJS / Circuit Breaker", "Integrates external payment and shipping services with fault-tolerance.")
+    Component(Order_Event_Publisher, "Order Event Publisher", "NestJS / Amazon EventBridge / Amazon SQS", "Publishes and queues order-related domain events.")
+}
+
+Rel(Amazon_API_Gateway, Catalog_Controller_Service, "Routes client catalog requests securely", "mTLS")
+Rel(Amazon_API_Gateway, Cart_Checkout_Engine, "Routes client cart and checkout requests securely", "mTLS")
+Rel(Cart_Checkout_Engine, Idempotency_Interceptor, "Uses for request idempotency locking", "TLS over TCP")
+Rel(Cart_Checkout_Engine, Payment_Shipping_Gateway_Adapters, "Invokes for processing payments and fulfilling orders", "")
+Rel(Cart_Checkout_Engine, Order_Event_Publisher, "Triggers order placement events", "")
+Rel(Currency_Conversion_Provider, Amazon_ElastiCache_Redis, "Caches exchange rates", "TLS over TCP")
+Rel(Idempotency_Interceptor, Amazon_ElastiCache_Redis, "Stores idempotency locks", "TLS over TCP")
+Rel(Cart_Checkout_Engine, Amazon_Aurora_PostgreSQL, "Reads/writes transactional data", "TLS over TCP")
+Rel(Catalog_Controller_Service, Amazon_Aurora_PostgreSQL, "Reads catalog data", "TLS over TCP")
+Rel(Cart_Checkout_Engine, Recommendation_Service, "Requests personalized recommendations", "gRPC")
+Rel(Order_Event_Publisher, Amazon_SQS, "Queues shipping fulfillment tasks", "AWS SDK")
+Rel(Amazon_EventBridge, Order_Event_Publisher, "Triggers event handlers", "Event Bus")
+@enduml

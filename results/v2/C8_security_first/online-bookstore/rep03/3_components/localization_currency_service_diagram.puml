@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Component(api_gateway_security, "API Gateway & Security", "AWS API Gateway, AWS WAF", "Routes internal traffic to the Localization & Currency Service via gRPC with mTLS.")
+Component_Ext(third_party_financial_apis, "Third-Party Financial APIs", "Third-Party API", "External APIs providing exchange rates and financial data.")
+
+Container_Boundary(localization_currency_service, "Localization & Currency Service") {
+    Component(currency_conversion_component, "Currency Conversion Component", "Node.js / TypeScript, AWS ECS Fargate", "Handles secure, real-time multi-currency conversion and uses circuit breakers and stale-rate caching to isolate third-party dependencies from checkout traffic.")
+    Component(exchange_rate_sync_worker, "Exchange Rate Sync Worker", "Node.js / TypeScript, AWS ECS Fargate", "Pulls rates from third-party financial APIs and retrieves credentials from AWS Secrets Manager.")
+    Component(localization_mapping_component, "Localization Mapping Component", "Node.js / TypeScript, AWS ECS Fargate", "Performs localization mapping with zero-persistence in-memory handling to guarantee strict GDPR and CCPA compliance.")
+    Component(amazon_elasticache, "Amazon ElastiCache", "Amazon ElastiCache (Redis) Global Datastore", "Enables low-latency cross-region caching, rate fallbacks, and multi-region replication across us-east-1, eu-west-1, and ap-southeast-1.")
+    Component(aws_secrets_manager, "AWS Secrets Manager", "AWS Secrets Manager", "Secures external financial API credentials with automated rotation.")
+}
+
+Rel(api_gateway_security, currency_conversion_component, "Routes internal traffic", "gRPC with mTLS")
+Rel(api_gateway_security, localization_mapping_component, "Routes internal traffic", "gRPC with mTLS")
+Rel(currency_conversion_component, amazon_elasticache, "Performs lookups", "Internal VPC Connection")
+Rel(localization_mapping_component, amazon_elasticache, "Performs lookups", "Internal VPC Connection")
+Rel(exchange_rate_sync_worker, third_party_financial_apis, "Pulls rates", "HTTPS")
+Rel(exchange_rate_sync_worker, aws_secrets_manager, "Retrieves credentials", "AWS SDK / Internal API")
+
+@enduml

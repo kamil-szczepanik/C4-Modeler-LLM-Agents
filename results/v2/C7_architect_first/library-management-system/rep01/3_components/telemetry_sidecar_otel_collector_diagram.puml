@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Telemetry Sidecar / OTEL Collector container
+
+System_Ext(CoreDomainService, "Core Domain Service", "Internal microservice")
+System_Ext(SearchService, "Search Service", "Internal microservice")
+System_Ext(AsyncWorker, "Async Worker", "Internal microservice")
+System_Ext(CentralizedObservabilityPlatform, "Centralized Observability Platform", "External monitoring platform")
+
+Container_Boundary(TelemetrySidecarOTELCollector, "Telemetry Sidecar / OTEL Collector") {
+    Component(ReceiversComponent, "Receivers Component", "OpenTelemetry Receiver Modules", "Ingests telemetry from internal microservices using Kubernetes service account tokens via OTLP/gRPC.")
+    Component(ProcessorsComponent, "Processors Component", "OTEL Processor Pipeline & Regex-based PII Scrubbing", "Sanitizes application telemetry and scrubs PII for GDPR compliance.")
+    Component(MemoryLimiterSamplerComponent, "Memory Limiter & Sampler Component", "OpenTelemetry Collector Contrib", "Manages memory utilization and sampling to preserve necessary metrics for SLAs.")
+    Component(ExportersComponent, "Exporters Component", "OTEL Exporter Modules", "Forwards processed telemetry to the Centralized Observability Platform via TLS 1.3 / mTLS and OTLP/gRPC.")
+    Component(PersistentQueueingExtension, "Persistent Queueing Extension", "Persistent File Storage Extension with Encryption at Rest", "Handles backpressure and queueing with encryption at rest.")
+    Component(PrometheusSelfMonitoringEndpoint, "Prometheus Self-Monitoring Endpoint", "Prometheus", "Provides self-monitoring metrics for the collector.")
+}
+
+Rel(CoreDomainService, ReceiversComponent, "Pushes telemetry", "OTLP/gRPC")
+Rel(SearchService, ReceiversComponent, "Pushes telemetry", "OTLP/gRPC")
+Rel(AsyncWorker, ReceiversComponent, "Pushes telemetry", "OTLP/gRPC")
+Rel(ReceiversComponent, ProcessorsComponent, "Passes raw telemetry for sanitization")
+Rel(ProcessorsComponent, MemoryLimiterSamplerComponent, "Passes processed telemetry for limiting and sampling")
+Rel(MemoryLimiterSamplerComponent, PersistentQueueingExtension, "Buffers telemetry during backpressure")
+Rel(MemoryLimiterSamplerComponent, ExportersComponent, "Sends telemetry for export")
+Rel(PersistentQueueingExtension, ExportersComponent, "Replays queued telemetry to exporters")
+Rel(ExportersComponent, CentralizedObservabilityPlatform, "Forwards processed telemetry", "TLS 1.3 / mTLS and OTLP/gRPC")
+
+@enduml

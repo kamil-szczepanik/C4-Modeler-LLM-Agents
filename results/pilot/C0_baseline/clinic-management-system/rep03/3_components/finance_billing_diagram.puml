@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Finance & Billing container
+
+System_Ext(api_gateway, "API Gateway", "Proxies requests via gRPC over mTLS")
+System_Ext(payment_gateway, "Payment Gateway", "Processes transactions and insurance claims via HTTPS REST")
+System_Ext(kafka, "Apache Kafka", "Event bus handling asynchronous invoicing and claim events")
+System_Ext(postgres, "PostgreSQL cluster", "Database utilizing table partitioning and immutable INSERT/SELECT roles")
+
+Container_Boundary(finance_and_billing, "Finance & Billing") {
+    Component(InvoiceGenerator, "InvoiceGenerator", "Spring component", "Renders itemized patient statements.")
+    Component(ClaimProcessor, "ClaimProcessor", "Spring WebFlux component", "Formats and submits ANSI X12/HL7 FHIR claims.")
+    Component(PaymentEngine, "PaymentEngine", "Spring component", "Integrates with external Payment Gateways using Resilience4j.")
+    Component(LedgerService, "LedgerService", "Spring Data JPA service", "Manages append-only, partitioned financial ledgers.")
+}
+
+Rel(api_gateway, InvoiceGenerator, "Proxies requests", "gRPC / mTLS")
+Rel(api_gateway, ClaimProcessor, "Proxies requests", "gRPC / mTLS")
+Rel(api_gateway, PaymentEngine, "Proxies requests", "gRPC / mTLS")
+Rel(api_gateway, LedgerService, "Proxies requests", "gRPC / mTLS")
+
+Rel(LedgerService, postgres, "Persists financial data", "Secure TCP/TLS")
+Rel(InvoiceGenerator, postgres, "Persists financial data", "Secure TCP/TLS")
+Rel(ClaimProcessor, postgres, "Persists financial data", "Secure TCP/TLS")
+Rel(PaymentEngine, postgres, "Persists financial data", "Secure TCP/TLS")
+
+Rel(PaymentEngine, payment_gateway, "Processes transactions and insurance claims", "HTTPS REST")
+Rel(LedgerService, kafka, "Publishes payment and invoicing events", "Transactional outbox patterns")
+@enduml

@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the AI Orchestrator & Audit Service container
+
+System_Ext(api_gateway, "API Gateway", "Routes external requests")
+System_Ext(ai_inference, "External AI Inference Service", "External AI model provider")
+System_Ext(regional_storage, "Regional Data Storage", "Cloud SQL, BigQuery, Google Cloud Storage Bucket Lock")
+System_Ext(cloud_kms, "Google Cloud KMS", "Key Management Service for envelope encryption and crypto-shredding")
+
+Container_Boundary(ai_orchestrator_container, "AI Orchestrator & Audit Service") {
+    Component(api_router, "API Router & Sanitizer Component", "Python/FastAPI", "Routes AI symptom checking and audit requests and provides local PII sanitization.")
+    Component(orchestration_engine, "Orchestration Engine Component", "Python/Go", "Orchestrates traceable AI triage and orchestrates requests.")
+    Component(audit_worm_writer, "Audit & WORM Writer Component", "Go", "Writes immutable audit logs via WORM storage and BigQuery.")
+    Component(consent_worker, "Consent-Aware Retention Worker Component", "Python/Go", "Executes crypto-shredding of encryption keys for consent revocation.")
+}
+
+Rel(api_gateway, api_router, "Routes AI symptom checking and audit requests", "gRPC / mTLS")
+Rel(api_router, ai_inference, "Sends sanitized prompts for urgency recommendations", "gRPC")
+Rel(api_router, orchestration_engine, "Forwards sanitized prompts for urgency recommendations", "Internal")
+Rel(orchestration_engine, audit_worm_writer, "Sends triage audit events", "Internal")
+Rel(audit_worm_writer, regional_storage, "Writes immutable audit logs", "WORM storage / BigQuery")
+Rel(consent_worker, cloud_kms, "Executes crypto-shredding of encryption keys", "API")
+
+@enduml

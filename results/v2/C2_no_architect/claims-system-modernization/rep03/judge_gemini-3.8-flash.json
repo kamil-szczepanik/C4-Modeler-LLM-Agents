@@ -1,0 +1,302 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 via 'Claim Submission and Management Controller', R-02 through 'Adjuster Dashboard Controller', and R-03 using the 'Traffic Splitter and Router' alongside 'Data Sync & Reconciliation Jobs' to manage incremental, claim-type by claim-type migration.",
+   "performance_efficiency": "R-05 is explicitly addressed by decoupling mainframe latency using 'Azure Cache / Local Caching Layer' ('Redis Cache Client') for sub-2-second adjuster reads, and offloading mutations asynchronously through 'Azure Service Bus' to prevent 5-second mainframe response delays from blocking user interfaces.",
+   "compatibility": "The architecture facilitates coexistence with the legacy mainframe via 'Data Sync & Reconciliation Jobs' and 'Legacy Integration Service' over mTLS. However, concrete mechanisms respecting the tight nightly batch window (23:00-05:00) and limiting mainframe interface churn to quarterly updates are minimally specified.",
+   "usability": "Distinct user personas (Customer, Broker, Claims Adjuster) are served by tailored components in 'Modern Web Application', including the React-based 'Adjuster Dashboard Controller' and dedicated submission controllers, though broker-specific workflow nuances are consolidated into a single submission controller.",
+   "reliability": "Reliability and zero data loss (R-04) are supported by 'Azure Service Bus & Dead-Letter Queues (DLQ)', 'Circuit Breaker', and 'Data Sync & Reconciliation Jobs'. However, explicit exactly-once processing mechanisms (e.g., deduplication IDs, idempotency tables) are not thoroughly detailed.",
+   "security": "R-07 is fully met by 'Edge JWT Validator' enforcing Azure Active Directory SSO and RBAC. Hybrid boundary traffic is secured with mTLS and certificate pinning, while 'Azure Key Vault & Managed Identities' safeguards secrets and manages customer-managed encryption keys.",
+   "maintainability": "The 'Traffic Splitter and Router' enables switching claim types back to the mainframe within one day (R-06). Modularity is strong with isolated containers. However, leveraging numerous advanced Azure services adds complexity for a team with noted limited cloud experience.",
+   "portability": "The design satisfies the hybrid deployment requirement spanning 'azure-westeurope' and 'on-prem-mainframe'. Portability is limited by tight coupling to proprietary Azure platform services ('Azure Service Bus', 'Azure Application Gateway', 'Azure Key Vault'), though Azure was the designated cloud provider."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 2.5,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The Redis caching layer and Caching Manager decouple UI responses from slow mainframe calls. However, cold cache misses on legacy data could still breach the 2-second threshold unless proactive pre-fetching is implemented.",
+    "elements": [
+     "Modern Web Application",
+     "Adjuster Dashboard Controller",
+     "Caching Manager",
+     "Azure Cache / Local Caching Layer",
+     "Redis Cache Client"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio for legacy claim data"
+    ],
+    "tradeoffs": [
+     "Data freshness versus sub-2-second retrieval latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Azure Service Bus acts as a buffer to absorb peak online submission bursts, decoupling web traffic from the mainframe and preventing any overload or extension of the nightly batch window.",
+    "elements": [
+     "API Gateway / Ingress Controller",
+     "Modern Web Application",
+     "Azure Service Bus",
+     "Claim Message Queue",
+     "Data Sync & Reconciliation Jobs"
+    ],
+    "sensitivity_points": [
+     "Message queue depth and batch throttling rate to the mainframe"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission processing versus immediate confirmation from system of record"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Azure Service Bus Claim Message Queue buffers online claim submissions during the mainframe batch window. Data Sync & Reconciliation Jobs resume forwarding once the batch window concludes without lost submissions.",
+    "elements": [
+     "Modern Web Application",
+     "Azure Service Bus",
+     "Claim Message Queue",
+     "Data Sync & Reconciliation Jobs",
+     "COBOL/DB2 Mainframe System of Record"
+    ],
+    "sensitivity_points": [
+     "Service bus message retention duration during extended batch outages"
+    ],
+    "tradeoffs": [
+     "Eventual consistency for online submissions versus mainframe processing window"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The architecture provides Dead-Letter Queues and reconciliation jobs to catch and retry failed synchronization. However, explicit idempotency mechanisms and deduplication stores to prevent double-processing are not fully defined.",
+    "elements": [
+     "Data Sync & Reconciliation Jobs",
+     "Azure Service Bus & Dead-Letter Queues (DLQ)",
+     "Azure Monitor & Azure Sentinel",
+     "COBOL/DB2 Mainframe System of Record"
+    ],
+    "sensitivity_points": [
+     "Dead-letter queue alerting and automated reconciliation job idempotency"
+    ],
+    "tradeoffs": [
+     "Reconciliation job recovery complexity versus mainframe transaction simplicity"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Traffic Splitter enables rapid route switching within one day. However, the architecture omits an operational cloud database to persist migrated claims, making migration of claim types incomplete and high risk.",
+    "elements": [
+     "API Gateway / Ingress Controller",
+     "Traffic Splitter and Router",
+     "Migration Administrator",
+     "Modern Web Application",
+     "Business/Migration Analytics Container"
+    ],
+    "sensitivity_points": [
+     "Routing rule configuration speed and lack of a modern cloud database"
+    ],
+    "tradeoffs": [
+     "Traffic-level rollback speed versus dual-write data synchronization overhead"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "While UI components are decoupled via controllers, the architecture has no cloud operational database. Switching off the mainframe is impossible without adding a persistent database layer and rewriting backend integration services.",
+    "elements": [
+     "Modern Web Application",
+     "Claim Submission and Management Controller",
+     "Legacy Integration Service",
+     "COBOL/DB2 Mainframe System of Record"
+    ],
+    "sensitivity_points": [
+     "Absence of an operational cloud data store in the container model"
+    ],
+    "tradeoffs": [
+     "Separation of UI from mainframe versus complete absence of target persistence"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Edge JWT Validator enforces identity at the edge, but there is no explicit broker-to-customer claim-level authorization (ABAC/RBAC) mechanism or security audit logging to deny and record cross-broker access attempts.",
+    "elements": [
+     "API Gateway / Ingress Controller",
+     "Edge JWT Validator",
+     "Modern Web Application",
+     "Claim Submission and Management Controller"
+    ],
+    "sensitivity_points": [
+     "Broker authorization policy enforcement at the application controller level"
+    ],
+    "tradeoffs": [
+     "Centralized edge authentication versus granular domain-level data authorization"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Azure AD SSO integration allows adjusters credentials to be disabled centrally. Because adjusters access only the modern UI via the gateway, mainframe access is prevented, provided JWT lifetimes are configured within 15 minutes.",
+    "elements": [
+     "API Gateway / Ingress Controller",
+     "Edge JWT Validator",
+     "Claims Adjuster"
+    ],
+    "sensitivity_points": [
+     "JWT access token expiration time and revocation list propagation"
+    ],
+    "tradeoffs": [
+     "Stateless token validation performance versus immediate token revocation enforcement"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7272727272727273,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "COBOL/DB2 Mainframe System of Record",
+     "Data Sync & Reconciliation Jobs"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none"
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none"
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none"
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer",
+     "Broker",
+     "API Gateway / Ingress Controller",
+     "Modern Web Application",
+     "Claim Submission and Management Controller"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjuster",
+     "Modern Web Application",
+     "Adjuster Dashboard Controller"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Migration Administrator",
+     "Traffic Splitter and Router",
+     "Business/Migration Analytics Container"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Data Sync & Reconciliation Jobs",
+     "Azure Service Bus",
+     "Claim Message Queue",
+     "Azure Service Bus & Dead-Letter Queues (DLQ)"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Adjuster Dashboard Controller",
+     "Caching Manager",
+     "Azure Cache / Local Caching Layer",
+     "Cache Manager",
+     "Redis Cache Client"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Traffic Splitter and Router",
+     "Dry-Run Simulation & Analytics Processor",
+     "Migration Administrator"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "API Gateway / Ingress Controller",
+     "Edge JWT Validator"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

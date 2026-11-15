@@ -1,0 +1,362 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are addressed comprehensively: PatientRegistration and Scheduling Engine Component handle admissions and scheduling clash checks, EMR Service with Audit Logging Service covers EMR with audit trails, and Billing & Claims Service with Insurance Gateway Adapter fulfills billing and claim submissions.",
+   "performance_efficiency": "The sub-second P95 target is supported by Distributed Cache (Redis) via Cache-Aside Manager, PgBouncer connection pooling, Async Message Broker (Kafka) for background workloads, and client-side IndexedDB caching in Offline/Cache Manager.",
+   "compatibility": "Interoperability is thoroughly supported by FHIR Integration Broker, featuring FHIR API Route Engine and Data Transformation Processor to exchange HL7 FHIR with External Labs & Imaging Systems, alongside dedicated adapters for Insurance Payment Gateway.",
+   "usability": "All specified actors (Doctor, Nurse, Receptionist, Billing Officer, Patient, Auditor) are supported through dedicated Frontend Web App modules (e.g., EMREditor, AppointmentScheduler, BillingModule) and specialized interfaces like Audit Query & Export Gateway.",
+   "reliability": "High availability includes Patroni failover in Patient DB, MongoDB 3-node replica sets, Circuit Breaker & Fallback Handler, and Redis WAN replication. However, true active-active multi-region synchronization for relational databases is only partially detailed with primary-standby configurations.",
+   "security": "HIPAA/GDPR requirements are met via AES-256 at rest across datastores, Field-Level Encryption Interceptor, State Encryption Wrapper, Identity & Access Proxy with OPA PEP and MFA/OIDC, and 10-year immutable retention via MinIO/S3 Object Lock WORM storage.",
+   "maintainability": "The architecture exhibits modular microservice decomposition with clear bounded domains (Patient & Scheduling, EMR, Billing, FHIR Broker). Schema Registry, domain event publishing, and clear component separation promote low coupling and testability.",
+   "portability": "The system supports the hybrid target (on-prem-k8s and eu-central-1) using containerized standard stacks and multi-target technologies (AWS S3/MinIO WORM, Kafka/RabbitMQ), though deployment definitions for hybrid orchestration remain largely implicit."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.90625,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture incorporates Redis distributed caching, Cache-Aside Manager in the EMR Service, and WiredTiger native caching, directly decoupling read traffic and comfortably serving 500 concurrent clinicians under 1 second P95.",
+    "elements": [
+     "Distributed Cache",
+     "EMR Service",
+     "Cache-Aside Manager",
+     "EMR DB",
+     "Frontend Web App"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in Distributed Cache",
+     "Redis serialization and deserialization overhead"
+    ],
+    "tradeoffs": [
+     "Cache consistency versus sub-second read performance",
+     "Memory footprint of Redis cluster versus storage cost"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The FHIR Integration Broker asynchronously publishes incoming payloads to Kafka, buffering the burst of 10,000 messages. Background ingestion isolates the write load from EMR read queries served via the cache.",
+    "elements": [
+     "FHIR Integration Broker",
+     "Async Message Broker",
+     "Data Transformation Processor",
+     "Distributed Cache",
+     "EMR DB"
+    ],
+    "sensitivity_points": [
+     "Kafka partition throughput and consumer concurrency",
+     "Transformation pipeline efficiency in Apache Camel"
+    ],
+    "tradeoffs": [
+     "Eventual consistency for newly ingested lab results versus immediate availability",
+     "Broker queue buffering overhead versus direct synchronous insertion"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture designates the API Gateway and transactional scheduling services as AWS-hosted without an on-premises redundant gateway or global traffic routing mechanism, making 1-minute failover during a cloud region outage impossible as designed.",
+    "elements": [
+     "API Gateway / Edge Proxy",
+     "Scheduling & Billing Services",
+     "Transactional Datastore",
+     "Distributed Cache"
+    ],
+    "sensitivity_points": [
+     "Global DNS routing and failover detection latency",
+     "Cross-site active-active state synchronization"
+    ],
+    "tradeoffs": [
+     "Hybrid multi-region operational complexity versus cost of single cloud entry",
+     "Cross-cloud data consistency latency versus localized autonomy"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Patient DB utilizes Patroni and etcd for automated leader election and failover within seconds. Billing & Claims Service integrates Polly retry policies and message broker background processing to prevent lost or duplicate claims.",
+    "elements": [
+     "Patient DB",
+     "Failover Coordinator",
+     "Primary DB Instance",
+     "Billing & Claims Service",
+     "Insurance Gateway Adapter"
+    ],
+    "sensitivity_points": [
+     "Patroni heartbeat timeout and failover window duration",
+     "Idempotency token validation in claim transactions"
+    ],
+    "tradeoffs": [
+     "Synchronous database replication latency versus zero data loss on failover",
+     "Aggressive retry policy overhead versus fast claim recovery"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "External billing gateways are completely isolated inside the Insurance Gateway Adapter component of the Billing & Claims Service. The EMR Service is decoupled via domain boundaries and async messaging, remaining entirely untouched.",
+    "elements": [
+     "Billing & Claims Service",
+     "Insurance Gateway Adapter",
+     "Async Message Broker",
+     "EMR Service"
+    ],
+    "sensitivity_points": [
+     "Abstraction level of the gateway adapter interface",
+     "Standardization of internal billing data models"
+    ],
+    "tradeoffs": [
+     "Maintenance of dedicated adapter abstractions versus direct third-party SDK calls",
+     "Loose coupling flexibility versus uniform protocol standardization"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Modifications are restricted to three components: PatientRegistration in the UI, Patient Management Controller in the service, and the Patient DB schema. The Audit Interceptor automatically captures changes without touching core business logic.",
+    "elements": [
+     "PatientRegistration",
+     "Patient Management Controller",
+     "Patient DB",
+     "Audit Interceptor Component"
+    ],
+    "sensitivity_points": [
+     "AOP transparency in capturing modified demographic fields",
+     "Database schema migration tooling agility"
+    ],
+    "tradeoffs": [
+     "Strict relational schema validation versus schemaless document flexibility",
+     "AOP interceptor runtime reflection overhead versus declarative auditing simplicity"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The Identity & Access Proxy enforces MFA integration with the external IdP. Unauthorized or missing factor attempts fail at the Token Validator/PEP, and the Audit Interceptor immediately forwards security alert events via Fluentbit.",
+    "elements": [
+     "Identity & Access Proxy",
+     "Token Validator Component",
+     "Policy Enforcement Point (PEP)",
+     "Audit Interceptor",
+     "Audit & Compliance Log Shipper"
+    ],
+    "sensitivity_points": [
+     "JWKS caching and token validation latency",
+     "Log shipper transmission buffer latency"
+    ],
+    "tradeoffs": [
+     "Strict perimeter authentication latency versus security enforcement strength",
+     "Immediate audit flushing network overhead versus buffered batch throughput"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The Policy Enforcement Point checks relationship context per request. Every read triggers the Audit Event Dispatcher, which ships HMAC-signed logs to WORM S3/MinIO Object Lock storage configured for 10-year retention.",
+    "elements": [
+     "Policy Enforcement Point (PEP)",
+     "EMR Service",
+     "Audit Event Dispatcher",
+     "Audit & Compliance Log Shipper",
+     "Audit Data Store"
+    ],
+    "sensitivity_points": [
+     "Completeness of read interception across all EMR endpoints",
+     "WORM retention policy enforcement and immutability guarantees"
+    ],
+    "tradeoffs": [
+     "Read throughput overhead for 100% audit logging versus security compliance",
+     "Long-term WORM storage retention costs versus regulatory compliance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Field-Level Encryption (FLE) Interceptor",
+     "PHI Masking & Tokenization Engine",
+     "State Encryption Wrapper",
+     "Audit & Compliance Log Shipper",
+     "Audit Interceptor Component",
+     "Row-Level Security Policy Engine",
+     "Encryption Manager",
+     "Audit Data Store",
+     "Data Masking & Retention Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Failover Coordinator",
+     "3-node Replica Sets",
+     "Cache Cluster Manager",
+     "Read Replica",
+     "Circuit Breaker & Fallback Handler",
+     "Offline/Cache Manager"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Audit Data Store",
+     "Object Storage Engine",
+     "Lifecycle Management Policy Engine"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "PatientRegistration",
+     "Patient & Scheduling Service",
+     "Patient Management Controller",
+     "Patient DB"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "AppointmentScheduler",
+     "Patient & Scheduling Service",
+     "Scheduling Engine Component",
+     "Distributed Cache",
+     "Patient DB"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMREditor",
+     "EMR Service",
+     "Clinical Record Manager",
+     "EMR DB",
+     "Change Streams",
+     "Audit Event Dispatcher",
+     "Audit & Compliance Log Shipper",
+     "Audit Data Store"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "BillingModule",
+     "Billing & Claims Service",
+     "Claim Processing Engine",
+     "Insurance Gateway Adapter",
+     "Insurance Payment Gateway"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity & Access Proxy",
+     "Token Validator Component",
+     "Encryption Manager",
+     "WiredTiger Engine",
+     "Key Management Service",
+     "Data Encryption Module",
+     "State Encryption Wrapper"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Distributed Cache",
+     "WAN Replication & Tunneling Module",
+     "Cache Cluster Manager",
+     "Failover Coordinator",
+     "3-node Replica Sets"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "EMREditor",
+     "Distributed Cache",
+     "In-Memory Storage Engine",
+     "Cache-Aside Manager",
+     "EMR Service"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Integration Broker",
+     "FHIR API Route Engine",
+     "FHIR Security & Validation Interceptor",
+     "Data Transformation Processor",
+     "FHIR Outbound Dispatcher",
+     "External Labs & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

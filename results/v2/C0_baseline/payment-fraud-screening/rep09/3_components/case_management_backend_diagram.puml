@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Case Management Backend container
+
+Person(Web Application, "Web Application", "Web Frontend", "Sends REST/JSON requests over HTTPS to the Case Management API Controller.")
+
+System_Boundary(case_management_backend, "Case Management Backend") {
+    Component(CaseManagementAPIController, "Case Management API Controller", "Spring MVC", "Handles incoming REST/JSON requests over HTTPS from the Web Application.")
+    Component(WorkflowAssignmentService, "Workflow & Assignment Service", "Spring Boot / Java", "Manages SLA-driven queues, case states, and core business logic.")
+    Component(DataAccessRepository, "Data Access Repository", "Spring Data JPA", "Executes queries and persists case states to the database.")
+    Component(AuditLedgerClient, "Audit Ledger Client", "Spring Boot / Java", "Dispatches audit records for tamper-evident logging.")
+    Component(MetricsTelemetryInterceptor, "Metrics & Telemetry Interceptor", "Micrometer/Prometheus", "Collects metrics and telemetry data for monitoring.")
+}
+
+System_Ext(AWSAuroraPostgreSQL, "AWS Aurora PostgreSQL", "Database", "Relational storage persisting case states with KMS encryption for PCI-DSS compliance.")
+System_Ext(AmazonSQS, "Amazon SQS", "Message Queue", "Receives cryptographically chained audit events published by the Audit Ledger Client.")
+
+Rel(Web Application, CaseManagementAPIController, "Sends REST/JSON requests over HTTPS", "HTTPS")
+Rel(CaseManagementAPIController, WorkflowAssignmentService, "Invokes business logic", "In-process")
+Rel(WorkflowAssignmentService, DataAccessRepository, "Executes queries", "JPA/JDBC over TLS 1.3")
+Rel(DataAccessRepository, AWSAuroraPostgreSQL, "Persists case states", "JDBC/TLS with AWS IAM Auth")
+Rel(WorkflowAssignmentService, AuditLedgerClient, "Dispatches audit records", "In-process")
+Rel(AuditLedgerClient, AmazonSQS, "Publishes cryptographically chained audit events", "AWS SDK over HTTPS")
+
+@enduml

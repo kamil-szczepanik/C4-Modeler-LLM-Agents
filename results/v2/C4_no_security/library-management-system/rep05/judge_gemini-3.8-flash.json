@@ -1,0 +1,241 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 and the brief via 'Catalog & Search Service', which interfaces with 'Digital Content Repositories and Publishers', 'Circulation Service' handling loans and fines, and 'Patron Web Portal' alongside 'Staff Management Portal' providing comprehensive self-service and management capabilities.",
+   "performance_efficiency": "Meeting R-05 (<800 ms search) is directly supported by 'Elasticsearch Cluster', low-latency 'gRPC' routing between 'Core API Gateway' and 'Catalog & Search Service', and offloading write workloads through asynchronous 'RabbitMQ' messaging and 'Preference Cache Component'.",
+   "compatibility": "The design provides dedicated integration points for external standards and systems including 'External Academic Identity Federation' (SAML/EduPerson), 'Identity Provider' (OAuth2/OIDC), 'Payment Gateway', and 'Digital Content Repositories and Publishers' using standard REST and SAML protocols.",
+   "usability": "Target audiences are explicitly served by tailored frontends: library patrons use 'Patron Web Portal' with discovery and account dashboard components, while staff and administrators use 'Staff Management Portal' with dedicated cataloging, circulation, and admin modules.",
+   "reliability": "Fault tolerance and recoverability are thoroughly addressed with 'Circuit Breaker' (Resilience4j, SmallRye, Opossum), 'RabbitMQ' featuring 'Quorum Queue Instances' with Raft replication, 'Dead-Letter Exchanges', and transactional durability provided by 'PostgreSQL'.",
+   "security": "EU data residency constraints are addressed with EU-hosted data stores. Security is enforced via 'Security and JWT Validator', 'Authentication & Authorization Guard', distributed rate limiting, and transport encryption across all services ('AMQP over TLS', 'JDBC over TLS', 'HTTPS').",
+   "maintainability": "The system exhibits clean domain separation into independent microservices ('Catalog & Search Service', 'Circulation Service', 'Notification Worker'). Tracing and diagnostics are unified via 'OpenTelemetry' and 'Centralized Observability Platform'.",
+   "portability": "Containers ('Kubernetes StatefulSets', React/Nginx, Quarkus, Spring Boot) ensure strong deployment portability across cloud or on-premise environments, though specific cloud vendor configuration abstractions for managed EU infrastructure are left unspecified."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.625,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 2.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Dedicated Elasticsearch cluster and gRPC communication between Gateway and Catalog service support sub-800ms searches. However, no query caching tier is documented to safeguard against extreme spikes.",
+    "elements": [
+     "Core API Gateway",
+     "API Route Controller",
+     "Catalog & Search Service",
+     "Search API Controller",
+     "Search Query Engine",
+     "Elasticsearch Cluster"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch index sizing, replica count, and gRPC latency between gateway and service."
+    ],
+    "tradeoffs": [
+     "Elasticsearch indexing resource consumption balanced against high-throughput search response times."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalog mutations are published asynchronously over RabbitMQ and ingested by Catalog Indexer without blocking search queries, keeping search P99 intact while easily achieving 5-minute search visibility.",
+    "elements": [
+     "Catalog & Search Service",
+     "Catalog Indexer",
+     "Search Query Engine",
+     "Elasticsearch Cluster",
+     "RabbitMQ",
+     "Exchange Routing Layer"
+    ],
+    "sensitivity_points": [
+     "Message queue ingestion throughput and Elasticsearch index refresh interval settings."
+    ],
+    "tradeoffs": [
+     "Near real-time eventual consistency chosen over immediate strong transactional consistency."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Elasticsearch runs on Kubernetes StatefulSets, and circulation transactions are fully decoupled into an independent Quarkus/PostgreSQL container with circuit breakers, preventing loan failures during search outages.",
+    "elements": [
+     "Catalog & Search Service",
+     "Elasticsearch Cluster",
+     "Circuit Breaker",
+     "Circulation Service",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch replica distribution across Kubernetes nodes and persistent volume failover speed."
+    ],
+    "tradeoffs": [
+     "Clustered search index storage overhead traded for high availability and failover resilience."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Patron Web Portal is stateless React/Nginx fronting a stateless API Gateway with JWT validation, allowing immediate redirection across replicas without dropping ongoing loan transactions.",
+    "elements": [
+     "Patron Web Portal",
+     "Core API Gateway",
+     "Security and JWT Validator",
+     "Circulation Service",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Load balancer health check intervals and fast client-side session retry capabilities."
+    ],
+    "tradeoffs": [
+     "Client-side statelessness requires repeated JWT verification on incoming gateway requests."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "While external publishers are identified at Context and Container levels, Catalog & Search Service lacks a dedicated ingestion adapter or connector architecture to isolate new provider integrations.",
+    "elements": [
+     "Digital Content Repositories and Publishers",
+     "Catalog & Search Service",
+     "Catalog Indexer"
+    ],
+    "sensitivity_points": [
+     "Coupling between external provider schemas and internal catalog ingestion models."
+    ],
+    "tradeoffs": [
+     "Generic ingestion components reduce container count but increase coupling during format modifications."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "Circulation rules are hardwired into Quarkus CDI Beans (Loan Management Component). No dynamic rule engine, external policy service, or configurable parameter repository exists for zero-downtime runtime reconfiguration.",
+    "elements": [
+     "Circulation Service",
+     "Loan Management Component",
+     "Fine & Fee Component"
+    ],
+    "sensitivity_points": [
+     "Embedded CDI bean logic requiring code modifications and recompilation for rule updates."
+    ],
+    "tradeoffs": [
+     "Compiled business logic ensures fast execution but sacrifices runtime configuration flexibility."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Internal storage explicitly mandates EU deployment, but third-party SaaS services (SendGrid, Twilio, Stripe) receive payload data without explicit architectural boundaries or EU-only proxy enforcement.",
+    "elements": [
+     "Notification Worker",
+     "Notification Service",
+     "Payment Gateway",
+     "PostgreSQL",
+     "Core API Gateway"
+    ],
+    "sensitivity_points": [
+     "Payload filtering and data routing before dispatching alerts or payment requests externally."
+    ],
+    "tradeoffs": [
+     "Using global external SaaS providers increases functionality while complicating strict regional data residency."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Stateless JWT authentication occurs at the Gateway, and OpenTelemetry logs requests to the Centralized Observability Platform. However, row-level authorization logic is not explicitly defined in the circulation components.",
+    "elements": [
+     "Core API Gateway",
+     "Security and JWT Validator",
+     "Circulation API Resource",
+     "OpenTelemetry",
+     "Centralized Observability Platform"
+    ],
+    "sensitivity_points": [
+     "Enforcement of patron claim-to-resource ownership mapping within the Circulation API Resource."
+    ],
+    "tradeoffs": [
+     "Centralized gateway authentication offloads token verification but defers object-level authorization downstream."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Rate Limiter",
+     "Notification History Store Component",
+     "Centralized Observability Platform"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Digital Content Repositories and Publishers",
+     "Staff Management Portal",
+     "Core Feature Modules",
+     "Catalog & Search Service",
+     "Catalog Indexer"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Core API Gateway",
+     "Catalog & Search Service",
+     "Search API Controller",
+     "Search Query Engine",
+     "Elasticsearch Cluster"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

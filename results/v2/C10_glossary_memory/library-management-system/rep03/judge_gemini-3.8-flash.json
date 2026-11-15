@@ -1,0 +1,231 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "Cataloging and circulation are addressed by 'Catalog & Search Service' and 'Circulation Service', with patron self-service via 'Web Application / SPA'. However, specific mechanisms differentiating physical versus digital item handling (e.g., digital asset access or licensing) are not explicitly detailed.",
+   "performance_efficiency": "The sub-800ms p99 search target is explicitly addressed by decoupling search into 'Search Query Engine' backed by 'Elasticsearch Index', complemented by asynchronous indexing via 'Index Synchronization Worker' and database connection pooling with 'PgBouncer'.",
+   "compatibility": "The architecture defines explicit interfaces with external systems: 'Identity Provider' via OIDC/OAuth2, and 'Payment Gateway' and 'Notification Provider' via HTTPS/REST, alongside gRPC and AMQP/Kafka protocols across internal containers.",
+   "usability": "Patrons, Librarians, and Administrators interact via the 'Web Application / SPA', where 'UI Framework Core' provides role-based feature toggling and specialized views. However, administrative management interfaces remain bundled into a single web front-end without specialized sub-portals.",
+   "reliability": "Reliability is well addressed through 'Patroni' for automated failover across availability zones, continuous WAL archiving and point-in-time recovery via 'Barman / WAL-G', and fault-tolerant asynchronous event distribution via 'Kafka Event Bus'.",
+   "security": "Security is thoroughly enforced with TLS 1.3 at edge, mTLS across all inter-service communications, OIDC validation and rate limiting at 'API Gateway', EU data residency controls, and dedicated tracking via 'Audit Service' and 'pgAudit'.",
+   "maintainability": "Domain responsibilities are cleanly separated into modular containers (Catalog, Circulation, Audit). However, some component diagrams redundantly re-declare other top-level containers (like Database and API Gateway) as local components, slightly confusing structural boundaries.",
+   "portability": "The use of portable, container-friendly stacks (Node.js, Spring Boot, Go, PostgreSQL, Kafka) enables flexible deployment across any EU-compliant cloud provider or on-premises infrastructure to satisfy the EU data residency constraint."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.65625,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 2.5,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The dedicated Catalog & Search Service utilizes a decoupled Elasticsearch index and gRPC communication behind an Envoy/NGINX gateway, directly supporting high-throughput, low-latency search requests below 800 ms.",
+    "elements": [
+     "API Gateway",
+     "Catalog & Search Service",
+     "Search Query Engine",
+     "Elasticsearch Index"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster capacity and index shard configuration",
+     "gRPC connection pooling between Gateway and Search Service"
+    ],
+    "tradeoffs": [
+     "Search speed optimized via Elasticsearch at the cost of eventual data consistency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Updates are committed to PostgreSQL and asynchronously indexed into Elasticsearch via Kafka and the Index Synchronization Worker, isolating search traffic from ingestion load well within the 5-minute window.",
+    "elements": [
+     "Catalog Management API",
+     "Database",
+     "Index Synchronization Worker",
+     "Message Broker",
+     "Elasticsearch Index"
+    ],
+    "sensitivity_points": [
+     "Kafka message delivery latency and worker indexing throughput"
+    ],
+    "tradeoffs": [
+     "Eventual index consistency traded against transactional write latency and search responsiveness"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Circulation operations are isolated in a separate service backed by PostgreSQL with Patroni HA failover, remaining fully operational during search index issues.",
+    "elements": [
+     "Circulation Service",
+     "Database",
+     "HA Failover Manager",
+     "Elasticsearch Index"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch replica count and automated shard reallocation time"
+    ],
+    "tradeoffs": [
+     "Cluster redundancy costs versus sub-minute search availability guarantees"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The SPA is client-side rendered and routed through an edge proxy/load balancer, allowing immediate rerouting without compromising active transactional backend states in the database.",
+    "elements": [
+     "Web Application / SPA",
+     "API Gateway",
+     "Edge Router & Reverse Proxy",
+     "Circulation Service"
+    ],
+    "sensitivity_points": [
+     "Load balancer health check intervals and failover reaction times"
+    ],
+    "tradeoffs": [
+     "Stateless client architecture trades client cache overhead for instant failover capability"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "The architecture lacks a specialized integration adapter or connector layer for external providers, requiring changes directly inside the Catalog Management API or Index Synchronization Worker.",
+    "elements": [
+     "Catalog Management API",
+     "Index Synchronization Worker",
+     "Catalog & Search Service"
+    ],
+    "sensitivity_points": [
+     "Coupling between external provider data schemas and core catalog models"
+    ],
+    "tradeoffs": [
+     "Direct API integration reduces development overhead but harms pluggability for new providers"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "Business rules are hardcoded in the NestJS Loan Management Service without an external rules engine, policy store, or dynamic configuration mechanism, necessitating code redeployment to modify policies.",
+    "elements": [
+     "Circulation Service",
+     "Loan Management Service"
+    ],
+    "sensitivity_points": [
+     "Hardcoded rule dependencies within loan business logic"
+    ],
+    "tradeoffs": [
+     "Hardcoding rules simplifies initial architecture but severely restricts runtime reconfigurability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Internal components specify EU data residency, but there are no architectural controls, geofencing, or validation policies preventing external integrations like Notification or Payment providers from routing patron data outside the EU.",
+    "elements": [
+     "Kafka Event Bus",
+     "Audit Database",
+     "Notification Provider",
+     "Payment Gateway"
+    ],
+    "sensitivity_points": [
+     "Third-party external service geographic data handling policies"
+    ],
+    "tradeoffs": [
+     "Using external SaaS solutions trades implementation ease for geographic compliance risks"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "OIDC validation occurs at the Gateway, PostgreSQL implements row-level security, and failed/unauthorized access events are audited via pgAudit and the dedicated Audit Service.",
+    "elements": [
+     "Rate Limiter & Auth Validator",
+     "Circulation Controller",
+     "Relational Data Store",
+     "Audit Logging Module",
+     "Audit Service"
+    ],
+    "sensitivity_points": [
+     "Row-level security policy correctness in PostgreSQL"
+    ],
+    "tradeoffs": [
+     "Detailed audit logging and database RLS enforcement incur query processing overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.6666666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Library Management System",
+     "Kafka Event Bus",
+     "Audit Database"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Catalog & Search Service",
+     "Catalog Management API",
+     "Web Application / SPA"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Service",
+     "Search Query Engine",
+     "Elasticsearch Index"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

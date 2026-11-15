@@ -1,0 +1,247 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 via 'Catalogue Manager Component' handling physical and digital items, integrated with 'Digital Content Repositories'. Circulation and patron self-service needs are addressed through 'Circulation Manager Component' and 'Client-Side SPA'.",
+   "performance_efficiency": "Target R-05 (<800ms P99 search) is directly supported by 'Search Service' using 'Caching Layer' (Redis), asynchronous updates via 'RabbitMQ Message Broker', and an 'Elasticsearch Cluster' provisioned with NVMe storage.",
+   "compatibility": "Well-defined integration points exist with 'External Payment Gateway' and 'Digital Content Repositories' using mTLS over HTTPS with OIDC SSO. Internal services communicate via standardized protocols including gRPC, AMQP 0-9-1, and REST.",
+   "usability": "Both 'Library Patrons' and 'Library Staff' are served via 'Client-Side SPA' providing public portals and staff management workflows. However, specific self-service portal accessibility or kiosk interfaces are not detailed.",
+   "reliability": "Reliability is thoroughly addressed using 'Patroni with etcd' automated failover, PostgreSQL read replicas, 'Quorum Queue Component' (Raft consensus) with 'Dead Letter Router Component', and gateway circuit breakers.",
+   "security": "EU data residency constraints are enforced at the storage and cluster levels. The system implements mTLS, 'Authentication Filter' (Kong OIDC), method-level authorization in 'Security Interceptor Component', LUKS encryption, and audit tracking via 'pgaudit'.",
+   "maintainability": "Maintains low coupling and high cohesion through decomposed services ('Core Domain Service', 'Search Service', 'Notification Service') and clean internal layering (managers, repositories, and event publishers).",
+   "portability": "Components leverage standard, portable runtimes (FastAPI, Spring Boot, Node.js, Nginx) deployable onto Kubernetes in EU regions, though cloud-agnostic infrastructure definitions are not explicitly outlined."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 3,
+   "MOD-02": 3,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 3.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The dedicated Search Service featuring an in-memory Redis caching layer, asynchronous FastAPI Query Pipeline, and clustered Elasticsearch on NVMe nodes directly provides sub-800ms P99 query latency under high concurrent load.",
+    "elements": [
+     "API Gateway",
+     "Routing Engine (Kong Proxy)",
+     "Search Service",
+     "Search API Controller",
+     "Query Pipeline Processor",
+     "Caching Layer",
+     "Search Repository",
+     "Elasticsearch Cluster"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio for popular catalogue search queries.",
+     "Elasticsearch query parsing and shard indexing performance."
+    ],
+    "tradeoffs": [
+     "Cache consistency versus immediate query response times."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "CQRS separation decouples transactional updates from queries. The Core Domain Service publishes updates via RabbitMQ asynchronously to the Index Synchronizer, easily meeting the 5-minute sync window without degrading search read performance.",
+    "elements": [
+     "Catalogue Manager Component",
+     "Event Publisher Component",
+     "RabbitMQ Message Broker",
+     "Index Synchronizer",
+     "Elasticsearch Cluster",
+     "Search API Controller",
+     "Caching Layer"
+    ],
+    "sensitivity_points": [
+     "RabbitMQ consumer latency in the Index Synchronizer.",
+     "Elasticsearch index refresh interval."
+    ],
+    "tradeoffs": [
+     "Eventual consistency of search indices versus transactional write throughput."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Loan transactions and circulation logic run independently within Core Domain Service backed by Patroni PostgreSQL. A failure in an Elasticsearch node only impacts search cluster redundancy without interrupting circulation or losing loan data.",
+    "elements": [
+     "Elasticsearch Cluster",
+     "Search Repository",
+     "Core Domain Service",
+     "Circulation Manager Component",
+     "PostgreSQL Database",
+     "Patroni with etcd"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster replica count and shard allocation health."
+    ],
+    "tradeoffs": [
+     "Storage cost of clustered replicas versus search service availability."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Web Application instances are stateless SPAs behind Nginx and API Gateway, enabling patron traffic to shift to surviving instances. However, the architecture does not explicitly detail the upstream edge load balancer failover mechanism.",
+    "elements": [
+     "Web Application",
+     "Client-Side SPA",
+     "Nginx Reverse Proxy",
+     "API Gateway",
+     "Core Domain Service"
+    ],
+    "sensitivity_points": [
+     "Health check and traffic failover speed at the edge router."
+    ],
+    "tradeoffs": [
+     "Session persistence complexity versus stateless client token handling."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Although Digital Content Repositories are represented as external systems, the Core Domain Service lacks a dedicated provider adapter or plugin abstraction within Catalogue Manager Component to isolate varying external e-book APIs.",
+    "elements": [
+     "Digital Content Repositories",
+     "API Gateway",
+     "Core Domain Service",
+     "Catalogue Manager Component"
+    ],
+    "sensitivity_points": [
+     "Coupling between Catalogue Manager Component and external repository interfaces."
+    ],
+    "tradeoffs": [
+     "Standardized internal data model versus bespoke external provider integrations."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "Circulation Manager encapsulates loan policies, but the architecture does not define an externalized configuration store, dynamic rule engine, or parameter service to modify academic versus public loan rules without deploying code.",
+    "elements": [
+     "Core Domain Service",
+     "Circulation Manager Component"
+    ],
+    "sensitivity_points": [
+     "Absence of an external rules engine for dynamic policy evaluation."
+    ],
+    "tradeoffs": [
+     "Configurable runtime rule flexibility versus compile-time safety and execution speed."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Data storage and processing in PostgreSQL, RabbitMQ, and Elasticsearch are explicitly restricted to EU clusters. However, the Notification Service references external SaaS adapters (SendGrid, Twilio) without documenting EU data sovereignty guarantees.",
+    "elements": [
+     "PostgreSQL Database",
+     "Elasticsearch Cluster",
+     "RabbitMQ Message Broker",
+     "Volume Mount",
+     "Provider Integration Adapters"
+    ],
+    "sensitivity_points": [
+     "Geographic data routing of external notification and payment integrations."
+    ],
+    "tradeoffs": [
+     "Using established third-party SaaS services versus managing strictly EU-hosted communication gateways."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The API Gateway and Security Interceptor enforce token validation and method-level patron scope authorization. Unauthorized cross-patron read attempts are blocked and logged into PostgreSQL append-only audit tables and pgaudit.",
+    "elements": [
+     "API Gateway",
+     "Authentication Filter",
+     "Security Interceptor Component",
+     "Audit Logger Component",
+     "PostgreSQL Database",
+     "pgaudit"
+    ],
+    "sensitivity_points": [
+     "Rigorous subject-record identity validation within the Security Interceptor."
+    ],
+    "tradeoffs": [
+     "Performance overhead of fine-grained audit logging versus comprehensive non-repudiation."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Library Management System",
+     "Elasticsearch Cluster",
+     "Connection Manager Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Core Domain Service",
+     "Catalogue Manager Component",
+     "Digital Content Repositories",
+     "Client-Side SPA"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Service",
+     "Elasticsearch Cluster",
+     "Caching Layer",
+     "Query Pipeline Processor",
+     "Search Repository"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

@@ -1,0 +1,22 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(Shopper, "Shopper", "Primary human user benefiting from personalized recommendations.")
+System_Ext(ThirdPartyRecommendationEngine, "Third-Party Recommendation Engine", "External system providing recommendation data.")
+Container(AWSSQSNSwithDLQs, "AWS SQS/SNS with DLQs", "AWS SQS/SNS", "Message broker for asynchronous event ingestion.")
+ContainerDb(AmazonElastiCacheRedis, "Amazon ElastiCache (Redis)", "Redis", "In-memory cache for fast retrieval of recommendation snippets.")
+
+Container_Boundary(RecommendationWorker, "Recommendation Worker") {
+    Component(EventConsumerComponent, "Event Consumer Component", "Spring Boot / Node.js", "Polls SQS queues to consume recommendation events.")
+    Component(RecommendationProcessorComponent, "Recommendation Processor Component", "Spring Boot / Node.js", "Core logic for external synchronization and fallbacks.")
+    Component(CacheStateSyncComponent, "Cache / State Sync Component", "Spring Boot / Node.js", "Manages local data in Amazon ElastiCache (Redis).")
+    Component(ComplianceEnforcementComponent, "Compliance Enforcement Component", "Spring Boot / Node.js", "Handles GDPR/CCPA data deletion events.")
+}
+
+Rel(RecommendationWorker, AWSSQSNSwithDLQs, "Consumes recommendation events", "AWS SQS protocol")
+Rel(EventConsumerComponent, RecommendationProcessorComponent, "Invokes processing pipeline", "Internal Method Call")
+Rel(RecommendationProcessorComponent, ThirdPartyRecommendationEngine, "Syncs interaction data and fetches recommendations", "HTTPS/REST")
+Rel(RecommendationProcessorComponent, AmazonElastiCacheRedis, "Updates cache, retrieves defaults, and purges user profiles", "RESP protocol")
+Rel(ComplianceEnforcementComponent, AmazonElastiCacheRedis, "Purges user recommendation profiles on deletion requests", "RESP protocol")
+@enduml

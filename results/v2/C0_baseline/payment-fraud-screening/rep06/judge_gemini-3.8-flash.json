@@ -1,0 +1,318 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "The architecture comprehensively satisfies functional requirements: Scoring Engine handles scoring decisions (R-01), Case Management API supports analyst reviews (R-02), and Rule & Model Registry with Model Loader enables zero-downtime hot-swapping of models and rules (R-03).",
+   "performance_efficiency": "Sub-50ms latency at 3,000 req/s is well addressed using compiled Rust/Go runtimes, parallelized DynamoDB lookups via Feature Assembler, in-memory model execution, and asynchronous offloading of audit logging through Kinesis Data Streams and Firehose.",
+   "compatibility": "Well-defined integration boundaries exist for all external entities: gRPC/mTLS for Payment Gateway, REST for Tokenization Vault, OIDC/SAML for Identity Provider, and AWS S3 APIs with Object Lock for WORM Compliance Storage.",
+   "usability": "Fraud Analysts and Risk Managers are supported via dedicated Case Management API and Registry API endpoints with RBAC; however, no dedicated frontend/UI container is modeled for analyst investigation workflows.",
+   "reliability": "DynamoDB, ECS Fargate, and Kinesis provide high availability. Fail-open behavior for R-07 is referenced via an Idempotency Store Table, but the explicit circuit-breaking and fallback bypass mechanism in AWS API Gateway/ALB is minimally specified.",
+   "security": "PCI-DSS compliance is thoroughly handled with perimeter WAF/mTLS, tokenization vault integration, AWS KMS encryption for stored data, and cryptographically signed audit logs pushed to S3 Object Lock WORM storage.",
+   "maintainability": "Clean separation of concerns across Scoring Engine, Case Management API, and Registry API. Utilizing managed AWS primitives (DynamoDB, Firehose, S3) significantly eases operational burden for a small team of three engineers.",
+   "portability": "The architecture is fully adapted to AWS eu-west-1 using ECS Fargate, DynamoDB, and Kinesis. Strong coupling to proprietary AWS managed services limits ease of migration to other cloud providers."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Rust/Go engines and DynamoDB feature caching support low-latency scoring. However, chaining API Gateway with ALB introduces potential latency overhead against the strict 50ms P99 target.",
+    "elements": [
+     "AWS API Gateway / ALB",
+     "Perimeter Security & mTLS Terminator",
+     "Scoring Engine",
+     "Feature Assembler",
+     "Inference & Rules Evaluator",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "DynamoDB query latency directly constrains P99 evaluation budgets",
+     "API Gateway and mTLS termination latency overhead at 3,000 RPS"
+    ],
+    "tradeoffs": [
+     "Using managed API Gateway aids security at the expense of tail latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Analyst workloads are entirely decoupled into a dedicated Case Management API and separate DynamoDB tables, preventing analyst queries from impacting real-time scoring throughput.",
+    "elements": [
+     "Case Management API",
+     "Case Controller",
+     "Data Access Repository",
+     "Case Management Table",
+     "Scoring Engine",
+     "Feature Store Table"
+    ],
+    "sensitivity_points": [
+     "Isolation between Case Management Table and Feature Store Table"
+    ],
+    "tradeoffs": [
+     "Maintaining distinct DynamoDB tables increases provisioning overhead to guarantee performance isolation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "An Idempotency Store Table exists for fail-open resilience, but explicit circuit-breaker routing and fallback decision generation in the ingress layer during a complete engine crash are unspecified.",
+    "elements": [
+     "AWS API Gateway / ALB",
+     "Routing and Dispatcher",
+     "Idempotency Store Table",
+     "Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Ingress layer detection and rapid failover triggering within 60 seconds",
+     "Fallback decision generation and auditing during total engine outages"
+    ],
+    "tradeoffs": [
+     "Failing open preserves payment continuity but accepts un-screened fraud risk temporarily"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Audit Dispatcher emits audit logs asynchronously to Kinesis Data Streams, isolating the scoring path from downstream S3 or Firehose degradation and buffering events during outages.",
+    "elements": [
+     "Scoring Engine",
+     "Audit Dispatcher",
+     "Amazon Kinesis Data Streams & AWS S3 Firehose",
+     "Kinesis Data Stream",
+     "WORM Compliance Storage"
+    ],
+    "sensitivity_points": [
+     "Kinesis shard capacity and client buffer memory during extended downstream S3 outages"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit emission decouples scoring latency from audit store availability"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Model Loader Component handles S3 events, verifies signatures, and performs atomic in-memory hot-swapping in Rust without process restarts, tagging decisions with model versions.",
+    "elements": [
+     "Rule & Model Registry",
+     "Registry API",
+     "Amazon S3",
+     "Model Loader Component",
+     "Inference & Rules Evaluator",
+     "Audit Dispatcher"
+    ],
+    "sensitivity_points": [
+     "Atomic in-memory pointer swaps to prevent scoring interruption during artifact load"
+    ],
+    "tradeoffs": [
+     "In-memory hot-swapping minimizes downtime but requires higher container memory headroom"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The architecture supports dynamic rule updates via the Rule & Model Registry and Model Loader Component, while the Audit Dispatcher records the specific rules evaluated.",
+    "elements": [
+     "Rule & Model Registry",
+     "Registry API",
+     "Model Loader Component",
+     "Inference & Rules Evaluator",
+     "Audit Dispatcher"
+    ],
+    "sensitivity_points": [
+     "Rule validation and syntax verification before distribution to scoring nodes"
+    ],
+    "tradeoffs": [
+     "Decoupled registry and dynamic updates allow sub-hour deployment but require schema verification"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Card numbers are tokenized via an external vault and encrypted, preventing analyst access to PANs. However, automated anomalous access detection and alerting within 15 minutes are not detailed.",
+    "elements": [
+     "Tokenization Vault",
+     "Case Management API",
+     "AWS KMS",
+     "External Identity Provider (IdP)"
+    ],
+    "sensitivity_points": [
+     "Strict token-only visibility in the case management data model",
+     "Lack of specified SIEM or behavioral anomaly alerting pipeline"
+    ],
+    "tradeoffs": [
+     "Tokenization removes PCI scope from analysts but relies on external vault availability"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Decisions, inputs, model versions, and explanations are cryptographically signed and streamed to Amazon S3 with Object Lock (WORM) for 7-year retention, easily queried within one day.",
+    "elements": [
+     "Audit Dispatcher",
+     "Amazon Kinesis Data Streams & AWS S3 Firehose",
+     "WORM Compliance Storage"
+    ],
+    "sensitivity_points": [
+     "S3 Object Lock retention policy configuration and immutable log indexing"
+    ],
+    "tradeoffs": [
+     "WORM compliance ensures tamper resistance but requires cold-data retrieval tooling"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial"
+  },
+  "coverage": 0.7272727272727273,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Tokenization Vault",
+     "Perimeter Security & mTLS Terminator",
+     "AWS KMS"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "WORM Compliance Storage",
+     "Audit Dispatcher",
+     "Amazon Kinesis Data Streams & AWS S3 Firehose",
+     "Audit & Compliance Logger"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "API Router & Validator",
+     "Feature Assembler",
+     "Inference & Rules Evaluator"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management API",
+     "Case Controller",
+     "Case Workflow Service",
+     "Note & Tagging Service",
+     "Case Management Table"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Rule & Model Registry",
+     "Registry API",
+     "Model Loader Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "Inference & Rules Evaluator",
+     "Feature Assembler",
+     "Amazon DynamoDB",
+     "Perimeter Security & mTLS Terminator"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Tokenization Vault",
+     "Routing and Dispatcher",
+     "AWS KMS"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Dispatcher",
+     "WORM Compliance Storage",
+     "Amazon Kinesis Data Streams & AWS S3 Firehose",
+     "Model Loader Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Idempotency Store Table"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

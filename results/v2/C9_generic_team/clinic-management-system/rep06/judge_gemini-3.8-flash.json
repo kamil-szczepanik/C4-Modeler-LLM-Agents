@@ -1,0 +1,299 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 5,
+   "usability": 2,
+   "reliability": 2,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.25,
+  "justifications": {
+   "functional_suitability": "Domain Services Containers cleanly provide 'Patient/EMR Microservice', 'Scheduling Microservice', and 'Billing Microservice' covering R-01 to R-04. However, explicit data stores, persistent audit trails, long-term 10-year retention mechanisms, and resource clash checking logic are left unspecified.",
+   "performance_efficiency": "The 'Async Event Bus Container' and stateless JWKS validation in 'Token Validator Component' assist throughput. However, meeting the <1s P95 EMR requirement lacks dedicated caching layers (e.g., Redis) or read-replica persistence architectures, as storage containers are omitted.",
+   "compatibility": "'FHIR Facade Router' (using Apache Camel) and 'API Gateway Handler' explicitly provide HL7 FHIR transformation and integration targeting 'External Labs' and 'Imaging Systems', fulfilling R-08 completely.",
+   "usability": "The model directly connects human actors ('Patients', 'Clinical Staff', 'Billing Administrators') to the 'API Gateway / FHIR Facade Container' without modeling web, mobile, or clinical desktop UI frontend containers.",
+   "reliability": "While 'Event Broker Core' mentions cross-site mirroring, the architecture omits global traffic management, database clustering, and active-active data replication across 'on-prem-k8s' and 'eu-central-1' needed to guarantee 99.99% availability.",
+   "security": "Multi-factor authentication via 'Identity Provider (IdP)', mTLS validation via 'OAuth2 / OIDC Reverse Proxy', and AES-256 key provisioning using 'Secret Management Sidecar' ('Vault Agent') address R-05 well, though detailed audit log storage is missing.",
+   "maintainability": "Distinct domain services ('Patient/EMR Microservice', 'Scheduling Microservice', 'Billing Microservice') ensure modularity. 'Database Migration Init-Container' aids evolution, and 'Observability Stack' ('Prometheus', 'Grafana', 'OpenTelemetry Collectors') provides comprehensive monitoring.",
+   "portability": "Components leverage container-agnostic technologies (Kubernetes Jobs, Envoy, Kafka), supporting hybrid deployment. However, concrete deployment specifications detailing how workloads and state synchronize between 'on-prem-k8s' and cloud 'eu-central-1' are omitted."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.59375,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 2.5,
+   "Modifiability": 4.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "Stateless JWT validation and Vault tmpfs caching reduce auth overhead, but the architecture lacks an explicit database layer or read-cache to guarantee sub-second P95 loads under concurrent clinician access.",
+    "elements": [
+     "API Gateway Handler",
+     "Token Validator Component",
+     "Patient/EMR Microservice",
+     "Vault Agent"
+    ],
+    "sensitivity_points": [
+     "Absence of a dedicated caching layer for high-concurrency read queries",
+     "Efficiency of in-memory token validation at the Envoy proxy"
+    ],
+    "tradeoffs": [
+     "Omitting read caching simplifies data consistency at the expense of read latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "The FHIR Facade routes heavy ingest payloads asynchronously onto the Kafka/RabbitMQ Event Bus, effectively buffering bursts and isolating synchronous EMR queries from ingestion pressure.",
+    "elements": [
+     "FHIR Facade Router",
+     "Event Publisher",
+     "Event Broker Core",
+     "Patient/EMR Microservice"
+    ],
+    "sensitivity_points": [
+     "Buffer capacity and partition sizing in the message broker core",
+     "Throughput of FHIR payload transformation in Apache Camel"
+    ],
+    "tradeoffs": [
+     "Asynchronous ingestion guarantees performance isolation but introduces slight eventual consistency lag in EMR"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Cross-site mirroring is indicated on the event broker, but the architecture omits global DNS/traffic management and active-active database replication across hybrid cloud and on-premises sites.",
+    "elements": [
+     "API Gateway / FHIR Facade Container",
+     "Domain Services Containers",
+     "Event Broker Core"
+    ],
+    "sensitivity_points": [
+     "Hybrid multi-region traffic failover routing mechanism",
+     "Cross-site state replication latency and consistency model"
+    ],
+    "tradeoffs": [
+     "Asynchronous cross-site broker mirroring avoids latency penalties but risks data loss during hard failover"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Databases and data persistence containers are missing from the architecture diagrams, leaving transaction management, node recovery, failover fail-safes, and idempotency handling unspecified for insurance claim submission.",
+    "elements": [
+     "Billing Microservice",
+     "Async Event Bus Container",
+     "Background Worker Service"
+    ],
+    "sensitivity_points": [
+     "Missing database replication and cluster failover mechanisms",
+     "Idempotency and deduplication mechanisms for in-flight billing claims"
+    ],
+    "tradeoffs": [
+     "Decoupled event-driven billing improves resilience but requires explicit transactional outbox mechanisms"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Domain services isolation and event-driven decoupling ensure the Billing Microservice can integrate a new clearinghouse via the API Gateway/Camel router without impacting Patient/EMR or Scheduling components.",
+    "elements": [
+     "Billing Microservice",
+     "FHIR Facade Router",
+     "API Gateway Handler"
+    ],
+    "sensitivity_points": [
+     "Clear DDD bounded context boundary surrounding billing operations",
+     "Extensibility of Apache Camel routing for external claim endpoints"
+    ],
+    "tradeoffs": [
+     "Maintaining dedicated microservice adapters increases deployment complexity for single integrations"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Modifications are strictly confined to the Patient/EMR Microservice and its corresponding Database Migration Init-Container. The gateway and auth layers remain untouched.",
+    "elements": [
+     "Patient/EMR Microservice",
+     "Database Migration Init-Container",
+     "Event Publisher"
+    ],
+    "sensitivity_points": [
+     "Coupling between schema migration init-containers and microservice versions",
+     "Isolation of demographic fields within the Patient bounded context"
+    ],
+    "tradeoffs": [
+     "Init-container-based automated schema migrations simplify rollouts but require forward-compatible database changes"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Delegating authentication to an external IdP with MFA enforced at the Envoy reverse proxy prevents unauthorized single-factor logins, while OpenTelemetry and Prometheus collect access metrics.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "OAuth2 / OIDC Reverse Proxy",
+     "Token Validator Component",
+     "Observability Stack"
+    ],
+    "sensitivity_points": [
+     "Strict enforcement of multi-factor authentication at the IdP edge",
+     "Latency of security incident event reporting through the observability pipeline"
+    ],
+    "tradeoffs": [
+     "External IdP delegation enhances security posture but introduces an external network dependency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "While token validation occurs at the proxy and audit events can be pushed to the Event Bus, there is no defined immutable/WORM storage container to ensure 10-year tamper-evident audit retention.",
+    "elements": [
+     "Security/Auth Proxy Container",
+     "Patient/EMR Microservice",
+     "Event Consumer",
+     "Async Event Bus Container"
+    ],
+    "sensitivity_points": [
+     "Absence of an immutable or write-once audit storage sink",
+     "Coverage of fine-grained relationship-based access control policies at domain level"
+    ],
+    "tradeoffs": [
+     "Publishing all read audit records asynchronously prevents query blocking but increases messaging volume"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "R-01": "partial",
+   "R-02": "partial",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "none",
+   "R-08": "full"
+  },
+  "coverage": 0.5,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Clinic Management System",
+     "Security/Auth Proxy Container",
+     "Secret Management Sidecar"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Event Broker Core"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Patient/EMR Microservice"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Scheduling Microservice"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Patient/EMR Microservice",
+     "Event Consumer"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Billing Microservice"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Security/Auth Proxy Container",
+     "OAuth2 / OIDC Reverse Proxy",
+     "Secret Management Sidecar",
+     "Secret Management Service"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Event Broker Core"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "API Gateway / FHIR Facade Container",
+     "FHIR Facade Router",
+     "External Labs",
+     "Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

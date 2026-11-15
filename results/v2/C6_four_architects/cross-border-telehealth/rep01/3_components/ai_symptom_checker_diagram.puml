@@ -1,0 +1,32 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the AI Symptom Checker container
+
+Container_Boundary(ai_symptom_checker, "AI Symptom Checker") {
+    Component(api_router, "API Router / Controller", "Python / FastAPI", "Routes symptom check requests and handles API entry points.")
+    Component(inference_orchestrator, "Inference Orchestrator", "Python / FastAPI", "Manages symptom analysis and coordinates processing steps.")
+    Component(model_version_tracker, "Model Version & Provenance Tracker", "Python", "Logs model metadata and persists hashes locally.")
+    Component(data_residency_enforcer, "Data Residency Enforcer", "Python", "Enforces strict regional data residency constraints.")
+    Component(regional_llm_gateway, "Regional LLM Gateway / Client", "Vertex AI SDK", "Executes model inference via regional LLM deployments.")
+    Component(clinical_safety_filter, "Clinical Safety Guardrail Filter", "LangChain Guardrails", "Validates outputs and ensures clinical safety.")
+    Component(local_audit_store, "Local Audit & State Store", "SQLite / Cloud SQL proxy", "Persists hashes locally and maintains state.")
+    Component(async_event_publisher, "Async Event Publisher", "Python asyncio", "Queues telemetry logs asynchronously.")
+}
+
+System_Ext(event_broker, "Asynchronous Event Broker (GCP Pub/Sub)", "GCP Pub/Sub messaging service")
+System_Ext(audit_logging_container, "Dedicated Audit & Logging Container", "Fluentbit / OpenTelemetry")
+System_Ext(regional_databases, "Regional Databases", "Cloud SQL PostgreSQL, Cloud Storage, Cloud Firestore")
+
+Rel(api_router, inference_orchestrator, "Manages symptom analysis", "In-process")
+Rel(inference_orchestrator, model_version_tracker, "Logs metadata", "In-process")
+Rel(inference_orchestrator, clinical_safety_filter, "Validates outputs", "In-process")
+Rel(inference_orchestrator, regional_llm_gateway, "Executes model inference", "HTTPS / Vertex AI SDK")
+Rel(model_version_tracker, local_audit_store, "Persists hashes locally", "SQL / In-process DB")
+Rel(inference_orchestrator, async_event_publisher, "Queues logs", "In-process async")
+Rel(async_event_publisher, event_broker, "Streams telemetry", "gRPC over TLS")
+Rel(clinical_safety_filter, audit_logging_container, "Sends raw vs. filtered logs", "gRPC")
+Rel(ai_symptom_checker, regional_databases, "Persists check histories", "gRPC/SQL")
+
+@enduml

@@ -1,0 +1,321 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are explicitly covered: Patient Admission Component handles R-01, Scheduling Engine Component with Redis handles clash checks (R-02), EMR Core Component and Audit & Compliance Service handle R-03, while Claim Processor and Invoice Controller fulfill R-04.",
+   "performance_efficiency": "EMR screen latency (<1s P95) is supported by CQRS in EMR Core Component, PgBouncer connection pooling, Redis caching, and client-side offline storage via State & Local Storage Manager (WatermelonDB). Asynchronous Kafka pipelines decouple heavy audit and claim operations.",
+   "compatibility": "R-08 is comprehensively met by Integration & Interoperability Service using FHIR Translation Engine and HL7 v2/v3 Adapter. Payment Gateway Client supports EDI X12 and REST for external Insurance/Payer Gateways, and Enterprise IdP integrates via standard OIDC/OAuth2.",
+   "usability": "Patient Portal App enforces WCAG 2.1 AA via Accessibility & Design System Module, while Clinicians and Administrative Staff use Clinical Web/Mobile App. However, Billing Officers lack a dedicated UI container in Level 2 relationships and interact without explicit client-tier modeling.",
+   "reliability": "High reliability is supported by Outbox Pattern Handler, Resilience & DLQ Handler, Automated PITR & Backup Controller, and MirrorMaker 2. However, Data Tier relies on an active-passive PostgreSQL cluster, creating a failover bottleneck against the active-active 99.99% hybrid brief requirement.",
+   "security": "Rigorous security includes MFA via Authentication & Authorization Filter, Security & RBAC Middleware, AES-256 encryption across Data Tier and State & Local Storage Manager, plus tamper-proof 10-year retention via Audit & Compliance WORM Store with AWS KMS/Vault.",
+   "maintainability": "The architecture exhibits high modularity with domain microservices (Billing Service, EMR & Scheduling Service, Audit & Compliance Service), event-driven decoupling through Apache Kafka, Confluent Schema Registry for contract governance, and clear internal component-level CQRS separation.",
+   "portability": "The design adapts cleanly to hybrid on-prem-k8s and AWS eu-central-1 via containerized services, Envoy ingress, MirrorMaker 2 cross-boundary topic replication, and dual-compatible storage abstractions using AWS S3 Object Lock and MinIO."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.90625,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "CQRS in the EMR core, connection pooling via PgBouncer, and client-side WatermelonDB caching ensure read workloads remain well under the 1 s P95 threshold for 500 concurrent clinicians.",
+    "elements": [
+     "Clinical Web/Mobile App",
+     "API Gateway / Reverse Proxy",
+     "EMR & Scheduling Service",
+     "Data Tier"
+    ],
+    "sensitivity_points": [
+     "PgBouncer pool sizing under concurrent morning peak connections",
+     "Read-replica synchronization latency"
+    ],
+    "tradeoffs": [
+     "CQRS eventual consistency versus real-time read accuracy"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Integration Service ingests FHIR payloads and buffers them asynchronously via Apache Kafka. This isolates high-throughput ingestion from the synchronous EMR query path, maintaining sub-second screen responsiveness.",
+    "elements": [
+     "Integration & Interoperability Service",
+     "Message Broker",
+     "EMR & Scheduling Service",
+     "Data Tier"
+    ],
+    "sensitivity_points": [
+     "Kafka partition count and consumer group parallelism",
+     "FHIR translation CPU overhead in Camel routes"
+    ],
+    "tradeoffs": [
+     "Asynchronous ingestion delay versus instantaneous clinical visibility"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Active-passive synchronous DB replication and Kafka MirrorMaker support zero data loss failover. However, cross-site traffic switching lacks explicit GSLB/DNS orchestration to guarantee full traffic redirection within 60 seconds.",
+    "elements": [
+     "Data Tier",
+     "Message Broker",
+     "API Gateway / Reverse Proxy",
+     "Kubernetes On-Premises and AWS"
+    ],
+    "sensitivity_points": [
+     "Cross-region synchronous replication network latency",
+     "Automated database fencing and VIP promotion speed"
+    ],
+    "tradeoffs": [
+     "Zero data loss via synchronous replication versus write latency overhead"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Synchronous database replication with automated fencing and PgBouncer minimizes failover disruption. Claim submissions are mediated through transactional handlers and Kafka topics, enabling idempotent retries within 30 seconds.",
+    "elements": [
+     "Billing Service",
+     "Data Tier",
+     "Message Broker"
+    ],
+    "sensitivity_points": [
+     "Database automated failover detection timeout",
+     "Idempotency key enforcement on claim reprocessing"
+    ],
+    "tradeoffs": [
+     "Strict transactional idempotency checks versus claim submission throughput"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Payment Gateway Client in Billing Service encapsulates payer integrations using Feign and Resilience4j. The EMR service is completely decoupled via asynchronous events and REST/gRPC boundaries.",
+    "elements": [
+     "Billing Service",
+     "Insurance/Payer Gateways",
+     "API Gateway / Reverse Proxy"
+    ],
+    "sensitivity_points": [
+     "Standardized internal claim data contract decoupling external protocols"
+    ],
+    "tradeoffs": [
+     "Custom gateway adapter overhead versus unified internal billing models"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Updating a demographic field requires modifications to only three components: Clinical Workspace Module (UI), Patient Admission Component (logic/validation), and PostgreSQL schema. Audit ingestion handles generic payloads seamlessly.",
+    "elements": [
+     "Clinical Web/Mobile App",
+     "EMR & Scheduling Service",
+     "Data Tier"
+    ],
+    "sensitivity_points": [
+     "Schema migration backwards-compatibility across active-active nodes"
+    ],
+    "tradeoffs": [
+     "Strict relational schema updates versus schema-less flexibility"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Authentication mandates MFA via the external IdP. The Envoy Authentication Filter blocks single-factor access, and the Audit & Telemetry Interceptor streams security violation events immediately to compliance monitoring.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "API Gateway / Reverse Proxy",
+     "Audit & Compliance Service"
+    ],
+    "sensitivity_points": [
+     "Strict token signature validation and revocation check latency"
+    ],
+    "tradeoffs": [
+     "Mandatory external IdP MFA checks versus user authentication latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "RBAC Middleware validates record access policies, while 100% of read events are captured and offloaded to WORM Object Storage with S3 Object Lock, enforcing tamper-evident 10-year retention.",
+    "elements": [
+     "EMR & Scheduling Service",
+     "Audit & Compliance Service",
+     "Data Tier"
+    ],
+    "sensitivity_points": [
+     "WORM storage retention compliance locking rules",
+     "Asynchronous audit logging reliability without dropping read events"
+    ],
+    "tradeoffs": [
+     "Complete read auditing overhead versus storage consumption and processing cost"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Service",
+     "Data Anonymization & Security Filter",
+     "Audit & Compliance WORM Store",
+     "Audit & Telemetry Interceptor",
+     "Tenant Quota & Policy Enforcer"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Kubernetes On-Premises and AWS",
+     "Routing & Load Balancing Engine",
+     "Primary Relational DB Cluster",
+     "MirrorMaker 2 Engine",
+     "Resilience & DLQ Handler"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Storage Tier",
+     "Audit & Compliance WORM Store",
+     "Immutable Storage Writer"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Admission Component",
+     "EMR & Scheduling Service",
+     "Clinical Workspace Module"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Engine Component",
+     "Appointment & Scheduling UI Module",
+     "EMR & Scheduling Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Core Component",
+     "Audit & Compliance Service",
+     "Audit Event Ingestion Engine",
+     "Immutable Storage Writer",
+     "Audit & Compliance WORM Store"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service",
+     "Claim Processor",
+     "Payment Gateway Client",
+     "Invoice Controller"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Authentication Controller",
+     "Authentication & Authorization Filter",
+     "Data Tier",
+     "Audit & Compliance WORM Store",
+     "State & Local Storage Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Kubernetes On-Premises and AWS",
+     "MirrorMaker 2 Engine",
+     "Primary Relational DB Cluster"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "EMR Core Component",
+     "EMR Viewer Module",
+     "Global CDN",
+     "State & Local Storage Manager"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration & Interoperability Service",
+     "FHIR Translation Engine",
+     "HL7 v2/v3 Adapter"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

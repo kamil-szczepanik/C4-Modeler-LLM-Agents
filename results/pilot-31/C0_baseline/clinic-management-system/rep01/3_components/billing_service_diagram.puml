@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+Container(Clinical_API_Gateway, "Clinical API Gateway", "gRPC", "Entry point for service-to-service communication.")
+Container(Clearinghouse_Gateway, "Clearinghouse Gateway", "REST/HTTPS", "External gateway for insurance claim processing.")
+Container(Payment_Gateway, "Payment Gateway", "REST/HTTPS", "External PCI-DSS compliant payment processing service.")
+Container(Audit_Log_Service, "Audit Log Service", "Event Streaming", "Service for real-time, cryptographically signed event logging.")
+
+System_Boundary(Billing_Service, "Billing Service") {
+    Component(Invoice_Manager, "Invoice Manager", "FastAPI", "Handles RESTful CRUD operations and patient-facing billing logic.")
+    Component(Claim_Processor, "Claim Processor", "Celery/RabbitMQ", "Asynchronous worker for Clearinghouse Gateway interactions.")
+    Component(Payment_Orchestrator, "Payment Orchestrator", "Python/State Machine", "Manages state machines for installment plans and PCI-DSS compliant payment processing.")
+    Component(Statement_Generator, "Statement Generator", "Jinja2", "Produces itemized patient statements and PDFs.")
+    Component(PostgreSQL, "PostgreSQL", "PostgreSQL", "Primary database with row-level security (RLS) and TDE.")
+    Component(S3_Glacier, "S3 Glacier", "AWS S3 Glacier", "Long-term immutable storage for 10-year data retention.")
+}
+
+Rel(Clinical_API_Gateway, Billing_Service, "Invokes via gRPC with mTLS")
+Rel(Billing_Service, Clearinghouse_Gateway, "Outbound calls protected by Resilience4j circuit breakers")
+Rel(Billing_Service, Payment_Gateway, "Tokenized API communication via PCI-DSS compliant trust zone")
+Rel(Billing_Service, Audit_Log_Service, "Streams cryptographically signed events")
+Rel(Invoice_Manager, PostgreSQL, "Reads and writes billing data")
+Rel(Claim_Processor, Clearinghouse_Gateway, "Processes insurance claims asynchronously")
+Rel(Payment_Orchestrator, Payment_Gateway, "Executes payment transactions")
+Rel(Statement_Generator, S3_Glacier, "Archives patient statements")
+
+@enduml

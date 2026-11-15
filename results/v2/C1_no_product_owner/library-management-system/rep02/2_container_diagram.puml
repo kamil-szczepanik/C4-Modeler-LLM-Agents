@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(LibraryStaff, "Library Staff", "Person using the system for cataloging and circulation.")
+Person(LibraryPatrons, "Library Patrons", "Person using the self-service portal for search and borrowing.")
+System_Ext(IdentityProvider, "Identity Provider", "External system handling centralized OIDC/OAuth 2.0 authentication.")
+
+System_Boundary(LibraryManagementSystem, "Library Management System") {
+    Container(WebApplication, "Web Application", "React, TypeScript", "Provides cataloging, circulation, and self-service portals hosted via CDN.")
+    Container(ApiGateway, "API Gateway", "Spring Cloud Gateway / Envoy", "Handles ingress and security with OAuth2/OIDC JWT validation.")
+    Container(CoreDomainService, "Core Domain Service", "Java / Spring Boot", "Manages core business and transactional logic.")
+    Container(SearchService, "Search Service", "Java / Elasticsearch / OpenSearch", "Handles high-performance search capabilities to satisfy <800ms search latency.")
+    Container(NotificationService, "Notification Service", "Node.js / TypeScript", "Handles asynchronous notifications.")
+    ContainerDb(PostgreSQLDatabase, "PostgreSQL Database", "PostgreSQL with AES-256 encryption", "Stores transactional data securely with EU-only residency.")
+    Container(ManagedEventBus, "Managed Event Bus", "Kafka / EventBridge", "Handles event streaming with TLS-encrypted TCP and SASL/OAuth2 authentication.")
+    ContainerDb(SearchIndex, "Search Index", "Elasticsearch / OpenSearch", "Index synchronized from PostgreSQL via Change Data Capture.")
+}
+
+Rel(LibraryStaff, WebApplication, "Accesses for cataloging and circulation", "HTTPS/REST")
+Rel(LibraryPatrons, WebApplication, "Accesses for search and borrowing", "HTTPS/REST")
+Rel(WebApplication, ApiGateway, "Makes API requests", "HTTPS/REST")
+Rel(ApiGateway, CoreDomainService, "Routes internal service requests", "gRPC over mTLS")
+Rel(ApiGateway, SearchService, "Routes search queries", "gRPC over mTLS")
+Rel(ApiGateway, NotificationService, "Routes notification requests", "gRPC over mTLS")
+Rel(CoreDomainService, PostgreSQLDatabase, "Reads and writes transactional data", "JDBC / TLS")
+Rel(CoreDomainService, ManagedEventBus, "Publishes and consumes domain events", "TLS-encrypted TCP with SASL/OAuth2")
+Rel(SearchService, SearchIndex, "Queries search index", "REST / gRPC")
+Rel(PostgreSQLDatabase, SearchIndex, "Synchronizes data via Change Data Capture", "Debezium")
+
+@enduml

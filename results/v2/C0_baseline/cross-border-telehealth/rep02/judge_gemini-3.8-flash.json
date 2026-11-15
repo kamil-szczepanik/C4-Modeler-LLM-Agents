@@ -1,0 +1,328 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively addressed: Consultation Orchestrator and WebRTC SFU for consultations (R-01), Prescription Dispatcher for regional e-prescriptions (R-02), AI Symptom Service for triage (R-03), and Consent & Policy Enforcement with PostgreSQL RLS for granular purpose-based consent (R-04).",
+   "performance_efficiency": "Performance is supported by Localization Cache (Memorystore Redis), PgBouncer Connection Pooler, and adaptive bitrate mechanisms in WebRTC Media Client. However, caching or asynchronous queuing mechanisms for high-load prescription dispatching and AI inference tasks are not fully detailed.",
+   "compatibility": "Prescription Dispatcher explicitly integrates with Pharmacy Partners (EU & US) using REST and HL7 FHIR over mTLS adhering to R-08. WebRTC Media Client and Consultation Orchestrator integrate seamlessly with standard Third-Party WebRTC SFUs and external AI Model Registry services.",
+   "usability": "Patients and Clinicians are provided unified interfaces via Web / Mobile Client. Localization Service provides regional translations, medical glossaries, and compliance disclaimers. Local State & Storage Manager supports offline caching for rural users, though clinician-specific workflows are lightly detailed.",
+   "reliability": "Adaptive bitrate fallback in WebRTC Media Client and local TURN/STUN relays in API Gateway support degraded low-bandwidth connections (<300 kbit/s). Checkout Recovery Service and PgBouncer bolster operational resilience, though multi-region database replication/failover mechanisms between GCP regions are omitted.",
+   "security": "Security is thoroughly addressed via Insertable Streams E2EE, WAF, mTLS internal routing, De-identification Middleware, OPA Sidecar consent enforcement, PostgreSQL Row-Level Security, CMEK Module encryption, and Cloud Storage WORM buckets for immutable EU MDR compliance audit logs.",
+   "maintainability": "The architecture exhibits modular decomposition across containers (AI Symptom Service, Core Telehealth Service, Localization Service) with low coupling via gRPC/mTLS. Components like Inference Adapter, Explanation Generator, and Prescription Dispatcher isolate distinct domain logic cleanly.",
+   "portability": "Containerized components (NestJS, FastAPI, Envoy) and cross-platform React Native clients are highly portable. While designed for GCP (europe-west3, us-central1), some components rely on GCP-specific services (Cloud Storage WORM, CMEK via Cloud KMS, Memorystore), creating minor cloud lock-in."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The external SFU with active-active edge routing and client-side adaptive streaming scales concurrent sessions well, though signaling latency during connection bursts depends on API Gateway throughput.",
+    "elements": [
+     "Third-Party WebRTC SFU",
+     "WebRTC Media Client",
+     "Consultation Orchestrator",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Signaling throughput of API Gateway during concurrent consultation joining spikes."
+    ],
+    "tradeoffs": [
+     "Offloading media to external SFU reduces internal compute load but introduces external dependency."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "At approximately 14 requests per second, the load is manageable. Asynchronous audit logging via Fluentbit sidecars and ephemeral volumes ensures compliance logging does not degrade inference response times below 3s.",
+    "elements": [
+     "AI Symptom Service",
+     "Triage Orchestrator Component",
+     "Inference Adapter",
+     "Fluentbit sidecar container",
+     "Cloud Storage WORM buckets"
+    ],
+    "sensitivity_points": [
+     "Asynchronous log offloading performance to prevent inference thread blocking."
+    ],
+    "tradeoffs": [
+     "Asynchronous audit log shipping minimizes response latency but risks buffering under sustained peak."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The WebRTC client explicitly supports adaptive bitrate fallback to survive unstable connections, while the local SQLite and secure enclave manager handles offline caching of consultation state and notes without data loss.",
+    "elements": [
+     "WebRTC Media Client",
+     "Third-Party WebRTC SFU",
+     "Local State & Storage Manager",
+     "Consultation Orchestrator"
+    ],
+    "sensitivity_points": [
+     "Bitrate adaptation threshold handling in the WebRTC Insertable Streams client."
+    ],
+    "tradeoffs": [
+     "Degrading video stream down to low-bitrate audio prioritizes call continuity over visual fidelity."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Only one US region (us-central1) is specified in target cloud regions. Without a documented secondary US region or automated cross-region US disaster recovery plan, restoring the US service within 1 hour is unachieved.",
+    "elements": [
+     "API Gateway",
+     "Geo-Router",
+     "Google Cloud SQL (PostgreSQL)"
+    ],
+    "sensitivity_points": [
+     "Absence of secondary regional cloud infrastructure within the US boundary."
+    ],
+    "tradeoffs": [
+     "Strict data residency prevents cross-region failover to EU during full US regional outages."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Prescription Dispatcher encapsulates regional e-prescription integration via HL7 FHIR and REST over mTLS. Modifying or adding country-specific gateways is largely isolated to this component.",
+    "elements": [
+     "Prescription Dispatcher",
+     "Core Telehealth Service",
+     "Pharmacy Partners (EU & US)"
+    ],
+    "sensitivity_points": [
+     "Coupling between national regulatory standards and the Prescription Dispatcher logic."
+    ],
+    "tradeoffs": [
+     "Consolidating dispatch logic inside one service component simplifies deployment but risks code bloat."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Externalizing model inference to an AI Model Registry supports rolling updates and rollbacks. The Triage Orchestrator and Fluentbit sidecar capture audit payloads directly to immutable WORM storage, preserving traceability.",
+    "elements": [
+     "AI Symptom Service",
+     "Inference Adapter",
+     "AI Model Registry / Inference Service",
+     "Cloud Storage WORM buckets"
+    ],
+    "sensitivity_points": [
+     "Contract versioning between Inference Adapter and external model registry."
+    ],
+    "tradeoffs": [
+     "Externalizing the model registry simplifies rollbacks but introduces external network interface latency."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Zero-trust OPA policies and PostgreSQL Row-Level Security explicitly validate consent and data residency boundaries before returning PHI, while pgAudit streams detailed audit logs to guarantee non-repudiation.",
+    "elements": [
+     "Consent & Policy Enforcement",
+     "Google Cloud SQL (PostgreSQL)",
+     "PostgreSQL RDBMS Engine",
+     "Audit & Activity Logging Daemon"
+    ],
+    "sensitivity_points": [
+     "Policy evaluation latency and correct enforcement of PostgreSQL Row-Level Security."
+    ],
+    "tradeoffs": [
+     "Evaluating fine-grained RLS and OPA policies per query adds slight data-access latency."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Consent revocation is evaluated immediately via OPA sidecar policies and enforced at the database layer via Row-Level Security, stopping data access instantly, with verification verifiable via pgAudit logs.",
+    "elements": [
+     "Consent & Policy Enforcement",
+     "Google Cloud SQL (PostgreSQL)",
+     "PostgreSQL RDBMS Engine",
+     "Audit & Activity Logging Daemon"
+    ],
+    "sensitivity_points": [
+     "Real-time invalidation of consent tokens and sidecar cache entries."
+    ],
+    "tradeoffs": [
+     "Immediate policy updates prevent stale data sharing at the cost of frequent cache invalidations."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.875,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent & Policy Enforcement",
+     "PostgreSQL RDBMS Engine",
+     "CMEK Module",
+     "Audit & Activity Logging Daemon",
+     "Cloud Storage WORM buckets",
+     "De-identification Middleware"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Geo-Router",
+     "Google Cloud SQL (PostgreSQL)",
+     "PostgreSQL RDBMS Engine",
+     "CMEK Module",
+     "Localization Cache"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Service",
+     "Cloud Storage WORM buckets",
+     "Immutable Audit Storage Interface",
+     "Fluentbit sidecar container",
+     "Audit & Activity Logging Daemon"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "WebRTC Media Client",
+     "Local State & Storage Manager",
+     "Third-Party WebRTC SFU"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Web / Mobile Client",
+     "WebRTC Media Client",
+     "Consultation Orchestrator",
+     "Third-Party WebRTC SFU"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Core Telehealth Service",
+     "Prescription Dispatcher",
+     "Pharmacy Partners (EU & US)"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Service",
+     "Triage Orchestrator Component",
+     "Inference Adapter",
+     "AI Model Registry / Inference Service"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Web / Mobile Client",
+     "Consent & Policy Enforcement",
+     "PostgreSQL RDBMS Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Geo-Router",
+     "Consent & Policy Enforcement",
+     "PostgreSQL RDBMS Engine"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "WebRTC Media Client",
+     "Third-Party WebRTC SFU"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "AI Symptom Service",
+     "Fluentbit sidecar container",
+     "Cloud Storage WORM buckets",
+     "Immutable Audit Storage Interface"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Prescription Dispatcher",
+     "Pharmacy Partners (EU & US)"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

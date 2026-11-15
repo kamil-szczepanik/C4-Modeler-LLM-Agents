@@ -1,0 +1,305 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 2,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.5,
+  "justifications": {
+   "functional_suitability": "While Fraud Scoring Engine scores transactions and Case Management & Rules Service provides case tools, there is no mechanism linking 'review' decisions to case storage. Additionally, Rule Authoring Engine updates AWS AppConfig, but Fraud Scoring Engine lacks any connection to load updated rules or models dynamically.",
+   "performance_efficiency": "The sub-50ms P99 target at 3,000 TPS is well supported by Go/Rust in Fraud Scoring Engine, sub-millisecond feature reads from AWS ElastiCache (Redis), and asynchronous offloading of audit events via Amazon SQS. However, AWS API Gateway latency overhead under heavy load remains an unaddressed risk.",
+   "compatibility": "AWS API Gateway provides standard HTTPS/JSON and gRPC endpoints to integrate with Payment Gateway / Merchants. S3 Batch Writer and Audit Logger interface cleanly with AWS S3 Object Lock and Amazon SQS using AWS SDK protocols.",
+   "usability": "Fraud Analysts and Compliance Officers interact directly with the Case Workflow Controller over HTTPS/REST. Auditors / Regulators are provided secure compliance report access channels, satisfying the specified external user groups.",
+   "reliability": "The architecture omits the critical R-07 requirement: there is no fallback, fail-open bypass, or circuit breaker in AWS API Gateway or Fraud Scoring Engine to prevent blocking payments when scoring is unavailable. SQS DLQ provides message fault tolerance, but payment availability targets are unaddressed.",
+   "security": "Security is addressed with JWT Authorizer, Ingress Traffic Handler with AWS WAF, and Data Masking Proxy ensuring analysts never see unmasked PANs. In addition, S3 Batch Writer guarantees tamper-evident 7-year storage via AWS S3 with Object Lock. Tokenization services are not explicitly detailed.",
+   "maintainability": "Clear container separation divides real-time scoring, analyst workflows, and audit persistence. Inside Fraud Scoring Engine, responsibilities are cleanly decoupled across API Controller, Feature Assembler, and Evaluation Core. AWS AppConfig isolates rule management, keeping operational overhead low for a three-engineer team.",
+   "portability": "The design satisfies the AWS eu-west-1 target requirement. However, components are tightly coupled to AWS proprietary services (AWS API Gateway, AWS AppConfig, Amazon SQS, AWS S3 Object Lock), making portability to other cloud providers or on-premises environments difficult without significant refactoring."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.625,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 2.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The Go/Rust scoring engine and ElastiCache feature store decouple audit writes asynchronously to SQS, enabling sub-50ms processing. However, AWS API Gateway latency overhead at P99 under 3,000 TPS requires careful tuning and regional optimization.",
+    "elements": [
+     "AWS API Gateway",
+     "Fraud Scoring Engine",
+     "AWS ElastiCache (Redis)",
+     "Amazon SQS"
+    ],
+    "sensitivity_points": [
+     "AWS API Gateway ingress overhead at 3,000 TPS",
+     "ElastiCache Redis sub-millisecond round-trip time"
+    ],
+    "tradeoffs": [
+     "Async audit dispatch via SQS preserves low latency over immediate write consistency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management workloads are isolated in a separate container (Case Management & Rules Service) away from the scoring path. Analysts querying cases do not compete for resources with the Fraud Scoring Engine or ElastiCache, isolating peak scoring latency.",
+    "elements": [
+     "Case Management & Rules Service",
+     "Fraud Scoring Engine",
+     "Case Workflow Controller"
+    ],
+    "sensitivity_points": [
+     "Physical isolation between analyst workloads and critical path scoring containers"
+    ],
+    "tradeoffs": [
+     "Separate microservices increase operational overhead for a small three-person team"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture lacks a fallback or fail-open mechanism in AWS API Gateway if the Fraud Scoring Engine crashes. Without a secondary path or default decision engine, transactions will be dropped or fail during an outage rather than recovering within 1 minute.",
+    "elements": [
+     "AWS API Gateway",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Single point of failure at the scoring engine ingress"
+    ],
+    "tradeoffs": [
+     "Failing closed protects against fraud but risks blocking legitimate payments during crashes"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Audit events are emitted asynchronously via SQS and buffered away from the scoring execution path. A sluggish or unavailable S3 target only impacts the Audit Worker and queues, protecting scoring latency and preventing record loss via DLQs.",
+    "elements": [
+     "Amazon SQS",
+     "Audit & Evidence Worker",
+     "S3 Batch Writer",
+     "SQS DLQ",
+     "AWS S3 with Object Lock"
+    ],
+    "sensitivity_points": [
+     "SQS retention window and DLQ durability during prolonged S3 outages"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of audit records in exchange for guaranteed scoring availability"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "The Fraud Scoring Engine includes an Evaluation Core, but provides no mechanism for dynamic model loading, traffic splitting, rollback, or model version tagging. A model deployment requires a full container redeployment with unstated rollback and versioning mechanics.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Evaluation Core"
+    ],
+    "sensitivity_points": [
+     "Container deployment coupling for machine learning model updates"
+    ],
+    "tradeoffs": [
+     "Compiled binaries maximize scoring throughput but impede rapid, zero-downtime model swaps"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The Rule Authoring Engine connects to AWS AppConfig, but no relationship or data flow connects AppConfig or the Case Management container to the Fraud Scoring Engine. The scoring engine lacks a documented channel to ingest updated rules dynamically at runtime.",
+    "elements": [
+     "Rule Authoring Engine",
+     "AWS AppConfig",
+     "Evaluation Core",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Missing configuration synchronization path between rules service and scoring engine"
+    ],
+    "tradeoffs": [
+     "Centralized configuration management requires robust synchronization channels to runtime nodes"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The Data Masking Proxy explicitly masks PAN data for analysts, ensuring card numbers are not exposed. However, the design omits intrusion detection, behavioral monitoring, or automated alerting mechanisms to detect anomalous account access within 15 minutes.",
+    "elements": [
+     "Data Masking Proxy",
+     "Case Workflow Controller",
+     "Audit Logger"
+    ],
+    "sensitivity_points": [
+     "Absence of real-time security analytics and behavioral anomaly detection"
+    ],
+    "tradeoffs": [
+     "Masking protects data confidentiality but does not address credential compromise detection"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Audit trails are preserved using S3 Object Lock and Glacier Deep Archive for 7 years in immutable, tamper-evident format. Auditors and compliance officers have designated export and reporting channels to reproduce decision records and explanations on demand.",
+    "elements": [
+     "Audit & Evidence Worker",
+     "S3 Batch Writer",
+     "AWS S3 with Object Lock and Glacier Deep Archive",
+     "Auditors and Regulators"
+    ],
+    "sensitivity_points": [
+     "S3 Object Lock retention policy configuration over a 7-year lifecycle"
+    ],
+    "tradeoffs": [
+     "Glacier retrieval latency requires retrieval requests to complete within one working day"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "none",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "none"
+  },
+  "coverage": 0.6363636363636364,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Data Masking Proxy",
+     "AWS API Gateway",
+     "Redis Cluster"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "AWS S3 with Object Lock and Glacier Deep Archive",
+     "Audit & Evidence Worker",
+     "S3 Batch Writer",
+     "Decision Metadata Extractor"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "AWS API Gateway",
+     "AWS AppConfig",
+     "Amazon SQS",
+     "AWS ElastiCache (Redis)",
+     "AWS S3 with Object Lock"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "API Controller",
+     "Evaluation Core",
+     "Feature Assembler"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management & Rules Service",
+     "Case Workflow Controller",
+     "Approval Workflow Interceptor"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Rule Authoring Engine",
+     "AWS AppConfig"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "AWS ElastiCache (Redis)",
+     "Redis Cluster",
+     "Standard Queue",
+     "Feature Assembler"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Data Masking Proxy",
+     "Redis Cluster"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "AWS S3 with Object Lock and Glacier Deep Archive",
+     "Audit & Evidence Worker",
+     "S3 Batch Writer",
+     "Audit Logger",
+     "Decision Metadata Extractor"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

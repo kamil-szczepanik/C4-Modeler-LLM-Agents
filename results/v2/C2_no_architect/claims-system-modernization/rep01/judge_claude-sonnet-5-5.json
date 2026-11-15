@@ -1,0 +1,312 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 2,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 3,
+   "portability": 3
+  },
+  "mean": 3.0,
+  "justifications": {
+   "functional_suitability": "Customer/Broker Web App, Claims Adjuster Web App and Traffic Router (migration-status routing) cover R-01 to R-03. Gaps: no claim-type migration registry or per-type routing config, no core claims processing service, and the API Gateway-to-mainframe path is missing from the container level.",
+   "performance_efficiency": "Asynchronous Service Bus messaging and a Readable Secondary Replica exist, but there is no cache or read model to hide the 5 s mainframe latency from adjuster screens (R-05). No autoscaling or timeouts are specified. Mechanisms are generic and do not match the 2 s target.",
+   "compatibility": "Mainframe Sync Adapter over ExpressRoute with IPSec, Azure Entra ID via OIDC, and Traffic Router coexistence are present. Gaps: no anti-corruption layer or COBOL/DB2 data mapping, no respect for the batch window, and the mainframe interface change limit is unaddressed.",
+   "usability": "All groups have channels: Customer/Broker Web App, Claims Adjuster UI Controller, Operations Portal with Migration Dashboard UI. Gaps: no UX or accessibility mechanisms, no status tracking detail for brokers, and the photo upload path is only loosely connected.",
+   "reliability": "Message Consumer & Router has retries, dead-letter queues and backoff. Audit & Reconciliation Container with State Comparator detects drift, and Administration & Rollback Controller offers rollback. Gaps: no idempotency or deduplication for R-04, no HA or DR, and the outbox pattern is only mentioned at context level.",
+   "security": "Authentication Handler and Authentication & Authorization Manager use Entra ID with SSO, JWT and RBAC. Security & Validation Engine provides WAF. PII Encryption Service uses Always Encrypted with Key Vault keys. Tamper-evident Audit Logger and WORM storage add accountability. Minor gaps: Operations Portal authentication is not shown and inconsistent.",
+   "maintainability": "Clear container decomposition (Integration/Messaging Container, Audit & Reconciliation Container, Operations Portal Container) and component separation. Rollback Controller supports R-06. Gaps: shared Azure SQL couples services, there is no per-claim-type module boundary, and the Administration & Rollback Controller targets the mainframe only for metrics, not switch-back.",
+   "portability": "Containerized Azure Container Apps and a hybrid ExpressRoute link match the on-prem plus Azure targets. Heavy Azure lock-in (Service Bus, Entra, Key Vault, SQL) with no abstraction layers. The team's little cloud experience is mitigated only by managed services."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 3,
+   "MOD-01": 3,
+   "MOD-02": 3,
+   "PERF-01": 2,
+   "PERF-02": 3,
+   "SEC-01": 2,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.4375,
+  "by_quality_attribute": {
+   "Performance": 2.5,
+   "Availability": 3.0,
+   "Modifiability": 3.0,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "elements": [
+     "Claims Adjuster Web App",
+     "API Gateway",
+     "Traffic Router",
+     "Azure SQL"
+    ],
+    "sensitivity_points": [
+     "Mainframe latency up to 5 s",
+     "No cache or read model for mainframe data"
+    ],
+    "tradeoffs": [
+     "Consistency of mainframe data vs screen speed"
+    ],
+    "justification": "No cache, read model, or async prefetch for mainframe-resident data. The gateway reads Azure SQL, but the Traffic Router can route to the mainframe synchronously, so the 5 s latency would hit adjusters. The 2 s target is unaddressed."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Customer/Broker Web App",
+     "Integration/Messaging Container",
+     "Azure Service Bus",
+     "Mainframe Sync Adapter"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue buffering",
+     "Sync adapter throughput toward the mainframe"
+    ],
+    "tradeoffs": [
+     "Submission acceptance vs delayed mainframe consistency"
+    ],
+    "justification": "Service Bus decouples submissions from the mainframe and absorbs bursts. However, there is no throttling of the sync adapter, no batch-window-aware drain schedule, and no autoscaling or load-shedding detail, so batch protection is unaddressed."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "elements": [
+     "Integration/Messaging Container",
+     "Message Consumer & Router",
+     "Azure Service Bus",
+     "Azure SQL"
+    ],
+    "sensitivity_points": [
+     "Retry/backoff may hammer mainframe after window",
+     "Persistence before publish unclear"
+    ],
+    "tradeoffs": [
+     "Eventual consistency vs continued availability"
+    ],
+    "justification": "Queued messages with retries and dead-letter queues allow submissions to continue and be forwarded later. Durability is not guaranteed, since the web app publishes to the bus without an explicit transactional outbox, and no window-aware forwarding exists."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Audit & Reconciliation Container",
+     "State Comparator",
+     "Exception Handler",
+     "Mainframe Sync Adapter"
+    ],
+    "sensitivity_points": [
+     "No idempotency key or deduplication",
+     "Reconciliation is detective, with manual exception resolution"
+    ],
+    "tradeoffs": [
+     "Reconciliation overhead vs strong consistency guarantees"
+    ],
+    "justification": "A reconciliation container detects drift and the outbox is mentioned only at the context level. There is no explicit idempotency or deduplication mechanism to prevent double processing, and the Exception Handler relies on manual resolution."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "API Gateway",
+     "Traffic Router",
+     "Administration & Rollback Controller",
+     "Mainframe Sync Adapter"
+    ],
+    "sensitivity_points": [
+     "Per-claim-type routing configuration",
+     "Mainframe interface change count"
+    ],
+    "tradeoffs": [
+     "Gateway routing flexibility vs gateway complexity"
+    ],
+    "justification": "The Traffic Router splits traffic by migration status, and the rollback controller supports switch-back, which suits one-by-one migration. Data back-sync after rollback, the mainframe interface minimization, and how the router consumes migration state are not specified."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "elements": [
+     "Claims Adjuster Web App",
+     "Customer/Broker Web App",
+     "API Gateway",
+     "Azure SQL"
+    ],
+    "sensitivity_points": [
+     "Mainframe-specific logic in the sync adapter",
+     "Data ownership transfer"
+    ],
+    "tradeoffs": [
+     "UI isolation vs integration layer maintenance"
+    ],
+    "justification": "UIs call only the API Gateway, which isolates them from the mainframe, so decommissioning needs no UI rewrite. However, no explicit domain services or data ownership switch mechanism is shown, and Azure SQL as the future system of record is unaddressed."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "elements": [
+     "Authentication & Authorization Manager",
+     "Authentication Handler",
+     "API Gateway",
+     "Audit Logger"
+    ],
+    "sensitivity_points": [
+     "No broker-to-customer ownership check",
+     "Mainframe-side authorization unaddressed"
+    ],
+    "tradeoffs": [
+     "Fine-grained authorization vs added gateway latency"
+    ],
+    "justification": "JWT validation and RBAC exist, but only for adjusters. There is no tenant or data-ownership authorization for brokers, nothing about access denial recording for brokers, and nothing about enforcement in the mainframe, so the scenario is largely unaddressed."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Azure AD (Entra ID)",
+     "Authentication Handler",
+     "Authentication & Authorization Manager",
+     "Mainframe Sync Adapter"
+    ],
+    "sensitivity_points": [
+     "Token lifetime and revocation latency",
+     "Mainframe credentials separate from AD"
+    ],
+    "tradeoffs": [
+     "Short token lifetimes vs more frequent re-authentication"
+    ],
+    "justification": "Entra ID SSO centralizes revocation for the new platform. There is no mention of token lifetimes, continuous access evaluation, or AD integration on the mainframe, so the 15-minute removal in both systems is unproven."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "none",
+   "R-06": "partial",
+   "R-07": "full"
+  },
+  "coverage": 0.5909090909090909,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "On-Premises COBOL/DB2 Mainframe System of Record",
+     "Mainframe Sync Adapter",
+     "Audit & Reconciliation Container"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Integration/Messaging Container",
+     "Mainframe Sync Adapter"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Azure Container Apps",
+     "Azure SQL",
+     "Azure Service Bus"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer/Broker Web App",
+     "Claim Submission Controller",
+     "Photo Upload Handler",
+     "Draft Claims Manager",
+     "API Gateway"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjuster Web App",
+     "Claims Adjuster UI Controller",
+     "Claims Processing Router"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Traffic Router",
+     "API Gateway",
+     "Migration Dashboard UI"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Audit & Reconciliation Container",
+     "State Comparator",
+     "Message Consumer & Router",
+     "Integration/Messaging Container"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "none",
+    "elements": []
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Administration & Rollback Controller",
+     "Traffic Router"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Azure Active Directory (Entra ID)",
+     "Authentication Handler",
+     "Authentication & Authorization Manager"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

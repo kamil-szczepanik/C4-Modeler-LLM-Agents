@@ -1,0 +1,237 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "Catalogue Service and Catalogue Management Domain satisfy cataloguing requirements, and Circulation & Loan Service handles loans. The Web Application Container provides self-service portals. However, specific functional mechanisms differentiating physical versus digital item management (such as digital asset storage or DRM licensing) are not explicitly detailed.",
+   "performance_efficiency": "The sub-800ms search target (R-05) is directly addressed by a dedicated Search Indexer with Elasticsearch v8, decoupled from write paths via Celery and RabbitMQ. System throughput is further protected using PgBouncer connection pooling and Envoy Proxy token-bucket rate limiting.",
+   "compatibility": "The architecture integrates cleanly with external services using established standards: Enterprise Identity Provider via OIDC/HTTPS, Payment Gateway via REST over HTTPS, and Notification Service via HTTPS/mTLS. Internal communication uses standard AMQP and gRPC/Protobuf protocols.",
+   "usability": "The Web Application Container (React/NGINX) serves all specified user groups (Patrons, Staff/Cataloguers, Administrators) via dedicated self-service and management portals. However, specific usability adaptations or accessibility standards (e.g., WCAG for public library patrons) are not articulated.",
+   "reliability": "High availability and resilience are well-architected via Patroni automated PostgreSQL failover across AZs, RabbitMQ Dead-Letter Handlers, an Outbox Pattern Component in Circulation & Loan Service for reliable message dispatch, and circuit breakers in the Notification Service Worker.",
+   "security": "EU data residency is enforced across external providers and PostgreSQL/Elasticsearch with AES-256 EU storage. Envoy Proxy enforces edge JWT Authentication Filters, service-to-service links require mTLS, and Data Access Layer applies column-level encryption for sensitive patron data.",
+   "maintainability": "Services are cleanly partitioned along domain boundaries (Catalogue Service, Circulation & Loan Service). Loose coupling is maintained via asynchronous messaging through RabbitMQ, clear internal component layering, and database schema versioning with Flyway/Liquibase.",
+   "portability": "Containers rely on standard open technologies (NGINX, Spring Boot, Node.js, FastAPI, PostgreSQL, RabbitMQ) deployable to standard EU cloud VM or container platforms. Container orchestration definitions and infrastructure abstraction layers are not explicitly documented."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 3,
+   "MOD-02": 3,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 3.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Envoy Proxy routes requests to the dedicated Search Indexer powered by an Elasticsearch engine, decoupling search traffic from transactional databases to meet the 800 ms latency target.",
+    "elements": [
+     "Envoy Proxy",
+     "Catalogue Service",
+     "Search & Query Component",
+     "Search Indexer",
+     "Elasticsearch Engine Component"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster sizing and index replica count under high concurrency"
+    ],
+    "tradeoffs": [
+     "Dedicated search indexer introduces eventual consistency against primary storage"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Writes to the Catalogue Service publish events asynchronously via RabbitMQ to the Indexing Worker Component for bulk Elasticsearch writes, isolating searches from cataloguing updates within the 5-minute threshold.",
+    "elements": [
+     "Catalogue Service",
+     "Event Publisher",
+     "Message Broker",
+     "Indexing Worker Component",
+     "Elasticsearch Engine Component"
+    ],
+    "sensitivity_points": [
+     "Message queue ingestion throughput and Celery worker bulk indexing batch sizes"
+    ],
+    "tradeoffs": [
+     "Asynchronous indexing prioritizes search query performance over immediate catalog read consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Circulation operations bypass the Search Indexer entirely and use PostgreSQL with Patroni failover, ensuring loans are unaffected; Elasticsearch node failover handles search availability.",
+    "elements": [
+     "Search Indexer",
+     "Elasticsearch Engine Component",
+     "Circulation & Loan Service",
+     "Catalogue DB and Circulation DB",
+     "Patroni"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch shard replication and master election latency"
+    ],
+    "tradeoffs": [
+     "Index replica overhead versus search service recovery speed during node outage"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Web Application Container consists of stateless NGINX and React instances, allowing upstream Envoy Proxy cluster management and health checks to reroute patron traffic within one minute without losing transactions.",
+    "elements": [
+     "Web Application Container",
+     "Web Server & Security Layer",
+     "Envoy Proxy",
+     "Cluster Manager",
+     "Circulation & Loan Service"
+    ],
+    "sensitivity_points": [
+     "Envoy health check intervals and active outlier detection configuration"
+    ],
+    "tradeoffs": [
+     "Aggressive health check frequency increases network polling overhead"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "The Catalogue Service contains generic domain and API components, but lacks a dedicated provider integration or adapter plugin interface, likely requiring modifications across core domain logic.",
+    "elements": [
+     "Catalogue Service",
+     "API Controller",
+     "Catalogue Management Domain"
+    ],
+    "sensitivity_points": [
+     "Degree of coupling within the Catalogue Management Domain business logic"
+    ],
+    "tradeoffs": [
+     "Monolithic catalogue domain versus modular provider adapter architecture"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "The Circulation Workflow Engine manages rules such as grace periods and expiry in code; no dynamic external rules engine or runtime configuration service is explicitly defined.",
+    "elements": [
+     "Circulation & Loan Service",
+     "Circulation Workflow Engine"
+    ],
+    "sensitivity_points": [
+     "Mechanism for externalizing business rule evaluation at runtime"
+    ],
+    "tradeoffs": [
+     "Hardcoded rule engine simplicity versus runtime dynamic rule configuration complexity"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "All external systems (Auth0/Keycloak EU, Stripe EU, SendGrid/Twilio EU) and storage layers (PostgreSQL with EU encrypted volumes) are constrained to EU regions by design.",
+    "elements": [
+     "Enterprise Identity Provider",
+     "Payment Gateway",
+     "Notification Service",
+     "Catalogue DB and Circulation DB",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Regional routing and third-party SaaS regional endpoint configuration"
+    ],
+    "tradeoffs": [
+     "Strict regional compliance limits the selection of external cloud services"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "JWT claims validated at the Envoy Proxy and propagated to the Loan API Controller enforce identity authorization, preventing cross-patron access; however, security audit log sinks are not explicitly modeled.",
+    "elements": [
+     "Envoy Proxy",
+     "JWT Authentication Filter",
+     "Circulation & Loan Service",
+     "Loan API Controller"
+    ],
+    "sensitivity_points": [
+     "Propagation and validation of subject claims down to repository queries"
+    ],
+    "tradeoffs": [
+     "Fine-grained RBAC and authorization checks at each layer introduce slight compute overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Library Management System",
+     "Enterprise Identity Provider",
+     "Payment Gateway",
+     "Notification Service",
+     "Catalogue DB and Circulation DB",
+     "PostgreSQL"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Catalogue Service",
+     "Catalogue Management Domain",
+     "Catalogue DB and Circulation DB",
+     "PostgreSQL"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Indexer",
+     "Elasticsearch Engine Component",
+     "Search & Query Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Localization Service container
+
+System_Ext(AmazonAPIGateway, "Amazon API Gateway", "External system")
+System_Ext(AWSSecretsManager, "AWS Secrets Manager", "External system")
+System_Ext(AmazonElastiCacheRedis, "Amazon ElastiCache (Redis)", "External system")
+System_Ext(AmazonAuroraPostgreSQL, "Amazon Aurora PostgreSQL", "External system")
+System_Ext(AWSCloudWatchandCloudWatchLogs, "AWS CloudWatch and CloudWatch Logs", "External system")
+
+Container_Boundary(LocalizationService, "Localization Service") {
+    Component(TranslationController, "Translation Controller", "Node.js, Express, @grpc/grpc-js", "Handles incoming gRPC requests from the API Gateway and routes them for translation and localization processing.")
+    Component(TranslationEngineComponent, "Translation Engine Component", "i18next, Node.js", "Manages multi-region translation bundles and text localization.")
+    Component(CurrencyConversionComponent, "Currency Conversion Component", "Node.js, Background Sync Worker", "Handles currency conversion and syncs rates using external financial APIs and credentials from AWS Secrets Manager.")
+    Component(GeoResolutionComponent, "Geo-Resolution Component", "Node.js", "Resolves geographic location data to provide region-specific localization.")
+    Component(LocalizationDataAccessLayer, "Localization Data Access Layer", "Node.js, PostgreSQL Driver, Redis Client", "Manages data reads and writes for translation bundles, currency rates, and persistent locale metadata.")
+}
+
+Rel(TranslationController, TranslationEngineComponent, "Delegates translation requests")
+Rel(TranslationController, CurrencyConversionComponent, "Delegates currency conversion requests")
+Rel(TranslationController, GeoResolutionComponent, "Delegates geo-resolution requests")
+Rel(TranslationEngineComponent, LocalizationDataAccessLayer, "Reads and writes translation bundles")
+Rel(CurrencyConversionComponent, LocalizationDataAccessLayer, "Reads and writes currency rates")
+Rel(CurrencyConversionComponent, AWSSecretsManager, "Fetches credentials for external financial APIs", "TLS 1.3")
+Rel(LocalizationDataAccessLayer, AmazonElastiCacheRedis, "Reads/writes translation bundles and currency rates", "TCP/6379 with TLS")
+Rel(LocalizationDataAccessLayer, AmazonAuroraPostgreSQL, "Connects for persistent locale metadata", "TCP/5432 with TLS")
+Rel(AmazonAPIGateway, TranslationController, "Receives gRPC over HTTP/2 with mTLS requests")
+Rel(TranslationController, AWSCloudWatchandCloudWatchLogs, "Emits Prometheus metrics and audit logs")
+@enduml

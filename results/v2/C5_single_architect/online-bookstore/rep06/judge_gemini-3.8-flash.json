@@ -1,0 +1,347 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 3.875,
+  "justifications": {
+   "functional_suitability": "All functional requirements are addressed by Catalog Service, Order & Checkout Service, Customer & Review Service, and Recommendation Service. Multi-currency and GDPR are represented by dedicated components. However, specific mechanisms for electronic book delivery (digital fulfillment) are omitted, focusing primarily on physical shipping via Shipping Provider APIs.",
+   "performance_efficiency": "Performance and scalability (1M MAU) are well supported via Amazon CloudFront, Amazon ElastiCache (Redis) in Recommendation Service, and asynchronous task offloading via Messaging & Workers. However, the Search Engine Client lacks a concrete dedicated distributed search datastore (e.g., OpenSearch) to back catalogue searches at scale.",
+   "compatibility": "External interoperability is thoroughly addressed with explicit integrations: Stripe/PayPal via Payment Gateway, FedEx/UPS via Fulfillment Adapter and Shipping Provider APIs, Avalara via Tax Calculation Service, and OAuth2/OIDC via Identity Provider / SSO Service, all using standard REST/TLS protocols.",
+   "usability": "The Single Page Application (SPA) serves the Customer well with dedicated components for Catalog, Cart, and Reviews. However, Admin / Support Staff back-office operations (catalogue management, fulfillment tracking) lack dedicated UI views or components within the SPA component architecture.",
+   "reliability": "Fault tolerance is aided by Amazon SQS, Amazon SNS, and Dead Letter Queue (DLQ). However, to meet 99.95% uptime across the three specified AWS regions (us-east-1, eu-west-1, ap-southeast-1), cross-region replication, health checks, or failover mechanisms (e.g., Route 53, Aurora Global Database) are missing.",
+   "security": "OWASP Top-10 mitigations are implemented via API Gateway components (JWT Auth Filter, Rate Limiting & Throttling, Request/Response Transformation payload sanitization). Data Privacy / Compliance Component explicitly enforces GDPR and CCPA cascades, and Payment Coordinator utilizes idempotency keys over TLS.",
+   "maintainability": "The architecture exhibits high modularity with decoupled domain services (Catalog, Order & Checkout, Recommendation, Customer & Review). Technologies are appropriately aligned per domain (Go, Spring Boot, Python FastAPI, Node.js), and event-driven decoupling via Messaging & Workers provides clear boundaries and testability.",
+   "portability": "The system targets AWS regions, but relies heavily on proprietary services (Amazon API Gateway, SQS, SNS, Aurora, CloudFront) without abstraction layers for cross-cloud portability. Furthermore, mechanisms to deploy and coordinate the multi-region topology across us-east-1, eu-west-1, and ap-southeast-1 are not defined."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.0,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront CDN and S3 distribute the SPA efficiently, while Go Catalog Service with an in-process Cache Manager and Search Engine Client offloads database queries. However, database read replicas and edge caching configurations are not explicitly detailed for 10x spikes.",
+    "elements": [
+     "Single Page Application (SPA)",
+     "API Gateway",
+     "Catalog Service",
+     "Cache Manager",
+     "Product Repository",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios on edge CDN and Catalog Service cache manager",
+     "Aurora PostgreSQL read replica scaling under peak traffic"
+    ],
+    "tradeoffs": [
+     "Aggressive caching improves responsiveness but risks temporary catalogue data staleness"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendation recomputation is completely decoupled using Celery workers via the Async Model Updater and SQS. Updates write directly to ElastiCache Redis, allowing the Recommendation Engine Core to read pre-computed data without degrading customer browsing latency.",
+    "elements": [
+     "Recommendation Service",
+     "Async Model Updater",
+     "Cache Repository",
+     "Amazon ElastiCache (Redis)",
+     "Recommendation Engine Core"
+    ],
+    "sensitivity_points": [
+     "Redis memory sizing and eviction policies during large batch updates",
+     "Worker pool resource isolation from serving nodes"
+    ],
+    "tradeoffs": [
+     "Pre-computed asynchronous recommendations trade instant personalisation for predictable read performance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The Messaging & Workers container provides SQS buffering, background workers, and DLQs for third-party shipping calls. However, Level 3 Order & Checkout lists a direct Fulfillment Adapter connection alongside asynchronous messaging, leaving ambiguity on whether checkout synchronously blocks on shipping.",
+    "elements": [
+     "Order & Checkout Service",
+     "Fulfillment Adapter",
+     "Order Management Service",
+     "Messaging & Workers",
+     "Task Queue Coordinator",
+     "Background Worker Pool",
+     "Dead Letter Queue (DLQ)"
+    ],
+    "sensitivity_points": [
+     "Strict asynchronous decoupling between checkout completion and third-party shipping calls",
+     "Dead-letter queue retry policies for prolonged shipping API downtime"
+    ],
+    "tradeoffs": [
+     "Asynchronous shipping guarantees checkout availability but delays instant tracking number generation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Although multiple regions are listed in target cloud requirements, the architecture lacks cross-region mechanisms: no global DNS failover (Route 53), Aurora Global Database replication, cross-region event queues, or multi-region data synchronisation are modeled across containers.",
+    "elements": [
+     "API Gateway",
+     "Order & Checkout Service",
+     "Amazon Aurora PostgreSQL",
+     "Messaging & Workers"
+    ],
+    "sensitivity_points": [
+     "Cross-region database replication latency and consistency models",
+     "Automated DNS routing and failover detection times"
+    ],
+    "tradeoffs": [
+     "Multi-region active-active replication ensures zero downtime but adds considerable data consistency overhead"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Currency support is isolated within the SPA Localization & Currency Context component and delegated externally to Avalara and Stripe. Changes for JPY are primarily configuration-based, though minor adjustments across checkout formatting components are required.",
+    "elements": [
+     "Localization & Currency Context",
+     "Cart & Checkout",
+     "Order & Checkout Service",
+     "Payment Gateway",
+     "Tax Calculation Service"
+    ],
+    "sensitivity_points": [
+     "External payment gateway and tax service multi-currency API capabilities",
+     "Decoupling of currency formatting logic from core order processing"
+    ],
+    "tradeoffs": [
+     "Relying on external tax and payment services simplifies additions but creates vendor dependence"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Recommendation Service encapsulates algorithmic logic cleanly inside the Recommendation Engine Core and Async Model Updater. External consumers interact exclusively through standard gRPC/HTTPS interfaces at the API Gateway, isolating changes entirely to the container.",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Engine Core",
+     "Async Model Updater",
+     "Recommendation API Controller",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Interface boundary stability between Recommendation API Controller and downstream clients",
+     "Coupling of model training and inference pipelines within worker components"
+    ],
+    "tradeoffs": [
+     "Encapsulating algorithms behind microservice APIs isolates logic but increases operational deployment footprint"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The API Gateway enforces JWT validation, rate limiting, and request transformation. Downstream components utilize ORM/repository layers (Mongoose, Spring Data JPA, Go repository), providing defense against SQLi and XSS. However, a dedicated WAF component is missing.",
+    "elements": [
+     "API Gateway",
+     "JWT Auth Filter",
+     "Request/Response Transformation",
+     "Product Repository",
+     "Order Repository",
+     "MongoDB Atlas"
+    ],
+    "sensitivity_points": [
+     "Input validation rigor at API Gateway and service boundaries",
+     "Consistent parameterization across diverse data access layers"
+    ],
+    "tradeoffs": [
+     "Deep payload inspection and transformation increases edge request latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "The Customer & Review Service contains an explicit Data Privacy / Compliance Component triggering compliance cascades. Events can fan out via SNS/SQS to coordinate deletions across order and review stores, though cross-service erasure choreography is not fully articulated.",
+    "elements": [
+     "Data Privacy / Compliance Component",
+     "Customer Profile Component",
+     "Review Management Component",
+     "Messaging & Workers",
+     "Order & Checkout Service"
+    ],
+    "sensitivity_points": [
+     "Reliability of asynchronous compliance cascades across microservice storage boundaries",
+     "Reconciliation between GDPR right-to-erasure and legal financial record retention"
+    ],
+    "tradeoffs": [
+     "Asynchronous deletion cascades scale cleanly across microservices but complicate immediate audit verification"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "partial"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Data Privacy / Compliance Component",
+     "Customer Profile Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Localization & Currency Context",
+     "Tax Calculation Service"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Provider APIs",
+     "Fulfillment Adapter",
+     "Background Worker Pool"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search",
+     "Catalog Service",
+     "Catalog API Handler",
+     "Search Engine Client / Indexer",
+     "Product Repository",
+     "Cache Manager"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Cart & Checkout",
+     "Order & Checkout Service",
+     "Checkout Controller",
+     "Cart Domain Component",
+     "Payment Coordinator",
+     "Order Repository",
+     "Payment Gateway"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Reviews & Ratings",
+     "Customer & Review Service",
+     "Review Management Component",
+     "Review Moderation Component",
+     "MongoDB Atlas"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendations",
+     "Recommendation Service",
+     "Recommendation API Controller",
+     "Recommendation Engine Core",
+     "Cache Repository",
+     "Event Consumer",
+     "Async Model Updater",
+     "Amazon ElastiCache (Redis)"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "Rate Limiting & Throttling",
+     "Messaging & Workers",
+     "Event Publisher Component",
+     "Task Queue Coordinator",
+     "Background Worker Pool",
+     "Amazon ElastiCache (Redis)",
+     "Single Page Application (SPA)"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Single Page Application (SPA)",
+     "Amazon ElastiCache (Redis)",
+     "Cache Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Dead Letter Queue (DLQ)",
+     "Messaging & Workers"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "partial",
+    "elements": [
+     "JWT Auth Filter",
+     "Rate Limiting & Throttling",
+     "Request/Response Transformation",
+     "Identity Provider / SSO Service"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

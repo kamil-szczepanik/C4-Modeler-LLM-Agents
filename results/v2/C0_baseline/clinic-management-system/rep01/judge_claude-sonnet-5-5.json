@@ -1,0 +1,346 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 3,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 3.75,
+  "justifications": {
+   "functional_suitability": "Registration (Patient Portal's Registration & Profile Manager), scheduling (Scheduling Engine Component), EMR with audit (EMR Management Component, Audit & Compliance Component) and billing (Billing & Estimation Engine) are covered. Gaps: no explicit resource clash check, and the claim submission path to Insurance Payment Gateways goes through Kafka with no adapter.",
+   "performance_efficiency": "Clinical Session Cache Component (Redis, short TTLs), PgBouncer Connection Pooler, Kafka asynchronous events and the gateway's Routing & Upstream Load Balancer are concrete mechanisms. No explicit P95 <1s target, no autoscaling or read-replica routing is described, and the encrypted cache adds overhead.",
+   "compatibility": "Integration / Interoperability Service with FHIR Ingress/Egress Router and Data Transformation Engine (Apache Camel) provides HL7 FHIR for Lab & Imaging Systems. OIDC/SAML for the IdP and REST/OAuth for insurance gateways are covered. Gap: no claim-format standards such as X12 are named, and the insurance link is vague.",
+   "usability": "Patient Portal has Appointment Self-Service UI and Localization & Preference Module, and Notification Dispatcher pushes updates. Staff groups (receptionists, clinicians, billing, auditors, administrators) have no dedicated UI container, and no auditor view is defined, only gateway access.",
+   "reliability": "Relational Database uses CloudNativePG automated failover and primary-replica replication; Kafka KRaft, a DLQ Manager and Prometheus/Grafana monitoring are present. Active-active 99.99% is not explicitly designed: there are no multi-site deployment details, no backup/DR, and the primary-replica model contradicts active-active.",
+   "security": "MFA via IdP and OIDC/JWT Validation Engine, WAF & Security Inspector, Istio strict mTLS, Vault AES-256 envelope encryption, Open Policy Agent Consent & Policy Enforcement, Audit Interceptor, Audit & Compliance Component and S3 Object Lock WORM storage match HIPAA/GDPR, 10-year retention and the audit requirements.",
+   "maintainability": "Clear service decomposition (Core Clinical, Billing & Scheduling, Integration), components with distinct responsibilities, Istio mesh, ArgoCD GitOps and OpenTelemetry observability. Minor gaps: a single shared Data Storage Layer couples services, the infrastructure container is a grab-bag, and a few model inconsistencies exist.",
+   "portability": "Kubernetes-based with ArgoCD GitOps, CloudNativePG and Istio, which supports on-prem-k8s; AWS eu-central-1 S3 Object Lock for archival. The open-source stack limits lock-in. Gaps: no explicit multi-environment deployment model, and the S3 WORM dependency is AWS-specific."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.4375,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 2.5,
+   "Modifiability": 2.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Clinical Session Cache Component",
+     "EMR Management Component",
+     "Connection Pooler",
+     "Relational Database",
+     "API Gateway / Reverse Proxy"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio and TTL determine P95",
+     "Gateway chain adds hop latency",
+     "Mesh mTLS overhead"
+    ],
+    "tradeoffs": [
+     "Decrypted cache speeds reads but widens PHI exposure",
+     "Short TTL favors security over latency"
+    ],
+    "justification": "Redis session cache, PgBouncer and a Java service plausibly support 500 concurrent loads. But no load-test evidence, no sizing, and no cache-freshness mechanism ('current data'). The P95 target is unverified."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "FHIR Ingress/Egress Router",
+     "Data Transformation Engine",
+     "Event Broker Component",
+     "Core Clinical Service",
+     "DLQ Manager"
+    ],
+    "sensitivity_points": [
+     "Ingestion path is not shown to be Kafka-buffered",
+     "Shared PostgreSQL contention with EMR reads"
+    ],
+    "tradeoffs": [
+     "Async buffering protects EMR latency but delays visibility",
+     "Audit streaming adds per-message overhead"
+    ],
+    "justification": "Camel transformation, Kafka and a DLQ can handle a burst. But the ingestion path into EMR storage is undefined, there is no workload isolation or read replica for EMR reads, and the 10-minute target is unverified."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "Data Storage Layer",
+     "Relational Database",
+     "AWS Cloud Infrastructure",
+     "API Gateway / Reverse Proxy",
+     "Object Storage"
+    ],
+    "sensitivity_points": [
+     "Replication mode (sync vs async) determines data loss",
+     "Failover traffic routing is undefined"
+    ],
+    "tradeoffs": [
+     "Synchronous replication prevents loss but raises latency",
+     "Hybrid cost vs active-active"
+    ],
+    "justification": "AWS is described only as replication and archive target, with primary-replica DB. No active-active deployment, global traffic routing, or compute in eu-central-1. Zero data loss and 1-minute failover are not demonstrated."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Relational Database",
+     "Billing & Scheduling Service",
+     "Event Broker Component",
+     "Insurance Payment Gateways",
+     "Connection Pooler"
+    ],
+    "sensitivity_points": [
+     "CloudNativePG failover time vs 30 s",
+     "No idempotency keys for claims"
+    ],
+    "tradeoffs": [
+     "Async Kafka submission gives retries but risks duplicates",
+     "Exactly-once requires added complexity"
+    ],
+    "justification": "CloudNativePG automated failover and Kafka-based claim submission support safe retry. But idempotency, outbox or transactional guarantees against duplicates are not specified, and the 30 s recovery is unproven."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Billing & Scheduling Service",
+     "Integration / Interoperability Service",
+     "Event Broker Component",
+     "Insurance Payment Gateways"
+    ],
+    "sensitivity_points": [
+     "Claim submission lives inside Billing service, not an adapter",
+     "Gateway coupling via Kafka topics"
+    ],
+    "tradeoffs": [
+     "Kafka decouples EMR but couples billing to gateway",
+     "Camel adapters would help but are FHIR-focused"
+    ],
+    "justification": "EMR (Core Clinical Service) is isolated from billing, so it stays unchanged. But there is no dedicated claims integration component or adapter abstraction; the change would land in the Billing service, which also holds other logic."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "elements": [
+     "Registration & Profile Manager",
+     "Core Clinical Service",
+     "Relational Database",
+     "Audit & Compliance Component",
+     "Audit Interceptor"
+    ],
+    "sensitivity_points": [
+     "Demographics ownership is unclear across services",
+     "Schema migration process undefined"
+    ],
+    "tradeoffs": [
+     "Separate services isolate change but spread the field across layers",
+     "Audit decoupling vs consistent field coverage"
+    ],
+    "justification": "A field change touches the portal UI, the BFF, the service owning demographics, the DB schema and audit, probably exceeding three components. No demographics component, data-model module or migration mechanism is defined."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "Identity Provider (IdP)",
+     "OIDC/JWT Validation Engine",
+     "Patient Authentication Controller",
+     "WAF & Security Inspector",
+     "Telemetry Collector & Monitoring"
+    ],
+    "sensitivity_points": [
+     "MFA enforced only at the IdP",
+     "No alerting rule defined for failed logins"
+    ],
+    "tradeoffs": [
+     "External IdP centralizes MFA but adds dependency",
+     "Strict token validation adds latency"
+    ],
+    "justification": "The IdP with OIDC and gateway JWT validation enforces MFA. But the 1-minute security alert path is missing: no failed-login detection, alert component or SIEM integration is defined, only generic monitoring."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Consent & Policy Enforcement",
+     "Audit & Compliance Component",
+     "Event Broker Component",
+     "Object Storage",
+     "Data Storage Layer"
+    ],
+    "sensitivity_points": [
+     "OPA is wired only on the FHIR path, not EMR reads",
+     "Audit completeness depends on async Kafka delivery"
+    ],
+    "tradeoffs": [
+     "Async audit lowers latency but risks missed events",
+     "WORM gives tamper evidence but hinders erasure"
+    ],
+    "justification": "WORM S3 Object Lock with a 10-year retention and an audit component provide tamper-evident retention. But policy checks for EMR reads are not shown; OPA is only in integration, and 100% read auditing is not guaranteed with async publishing."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.7272727272727273,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Audit & Compliance Component",
+     "Consent & Policy Enforcement",
+     "Audit Interceptor",
+     "Data Storage Layer",
+     "Service Mesh",
+     "Secrets Management Component",
+     "WAF & Security Inspector"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Relational Database",
+     "Event Broker Component",
+     "Routing & Upstream Load Balancer",
+     "Data Storage Layer"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Object Storage",
+     "Data Storage Layer",
+     "AWS Cloud Infrastructure"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Registration & Profile Manager",
+     "Patient Portal",
+     "Core Clinical Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Scheduling Engine Component",
+     "Rescheduling & Waitlist Sub-component",
+     "Appointment Self-Service UI",
+     "Billing & Scheduling Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Management Component",
+     "Audit & Compliance Component",
+     "Data Storage Layer",
+     "Audit Interceptor"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Billing & Estimation Engine Component",
+     "Billing & Scheduling Service",
+     "Insurance Payment Gateways"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "OIDC/JWT Validation Engine",
+     "Patient Authentication Controller",
+     "Data Storage Layer",
+     "Secret Management"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Relational Database",
+     "Event Broker Component",
+     "Routing & Upstream Load Balancer",
+     "AWS Cloud Infrastructure"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Clinical Session Cache Component",
+     "Connection Pooler",
+     "Core Clinical Service"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration / Interoperability Service",
+     "FHIR Ingress/Egress Router",
+     "Data Transformation Engine",
+     "Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

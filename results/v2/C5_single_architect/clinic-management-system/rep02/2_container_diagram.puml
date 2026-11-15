@@ -1,0 +1,40 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patient, "Patient", "Patient using the platform for admissions, scheduling, and medical records.")
+Person(Clinician_Receptionist, "Clinician / Receptionist", "Clinician or Receptionist managing clinical workflows, scheduling, and billing.")
+System_Ext(External_Lab_Imaging_Systems, "External Lab & Imaging Systems", "External systems for clinical diagnostics and imaging.")
+System_Ext(Payment_Gateway_Insurance_Clearinghouse, "Payment Gateway / Insurance Clearinghouse", "External financial systems for processing payments and insurance claims.")
+System_Ext(Notification_Service, "Notification Service", "External service for sending notifications and alerts.")
+
+System_Boundary(Clinic_Management_System, "Clinic Management System") {
+    Container(API_Gateway, "API Gateway", "Kong / NGINX", "Handles reverse proxy, rate limiting, and mTLS termination.")
+    Container(Patient_Scheduling_Service, "Patient & Scheduling Service", "Spring Boot (Java), Redis", "Manages patient admissions, scheduling logic, and scheduling locks.")
+    Container(EMR_Service, "EMR Service", "Spring Boot (Java), PostgreSQL", "Manages electronic medical records and core clinical data.")
+    Container(Billing_Claims_Service, "Billing & Claims Service", "Node.js", "Manages billing, invoicing, and insurance claims.")
+    Container(Integration_Service_FHIR_Adapter, "Integration Service (FHIR Adapter)", "Apache Camel / Spring Integration", "Ensures interoperability with external healthcare systems via HL7 FHIR.")
+    Container(Audit_Service, "Audit Service", "Elasticsearch / WORM storage", "Maintains immutable audit logs for security and compliance.")
+    Container(Apache_Kafka, "Apache Kafka", "Apache Kafka", "Fault-tolerant, durable asynchronous message broker for event-driven messaging.")
+    ContainerDb(PostgreSQL, "PostgreSQL", "PostgreSQL with AES-256", "Primary relational database for patient and EMR data.")
+    ContainerDb(Redis, "Redis", "Redis", "Caching and session state storage, and scheduling locks.")
+    ContainerDb(Elasticsearch_WORM_storage, "Elasticsearch / WORM storage", "Elasticsearch / WORM", "Storage for audit logs.")
+}
+
+Rel(Patient, API_Gateway, "Accesses patient admissions and scheduling", "HTTPS / REST, OAuth2 / MFA over TLS 1.3")
+Rel(Clinician_Receptionist, API_Gateway, "Manages EMR, scheduling, and billing", "HTTPS / REST, OAuth2 / MFA over TLS 1.3")
+Rel(External_Lab_Imaging_Systems, Integration_Service_FHIR_Adapter, "Exchanges clinical and imaging data", "HL7 FHIR over TLS 1.3")
+Rel(API_Gateway, Patient_Scheduling_Service, "Routes patient and scheduling requests", "gRPC")
+Rel(API_Gateway, EMR_Service, "Routes electronic medical record requests", "gRPC")
+Rel(API_Gateway, Billing_Claims_Service, "Routes billing and claims requests", "gRPC")
+Rel(Billing_Claims_Service, Apache_Kafka, "Publishes asynchronous billing events", "mTLS over Apache Kafka")
+Rel(Integration_Service_FHIR_Adapter, Apache_Kafka, "Publishes asynchronous integration events", "mTLS over Apache Kafka")
+Rel(Patient_Scheduling_Service, PostgreSQL, "Reads and writes patient data", "Encrypted database protocols with AES-256")
+Rel(Patient_Scheduling_Service, Redis, "Uses for caching and locks", "Encrypted database protocols with AES-256")
+Rel(EMR_Service, PostgreSQL, "Reads and writes EMR data", "Encrypted database protocols with AES-256")
+Rel(Billing_Claims_Service, PostgreSQL, "Reads and writes billing data", "Encrypted database protocols with AES-256")
+Rel(Audit_Service, Elasticsearch_WORM_storage, "Persists immutable audit logs", "Encrypted database protocols with AES-256")
+
+@enduml

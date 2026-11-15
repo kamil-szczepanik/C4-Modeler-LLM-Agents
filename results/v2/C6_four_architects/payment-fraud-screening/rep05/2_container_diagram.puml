@@ -1,0 +1,37 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Card-Not-Present Fraud Detection System
+
+Person(FraudAnalysts, "Fraud Analysts", "Human reviewers managing suspicious transactions via UI.")
+System_Ext(PaymentGatewayClient, "Payment Gateway / Client", "External caller initiating payment authorizations.")
+
+System_Boundary(CardNotPresentFraudDetectionSystem, "Card-Not-Present Fraud Detection System") {
+    Container(AWSALB, "AWS ALB", "AWS Application Load Balancer", "Ingress load balancer handling gRPC/HTTP/2 traffic.")
+    Container(FraudScoringService, "Fraud Scoring Service", "Python, FastAPI, ONNX Runtime, Amazon ECS Fargate", "Scores payment authorizations for fraud in real-time.")
+    Container(CaseManagementAPI, "Case Management API", "Amazon ECS Fargate", "ECS Fargate service for analyst review workflows.")
+    Container(CloudFrontReactSPA, "CloudFront / React SPA", "Amazon CloudFront, React", "User interface for fraud analysts to manage reviews and cases.")
+    Container(APIGateway, "API Gateway", "Amazon API Gateway", "Gateway for analyst review traffic.")
+    ContainerDb(AmazonElastiCacheRedis, "Amazon ElastiCache (Redis)", "Amazon ElastiCache Redis", "Low-latency feature store and cache.")
+    Container(AmazonS3ModelRegistry, "Amazon S3 Model Registry", "Amazon S3", "S3 bucket for zero-downtime model and rule hot-reloading.")
+    Container(AmazonSQS, "Amazon SQS", "Amazon SQS", "Asynchronous messaging queue for audit processing.")
+    Container(AWSLambda, "AWS Lambda", "AWS Lambda", "Audit processor function.")
+    ContainerDb(AmazonS3ObjectLock, "Amazon S3 Object Lock", "Amazon S3 Object Lock", "Tamper-evident 7-year audit storage in Compliance Mode.")
+    ContainerDb(AmazonAuroraPostgreSQL, "Amazon Aurora PostgreSQL", "Amazon Aurora PostgreSQL", "Operational data store for case management.")
+    Container(AWSCloudMap, "AWS Cloud Map", "AWS Cloud Map", "Lightweight internal service discovery.")
+}
+
+Rel(PaymentGatewayClient, AWSALB, "Initiates payment authorizations", "HTTPS/gRPC")
+Rel(AWSALB, FraudScoringService, "Routes scoring traffic", "gRPC/HTTP/2 via AWS Cloud Map")
+Rel(FraudAnalysts, CloudFrontReactSPA, "Accesses review UI", "HTTPS")
+Rel(CloudFrontReactSPA, APIGateway, "Sends API requests", "HTTPS/REST")
+Rel(APIGateway, CaseManagementAPI, "Forwards requests", "HTTPS/REST")
+Rel(FraudScoringService, AmazonElastiCacheRedis, "Retrieves and stores features", "TCP/RESP")
+Rel(FraudScoringService, AmazonS3ModelRegistry, "Hot-reloads models and rules", "HTTPS")
+Rel(FraudScoringService, AmazonSQS, "Publishes audit events", "HTTPS")
+Rel(AmazonSQS, AWSLambda, "Triggers audit processing", "Asynchronous")
+Rel(AWSLambda, AmazonS3ObjectLock, "Stores audit logs", "HTTPS")
+Rel(CaseManagementAPI, AmazonAuroraPostgreSQL, "Reads and writes operational case data", "TCP/TLS")
+
+@enduml

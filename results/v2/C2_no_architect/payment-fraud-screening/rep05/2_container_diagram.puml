@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening Platform
+
+Person(Cardholder, "Cardholder", "End customer initiating transactions.")
+Person(Fraud Analyst, "Fraud Analyst", "Internal analyst who reviews suspicious payments via the Case Management UI without accessing raw PAN data.")
+Person(Risk/Fraud Operations Manager, "Risk/Fraud Operations Manager", "Manager overseeing operational metrics and fraud review workflows.")
+
+System_Ext(Payment Gateway, "Payment Gateway", "External client submitting payment authorizations.")
+
+System_Boundary(Real-Time Payment Fraud Screening Platform, "Real-Time Payment Fraud Screening Platform") {
+    Container(API Gateway, "API Gateway", "AWS ECS (Fargate)", "Routes incoming scoring requests and secures API traffic.")
+    Container(Scoring Engine Container, "Scoring Engine Container", "AWS ECS (Fargate)", "Evaluates payment authorizations for fraud in real-time.")
+    Container(Case Management Container, "Case Management Container", "AWS ECS (Fargate), AWS Cognito", "Provides review UI and operational metrics for fraud analysts and managers.")
+    ContainerDb(Redis Cache, "Redis Cache", "AWS ElastiCache Serverless", "Powers the degraded-mode fallback cache for rules during outages.")
+    ContainerDb(S3 Glacier Object Lock Storage, "S3 Glacier Object Lock Storage", "AWS S3 Glacier with Object Lock, AWS KMS", "Stores tamper-evident 7-year audit logs using envelope encryption.")
+}
+
+Rel(Cardholder, Payment Gateway, "Initiates payment transactions", "HTTPS")
+Rel(Payment Gateway, API Gateway, "Sends payment authorization requests", "HTTPS, mTLS, TLS 1.3")
+Rel(API Gateway, Scoring Engine Container, "Routes scoring requests", "Internal VPC Networking")
+Rel(Scoring Engine Container, Redis Cache, "Queries cached fallback ruleset during outages", "Isolated VPC Subnet")
+Rel(Scoring Engine Container, S3 Glacier Object Lock Storage, "Writes cryptographically signed audit logs", "AWS KMS Envelope Encryption")
+Rel(Fraud Analyst, Case Management Container, "Accesses review UI and operational metrics", "HTTPS, OAuth2/OIDC, AWS Cognito")
+Rel(Risk/Fraud Operations Manager, Case Management Container, "Accesses review UI and operational metrics", "HTTPS, OAuth2/OIDC, AWS Cognito")
+
+@enduml

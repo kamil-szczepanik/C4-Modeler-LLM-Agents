@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the E-Prescription Adapter container
+
+Container_Boundary(e_prescription_adapter, "E-Prescription Adapter") {
+    Component(PrescriptionRouter, "Prescription Router", "Node.js / TypeScript", "Routes prescription requests and enqueues messages.")
+    Component(OutboxProcessor, "Outbox Processor", "Node.js / TypeScript", "Enqueues messages, dispatches queued payloads, dispatches delivery state changes, and forwards immutable event logs using the Transactional Outbox pattern.")
+    Component(GatewayClient, "Gateway Client", "Node.js / TypeScript", "Dispatches queued payloads to local pharmacies.")
+    Component(StatusNotification, "Status Notification", "Node.js / TypeScript", "Dispatches delivery state changes and pushes status receipts and error codes.")
+    Component(AuditLogging, "Audit Logging", "Node.js / TypeScript", "Forwards immutable event logs to regional WORM storage.")
+}
+
+System_Ext(LocalPharmacies, "Local Pharmacies", "Local pharmacy network endpoints.")
+System_Ext(BFF, "Backend-for-Frontend (BFF)", "Node.js, GraphQL BFF service.")
+System_Ext(WORMStorage, "Regional WORM Storage", "GCP Storage for compliance logs.")
+
+Rel(BFF, PrescriptionRouter, "Transmits prescription requests", "gRPC over mTLS via Istio")
+Rel(PrescriptionRouter, OutboxProcessor, "Enqueues messages", "Internal Async")
+Rel(OutboxProcessor, GatewayClient, "Dispatches queued payloads", "Internal Event")
+Rel(GatewayClient, LocalPharmacies, "Transmits signed payloads", "TLS 1.3, HL7 FHIR/REST/SOAP")
+Rel(OutboxProcessor, StatusNotification, "Dispatches delivery state changes", "Internal Event")
+Rel(StatusNotification, BFF, "Pushes status receipts and error codes", "gRPC Stream")
+Rel(OutboxProcessor, AuditLogging, "Forwards immutable event logs", "Internal Async")
+Rel(AuditLogging, WORMStorage, "Writes compliance logs", "GCP Storage API, TLS 1.3")
+
+@enduml

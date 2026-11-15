@@ -1,0 +1,326 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "All requirements are met: R-01 via 'Scoring Engine Container', R-02 via 'Case Management Container' (and 'Case UI Component'), and R-03 via hot-loading cryptographically signed rules from 'Dynamic Rule & Model Registry'.",
+   "performance_efficiency": "Sub-50ms P99 at 3,000 TPS is addressed through 'Rust / Tokio' in 'Scoring Engine Container', native in-memory rule evaluation, and asynchronous logging via 'Audit Dispatcher Component' and 'AWS SQS'.",
+   "compatibility": "Standards and external systems are explicitly integrated: gRPC/REST with TLS 1.3/mTLS for 'Payment Gateway', secure token APIs with 'External Cardholder Data Environment', and AWS SDK integration with 'AWS S3 Object Lock'.",
+   "usability": "Distinct personas are well-served: 'Fraud Analyst' and 'Risk Manager' use 'Case UI Component', while 'Compliance & Audit Officer' uses 'Audit UI Component' for reporting and regulatory exception reviews.",
+   "reliability": "R-07 availability is strictly addressed by 'Circuit Breaker & Fallback Coordinator Component' routing to 'Fallback Scoring Container' with 'Heuristic Evaluator', along with SQS DLQ mechanisms preventing pipeline blockages.",
+   "security": "Cardholder protection (R-05) is ensured by 'Token Resolution Component', preventing raw PAN storage. Audit integrity (R-06) uses 'AWS S3 Object Lock' (WORM), mTLS, OAuth2, and ECDSA P-256 signature verification.",
+   "maintainability": "Well-modularized into distinct containers with clear domain boundaries. Serverless managed services ('AWS ECS Fargate', 'AWS Aurora Serverless v2') ensure high maintainability feasible for a three-engineer team within budget.",
+   "portability": "Explicitly targets AWS eu-west-1 using containerized ECS tasks. However, heavy reliance on AWS-proprietary services (S3 Object Lock, KMS, Athena) slightly limits migration outside of the target cloud provider."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 3,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.0,
+   "Modifiability": 4.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Rust and Tokio provide the necessary throughput and low-latency concurrency for 3,000 TPS. However, synchronously querying the external CDE/Tokenization vault over network APIs for every authorization poses a tail-latency risk against the 50 ms P99 target.",
+    "elements": [
+     "Scoring Engine Container",
+     "API Ingress Component",
+     "Token Resolution Component",
+     "Rule & Model Execution Component",
+     "Audit Dispatcher Component",
+     "External Cardholder Data Environment (CDE) / Tokenization Vault"
+    ],
+    "sensitivity_points": [
+     "Network latency and availability of external tokenization vault API calls",
+     "Asynchronous non-blocking audit dispatching via Tokio channels"
+    ],
+    "tradeoffs": [
+     "Resolving tokens externally guarantees PCI isolation at the expense of authorization latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management workloads are completely segregated from the scoring engine into independent containers, using AWS SQS for asynchronous queueing and a dedicated Aurora Serverless database. Analyst queries cannot contend with real-time scoring execution.",
+    "elements": [
+     "Scoring Engine Container",
+     "Case Management Container",
+     "Case UI Component",
+     "Case API Component",
+     "Case Database Component",
+     "AWS SQS"
+    ],
+    "sensitivity_points": [
+     "Decoupling analyst operations from scoring via asynchronous message queuing"
+    ],
+    "tradeoffs": [
+     "Asynchronous event queue introduces eventual consistency between scoring decisions and review queues"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The Fallback Scoring Container is positioned behind the Scoring Engine Container via its internal Circuit Breaker component. If the scoring engine crashes, the entire ingress path fails and traffic cannot reach the fallback scoring container.",
+    "elements": [
+     "Payment Gateway / Core Processing System",
+     "Scoring Engine Container",
+     "Fallback Scoring Container",
+     "Circuit Breaker & Fallback Coordinator Component"
+    ],
+    "sensitivity_points": [
+     "Placement of the fallback coordinator within the primary failure domain",
+     "Gateway routing topology during container crashes"
+    ],
+    "tradeoffs": [
+     "Internal circuit breaker simplifies gateway integration but creates a single point of failure"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Tokio async Audit Dispatcher and AWS Firehose buffer decouple scoring latency from S3 write availability. However, prolonged S3 or Firehose outages rely on in-memory buffers that risk dropping audit records once memory is exhausted.",
+    "elements": [
+     "Scoring Engine Container",
+     "Audit Dispatcher Component",
+     "AWS S3 Object Lock"
+    ],
+    "sensitivity_points": [
+     "Tokio async channel buffer capacity during extended downstream storage outages"
+    ],
+    "tradeoffs": [
+     "In-memory asynchronous audit dispatch favors scoring latency over guaranteed zero-loss durability during extended outages"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Dynamic Rule & Model Registry combined with native evaluation and KMS signature validation enables dynamic hot-reloading at runtime without restarting containers. Model versions are captured alongside decision inputs to support quick rollbacks and auditable references.",
+    "elements": [
+     "Dynamic Rule & Model Registry",
+     "Rule & Model Execution Component",
+     "Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Cryptographic signature verification speed during dynamic hot-reloading"
+    ],
+    "tradeoffs": [
+     "In-memory dynamic evaluation allows zero-downtime updates but requires rigorous local validation before activation"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "While rule updates can be hot-loaded without downtime, the architecture lacks a shared, low-latency state store (e.g., Redis or DynamoDB). Evaluating velocity checks across transactions is impossible in a stateless native evaluation component.",
+    "elements": [
+     "Dynamic Rule & Model Registry",
+     "Scoring Engine Container",
+     "Rule & Model Execution Component"
+    ],
+    "sensitivity_points": [
+     "Absence of distributed state storage for cross-transaction velocity rules"
+    ],
+    "tradeoffs": [
+     "Stateless scoring maximizes execution speed but severely limits stateful velocity check capabilities"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Raw card numbers are never stored in the case database and remain tokenized in the external vault, preventing PAN exfiltration. However, the architecture defines no intrusion detection, SIEM, or anomalous access alerting mechanisms to meet the 15-minute detection requirement.",
+    "elements": [
+     "Case Management Container",
+     "Case API Component",
+     "Case Database Component",
+     "External Cardholder Data Environment (CDE) / Tokenization Vault"
+    ],
+    "sensitivity_points": [
+     "Tokenized data isolation preventing exposure of clear-text cardholder data"
+    ],
+    "tradeoffs": [
+     "Delegating security solely to tokenization leaves behavioral anomaly detection unaddressed"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The combination of AWS S3 Object Lock (WORM storage) for 7-year retention and Athena-based querying via the Audit Reporting Container allows compliance officers to quickly locate, inspect, and export decision inputs, explanations, and model versions within hours.",
+    "elements": [
+     "Audit Reporting Container",
+     "Query & Aggregation Component",
+     "S3 Access Component",
+     "AWS S3 Object Lock"
+    ],
+    "sensitivity_points": [
+     "Partitioning and Parquet compaction strategy for Athena query performance on historical data"
+    ],
+    "tradeoffs": [
+     "WORM storage guarantees immutability but prevents retrospective schema alterations on historical logs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "External Cardholder Data Environment (CDE) / Tokenization Vault",
+     "Token Resolution Component",
+     "Scoring Engine Container",
+     "AWS S3 Object Lock"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "AWS S3 Object Lock",
+     "Audit Dispatcher Component",
+     "Audit Reporting Container",
+     "Query & Aggregation Component",
+     "S3 Access Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Case Database Component",
+     "Scoring Engine Container",
+     "Case Management Container"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Scoring Engine Container",
+     "Case Management Container",
+     "Audit Reporting Container",
+     "AWS SQS",
+     "Case Database Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Scoring Engine Container",
+     "API Ingress Component",
+     "Rule & Model Execution Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Container",
+     "Case UI Component",
+     "Case API Component",
+     "Case Ingestion Worker Component",
+     "Case Database Component",
+     "AWS SQS"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Dynamic Rule & Model Registry",
+     "Scoring Engine Container",
+     "Rule & Model Execution Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scoring Engine Container",
+     "API Ingress Component",
+     "Rule & Model Execution Component",
+     "Audit Dispatcher Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "External Cardholder Data Environment (CDE) / Tokenization Vault",
+     "Token Resolution Component",
+     "Case UI Component",
+     "Case API Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "AWS S3 Object Lock",
+     "Audit Dispatcher Component",
+     "Rule & Model Execution Component",
+     "Regulatory Exception Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Circuit Breaker & Fallback Coordinator Component",
+     "Fallback Scoring Container",
+     "Fallback API Handler",
+     "Heuristic Evaluator"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

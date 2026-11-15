@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Asynchronous Messaging container
+
+System_Ext(Fraud Scoring Engine, "Fraud Scoring Engine", "Go container on Amazon ECS on EC2 scoring authorization requests.")
+System_Ext(Case Management API, "Case Management API", "Node.js/TypeScript container on Amazon ECS on EC2 handling analyst reviews.")
+System_Ext(Audit Sink, "Audit Sink", "External tamper-evident data store.")
+
+Container_Boundary("Asynchronous Messaging", "Asynchronous Messaging") {
+    Component(Audit Event Ingestion Queue, "Audit Event Ingestion Queue", "Amazon SQS", "Receives decoupled asynchronous audit events from the Fraud Scoring Engine and Case Management API via AWS VPC Endpoints.")
+    Component(Audit Dispatcher Worker, "Audit Dispatcher Worker", "Go on Amazon ECS", "Processes messages from the ingestion queue, handles retries, and forwards logs to the external Audit Sink or Dead-Letter Queue.")
+    Component(Audit Dead-Letter Queue (DLQ), "Audit Dead-Letter Queue (DLQ)", "Amazon SQS", "Captures failed audit event messages after they breach the retry threshold for manual investigation.")
+}
+
+Rel(Fraud Scoring Engine, Audit Event Ingestion Queue, "Publishes audit events", "SQS API")
+Rel(Case Management API, Audit Event Ingestion Queue, "Publishes audit events", "SQS API")
+Rel(Audit Event Ingestion Queue, Audit Dispatcher Worker, "Dispatches messages for processing")
+Rel(Audit Dispatcher Worker, Audit Dead-Letter Queue (DLQ), "Forwards failed messages after retry threshold breach", "SQS API")
+Rel(Audit Dispatcher Worker, Audit Sink, "Streams tamper-evident audit logs using mutual TLS or AWS SigV4", "HTTPS / AWS API")
+
+@enduml

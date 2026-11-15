@@ -1,0 +1,37 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Library Management Systems
+
+Person(LibraryPatronsStaff, "Library Patrons & Staff", "End-users accessing physical and digital item cataloging, circulation management, and self-service portals.")
+
+System_Ext(IdentityProvider, "Identity Provider", "Identity Provider system for authentication and authorization.")
+System_Ext(PaymentGateway, "Payment Gateway", "External payment gateway for handling transactions.")
+System_Ext(NationalLibraryDatabase, "National Library Database", "External national library database for catalog synchronization.")
+System_Ext(CentralizedObservabilityPlatform, "Centralized Observability Platform", "Platform for collecting system telemetry and logs.")
+
+System_Boundary(LibraryManagementSystem, "Library Management System") {
+    Container(WebApplicationsPA, "Web Application (SPA)", "React", "Powers the frontend SPA for fast patron and staff self-service.")
+    Container(ApiGateway, "API Gateway", "Nginx / Kong", "Acts as API Gateway for ingress, rate-limiting, and JWT validation.")
+    Container(CoreDomainService, "Core Domain Service", "Node.js / NestJS", "Implements the Core Domain Service for circulation and catalog logic.")
+    Container(SearchService, "Search Service", "Java / Elasticsearch", "Powers the dedicated Search Service to guarantee sub-800ms query performance.")
+    ContainerDb(Database, "Database", "PostgreSQL", "Stores transactional data with multi-AZ replication in the EU.")
+    Container(AsyncWorker, "Async Worker", "Python / Celery", "Manages asynchronous background tasks and external integrations.")
+    Container(TelemetrySidecarOTELCollector, "Telemetry Sidecar / OTEL Collector", "OpenTelemetry", "Collects and forwards telemetry data to centralized observability.")
+}
+
+Rel(LibraryPatronsStaff, WebApplicationsPA, "Interacts with self-service portals and administrative workflows", "HTTPS/REST with TLS 1.3")
+Rel(WebApplicationsPA, ApiGateway, "Sends API requests to the backend", "HTTPS/REST with TLS 1.3")
+Rel(ApiGateway, CoreDomainService, "Routes core business requests", "gRPC over mTLS")
+Rel(ApiGateway, SearchService, "Routes search queries", "gRPC over mTLS")
+Rel(CoreDomainService, Database, "Reads and writes transactional data", "TLS-encrypted TCP")
+Rel(CoreDomainService, AsyncWorker, "Dispatches background tasks", "AMQP over TLS with RabbitMQ")
+Rel(WebApplicationsPA, TelemetrySidecarOTELCollector, "Sends telemetry and metrics", "OTEL")
+Rel(ApiGateway, TelemetrySidecarOTELCollector, "Sends telemetry and metrics", "OTEL")
+Rel(CoreDomainService, TelemetrySidecarOTELCollector, "Sends telemetry and metrics", "OTEL")
+Rel(SearchService, TelemetrySidecarOTELCollector, "Sends telemetry and metrics", "OTEL")
+Rel(AsyncWorker, TelemetrySidecarOTELCollector, "Sends telemetry and metrics", "OTEL")
+Rel(TelemetrySidecarOTELCollector, CentralizedObservabilityPlatform, "Forwards telemetry data", "OTEL Protocol")
+
+@enduml

@@ -1,0 +1,315 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 5
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: 'Patient & Scheduling Engine' manages registration and scheduling, 'EMR Core & Audit Service' handles medical records with audit trails, and 'Billing & Claims Service' covers billing and insurance clearinghouse submissions.",
+   "performance_efficiency": "Low latency is addressed via 'In-Memory Caching Layer' (Redis), 'Local JWKS Caching Module', and 'PgBouncer Sidecar'. Asynchronous offloading through 'Kafka Outbox Publisher' and Fastify ensures the P95 < 1s target is achievable.",
+   "compatibility": "The 'FHIR Interoperability Gateway' utilizing 'HAPI FHIR JPA Server Engine' provides standard HL7 FHIR APIs for 'Lab & Imaging Systems'. External clearinghouses and 'Enterprise Identity Provider (IdP)' integrate cleanly via EDI, REST, and OIDC.",
+   "usability": "While all user roles (Patient, Clinician, Billing Specialist) are identified, the architecture lacks explicit frontend/UI presentation containers, depicting human actors connecting directly to the 'Envoy Proxy API Gateway' without concrete clinical interfaces.",
+   "reliability": "'CloudNativePG Operator', 'WAL-G Sidecar', and 'Kafka MirrorMaker 2 (MM2)' provide cross-site replication and backup retention. However, achieving true active-active multi-region (99.99%) across on-prem and eu-central-1 using single-writer PostgreSQL presents unaddressed replication conflict challenges.",
+   "security": "HIPAA/GDPR needs are met using 'OAuth2-Proxy / Keycloak Sidecar' for MFA token validation, 'Tokenization & Security Manager', 'PostgreSQL 16 Engine' with RLS and pgaudit, and ubiquitous TLS 1.3 with AES-256 at rest.",
+   "maintainability": "Services are modularly segregated ('Billing & Claims Service', 'FHIR Interoperability Gateway'). However, 'EMR & Patient Service' improperly lists peer containers ('PostgreSQL', 'Apache Kafka') as internal components in its C4 component diagram.",
+   "portability": "The system runs cloud-agnostic Kubernetes components ('CloudNativePG', 'Envoy Proxy API Gateway', containerized microservices) and utilizes 'Kafka MirrorMaker 2' to support hybrid deployment between on-prem-k8s and AWS eu-central-1 seamlessly."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Envoy, local JWKS caching, Fastify, Redis caching for lookups, and PgBouncer connection pooling collectively ensure sub-second P95 EMR retrieval.",
+    "elements": [
+     "Envoy Proxy API Gateway",
+     "OAuth2-Proxy / Keycloak Sidecar",
+     "EMR & Patient Service",
+     "In-Memory Caching Layer",
+     "PgBouncer Sidecar",
+     "PostgreSQL 16 Engine"
+    ],
+    "sensitivity_points": [
+     "Redis cache hit ratio for clinical and patient lookups",
+     "PgBouncer connection pool sizing under concurrent load"
+    ],
+    "tradeoffs": [
+     "In-memory caching latency reduction vs cache invalidation complexity across clusters"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "HAPI FHIR Gateway decouples high-volume result ingestion through Kafka asynchronous messaging, protecting relational persistence and isolating EMR read traffic.",
+    "elements": [
+     "FHIR Interoperability Gateway",
+     "HAPI FHIR JPA Server Engine",
+     "Kafka Event Producer",
+     "Apache Kafka",
+     "EMR & Patient Service"
+    ],
+    "sensitivity_points": [
+     "Kafka topic partitioning and consumer ingestion throughput",
+     "HAPI FHIR JPA server write batching efficiency"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of ingested lab results vs immediate relational write contention"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Kafka MirrorMaker 2 replicates streaming data cross-site, but zero-data-loss cross-region active-active database replication across hybrid on-prem and cloud is unaddressed.",
+    "elements": [
+     "Kafka MirrorMaker 2 (MM2)",
+     "CloudNativePG Operator",
+     "PostgreSQL 16 Engine",
+     "Envoy Proxy API Gateway"
+    ],
+    "sensitivity_points": [
+     "Cross-site replication latency between on-premises and AWS cloud",
+     "Automated failover convergence time of CloudNativePG across hybrid networks"
+    ],
+    "tradeoffs": [
+     "Zero-RPO synchronous replication vs cross-region write performance overhead"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "CloudNativePG executes automated failover under 30 seconds, while Resilience4j and Kafka Transactional Outbox guarantee idempotent retries without claim loss or duplicates.",
+    "elements": [
+     "CloudNativePG Operator",
+     "PostgreSQL 16 Engine",
+     "Claims Processor Service",
+     "Kafka Outbox Publisher",
+     "PgBouncer Sidecar"
+    ],
+    "sensitivity_points": [
+     "CloudNativePG health-check and leader election failure detection threshold",
+     "Transactional outbox polling frequency and deduplication keys"
+    ],
+    "tradeoffs": [
+     "Transactional outbox write overhead vs guaranteed exactly-once claim delivery"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Billing & Claims Service is fully isolated from EMR via gRPC and Kafka; new clearinghouse interfaces only require changes in the billing container.",
+    "elements": [
+     "Billing & Claims Service",
+     "Claims Processor Service",
+     "Kafka Outbox Publisher",
+     "Insurance Claim Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Abstraction level of clearinghouse adapter interfaces within Claims Processor"
+    ],
+    "tradeoffs": [
+     "Pluggable clearinghouse integration architecture vs immediate point-to-point integration speed"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Demographic updates are strictly confined to Patient & Scheduling Engine, Data Access Repository, and PostgreSQL schema, cleanly meeting the three-component limit.",
+    "elements": [
+     "Patient & Scheduling Engine",
+     "Data Access Repository",
+     "PostgreSQL 16 Engine",
+     "EMR Core & Audit Service"
+    ],
+    "sensitivity_points": [
+     "Knex.js data layer coupling with database column definitions"
+    ],
+    "tradeoffs": [
+     "Strict database schema migrations vs schema-less flexibility for demographic extensions"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Mandatory MFA is enforced by Enterprise IdP and validated via OAuth2-Proxy and Keycloak; however, specific SIEM alert forwarding pipelines are not detailed.",
+    "elements": [
+     "Enterprise Identity Provider (IdP)",
+     "OAuth2-Proxy / Keycloak Sidecar",
+     "Authentication Filter",
+     "Edge Router"
+    ],
+    "sensitivity_points": [
+     "Enforcement of strict MFA challenges at the Enterprise IdP layer",
+     "Security event log shipping latency to security monitoring tools"
+    ],
+    "tradeoffs": [
+     "Rigid MFA validation policies vs emergency clinician override workflows"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Every read is validated and audited using PostgreSQL pgaudit, RLS, and EMR Audit Service, with WAL-G and Tiered Storage guaranteeing 10-year immutable retention.",
+    "elements": [
+     "PostgreSQL 16 Engine",
+     "EMR Core & Audit Service",
+     "WAL-G Sidecar",
+     "Tiered Storage Manager"
+    ],
+    "sensitivity_points": [
+     "pgaudit log coverage for row-level SELECT operations",
+     "Object storage immutability policies for 10-year archival logs"
+    ],
+    "tradeoffs": [
+     "Comprehensive read-audit logging overhead vs database I/O performance and storage costs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "EMR Core & Audit Service",
+     "Tokenization & Security Manager",
+     "PostgreSQL 16 Engine"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "CloudNativePG Operator",
+     "Kafka MirrorMaker 2 (MM2)",
+     "Envoy Proxy API Gateway"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "WAL-G Sidecar",
+     "Tiered Storage Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "EMR & Patient Service",
+     "Patient & Scheduling Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Patient & Scheduling Engine",
+     "In-Memory Caching Layer"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Core & Audit Service",
+     "PostgreSQL 16 Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Service",
+     "Claims Processor Service",
+     "Insurance Claim Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Enterprise Identity Provider (IdP)",
+     "OAuth2-Proxy / Keycloak Sidecar",
+     "PostgreSQL"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "CloudNativePG Operator",
+     "Kafka MirrorMaker 2 (MM2)"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "In-Memory Caching Layer",
+     "PgBouncer Sidecar"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Interoperability Gateway",
+     "HAPI FHIR JPA Server Engine",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

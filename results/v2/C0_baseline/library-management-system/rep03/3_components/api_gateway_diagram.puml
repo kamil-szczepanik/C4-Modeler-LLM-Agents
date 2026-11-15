@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the API Gateway container
+
+Person(PatronPortal, "Patron Portal", "End-user accessing the library public catalogue.")
+Person(StaffDashboard, "Staff Dashboard", "Staff interface for library management.")
+System_Ext(CoreBusinessService, "Core Business Service", "Upstream microservice handling core business logic.")
+System_Ext(SearchService, "Search Service", "Upstream microservice handling catalog searches.")
+System_Ext(ThirdPartyIdentityProvider, "Third-Party Identity Provider", "Provides OAuth2/OIDC authentication and JWT validation.")
+System_Ext(CentralizedObservabilitySIEMPlatform, "Centralized Observability & SIEM Platform", "Collects metrics and traces via Prometheus / OpenTelemetry.")
+
+Container_Boundary(api_gateway, "API Gateway") {
+    Component(RoutingLoadBalancingEngine, "Routing & Load Balancing Engine", "Envoy C++ Core", "Manages, secures, and routes all incoming ingress traffic across multiple Availability Zones.")
+    Component(AuthenticationAuthorizationFilter, "Authentication & Authorization Filter", "Envoy WASM/Lua Plugin", "Validates incoming requests, verifies JWTs, and handles data residency filtering.")
+    Component(RateLimitingTrafficShapingModule, "Rate Limiting & Traffic Shaping Module", "Envoy Rate Limit Service", "Enforces rate-limiting and geo-compliance to ensure high-performance public and staff portals.")
+    Component(CachingResponseCompressionComponent, "Caching & Response Compression Component", "Envoy HTTP Cache Filter", "Evaluates cache policies backed by Redis for rapid retrieval of public catalogue metadata.")
+    Component(ResponseTransformationComponent, "Response Transformation Component", "Envoy Transformation Filter", "Transforms outgoing responses at the ingress boundary.")
+}
+
+Rel(PatronPortal, AuthenticationAuthorizationFilter, "Validates incoming requests", "HTTPS (TLS 1.3)")
+Rel(StaffDashboard, AuthenticationAuthorizationFilter, "Validates incoming requests", "HTTPS (TLS 1.3)")
+Rel(RoutingLoadBalancingEngine, CoreBusinessService, "Forwards upstream traffic", "gRPC/mTLS (Istio)")
+Rel(RoutingLoadBalancingEngine, SearchService, "Forwards upstream traffic", "gRPC/mTLS (Istio)")
+Rel(RoutingLoadBalancingEngine, CachingResponseCompressionComponent, "Evaluates cache policies", "Internal Memory/Redis")
+Rel(AuthenticationAuthorizationFilter, ThirdPartyIdentityProvider, "Verifies JWTs", "OAuth2/OIDC")
+Rel(api_gateway, CentralizedObservabilitySIEMPlatform, "Exports metrics and traces", "Prometheus / OpenTelemetry")
+
+@enduml

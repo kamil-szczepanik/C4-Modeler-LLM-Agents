@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(api_gateway, "API Gateway", "External system routing traffic.")
+System_Ext(rabbit_mq, "RabbitMQ", "Message Broker", "Asynchronous message broker for handling event-driven alerts.")
+System_Ext(notification_provider, "Notification Provider", "External API", "External API for delivering notifications via outbound REST over TLS 1.3.")
+System_Ext(hashi_corp_vault, "HashiCorp Vault", "Secret Management", "Secure secret retrieval service for managing credentials.")
+
+Container_Boundary(notification_service, "Notification Service") {
+    Component(notification_controller, "Notification Controller", "Spring Web/gRPC", "Handles incoming gRPC requests with mTLS and propagated JWTs.")
+    Component(event_consumer, "Event Consumer / Listener", "Spring AMQP", "Consumes asynchronous events from RabbitMQ over TLS.")
+    Component(template_engine, "Template Engine", "Thymeleaf", "Secure template engine enforcing strict escaping to prevent SSTI.")
+    Component(dispatch_engine, "Dispatch Engine", "Java 21 Service Layer", "Core service layer managing the dispatch logic and transactional rules.")
+    Component(provider_integration_client, "Provider Integration Client", "Spring WebClient with Resilience4j", "Communicates with external notification providers using circuit breakers.")
+    ComponentDb(outbox_table, "Outbox Table", "PostgreSQL with JPA/Hibernate", "Relational database utilizing the Outbox Pattern for reliable transactional messaging.")
+}
+
+Rel(api_gateway, notification_controller, "gRPC with mTLS and propagated JWTs")
+Rel(event_consumer, rabbit_mq, "AMQP over TLS")
+Rel(notification_controller, outbox_table, "JDBC over TLS")
+Rel(event_consumer, outbox_table, "JDBC over TLS")
+Rel(dispatch_engine, provider_integration_client, "In-process Java method calls")
+Rel(provider_integration_client, notification_provider, "Outbound REST over TLS 1.3")
+Rel(provider_integration_client, hashi_corp_vault, "Secure secret retrieval")
+@enduml

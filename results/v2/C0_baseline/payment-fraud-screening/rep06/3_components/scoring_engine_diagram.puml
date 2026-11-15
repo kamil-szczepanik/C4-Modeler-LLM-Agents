@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Scoring Engine container
+
+System_Ext(aws_api_gateway_alb, "AWS API Gateway / ALB", "External API Gateway / Load Balancer")
+System_Ext(amazon_dynamodb, "Amazon DynamoDB", "Stores feature stores and transaction data with AWS KMS encryption.")
+System_Ext(rule_model_registry, "Rule & Model Registry", "Amazon S3 storing model artifacts.")
+System_Ext(amazon_kinesis_data_streams_aws_s3_firehose, "Amazon Kinesis Data Streams & AWS S3 Firehose", "Streams audit logs.")
+System_Ext(worm_compliance_storage, "WORM Compliance Storage", "Persists immutable compliance logs.")
+
+Container_Boundary(scoring_engine, "Scoring Engine") {
+    Component(api_router_validator, "API Router & Validator", "Go", "Validates incoming gRPC payloads and enforces schema integrity.")
+    Component(feature_assembler, "Feature Assembler", "Go", "Queries DynamoDB for user and card velocity features with parallelized execution.")
+    Component(inference_rules_evaluator, "Inference & Rules Evaluator", "Rust", "Executes compiled machine learning models and dynamic rule sets concurrently.")
+    Component(model_loader_component, "Model Loader Component", "Rust", "Handles S3 event notifications, cryptographic signature verification, and atomic in-memory model hot-swapping.")
+    Component(audit_dispatcher, "Audit Dispatcher", "Go", "Asynchronously emits cryptographically signed, tamper-evident audit records.")
+}
+
+Rel(aws_api_gateway_alb, api_router_validator, "Routes incoming authorization requests", "mTLS / gRPC")
+Rel(feature_assembler, amazon_dynamodb, "Reads and writes feature stores and transaction data", "AWS SDK")
+Rel(model_loader_component, rule_model_registry, "Receives S3 event notifications and fetches model artifacts", "HTTPS / AWS SDK")
+Rel(audit_dispatcher, amazon_kinesis_data_streams_aws_s3_firehose, "Streams audit logs", "AWS SDK")
+Rel(audit_dispatcher, worm_compliance_storage, "Persists immutable compliance logs", "S3 Firehose")
+
+@enduml

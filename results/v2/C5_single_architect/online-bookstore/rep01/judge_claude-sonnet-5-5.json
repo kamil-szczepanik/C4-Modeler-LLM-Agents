@@ -1,0 +1,346 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 3,
+   "usability": 2,
+   "reliability": 3,
+   "security": 3,
+   "maintainability": 3,
+   "portability": 2
+  },
+  "mean": 2.75,
+  "justifications": {
+   "functional_suitability": "Catalog & Search Container, Cart & Checkout View, Order & Checkout Container, Recommendations Container and Reviews & Ratings Widget cover R-01 to R-04. Gaps: no backend reviews component, 'customers also bought' is only generic ML, and Currency Exchange and GDPR/CCPA flows have no containers.",
+   "performance_efficiency": "CloudFront SPA, API Gateway caching, ElastiCache In-Memory Cache, OpenSearch, DynamoDB and the Async Event Bus support the targets. Gaps: no autoscaling, no CDN or cache for catalog data, and a single shared database container is a bottleneck. No 3G optimisation is shown.",
+   "compatibility": "Payment Client Component, the Third-Party Shipping Provider webhooks, OIDC Identity Provider and Currency Exchange Rate Service are shown with HTTPS/REST. Gaps: no container or component consumes the Currency Exchange Service, and no shipping adapter or anti-corruption layer exists. Shipping goes through Outbound Dispatcher.",
+   "usability": "Only the Customer persona is served, by the SPA with Catalog & Search View, Cart & Checkout View and Reviews & Ratings Widget. No admin or operator interface exists for inventory, and nothing covers mobile, accessibility, localisation or currency selection in the UI.",
+   "reliability": "Payment Client Component uses circuit breakers, the DLQ Handler recovers failed events, and Aurora Multi-Region and DynamoDB Global Tables provide replication. Gaps: no explicit failover, health checks, autoscaling or backup design for 99.95%, and the in-memory saga state machine is lost on failure.",
+   "security": "Auth Filter, the external Identity Provider (OIDC), TLS everywhere, VPC private subnets, Rate Limiter, Schema Registry and SASL/SCRAM on MSK. Gaps: no WAF or OWASP-specific mitigations, no secrets or encryption-at-rest management, no GDPR/CCPA consent, deletion or data residency, and only a limited audit trail (Delivery Status Tracker).",
+   "maintainability": "Modular microservices with clear responsibilities, an Async Event Bus for decoupling, and layered components (API Client Layer, Payment Client Component). Gaps: Catalog & Search also embeds recommendations, which duplicates the Recommendations Container. One shared database couples services, and polyglot stacks raise cost.",
+   "portability": "The design is AWS-specific (API Gateway, SageMaker, MSK, Aurora, DynamoDB Global Tables, S3/CloudFront) with multi-region data stores, which partly fits the three regions. There is no containerisation, IaC or abstraction layer, and little portability or replaceability of infrastructure."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 3,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 2,
+   "SEC-02": 1
+  },
+  "responsiveness_index": 0.375,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 3.5,
+   "Modifiability": 2.0,
+   "Security": 1.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "SPA (S3 + CloudFront)",
+     "API Gateway",
+     "Request Transformation/Caching",
+     "Catalog & Search Container",
+     "Search Service",
+     "Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Gateway cache hit rate for catalogue pages",
+     "No autoscaling or compute platform defined for services",
+     "Shared database for all containers"
+    ],
+    "tradeoffs": [
+     "Caching improves latency but risks stale prices and stock",
+     "Shared database simplifies design but limits scaling"
+    ],
+    "justification": "CloudFront, gateway caching and OpenSearch help page speed, but no autoscaling, read replicas or 3G-specific optimization are shown. The shared database and unspecified compute leave 10x load unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Recommendations Container",
+     "Collaborative Filtering Engine",
+     "In-Memory Cache",
+     "Recommendation Ingestion Component",
+     "Aurora PostgreSQL & DynamoDB"
+    ],
+    "sensitivity_points": [
+     "Batch recomputation competes for the shared database",
+     "Cache isolation from recompute jobs",
+     "Recommendation logic duplicated in Catalog container"
+    ],
+    "tradeoffs": [
+     "Precomputed cached vectors give fast reads but stale results",
+     "Shared datastore couples batch load to browsing"
+    ],
+    "justification": "Redis cache and a separate container help isolate reads, but recomputation runs on the shared database and no offline batch job separation is shown. Spring Batch ingestion in the Catalog container could impact browsing."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "elements": [
+     "Order & Checkout Container",
+     "Async Event Bus",
+     "Dead Letter Queue Handler",
+     "Outbound Dispatcher",
+     "Third-Party Shipping Provider"
+    ],
+    "sensitivity_points": [
+     "Event publication after order persistence consistency",
+     "DLQ retry and replay policy",
+     "Outbox pattern not shown"
+    ],
+    "tradeoffs": [
+     "Eventual shipping fulfillment trades immediacy for checkout resilience"
+    ],
+    "justification": "Shipping is decoupled through OrderPlaced events, with a DLQ and an outbound dispatcher, so checkout does not call shipping synchronously. Retry policy and atomic persist-and-publish are not explicit, leaving small risks."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Aurora PostgreSQL Multi-Region",
+     "DynamoDB Global Tables",
+     "CloudFront",
+     "API Gateway",
+     "Async Event Bus"
+    ],
+    "sensitivity_points": [
+     "No DNS or global routing failover mechanism shown",
+     "Aurora cross-region failover RPO",
+     "Compute and event bus regional deployment unspecified"
+    ],
+    "tradeoffs": [
+     "Multi-region replication raises cost and risks replication lag losing orders"
+    ],
+    "justification": "Data stores are multi-region and the SPA sits on CloudFront, but there is no Route 53 or health-check failover, and the gateway, services and MSK are not shown as multi-region. Order loss is possible with Aurora replication lag."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "elements": [
+     "Currency Exchange Rate Service",
+     "Order & Checkout Container",
+     "Payment Client Component",
+     "Catalog & Search Container"
+    ],
+    "sensitivity_points": [
+     "No pricing or currency component exists",
+     "Currency logic is scattered across containers",
+     "Payment gateway currency support"
+    ],
+    "tradeoffs": [
+     "Live external rates add flexibility but add dependency and latency"
+    ],
+    "justification": "There is no pricing or currency component, and the exchange service has no connecting relationship in the container view. Currency handling would be spread across catalog, checkout and the SPA, so changes would not be limited to pricing and payment."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "elements": [
+     "Recommendations Container",
+     "Catalog & Search Container",
+     "ML Inference Bridge",
+     "Amazon SageMaker",
+     "Collaborative Filtering Engine"
+    ],
+    "sensitivity_points": [
+     "Recommendations duplicated in Catalog container via SageMaker",
+     "Unclear which component serves Customers also bought",
+     "Shared recommendation tables"
+    ],
+    "tradeoffs": [
+     "Embedding ML in the catalog speeds search integration but breaks encapsulation"
+    ],
+    "justification": "Recommendation logic lives in both the Recommendations Container and the Catalog container, via the ML Inference Bridge and Ingestion Component. Replacing the algorithm would require changes outside a single component, violating the measure."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "elements": [
+     "API Gateway",
+     "Auth Filter",
+     "Rate Limiter",
+     "Search Service",
+     "Reviews & Ratings Widget",
+     "Identity Provider"
+    ],
+    "sensitivity_points": [
+     "No WAF or input validation component",
+     "No review service handling sanitization",
+     "No logging or monitoring component"
+    ],
+    "tradeoffs": [
+     "Gateway-level controls are cheap but are not a substitute for input validation"
+    ],
+    "justification": "TLS, token validation and rate limiting exist, but there is no WAF, input validation, output encoding, review service or security logging and alerting. SQLi and XSS blocking and logging are not demonstrated, and reviews have no backend owner."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 1,
+    "elements": [
+     "Aurora PostgreSQL & DynamoDB",
+     "Notification Service",
+     "Recommendations Container",
+     "Order & Checkout Container",
+     "Identity Provider"
+    ],
+    "sensitivity_points": [
+     "No privacy or erasure component",
+     "Personal data spread across stores, caches and logs",
+     "No audit trail of deletion"
+    ],
+    "tradeoffs": [
+     "Event-based erasure would add decoupling but requires reliable propagation"
+    ],
+    "justification": "No data-deletion mechanism, consent or privacy service exists. Personal data sits in Aurora, DynamoDB, Redis, notification audit logs, the identity provider and recommendation data, with no orchestration or verification. Erasure within 30 days is not supported."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "none",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "partial"
+  },
+  "coverage": 0.6818181818181818,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "none",
+    "elements": []
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Currency Exchange Rate Service"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Third-Party Shipping Provider",
+     "Async Event Bus",
+     "Outbound Dispatcher"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Container",
+     "Search Service",
+     "Catalog & Search View",
+     "Catalog Controller",
+     "Inventory Manager"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Order & Checkout Container",
+     "Checkout Orchestrator Component",
+     "Cart Management Component",
+     "Payment Client Component",
+     "Third-Party Payment Gateway",
+     "Cart & Checkout View",
+     "Order Persistence Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Reviews & Ratings Widget",
+     "Catalog & User Relational DB"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendations Container",
+     "Collaborative Filtering Engine",
+     "Recommendation Service",
+     "In-Memory Cache",
+     "Recommendation API Router"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "API Gateway",
+     "Async Event Bus",
+     "Amazon DynamoDB Global Tables",
+     "In-Memory Cache",
+     "Cart & Session NoSQL Store"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Single Page Application (SPA)",
+     "Request Transformation/Caching",
+     "In-Memory Cache",
+     "State Hydration / Caching Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Catalog & User Relational DB",
+     "Cart & Session NoSQL Store",
+     "Dead Letter Queue (DLQ) Handler",
+     "Payment Client Component",
+     "Rate Limiter"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "partial",
+    "elements": [
+     "Auth Filter",
+     "Rate Limiter",
+     "Identity Provider",
+     "API Gateway",
+     "Schema Registry"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

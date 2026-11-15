@@ -1,0 +1,315 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: Patient Registry Component handles demographics (R-01), Scheduling & Resource Engine provides locking and clash checks (R-02), EMR Management Component manages records with audit logging (R-03), and Billing & Claims Worker orchestrates claims and payments (R-04).",
+   "performance_efficiency": "EMR screen load <1s is directly targeted via Frontend Container SSR, API Client & Caching (TanStack Query/Redis), connection pooling (HikariCP), ClickHouse CDC offloading, and Go/Redis distributed locking, ensuring high responsiveness under clinical load.",
+   "compatibility": "Interoperability Service implements HAPI FHIR endpoints and Apache Camel translation for HL7/DICOM systems (R-08). Clearinghouse Integration Adapter explicitly integrates with Payment Gateway and Insurance Clearinghouses using standard REST protocols.",
+   "usability": "All user personas (Patients, Clinicians, Administrative Staff, Billing Officers, Auditors) interact via Frontend Container with role-tailored views and WCAG 2.1 AA compliance. However, dedicated interfaces or tools for Regulatory Auditors are not detailed beyond generic API Gateway access.",
+   "reliability": "High availability (99.99%) is supported via distributed locking, RabbitMQ queuing, Polly resilience, and edge routing. However, concrete cross-region active-active synchronization mechanisms between on-prem-k8s and eu-central-1 for primary data stores are not elaborated.",
+   "security": "Excellently covered with MFA and OAuth2/OIDC relay at the API Gateway, mTLS between internal containers, WORM-backed Audit Archive on S3 Glacier for 10-year immutable retention, and cryptographically signed audit logging across services.",
+   "maintainability": "Microservice decomposition exhibits high cohesion and low coupling with well-defined bounded contexts (Clinical Core, Scheduling, Interoperability, Billing). Standardized protocols (gRPC, AMQP, REST) and architectural patterns (BFF, CDC via Debezium) provide high modularity.",
+   "portability": "Containerized components (Go, Java, .NET, Node.js) run seamlessly across hybrid targets (on-prem-k8s and AWS). However, dependency on AWS S3 Glacier WORM introduces mild cloud lock-in for on-premise deployments without an explicit abstraction layer."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.0,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "BFF caching via Redis, TanStack Query, and HikariCP connection pooling in Clinical Core enable sub-second reads. However, 500 concurrent uncached cache-miss queries hitting PostgreSQL simultaneously could degrade response times without explicit read-replica routing.",
+    "elements": [
+     "Frontend Container",
+     "BFF Routing & Middleware",
+     "API Client & Caching",
+     "Clinical Core Container",
+     "EMR Management Component"
+    ],
+    "sensitivity_points": [
+     "Redis cache hit ratio for active clinician EMR views",
+     "HikariCP connection pool saturation under burst concurrency"
+    ],
+    "tradeoffs": [
+     "Aggressive SSR and BFF caching risks serving slightly stale clinical data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "The Interoperability Service buffers bursts via RabbitMQ/Kafka, decoupling ingestion from the Clinical Core. However, high-frequency updates from 10,000 FHIR transactions directly contending on the PostgreSQL EMR tables could degrade concurrent screen load times below 1 second.",
+    "elements": [
+     "Interoperability Service",
+     "FHIR API Endpoint Controller",
+     "Integration Message Broker Client",
+     "Clinical Core Container",
+     "EMR Management Component"
+    ],
+    "sensitivity_points": [
+     "Message broker ingestion throughput and batch processing rates",
+     "Database write lock contention between FHIR writes and EMR reads"
+    ],
+    "tradeoffs": [
+     "Asynchronous queued ingestion trades real-time lab visibility for clinical read performance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The brief requires active-active 99.99% availability across on-premises and eu-central-1. The architecture lacks cross-region active-active database replication, distributed consensus, and global traffic routing mechanisms necessary to achieve sub-minute failover with zero data loss.",
+    "elements": [
+     "API Gateway",
+     "Edge Router / Reverse Proxy",
+     "Clinical Core Container"
+    ],
+    "sensitivity_points": [
+     "WAN latency between on-premises k8s and eu-central-1 cloud",
+     "Data replication lag and automated split-brain prevention"
+    ],
+    "tradeoffs": [
+     "Active-active synchronous database replication increases write latency across hybrid regions"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Claim processing is asynchronously decoupled through RabbitMQ with Polly retry policies and EF Core state reconciliation, preventing duplicate submissions. However, the specific database clustering failover mechanism and election latency are not explicitly defined in the container components.",
+    "elements": [
+     "Billing & Claims Worker",
+     "Claim Submission Queue Listener",
+     "Clearinghouse Integration Adapter",
+     "Reconciliation & State Manager"
+    ],
+    "sensitivity_points": [
+     "Idempotency handling in Clearinghouse Integration Adapter",
+     "Database failover detection and connection reconnection timeouts"
+    ],
+    "tradeoffs": [
+     "Strict message acknowledgment and transactional retries trade processing throughput for consistency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Clearinghouse communication is fully encapsulated inside the Clearinghouse Integration Adapter in the Billing & Claims Worker container. Integrating a new clearinghouse is completely isolated from the EMR and Clinical Core, requiring changes only to that specific adapter.",
+    "elements": [
+     "Billing & Claims Worker",
+     "Clearinghouse Integration Adapter",
+     "Remediation Mapping Engine"
+    ],
+    "sensitivity_points": [
+     "Standardized interface abstractions across external clearinghouse APIs"
+    ],
+    "tradeoffs": [
+     "Generic adapter abstractions can limit clearinghouse-specific optimization capabilities"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are localized to UI View Orchestration, Patient Registry Component, and database schema, adhering to the three-component limit. Audit streaming handles new fields automatically, although CDC pipeline updates for ClickHouse analytics might add minor integration overhead.",
+    "elements": [
+     "UI View Orchestration",
+     "Patient Registry Component",
+     "CDC Ingestion Worker"
+    ],
+    "sensitivity_points": [
+     "Schema evolution decoupling between relational storage and downstream CDC consumers"
+    ],
+    "tradeoffs": [
+     "Strict schema validation across layers increases sprint coordination effort"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "MFA is strictly enforced at the Edge Router via OAuth2/OIDC and Enterprise IdP, preventing single-factor compromise. Gateway interceptors log security events immediately, though automated alerting within 1 minute depends on external telemetry monitors not fully articulated internally.",
+    "elements": [
+     "API Gateway",
+     "Edge Router / Reverse Proxy",
+     "Authentication & Token Relay Plugin",
+     "Audit Logging & Tracing Interceptor",
+     "Enterprise Identity Provider"
+    ],
+    "sensitivity_points": [
+     "Strict MFA enforcement rules within the Authentication Plugin",
+     "Low latency of audit event emission and alert dispatching"
+    ],
+    "tradeoffs": [
+     "Mandatory multi-factor authentication increases clinician login friction during emergencies"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "The Session & Emergency Override Manager captures policy checks, and Clinical Core streams cryptographically signed audit logs over secure TCP to AWS S3 Glacier WORM storage for 10-year retention. Explicit fine-grained ABAC enforcement on every read query needs clearer component-level definition.",
+    "elements": [
+     "Frontend Container",
+     "Session & Emergency Override Manager",
+     "Clinical Core Container",
+     "EMR Management Component",
+     "Audit Archive"
+    ],
+    "sensitivity_points": [
+     "Cryptographic signing integrity before log offloading",
+     "Completeness of EMR read interception across all query pathways"
+    ],
+    "tradeoffs": [
+     "Synchronous auditing on every record access can introduce read latency"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Audit Archive",
+     "Audit Logging & Tracing Interceptor",
+     "Regulatory Auditors"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "API Gateway",
+     "Edge Router / Reverse Proxy"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Audit Archive"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Clinical Core Container",
+     "Patient Registry Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling & Resource Engine",
+     "API Controller",
+     "Resource Locking Coordinator"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Clinical Core Container",
+     "EMR Management Component",
+     "Audit Archive"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Worker",
+     "Claim Submission Queue Listener",
+     "Clearinghouse Integration Adapter",
+     "Payment Gateway and Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "API Gateway",
+     "Authentication & Token Relay Plugin",
+     "Enterprise Identity Provider"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "API Gateway",
+     "Edge Router / Reverse Proxy"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Frontend Container",
+     "BFF Routing & Middleware",
+     "API Client & Caching"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Interoperability Service",
+     "FHIR API Endpoint Controller",
+     "HL7/DICOM Translation Engine",
+     "External Lab and Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

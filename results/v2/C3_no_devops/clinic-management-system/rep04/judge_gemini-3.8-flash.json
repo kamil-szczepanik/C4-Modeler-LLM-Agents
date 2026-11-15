@@ -1,0 +1,333 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are met: PatientManagementModule covers demographics (R-01), SchedulingModule with Redis Cache manages resource clashes (R-02), EMR Management Component with Audit & Compliance Container handles EMR audits (R-03), and BillingModule with Clearinghouse Adapter Component handles claims (R-04).",
+   "performance_efficiency": "Sub-second EMR loads (R-07) are well-supported via Encrypted Redis Cache, Timeline Aggregator Component, and PgBouncer Connection Pooler. Asynchronous event streaming via Apache Kafka and analytical offloading to ClickHouse Database ensure high throughput.",
+   "compatibility": "The Integration Service Container provides a dedicated FHIR Gateway Component using HAPI FHIR for lab and imaging integrations (R-08), alongside the Clearinghouse Adapter Component utilizing X12 EDI for insurance clearinghouses.",
+   "usability": "The Frontend Container provides dedicated Clinical & Administrative Feature Modules for all defined roles (Clinician, Patient, Staff, Billing). The Notification Container provides multi-channel alerting (SMS, email, push), though specific native mobile delivery mechanisms are not detailed.",
+   "reliability": "Patroni & Etcd Replication & HA Controller, Outbox & Retry Dispatcher, and Kafka KRaft Quorum provide high availability. However, true cross-region active-active data conflict resolution across on-prem-k8s and eu-central-1 is not fully elaborated.",
+   "security": "Addresses R-05, HIPAA, and GDPR thoroughly: Authentication & Authorization Filter enforces OIDC MFA and OPA; pgcrypto Encryption Module ensures AES-256 at rest; and Audit & Compliance Container provides hash-validated retention.",
+   "maintainability": "High modularity with decoupled containers (EMR Service, Core Services, Integration Service) communicating over Kafka and Istio mTLS. However, component diagrams blur container boundaries by listing neighboring containers as internal components.",
+   "portability": "The system utilizes standard containerized stacks (Go, Spring Boot, React) managed by Istio Service Mesh, suitable for hybrid deployment across on-prem-k8s and AWS eu-central-1, though cloud abstraction abstractions for storage are minimal."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The EMR Service uses a Go-based Timeline Aggregator backed by an Encrypted Redis Cache and PgBouncer connection pooling, ensuring P95 query latencies stay well below 1 second under 500 concurrent clinician requests.",
+    "elements": [
+     "Frontend Container",
+     "API Gateway",
+     "EMR Service Container",
+     "Timeline Aggregator Component",
+     "Encrypted Redis Cache",
+     "PgBouncer Connection Pooler",
+     "PostgreSQL 16 Relational Storage Engine"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio on Timeline Aggregator",
+     "PgBouncer connection pool sizing under burst load"
+    ],
+    "tradeoffs": [
+     "Memory overhead for timeline caching versus sub-second retrieval latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Ingestion traffic is handled via the dedicated FHIR Gateway, Camel transformation engine, and Kafka buffering, isolating high write volumes from clinician reads; however, the consumer pipeline into EMR storage is partially implicit.",
+    "elements": [
+     "Integration Service Container",
+     "FHIR Gateway Component",
+     "Adapter & Transformation Engine",
+     "Apache Kafka",
+     "EMR Service Container",
+     "PostgreSQL Database"
+    ],
+    "sensitivity_points": [
+     "Kafka partition parallelism for HL7 ingestion",
+     "PostgreSQL write throughput during batch ingestion bursts"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of lab results in EMR versus query performance isolation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Patroni and Etcd provide automated failover with synchronous replication to prevent data loss, but cross-site global load balancing and WAN latency impacts for active-active hybrid routing are not explicitly defined.",
+    "elements": [
+     "Patroni & Etcd Replication & HA Controller",
+     "PostgreSQL Database",
+     "API Gateway",
+     "KRaft Controller Quorum"
+    ],
+    "sensitivity_points": [
+     "Cross-site network latency for Etcd consensus and synchronous replication",
+     "Global DNS or load balancer health-check and failover convergence time"
+    ],
+    "tradeoffs": [
+     "Synchronous replication prevents data loss but increases write latency across WAN"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Outbox & Retry Dispatcher combined with Patroni and Etcd automated database failover within 30 seconds ensures transactional integrity and safe idempotency retries for claims without duplicate submission.",
+    "elements": [
+     "Outbox & Retry Dispatcher",
+     "Clearinghouse Adapter Component",
+     "Patroni & Etcd Replication & HA Controller",
+     "PgBouncer Connection Pooler",
+     "PostgreSQL 16 Relational Storage Engine"
+    ],
+    "sensitivity_points": [
+     "Patroni leader lease TTL configuration",
+     "Outbox retry idempotency keys sent to clearinghouses"
+    ],
+    "tradeoffs": [
+     "Transactional outbox table storage overhead versus guaranteed at-least-once message delivery"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The dedicated Clearinghouse Adapter Component and Apache Camel transformation engine isolate external partner interfaces within the Integration Service, ensuring EMR and Core services remain completely untouched.",
+    "elements": [
+     "Integration Service Container",
+     "Clearinghouse Adapter Component",
+     "Adapter & Transformation Engine",
+     "EMR Service Container"
+    ],
+    "sensitivity_points": [
+     "Clearinghouse protocol abstraction interface design",
+     "Extensibility of Apache Camel transformation engine"
+    ],
+    "tradeoffs": [
+     "Generic adapter abstraction complexity versus isolated clearinghouse modifications"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The change cleanly maps to the Frontend feature module, the Core Services PatientManagementModule, and PostgreSQL tables with pgaudit. Three components are affected, though schema evolution across partitioned tables adds minor operational overhead.",
+    "elements": [
+     "Clinical & Administrative Feature Modules",
+     "PatientManagementModule",
+     "PostgreSQL 16 Relational Storage Engine",
+     "pgaudit Audit Logging"
+    ],
+    "sensitivity_points": [
+     "Schema migration tooling for partitioned demographic tables",
+     "Coupling between UI forms and backend demographic models"
+    ],
+    "tradeoffs": [
+     "Automated database-level pgaudit capturing versus custom demographic event serialization"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The external IdP and API Gateway Authentication Filter strictly enforce MFA and reject password-only access. Kafka and the Audit container log the attempt, though automated real-time SIEM alerting within one minute relies on external or generalized notification paths.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Authentication & Authorization Filter",
+     "Audit & Tracing Interceptor",
+     "Apache Kafka",
+     "Audit & Compliance Container"
+    ],
+    "sensitivity_points": [
+     "MFA enforcement token validation latency at API Gateway",
+     "Alert processing delay across Kafka stream ingestion"
+    ],
+    "tradeoffs": [
+     "Strict mandatory MFA versus clinician friction during emergency workflow overrides"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The Access Control Enforcer validates clinical relationship policies, while pgaudit and Kafka capture read events. The Audit & Compliance Container indexes them into ClickHouse and archives with SHA-256 hashes to object storage, fulfilling 10-year tamper-evident retention.",
+    "elements": [
+     "Access Control Enforcer Component",
+     "pgaudit Audit Logging",
+     "Compliance Storage & Indexing Component",
+     "Retention & Archival Manager Component",
+     "Apache Kafka"
+    ],
+    "sensitivity_points": [
+     "Policy evaluation overhead in Access Control Enforcer on every read",
+     "Immutability verification of cold storage archives with SHA-256"
+    ],
+    "tradeoffs": [
+     "Performance cost of auditing every EMR read versus absolute compliance guarantee"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Access Control Enforcer Component",
+     "pgaudit Audit Logging",
+     "Security & Encryption Module",
+     "Preference & Consent Manager Component",
+     "Audit & Compliance Container"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Patroni & Etcd Replication & HA Controller",
+     "KRaft Controller Quorum",
+     "Storage Engine (MergeTree Family)"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Retention & Archival Manager Component",
+     "Storage Engine (MergeTree Family)",
+     "Kafka Connect"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "PatientManagementModule",
+     "Clinical & Administrative Feature Modules",
+     "Core Services Container"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "SchedulingModule",
+     "Redis Cache",
+     "Core Services Container"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service Container",
+     "EMR Management Component",
+     "Audit & Compliance Container",
+     "pgaudit Audit Logging"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "BillingModule",
+     "Clearinghouse Adapter Component",
+     "Integration Service Container",
+     "Insurance Clearinghouses"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Authentication & Session Manager",
+     "pgcrypto Encryption Module",
+     "Security & Encryption Module",
+     "PostgreSQL Database"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Patroni & Etcd Replication & HA Controller",
+     "Storage Engine (MergeTree Family)"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Timeline Aggregator Component",
+     "Encrypted Redis Cache",
+     "PgBouncer Connection Pooler",
+     "Routing & Shell Component"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Gateway Component",
+     "Integration Service Container",
+     "Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

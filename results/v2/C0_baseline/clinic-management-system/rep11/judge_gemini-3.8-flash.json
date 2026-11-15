@@ -1,0 +1,330 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All functional requirements (R-01 to R-04) are explicitly implemented via dedicated components in Core Services Container (Patient Management, Scheduling, EMR Core, Billing) and the Integration Service (Claims Translation).",
+   "performance_efficiency": "Sub-second EMR screen loads and high scalability are facilitated by Redis caching, PgBouncer connection pooling, ClickHouse for analytics, and Local Persistence Store within the Clinical Workstation App.",
+   "compatibility": "Interoperability is thoroughly supported via the Integration Service, featuring the FHIR Ingress/Egress component for HL7 FHIR exchange with external lab systems, alongside dedicated adapters for insurance clearinghouses.",
+   "usability": "All target personas are well catered for: patients use the Patient Web/Mobile App designed with WCAG 2.1 AA compliance, while clinical and administrative staff utilize the specialized Clinical Workstation App.",
+   "reliability": "High availability and retention are supported by Patroni-managed PostgreSQL Standby Instances, pgBackRest archiving (10-year retention), and Kafka MirrorMaker 2. However, PostgreSQL relies on active-passive streaming replication rather than true active-active across regions.",
+   "security": "Meets strict HIPAA/GDPR mandates using MFA via the Identity Provider, AES-256 at rest through Encryption Manager, tamper-proof auditing via Audit Extension Module (pg_audit), and Data Masking & Purging components.",
+   "maintainability": "Displays clean modular decomposition with isolated bounded contexts in Core Services Container, event-driven decoupling via Apache Kafka, and modular integration through Integration Service and Notification Container.",
+   "portability": "Workloads are containerized and leverage vendor-neutral tooling (Kubernetes, Envoy, Patroni, Redis Operator), though specific deployment topology mapping across on-prem-k8s and eu-central-1 is not explicitly detailed."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "PgBouncer connection pooling, local workstation caching, and Redis caching minimize database contention during concurrent morning round queries. However, cross-service synchronization and cache invalidation under heavy morning concurrency present a potential bottleneck for sub-second P95 latency.",
+    "elements": [
+     "Clinical Workstation App",
+     "API Gateway",
+     "Core Services Container",
+     "EMR Core",
+     "Redis",
+     "Connection Pooler",
+     "PostgreSQL Primary Instance"
+    ],
+    "sensitivity_points": [
+     "Redis cache hit ratio for active clinician patient lists",
+     "PgBouncer pool saturation under concurrent morning peak connections"
+    ],
+    "tradeoffs": [
+     "Aggressive EMR data caching risks serving stale clinical records"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Integration Service decouples high-volume FHIR ingestion via Apache Kafka event streaming, preventing transactional PostgreSQL saturation. Core Services consume results asynchronously, ensuring clinical workstation EMR screen queries remain isolated from ingestion spikes.",
+    "elements": [
+     "Integration Service",
+     "FHIR Ingress/Egress",
+     "Apache Kafka",
+     "Kafka Broker Cluster",
+     "Core Services Container",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Kafka partition count and consumer group concurrency during bursts",
+     "FHIR payload parsing overhead in Integration Service"
+    ],
+    "tradeoffs": [
+     "Asynchronous event ingestion trades real-time EMR visibility for transactional stability"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "While Patroni and MirrorMaker 2 support failover, running active-active across hybrid on-prem and AWS regions with synchronous replication faces WAN latency constraints. Recovering within 1 minute with strictly zero data loss across hybrid cloud boundaries requires explicit cross-region quorum mechanisms.",
+    "elements": [
+     "PostgreSQL Primary Instance",
+     "PostgreSQL Standby Instances",
+     "Kafka Broker Cluster",
+     "API Gateway",
+     "Edge Router & TLS Terminator"
+    ],
+    "sensitivity_points": [
+     "WAN network latency between on-prem k8s and eu-central-1",
+     "Patroni leader election and failover convergence duration"
+    ],
+    "tradeoffs": [
+     "Synchronous WAN replication guarantees zero data loss but increases write latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Patroni manages automated PostgreSQL standby promotion within 30 seconds. In-flight claims are safeguarded by Camel's Retry & Backoff Orchestrator and Kafka message persistence, enabling idempotent claim re-submission without duplication or data loss.",
+    "elements": [
+     "Integration Service",
+     "Claims Translation",
+     "Retry & Backoff Orchestrator",
+     "PostgreSQL Standby Instances",
+     "Apache Kafka"
+    ],
+    "sensitivity_points": [
+     "PostgreSQL Patroni failover timeout configuration",
+     "Idempotency token preservation across database reconnects"
+    ],
+    "tradeoffs": [
+     "Conservative retry backoff increases total claim completion latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "External clearinghouse protocols are isolated inside the Integration Service's Claims Translation component. Core clinical workflows and EMR components interact only via standardized internal domain contracts, keeping them entirely unaffected.",
+    "elements": [
+     "Integration Service",
+     "Claims Translation",
+     "Core Services Container",
+     "Billing"
+    ],
+    "sensitivity_points": [
+     "Coupling between Camel claim transformation routes and external clearinghouse APIs"
+    ],
+    "tradeoffs": [
+     "Isolating clearinghouse adapters into a distinct service introduces minor network overhead"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are localized to the Patient Management service, UI schema, and database schema. PostgreSQL RLS and pg_audit automatically capture changes to the new field, easily fitting within the three-component limit and single-sprint timeframe.",
+    "elements": [
+     "Patient Management",
+     "Scheduling & Intake UI",
+     "Audit Extension Module",
+     "PostgreSQL Primary Instance"
+    ],
+    "sensitivity_points": [
+     "Database schema migration tooling compatibility with active replication"
+    ],
+    "tradeoffs": [
+     "Dynamic schema adjustments require comprehensive regression testing across downstream consumers"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The Auth Client Module and API Gateway enforce OIDC with multi-factor authentication before granting access. Failed attempts generate security audit events sent to Kafka and the Notification Container, though alerting latency depends on downstream worker queue responsiveness.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Auth Client Module",
+     "Auth & Token Introspection Filter",
+     "API Gateway",
+     "Notification Container"
+    ],
+    "sensitivity_points": [
+     "IdP token revocation and introspection caching freshness"
+    ],
+    "tradeoffs": [
+     "Strict MFA and deep token introspection introduce latency on initial user authentication"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The architecture incorporates pg_audit and Row-Level Security for tamper-evident read logging, combined with pgBackRest cold object storage archiving configured for the mandatory 10-year retention policy.",
+    "elements": [
+     "EMR Core",
+     "PostgreSQL Primary Instance",
+     "Audit Extension Module",
+     "Data Masking & Purging Component",
+     "Archiving Service"
+    ],
+    "sensitivity_points": [
+     "Disk I/O and storage overhead from pg_audit capturing 100% of read queries",
+     "Object storage lifecycle policy enforcement for 10-year retention"
+    ],
+    "tradeoffs": [
+     "Comprehensive read audit logging increases relational database disk consumption and I/O load"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Data Masking & Purging Component",
+     "Data Anonymization & Governance Proxy",
+     "Audit Extension Module"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "PostgreSQL Standby Instances",
+     "Redis Master/Replica Cluster",
+     "Kafka Broker Cluster",
+     "ClickHouse Keeper"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Archiving Service",
+     "Data Masking & Purging Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Management",
+     "Scheduling & Intake UI",
+     "Patient Web/Mobile App"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling",
+     "Redis",
+     "Redis Master/Replica Cluster",
+     "Scheduling & Intake UI"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Core",
+     "Audit Extension Module",
+     "Dead Letter & Audit Publisher",
+     "Local Persistence Store"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing",
+     "Claims Translation",
+     "Payment Gateway / Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Auth Client Module",
+     "Auth & Token Introspection Filter",
+     "Encryption Manager",
+     "PostgreSQL"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "PostgreSQL Standby Instances",
+     "Redis Master/Replica Cluster",
+     "Kafka Broker Cluster"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Local Persistence Store",
+     "Redis",
+     "Connection Pooler",
+     "EMR & Scheduling Module Components"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Service",
+     "FHIR Ingress/Egress",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

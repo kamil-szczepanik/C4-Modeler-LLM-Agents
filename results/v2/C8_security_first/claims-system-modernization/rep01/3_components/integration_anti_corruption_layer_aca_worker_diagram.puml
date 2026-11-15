@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Integration / Anti-Corruption Layer (ACA Worker) container
+
+System_Ext(AzureServiceBus, "Azure Service Bus", "Cloud messaging service")
+System_Ext(AzureSQLDatabase, "Azure SQL Database", "Relational database service")
+System_Ext(LegacyMainframeSystem, "Legacy Mainframe System (COBOL/DB2)", "Legacy backend mainframe system")
+System_Ext(AzureKeyVault, "Azure Key Vault", "Secret management service")
+
+Container_Boundary(ACAWorkerBoundary, "Integration / Anti-Corruption Layer (ACA Worker)") {
+    Component(MessageConsumerComponent, "Message Consumer Component", ".NET Worker Service (C#)", "Consumes messages from Azure Service Bus to drive asynchronous processing.")
+    Component(TranslationMapperComponent, "Translation / Mapper Component", ".NET Worker Service (C#)", "Translates and maps modern data models to legacy formats and vice versa.")
+    Component(LegacyAdaptorComponent, "Legacy Adaptor Component", ".NET Worker Service (C#)", "Interfaces with the legacy mainframe system via custom TCP sockets encapsulated in mTLS over IPsec VPN / ExpressRoute.")
+    Component(OutboxAuditDispatcherComponent, "Outbox / Audit Dispatcher Component", ".NET Worker Service (C#)", "Dispatches messages and persists transaction states to ensure zero data loss.")
+}
+
+Rel(MessageConsumerComponent, AzureServiceBus, "Consumes messages", "AMQP over TLS 1.3")
+Rel(OutboxAuditDispatcherComponent, AzureServiceBus, "Dispatches messages", "AMQP over TLS 1.3")
+Rel(OutboxAuditDispatcherComponent, AzureSQLDatabase, "Persists transaction states", "TDS using Managed Identity")
+Rel(LegacyAdaptorComponent, LegacyMainframeSystem, "Interfaces with legacy backend for hybrid operations", "custom TCP sockets in mTLS over IPsec VPN / ExpressRoute")
+Rel(MessageConsumerComponent, AzureKeyVault, "Retrieves certificates and secrets", "Azure Container Apps Managed Identities")
+Rel(TranslationMapperComponent, AzureKeyVault, "Retrieves certificates and secrets", "Azure Container Apps Managed Identities")
+Rel(LegacyAdaptorComponent, AzureKeyVault, "Retrieves certificates and secrets", "Azure Container Apps Managed Identities")
+Rel(OutboxAuditDispatcherComponent, AzureKeyVault, "Retrieves certificates and secrets", "Azure Container Apps Managed Identities")
+
+@enduml

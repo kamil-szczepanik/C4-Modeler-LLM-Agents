@@ -1,0 +1,324 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are addressed via dedicated components: Patient Registry Controller covers R-01, Scheduling Engine handles R-02 with interval tree clash checks, Clinical Record Manager and Audit Trail Engine fulfill R-03, and Payment & Claims Processor covers R-04.",
+   "performance_efficiency": "Achieves low latency using PgBouncer connection pooling, PostgreSQL read replicas, in-memory interval trees, and asynchronous processing via AWS MSK/Strimzi. However, there is no explicit caching layer (e.g., Redis) to guarantee EMR screen loads under 1 second P95.",
+   "compatibility": "Interoperability is thoroughly addressed by FHIR Translation Engine and Billing & Integration Service, exposing HL7 FHIR RESTful APIs over mTLS to External Lab & Imaging Systems, with Confluent Schema Registry governing event interfaces.",
+   "usability": "System Context identifies Patient and Clinician/Staff personas, but the architecture omits concrete client-side containers (such as web portals or mobile applications). Person actors connect directly to the Envoy API gateway without dedicated user interface layers.",
+   "reliability": "Includes Patroni for DB failover, pgBackRest for backups, Istio East-West Gateway, and Kafka MirrorMaker 2. However, PostgreSQL with Patroni is explicitly configured as active-passive, which does not fully meet the active-active requirement specified in R-06.",
+   "security": "Multi-factor auth and OAuth2 are validated at Envoy. Transit Secrets Engine and KMS in HashiCorp Vault ensure AES-256 encryption at rest. Audit Trail Engine and WORM-compliant S3 / MinIO with Object Lock enforce HIPAA/GDPR-compliant immutable audit trails.",
+   "maintainability": "Clean domain boundaries separate Patient & Scheduling Service, EMR Core Service, and Billing & Integration Service. Clear component decomposition into controllers, managers, and repositories, coupled with Istio service mesh and asynchronous messaging, ensures high modularity and low coupling.",
+   "portability": "Hybrid deployment across on-prem-k8s and AWS eu-central-1 is well-architected using containerized microservices, Istio East-West Gateway, MinIO cross-site replication to AWS S3, and Strimzi on Kubernetes replicating to AWS MSK via MirrorMaker 2."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "PgBouncer and dedicated read-replicas handle concurrent query spikes effectively. However, the absence of an in-memory caching tier (like Redis) leaves PostgreSQL directly handling all read loads during peak rounds.",
+    "elements": [
+     "Envoy",
+     "EMR Rest Controller Layer",
+     "Clinical Record Manager",
+     "Data Access Repository",
+     "PgBouncer",
+     "PostgreSQL Instance"
+    ],
+    "sensitivity_points": [
+     "PgBouncer pool sizing and PostgreSQL read-replica replication lag."
+    ],
+    "tradeoffs": [
+     "Direct database reads preserve freshness at the expense of peak throughput."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Asynchronous messaging decouples high-throughput ingestion from core query processing. Dedicating translation to Billing & Integration Service insulates EMR, though heavy database ingestion writes could impact read replicas.",
+    "elements": [
+     "Billing & Integration Service",
+     "FHIR Translation Engine",
+     "Integration Event Publisher",
+     "AWS MSK",
+     "Strimzi",
+     "EMR Core Service"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer throughput and batch size configuration for database inserts."
+    ],
+    "tradeoffs": [
+     "Asynchronous message processing ensures ingestion resilience but introduces eventual consistency."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "While hybrid networking, East-West gateways, and MirrorMaker 2 support multi-cluster operation, Patroni is configured as active-passive. Achieving zero data loss across WAN without cross-region synchronous replication latency penalties is unresolved.",
+    "elements": [
+     "East-West Gateway",
+     "Patroni Daemon",
+     "Distributed Configuration Store (Etcd)",
+     "Kafka MirrorMaker 2",
+     "Replication & Tiering Controller"
+    ],
+    "sensitivity_points": [
+     "WAN latency between on-premise and AWS clusters governing Patroni consensus."
+    ],
+    "tradeoffs": [
+     "Choosing asynchronous cross-site replication risks data loss, while synchronous replication increases write latency."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Patroni with etcd delivers automated primary failover within 30 seconds, and PgBouncer abstracts database reconnections. Broker-backed dead-letter queues and transaction boundaries prevent duplicate claim submissions.",
+    "elements": [
+     "Payment & Claims Processor",
+     "Patroni Daemon",
+     "Distributed Configuration Store (Etcd)",
+     "PgBouncer",
+     "PostgreSQL Instance"
+    ],
+    "sensitivity_points": [
+     "Etcd leader lease TTL and Patroni failover timeout settings."
+    ],
+    "tradeoffs": [
+     "Aggressive failover thresholds speed recovery but elevate false-positive failover risks."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Clear service boundaries isolate external insurance clearinghouse interactions entirely within the Billing & Integration Service. The EMR Core Service and Patient Service remain completely decoupled and unaffected.",
+    "elements": [
+     "Billing & Integration Service",
+     "Payment & Claims Processor",
+     "FHIR Translation Engine",
+     "Payment Gateway / Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Modularity and interface decoupling of external gateway connectors."
+    ],
+    "tradeoffs": [
+     "Isolating clearinghouse logic in an integration microservice adds remote network hops."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Changes are strictly confined to the Patient Registry Controller, Scheduling Engine, and its database schema. The Audit Interceptor automatically intercepts and cryptographically signs data modifications.",
+    "elements": [
+     "Patient Registry Controller",
+     "Audit Interceptor",
+     "PostgreSQL with Patroni",
+     "HashiCorp Vault"
+    ],
+    "sensitivity_points": [
+     "Cohesion of domain schema migrations within the Patient & Scheduling Service."
+    ],
+    "tradeoffs": [
+     "Automated audit interception simplifies modifications but couples domain logic to audit middleware."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Envoy terminates external TLS and validates MFA and OAuth2 tokens before routing traffic inwards. While unauthorized access is blocked, automated security alert delivery within one minute relies on external telemetry integration.",
+    "elements": [
+     "Envoy",
+     "API Gateway Router",
+     "HashiCorp Vault",
+     "Telemetry Provider"
+    ],
+    "sensitivity_points": [
+     "Enforcement of mandatory MFA at the edge gateway proxy."
+    ],
+    "tradeoffs": [
+     "Strict perimeter authentication enforcement adds minimal processing latency to each request."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "EMR Core Service utilizes Spring AOP for audit interception, transit cryptography via Vault, and exports tamper-proof logs to S3/MinIO with COMPLIANCE object locking for 10-year retention.",
+    "elements": [
+     "EMR Rest Controller Layer",
+     "Audit Trail Engine",
+     "Transit Secrets Engine Component",
+     "Object Locking & Retention Manager",
+     "WORM-compliant S3 / MinIO"
+    ],
+    "sensitivity_points": [
+     "Immutability rules enforced by WORM compliance mode in object storage."
+    ],
+    "tradeoffs": [
+     "Cryptographic signing and immutable object archiving introduce storage and computation overhead."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Envoy",
+     "Istio",
+     "HashiCorp Vault",
+     "Audit Interceptor",
+     "Audit Trail Engine",
+     "WORM-compliant S3 / MinIO",
+     "Notification Dispatcher"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "PostgreSQL with Patroni",
+     "Patroni Daemon",
+     "Etcd",
+     "East-West Gateway",
+     "Kafka MirrorMaker 2",
+     "Replication & Tiering Controller"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "WORM-compliant S3 / MinIO",
+     "Object Locking & Retention Manager",
+     "pgBackRest"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Patient Registry Controller"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Scheduling Engine"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Core Service",
+     "Clinical Record Manager",
+     "Audit Trail Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Integration Service",
+     "Payment & Claims Processor",
+     "Payment Gateway / Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Envoy",
+     "HashiCorp Vault",
+     "Transit Secrets Engine Component",
+     "IAM & Policy Enforcer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "PostgreSQL with Patroni",
+     "Kafka MirrorMaker 2",
+     "East-West Gateway",
+     "Replication & Tiering Controller"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Data Access Repository",
+     "PgBouncer"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Billing & Integration Service",
+     "FHIR Translation Engine",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

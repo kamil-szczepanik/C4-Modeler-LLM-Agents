@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalystsandMLEngineers, "Fraud Analysts and ML Engineers", "Users who manage cases, review flagged transactions, and monitor the fraud screening system.")
+System_Ext(PaymentGatewayCoreProcessingSystem, "Payment Gateway / Core Processing System", "External system submitting payment authorizations for fraud screening.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(AWSAPIGatewayALBIngress, "AWS API Gateway / ALB (Ingress)", "AWS API Gateway / ALB", "Ingress point for incoming payment authorization requests.")
+    Container(FraudScoringEngine, "Fraud Scoring Engine", "Go microservice on ECS Fargate", "Scores transactions for fraud in real-time.")
+    Container(ONNXModelSidecar, "ONNX Model Sidecar", "ONNX Runtime", "Lightweight model serving sidecar container for seamless fraud model updates.")
+    Container(CaseManagementApp, "Case Management App", "Node.js/React monolith on ECS Fargate", "Application used by fraud analysts to manage flagged cases.")
+    ContainerDb(AmazonDynamoDB, "Amazon DynamoDB", "Amazon DynamoDB", "Feature store and audit logs data store.")
+    ContainerDb(AmazonRDSPostgreSQL, "Amazon RDS PostgreSQL", "Amazon RDS PostgreSQL", "Data store for case management data.")
+    Container(AmazonS3withObjectLock, "Amazon S3 with Object Lock", "Amazon S3", "7-year tamper-evident audit storage.")
+    Container(AmazonEventBridge, "Amazon EventBridge", "Amazon EventBridge", "Asynchronous event bus for decision events.")
+}
+
+Rel(PaymentGatewayCoreProcessingSystem, AWSAPIGatewayALBIngress, "Calls ingress via gRPC over TLS", "gRPC over TLS")
+Rel(AWSAPIGatewayALBIngress, FraudScoringEngine, "Routes payment authorization requests", "HTTP/gRPC")
+Rel(FraudScoringEngine, ONNXModelSidecar, "Queries for model inference", "localhost gRPC")
+Rel(FraudScoringEngine, AmazonDynamoDB, "Reads and writes features and audit logs", "AWS SDK")
+Rel(FraudScoringEngine, AmazonEventBridge, "Emits decision events", "API / Event Bus")
+Rel(FraudAnalystsandMLEngineers, CaseManagementApp, "Accesses for case management and review", "HTTPS")
+Rel(CaseManagementApp, AmazonRDSPostgreSQL, "Reads and writes case management data", "Database Connection")
+
+@enduml

@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Async Event Bus container
+
+Container_Boundary(async_event_bus, "Async Event Bus") {
+    Component(event_router_ingestion_engine, "Event Router / Ingestion Engine", "Amazon EventBridge Rules / Kafka Brokers", "Decouples microservices and routes events based on schema rules.")
+    Component(event_topic_stream_partition_manager, "Event Topic / Stream Partition Manager", "Amazon MSK Topics", "Provides distributed event ingestion and ordered event log streaming.")
+    Component(dead_letter_queue_dlq_handler, "Dead Letter Queue (DLQ) Handler", "Amazon SQS + Lambda", "Implements Dead Letter Queues for fault-tolerant failure recovery.")
+    Component(outbound_dispatcher, "Outbound Dispatcher", "AWS Lambda / EventBridge API Destinations", "Triggers external integrations and outbound message dispatching.")
+    Component(schema_registry, "Schema Registry", "AWS Glue Schema Registry", "Enforces strict JSON/Avro schemas to validate event payloads.")
+}
+
+Container(order_checkout_container, "Order & Checkout Container", "Container", "Publishes domain events to the event bus.")
+Container(notification_service, "Notification Service", "Service", "Streams domain events for customer alerts.")
+System_Ext(third_party_shipping_provider, "Third-Party Shipping Provider", "Receives fulfillment requests via webhooks and HTTPS APIs.")
+
+Rel(order_checkout_container, event_router_ingestion_engine, "Publishes events", "JSON over TLS")
+Rel(event_router_ingestion_engine, schema_registry, "Validates event payloads", "Internal gRPC/HTTPS")
+Rel(event_router_ingestion_engine, event_topic_stream_partition_manager, "Routes events based on schema rules", "Internal broker protocol")
+Rel(event_topic_stream_partition_manager, outbound_dispatcher, "Triggers external integrations", "Internal polling/push")
+Rel(event_topic_stream_partition_manager, notification_service, "Streams domain events for customer alerts", "SASL/SCRAM over TLS")
+Rel(outbound_dispatcher, third_party_shipping_provider, "Sends fulfillment requests", "Webhooks / HTTPS APIs")
+
+@enduml

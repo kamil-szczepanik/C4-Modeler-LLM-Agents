@@ -1,0 +1,253 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "The architecture directly supports cataloguing physical and digital items via Cataloging Component in Core Business Service. Circulation Component handles lending, and Web Frontend Role-Based Modules provide dedicated self-service portals for Library Patrons, Librarians, and Library Administrators.",
+   "performance_efficiency": "Search performance (<800ms) is addressed through a dedicated Elasticsearch Search Service, Response Caching Plugin in API Gateway, and TanStack Query State Caching Manager. Asynchronous updates via Message Broker and PostgreSQL Read Replica Cluster prevent bottlenecks.",
+   "compatibility": "The design interfaces seamlessly with external systems via standard protocols, connecting to Identity Provider via OIDC/SAML 2.0, Payment Gateway via REST/TLS 1.3, and Notification Service via Channel Adapters using outbound HTTPS.",
+   "usability": "Library Patrons, Librarians, and Administrators access tailored user interfaces via Web Frontend Role-Based Modules and Service Worker PWA. Notification Dispatcher offers multi-channel alerts (SMS, Email, Push), though accessibility compliance standards are not explicitly detailed.",
+   "reliability": "High availability and recoverability are supported by Primary Database Instance replication to Read Replica Cluster, durable Message Broker queues with Dead Letter Exchange, and Celery background workers. Cross-region disaster recovery mechanisms are not specified.",
+   "security": "EU data residency is enforced via EU-hosted databases with AES-256 encryption. Strong perimeter security uses API Gateway Authentication & Authorization Plugin, internal mTLS, PostgreSQL Row-Level Security, and tamper-evident audit logging using WORM storage with Merkle trees.",
+   "maintainability": "The architecture exhibits high maintainability with clean domain separation between Core Business Service, Search Service, and Audit Logging Service. Components have distinct single responsibilities, and services are decoupled via the Message Broker.",
+   "portability": "Containers (Spring Boot, Go, Python/Celery) provide solid portability across hosting platforms. While AWS-specific dependencies like S3 Object Lock and SQS are referenced, standard equivalents (RabbitMQ, PostgreSQL) ensure reasonable adaptability within EU cloud environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 3,
+   "MOD-02": 4,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.0,
+   "Modifiability": 3.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Search queries are decoupled from the transactional database, routed via API Gateway caching to a dedicated Elasticsearch cluster. The frontend also implements client-side state caching with TanStack Query, easily sustaining high concurrent read throughput below 800 ms.",
+    "elements": [
+     "Web Frontend",
+     "State Caching Manager",
+     "API Gateway",
+     "Response Caching Plugin",
+     "Search Service",
+     "Search Execution Engine"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch index sharding and cluster capacity under peak query concurrency",
+     "Cache hit ratios at the API gateway and client state manager"
+    ],
+    "tradeoffs": [
+     "Aggressive response caching reduces server load but risks presenting slightly stale catalog data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalog mutations in Core Business Service are asynchronously pushed to Elasticsearch via RabbitMQ and the Indexer component. This isolates read load from write ingestion, keeping search response times low while easily achieving catalog propagation within 5 minutes.",
+    "elements": [
+     "Core Business Service",
+     "Cataloging Component",
+     "Catalog Indexer Component",
+     "Message Broker",
+     "Search Service",
+     "Indexing & Synchronization Component"
+    ],
+    "sensitivity_points": [
+     "Message broker queue processing lag and Elasticsearch index refresh interval",
+     "Indexing overhead during peak search query execution"
+    ],
+    "tradeoffs": [
+     "Asynchronous event-driven indexing protects search latency at the cost of eventual consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Circulation transactions depend entirely on PostgreSQL, completely decoupled from Elasticsearch. Search availability depends on native Elasticsearch cluster replication; while node clustering is standard, explicit replica configurations are not detailed in the architecture definitions.",
+    "elements": [
+     "Search Service",
+     "Core Business Service",
+     "Circulation Component",
+     "Database",
+     "Transactional Data Store"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch replica shard allocation and master node failover speed",
+     "Core Business Service timeout handling when contacting the search cluster"
+    ],
+    "tradeoffs": [
+     "Maintaining Elasticsearch replica shards increases infrastructure cost and indexing write amplification"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Web Frontend is hosted on an EU-region CDN and services are decoupled via the API Gateway. A client-facing portal node failure is mitigated by CDN caching and gateway routing, though active health checks and load-balancer failover mechanics are not explicitly modeled.",
+    "elements": [
+     "Web Frontend",
+     "Role-Based Modules",
+     "API Gateway",
+     "Proxy Router",
+     "Core Business Service",
+     "Circulation Component"
+    ],
+    "sensitivity_points": [
+     "Health check interval and gateway route failover latency upon portal instance failure",
+     "Stateless session persistence across redundant service instances"
+    ],
+    "tradeoffs": [
+     "Stateless multi-instance deployment increases configuration overhead but prevents loan data loss"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "The cataloging logic is concentrated inside a monolithic Cataloging Component within Core Business Service. Without a modular adapter/plugin architecture or dedicated external provider integration components, adding a new digital provider requires modifying core business service code directly.",
+    "elements": [
+     "Core Business Service",
+     "Cataloging Component",
+     "Catalog Indexer Component"
+    ],
+    "sensitivity_points": [
+     "Coupling between external provider ingestion schemas and internal catalog domain models",
+     "Absence of external provider adapter interfaces"
+    ],
+    "tradeoffs": [
+     "A centralized cataloging component avoids premature abstraction but couples external vendor integrations"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The architecture explicitly isolates institutional rule logic into a dedicated Policy Evaluation Component within the Core Business Service. However, runtime dynamic configuration loading (e.g., via config store or database-backed rules engine) is not explicitly detailed.",
+    "elements": [
+     "Core Business Service",
+     "Policy Evaluation Component",
+     "Circulation Component",
+     "Database"
+    ],
+    "sensitivity_points": [
+     "Externalization of rule definitions outside compiled application artifacts",
+     "Support for dynamic rule reloading at runtime without service restarts"
+    ],
+    "tradeoffs": [
+     "External dynamic policy evaluation adds architectural complexity compared to hardcoded policy logic"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "EU data residency is systematically enforced across all boundaries: EU-region CDN, PostgreSQL with EU residency constraints, WORM audit storage in EU S3, and exclusively EU-specific external integrations (Stripe EU, Shibboleth EU, SendGrid EU).",
+    "elements": [
+     "Web Frontend",
+     "Database",
+     "Audit Logging Service",
+     "WORM Storage Adapter",
+     "Payment Gateway",
+     "Identity Provider",
+     "Notification Service"
+    ],
+    "sensitivity_points": [
+     "Strict regional binding of cloud resources and third-party SaaS API endpoints",
+     "Prevention of cross-region replication or fallback routing"
+    ],
+    "tradeoffs": [
+     "Restricting all infrastructure strictly to EU regions limits global disaster-recovery options"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Perimeter token validation occurs at the API Gateway, while PostgreSQL explicitly enforces Row-Level Security (RLS) to prevent unauthorized record access. Unauthorized attempts trigger the Log Transport Plugin and Event Publisher to emit tamper-evident audit logs directly to WORM storage.",
+    "elements": [
+     "API Gateway",
+     "Authentication & Authorization Plugin",
+     "Log Transport Plugin",
+     "Database",
+     "Transactional Data Store",
+     "Audit Logging Service"
+    ],
+    "sensitivity_points": [
+     "Correct propagation of patron identity claims from API Gateway to database RLS sessions",
+     "Reliable synchronous emission of security violation logs"
+    ],
+    "tradeoffs": [
+     "Database-level row security and synchronous audit logging introduce slight query execution overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Web Frontend",
+     "Database",
+     "WORM Storage Adapter",
+     "Payment Gateway",
+     "Identity Provider"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Core Business Service",
+     "Cataloging Component",
+     "Catalog Indexer Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Service",
+     "Search Execution Engine",
+     "State Caching Manager",
+     "Response Caching Plugin"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

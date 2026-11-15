@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Scoring Engine Container container
+
+System_Ext(api_gateway, "API Gateway", "External gateway routing client requests.")
+System_Ext(elasticache_redis, "Amazon ElastiCache (Redis)", "In-memory data store for velocity data.")
+System_Ext(sidecar_s3_volume, "Sidecar S3 Volume", "S3-backed model fetcher / Local shared volumes.")
+System_Ext(dynamodb_sqs, "Amazon DynamoDB & AWS SQS", "Transactional storage and message queuing.")
+System_Ext(case_management, "Case Management Container", "Container for fraud analyst review workflows.")
+
+Container_Boundary(scoring_engine_container, "Scoring Engine Container") {
+    Component(api_handler_component, "API Handler Component", "Go/Fiber or Rust/Axon", "Manages inbound gRPC/REST requests.")
+    Component(feature_assembler_component, "Feature Assembler Component", "Go / In-memory Go Channels", "Concurrently fetches contextual velocity data.")
+    Component(inference_engine_component, "Inference Engine Component", "Compiled decision trees / ONNX-runtime ML models", "Evaluates transactions using compiled decision trees or ONNX-runtime ML models.")
+    Component(audit_dispatcher_component, "Audit Dispatcher Component", "Go / Local ring-buffer durability pattern", "Asynchronously flushes immutable decision logs using a local ring-buffer durability pattern.")
+    Component(feedback_loop_receiver_component, "Feedback Loop Receiver Component", "Go/Fiber or Rust/Axon", "Ingests analyst review outcomes from the Case Management container.")
+    Component(sidecar_model_deployment_pipeline, "Sidecar Model Deployment Pipeline", "S3-backed model fetcher / Local shared volumes", "Utilizes local shared volumes for atomic hot-reloading.")
+}
+
+Rel(api_gateway, api_handler_component, "Invokes real-time fraud scoring", "gRPC/REST")
+Rel(api_handler_component, feature_assembler_component, "Passes validated request payloads", "In-memory Go Channels")
+Rel(feature_assembler_component, elasticache_redis, "Fetches cached velocity data", "TCP/Redis Protocol")
+Rel(feature_assembler_component, inference_engine_component, "Passes assembled feature vectors", "In-memory")
+Rel(sidecar_s3_volume, inference_engine_component, "Provides atomic model file updates", "Local Shared Volume")
+Rel(inference_engine_component, audit_dispatcher_component, "Emits decisions and explanation payloads", "In-memory Channel")
+Rel(audit_dispatcher_component, dynamodb_sqs, "Flushes tamper-evident audit logs", "AWS SDK / HTTPS")
+Rel(case_management, feedback_loop_receiver_component, "Sends analyst review outcomes", "gRPC/REST")
+@enduml

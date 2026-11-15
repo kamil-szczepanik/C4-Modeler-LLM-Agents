@@ -1,0 +1,317 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 5
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "While EMR (R-03) and Billing (R-04) have dedicated services, Patient Registration (R-01) and Scheduling with clash detection (R-02) appear only as generic UI components in 'Patient Portal / Mobile App' without corresponding backend domain services or database logic to perform conflict checks.",
+   "performance_efficiency": "EMR sub-second latency (R-07) is supported by 'Read-Only Offline Cache Component', 'Web Frontend (BFF & Static Assets)' with CDN caching, and asynchronous processing via sidecars. However, database query paths and primary data store scaling details are absent.",
+   "compatibility": "The model directly addresses external requirements, interfacing with 'Lab & Imaging Systems' using HL7 FHIR APIs over mTLS, and connecting to 'Insurance / Payer System' via secure HTTPS with DLQs and circuit breakers.",
+   "usability": "All distinct roles (Patient, Clinician, Receptionist, Billing Specialist, Compliance Officer) have defined access channels via 'Web Frontend' (supporting WCAG 2.1 AA) and 'Patient Portal / Mobile App'. Specialized reception/scheduling-specific workflow interfaces are slightly generalized.",
+   "reliability": "High availability (99.99%) is addressed via hybrid deployment across 'on-prem-k8s cluster' and 'AWS (eu-central-1)', Route 53 health-check failover, and local offline caching. However, the 'Active-Active Databases' replication engine and conflict resolution mechanisms remain largely undescribed.",
+   "security": "Exemplary zero-trust design: OAuth2/OIDC, ABAC via 'Authorization Evaluator' (OPA), SPIFFE/SPIRE mTLS, HashiCorp Vault dynamic secrets, AES-256 via KMS/Vault, and immutable 10-year retention WORM compliance via 'Audit Logging sidecars' and 'AWS S3 Object Lock'.",
+   "maintainability": "Clean separation of cross-cutting concerns using Istio, OpenTelemetry sidecars, and Vault. Microservices have defined scopes, though nesting entire environments ('on-prem-k8s cluster') as components inside containers mixes C4 abstraction levels slightly, clouding component boundaries.",
+   "portability": "Target environments are explicitly implemented across 'on-prem-k8s cluster' and 'AWS (eu-central-1)' using standard container orchestration (Amazon EKS, Kubernetes), Envoy, and platform-agnostic tools like OpenTelemetry and HashiCorp Vault to prevent vendor lock-in."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 3,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "BFF with CDN caching, OPA local sidecars, and local EMR read-only caching support sub-second P95 loads, though persistent database tier scaling details are absent.",
+    "elements": [
+     "Web Frontend (BFF & Static Assets)",
+     "API Gateway",
+     "EMR Service",
+     "Read-Only Offline Cache Component"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios on the BFF and EMR read cache",
+     "Latency overhead introduced by OPA sidecar policy evaluations"
+    ],
+    "tradeoffs": [
+     "Local caching improves read latency but risks presenting stale clinical data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "justification": "EMR Service directly handles HL7 FHIR APIs without an asynchronous ingestion queue or buffer, creating resource contention between bulk writes and concurrent clinician reads.",
+    "elements": [
+     "Lab & Imaging Systems",
+     "EMR Service",
+     "Audit & Compliance Tracker"
+    ],
+    "sensitivity_points": [
+     "Absence of ingestion message queues for high-volume FHIR payloads",
+     "Thread pool exhaustion in EMR Service during concurrent read/write bursts"
+    ],
+    "tradeoffs": [
+     "Direct synchronous FHIR processing reduces architecture complexity but risks degradation under sudden volume surges"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Route 53 DNS failover and on-prem K8s provide compute redundancy, but cross-site data replication and conflict resolution mechanisms for active-active state are not detailed.",
+    "elements": [
+     "Amazon Route 53",
+     "on-prem-k8s cluster",
+     "AWS (eu-central-1)",
+     "Active-Active Databases"
+    ],
+    "sensitivity_points": [
+     "Route 53 DNS TTL and health-check detection latency",
+     "Hybrid cross-region database replication lag"
+    ],
+    "tradeoffs": [
+     "Active-active hybrid setup ensures high availability but risks data inconsistency during network partitions"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Billing & Claims Service leverages persistent encrypted queues and dead-letter queues (DLQ), ensuring failed submissions can be retried without losing transactions.",
+    "elements": [
+     "Billing / Claims Service",
+     "Claims Processor Component",
+     "Insurance / Payer System"
+    ],
+    "sensitivity_points": [
+     "Message queue idempotency guarantees during retries",
+     "DLQ alerting and failover threshold tuning"
+    ],
+    "tradeoffs": [
+     "Persistent queueing with DLQ prevents message loss but introduces eventual consistency during outages"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Claims submission logic is completely isolated within the Claims Processor Component of the Billing / Claims Service, leaving EMR Service and API Gateway untouched.",
+    "elements": [
+     "Billing / Claims Service",
+     "Claims Processor Component",
+     "Insurance / Payer System"
+    ],
+    "sensitivity_points": [
+     "Standardization of payer adapter interfaces within Claims Processor"
+    ],
+    "tradeoffs": [
+     "Encapsulating integration logic in a dedicated component increases indirection but protects core clinical services"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are strictly localized to Web Frontend, EMR Service data models, and the Audit & Compliance Tracker, meeting the maximum three-component change threshold.",
+    "elements": [
+     "Web Frontend",
+     "EMR Service",
+     "Audit & Compliance Tracker",
+     "Audit Logging sidecars"
+    ],
+    "sensitivity_points": [
+     "Extensibility of data schema and audit log ingestion contracts"
+    ],
+    "tradeoffs": [
+     "Rigid schema definitions require coordinated component updates across UI and backend"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "API Gateway enforces edge OAuth2/OIDC authentication with MFA, and failed attempts trigger alerts via CloudTrail/GuardDuty and OpenTelemetry sidecars.",
+    "elements": [
+     "API Gateway",
+     "Security Enforcement Module",
+     "AWS CloudTrail & Amazon GuardDuty",
+     "OpenTelemetry sidecars"
+    ],
+    "sensitivity_points": [
+     "Enforcement of MFA at the Identity Provider / OIDC layer",
+     "Latency of threat detection rules in GuardDuty"
+    ],
+    "tradeoffs": [
+     "Strict MFA gating increases edge latency and complexity for clinician authentication workflows"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "OPA Authorization Evaluator enforces ABAC policies on every read, while Audit Logging sidecars and AWS S3 Object Lock enforce immutable 10-year WORM storage.",
+    "elements": [
+     "API Gateway",
+     "Authorization Evaluator",
+     "Audit & Compliance Tracker",
+     "Audit Logging sidecars",
+     "AWS S3 Object Lock"
+    ],
+    "sensitivity_points": [
+     "Completeness of ABAC context passed to OPA for relationship checks",
+     "Asynchronous socket logging reliability to prevent read drops"
+    ],
+    "tradeoffs": [
+     "Evaluating and auditing 100% of read requests consumes compute and increases compliance storage costs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Compliance Officer",
+     "Audit Logging sidecars",
+     "Audit & Compliance Tracker",
+     "AWS S3 Object Lock"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Active-Active Databases",
+     "AWS (eu-central-1)",
+     "on-prem-k8s cluster",
+     "Amazon Route 53"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AWS S3 Object Lock",
+     "Archive Manager Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Registration Module",
+     "Self-Registration Component",
+     "Receptionist / Admin"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Appointment Scheduler",
+     "Appointment Booking Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Engine",
+     "EMR Service",
+     "Audit & Compliance Tracker",
+     "Audit Logging sidecars"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Processor",
+     "Billing / Claims Service",
+     "Claims Processor Component",
+     "Insurance / Payer System"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Security Enforcement Module",
+     "Vault Integration Client",
+     "AWS KMS",
+     "Dynamic Secrets Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Active-Active Databases",
+     "AWS (eu-central-1)",
+     "on-prem-k8s cluster"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "EMR Engine",
+     "Web Frontend (BFF & Static Assets)",
+     "Read-Only Offline Cache Component"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

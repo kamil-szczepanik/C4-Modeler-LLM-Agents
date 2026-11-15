@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Claims Core Service container
+
+System_Ext(azure_service_bus_dlq, "Azure Service Bus (DLQ)", "Asynchronous messaging system")
+
+Container_Boundary(claims_core_service, "Claims Core Service") {
+    Component(command_router_validation_component, "Command Router & Validation Component", "Node.js / TypeScript", "Routes and validates incoming requests dispatched to the domain model.")
+    Component(aggregate_root_business_logic_engine, "Aggregate Root & Business Logic Engine", "Node.js / TypeScript", "Executes core business logic and dispatches validated commands.")
+    Component(event_store_repository, "Event Store Repository", "Azure Cosmos DB SDK", "Appends immutable domain events to the event store.")
+    Component(outbox_publisher_worker, "Outbox Publisher Worker", "Node.js / TypeScript", "Streams uncommitted events from the database change feed.")
+    Component(saga_compensation_coordinator, "Saga & Compensation Coordinator", "Node.js / TypeScript", "Triggers compensation flows on integration failure and handles routing of failed business events.")
+}
+
+Rel(command_router_validation_component, aggregate_root_business_logic_engine, "Dispatches validated commands", "In-memory")
+Rel(aggregate_root_business_logic_engine, event_store_repository, "Appends immutable domain events", "HTTPS via Azure Cosmos DB SDK")
+Rel(event_store_repository, outbox_publisher_worker, "Streams uncommitted events", "Database Change Feed")
+Rel(outbox_publisher_worker, saga_compensation_coordinator, "Triggers compensation flows on integration failure", "Async callback")
+Rel(saga_compensation_coordinator, azure_service_bus_dlq, "Routes failed business events", "AMQP")
+
+@enduml

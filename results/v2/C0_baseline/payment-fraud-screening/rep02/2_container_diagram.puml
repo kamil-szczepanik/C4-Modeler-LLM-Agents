@@ -1,0 +1,34 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Fraud Screening System
+
+Person(FraudAnalystsAndRiskOperationsManagers, "Fraud Analysts and Risk Operations Managers", "Users who interact with the case management UI and provide feedback loops for fraud screening.")
+
+System_Ext(PaymentGatewayAcquirer, "Payment Gateway / Acquirer", "External system that sends payment authorization requests for fraud screening.")
+System_Ext(IdentityProvider, "Identity Provider", "External system handling user authentication.")
+System_Ext(AuditComplianceArchive, "Audit / Compliance Archive", "Long-term tamper-evident storage destination.")
+
+System_Boundary(RealTimeFraudScreeningSystem, "Real-Time Fraud Screening System") {
+    Container(APIGatewayTokenizationProxy, "API Gateway & Tokenization Proxy", "Java / Spring Cloud Gateway", "Container performing TLS termination, circuit breaking, and PAN tokenization.")
+    Container(FraudScoringEngine, "Fraud Scoring Engine", "Java / Spring Boot", "Container executing in-memory fraud evaluation via gRPC.")
+    Container(CaseManagementRuleUI, "Case Management & Rule UI", "Node.js / TypeScript", "Container handling analyst reviews and self-service rule management.")
+    ContainerDb(AmazonDynamoDB, "Amazon DynamoDB", "AWS DynamoDB", "Data store for rule metadata and active case states.")
+    Container(AmazonS3WithObjectLock, "Amazon S3 with Object Lock", "Amazon S3", "Storage container with AWS IAM SCPs for 7-year tamper-evident audit logs and rule distribution.")
+    Container(AmazonSQS, "Amazon SQS", "Amazon SQS", "Asynchronous message broker for audit logging and rule update notifications.")
+}
+
+Rel(PaymentGatewayAcquirer, APIGatewayTokenizationProxy, "Authorization requests", "HTTPS/TLS 1.3")
+Rel(IdentityProvider, CaseManagementRuleUI, "User authentication", "HTTPS")
+Rel(FraudAnalystsAndRiskOperationsManagers, CaseManagementRuleUI, "Analyst reviews and rule management", "HTTPS/REST")
+Rel(APIGatewayTokenizationProxy, FraudScoringEngine, "Fraud evaluation requests", "gRPC over internal VPC security groups with mTLS")
+Rel(APIGatewayTokenizationProxy, CaseManagementRuleUI, "Routing requests", "HTTPS/REST")
+Rel(FraudScoringEngine, AmazonDynamoDB, "Reads and writes rule metadata and active cases", "AWS SDK")
+Rel(CaseManagementRuleUI, AmazonDynamoDB, "Reads and writes active case states", "AWS SDK")
+Rel(FraudScoringEngine, AmazonS3WithObjectLock, "Rule distribution and audit logs", "HTTPS")
+Rel(CaseManagementRuleUI, AmazonS3WithObjectLock, "Audit logs storage", "HTTPS")
+Rel(CaseManagementRuleUI, AmazonSQS, "Asynchronous messaging for audit logging and rule updates", "AWS SDK")
+Rel(FraudScoringEngine, AuditComplianceArchive, "Sends audit logs for long-term retention", "HTTPS")
+
+@enduml

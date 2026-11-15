@@ -1,0 +1,19 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(scoring_engine_container, "Scoring Engine Container", "External container")
+System_Ext(aws_kms, "AWS KMS", "External system")
+
+Container_Boundary(tokenization_proxy_container, "Tokenization Proxy Container") {
+    Component(api_router, "API Router", "Rust (Hyper/Tokio)", "Handles gRPC request termination over vsock.")
+    Component(tokenization_core, "Tokenization Core", "Rust", "Manages ephemeral AES-GCM DEKs, moka in-memory LRU cache, and AWS KMS integration.")
+    Component(audit_logger, "Audit Logger", "Rust", "Generates and forwards cryptographic hashes for tamper-evident logging.")
+    Component(health_attestation_monitor, "Health & Attestation Monitor", "Rust", "Manages cryptographic attestation and vsock health checks.")
+    Component(parent_ecs_task, "Parent ECS Task", "AWS ECS", "Orchestrator managing network and storage handoffs.")
+}
+
+Rel(scoring_engine_container, api_router, "Sends cleartext PAN for tokenization/detokenization", "gRPC over VSOCK")
+Rel(tokenization_core, aws_kms, "Performs envelope encryption via parent VPC endpoint", "HTTPS (TLS 1.3)")
+Rel(audit_logger, parent_ecs_task, "Streams tamper-evident audit hashes for S3 Object Lock ingestion", "gRPC over VSOCK")
+@enduml

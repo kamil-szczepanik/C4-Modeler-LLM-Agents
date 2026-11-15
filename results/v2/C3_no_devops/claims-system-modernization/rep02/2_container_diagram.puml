@@ -1,0 +1,43 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Modern Claims Platform
+
+Person(EndCustomers, "End Customers", "Policyholders who submit online self-service claims.")
+Person(Brokers, "Brokers", "Partners who assist with claims and submit information on behalf of customers.")
+Person(ClaimsAdjusters, "Claims Adjusters", "Internal staff who use the modern adjuster web application to review and process claims.")
+Person(CustomerSupportAgents, "Customer Support Agents", "Support staff who assist users and manage claim inquiries.")
+Person(OperationsMigrationManagers, "Operations/Migration Managers", "Managers overseeing the incremental claim type migration and system operations.")
+
+System_Ext(LegacyMainframeSystem, "Legacy Mainframe System", "On-premises 30-year-old COBOL/DB2 mainframe acting as the system of record.")
+System_Ext(AzureActiveDirectoryIdentityProvider, "Azure Active Directory / Identity Provider", "Provides Single Sign-On (SSO) and RBAC authorization.")
+
+System_Boundary(ModernClaimsPlatform, "Modern Claims Platform") {
+    Container(CustomerPortal, "Customer Portal", "React SPA / Azure Static Web Apps", "Allows end customers and brokers to submit online claims and view status.")
+    Container(AdjusterWorkspace, "Adjuster Workspace", "Node.js/Spring Boot BFF + React", "Provides adjusters and support agents a modern web application to review and process claims.")
+    Container(AzureAPIManagement, "Azure API Management", "Azure API Management", "API Gateway that secures, manages, and routes incoming traffic to backend containers.")
+    Container(MigrationControlRoutingEngine, "Migration Control & Routing Engine", "Azure Functions & Azure Cosmos DB", "Dynamically directs claim payloads to either the Claims Processing Core or the Anti-Corruption Layer.")
+    Container(ClaimsProcessingCore, "Claims Processing Core", "Azure Container Apps", "Handles modern claims processing workflows and microservices.")
+    Container(AntiCorruptionLayerIntegration, "Anti-Corruption Layer & Integration", "Azure Service Bus & Apache Camel", "Translates and communicates with the legacy mainframe via enterprise messaging.")
+    Container(ReconciliationWorker, "Reconciliation Worker", "Azure Container Apps Background Jobs", "Cross-checks state changes with the Legacy Mainframe during the nightly batch window.")
+    Container(AuditReconciliationLedger, "Audit & Reconciliation Ledger", "Azure SQL Ledger", "Stores tamper-evident audit logs and reconciliation records.")
+    Container(AzureKeyVault, "Azure Key Vault", "Azure Key Vault", "Manages secrets, certificates, and keys securely.")
+}
+
+Rel(EndCustomers, CustomerPortal, "Interacts via HTTPS (TLS 1.3)", "HTTPS (TLS 1.3)")
+Rel(Brokers, CustomerPortal, "Interacts via HTTPS (TLS 1.3)", "HTTPS (TLS 1.3)")
+Rel(ClaimsAdjusters, AdjusterWorkspace, "Interacts via HTTPS", "HTTPS")
+Rel(CustomerSupportAgents, AdjusterWorkspace, "Interacts via HTTPS", "HTTPS")
+Rel(OperationsMigrationManagers, MigrationControlRoutingEngine, "Monitors and manages migration routes", "HTTPS")
+Rel(CustomerPortal, AzureAPIManagement, "Consumes services", "OAuth 2.0 / OpenID Connect")
+Rel(AdjusterWorkspace, AzureAPIManagement, "Consumes services", "OAuth 2.0 / OpenID Connect")
+Rel(AzureAPIManagement, MigrationControlRoutingEngine, "Routes claim submissions", "REST / HTTPS")
+Rel(MigrationControlRoutingEngine, ClaimsProcessingCore, "Directs payloads for modern processing", "Internal API")
+Rel(MigrationControlRoutingEngine, AntiCorruptionLayerIntegration, "Directs payloads destined for legacy integration", "Azure Service Bus")
+Rel(AntiCorruptionLayerIntegration, LegacyMainframeSystem, "Communicates with legacy system", "Enterprise Service Bus / Message Queue with mTLS")
+Rel(ReconciliationWorker, LegacyMainframeSystem, "Cross-checks state changes during nightly batch window", "Batch Processing / mTLS")
+Rel(ReconciliationWorker, AuditReconciliationLedger, "Logs reconciliation records", "Database Connection")
+Rel(ClaimsProcessingCore, AuditReconciliationLedger, "Writes audit logs", "Database Connection")
+
+@enduml

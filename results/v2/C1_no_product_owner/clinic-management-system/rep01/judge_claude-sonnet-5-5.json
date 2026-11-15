@@ -1,0 +1,364 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 3,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 3.75,
+  "justifications": {
+   "functional_suitability": "Patient Service, Scheduling Service (Resource Clash Checker, Distributed Lock Manager), EMR Service with Audit Trail Publisher, and Billing Service (Insurance Integration Adapter) cover R-01 to R-04. Minor gaps: Patient Portal has no container interface, and the Integration Service/EMR roles are partly redundant.",
+   "performance_efficiency": "Mechanisms include a Caffeine cache in Clinical Record Manager, PgBouncer Transaction Coordinator, Citus partitioning, Kafka async events, and rate limiting. However, no explicit EMR <1s P95 mechanism, no autoscaling or load targets, and the audit WAL/SQLite buffer adds overhead.",
+   "compatibility": "FHIR Transformer (HAPI), Interoperability & FHIR Proxy, Integration Service FHIR Translator, and the X12/SFTP clearinghouse adapter cover the standards. Gaps: inconsistent protocols (SFTP/EDI vs HTTPS mTLS) and overlapping FHIR responsibilities across components.",
+   "usability": "Web Application Frontend (React SPA) serves Hospital Staff, and the Patient Portal is external. The SPA Router and Views cover the main workflows, but there are no patient-facing interfaces, accessibility or UX mechanisms, and the portal integration path is undefined.",
+   "reliability": "Kafka MirrorMaker 2, Patroni, Barman, circuit breakers, the audit WAL/buffer, and the outbox pattern help. Gaps: Patroni is explicitly active-passive, contradicting the active-active R-06 requirement for 99.99%, and there is no clear multi-region traffic failover or RPO/RTO definition.",
+   "security": "Covers MFA via the JWT/OAuth2 Authentication Filter and IdP, mTLS service mesh, HSM-managed AES-256 column encryption, ABAC/RBAC, immutable pgaudit EMR Audit Repository, signed audit events to the Regulatory Audit System, and Kafka ACLs. Thorough and matches HIPAA/GDPR.",
+   "maintainability": "Separate Spring Boot services per domain, layered components (Controller, Manager, Repository), Strimzi Operator, Schema Registry, and an API gateway give clear modularity. Minor gaps: a shared Data Persistence Layer couples services, and some components (Audit Logging Component) are vague.",
+   "portability": "Kubernetes-native deployment (Strimzi, Spring Boot on Kubernetes), PostgreSQL/Kafka open technologies, and cross-region MirrorMaker 2 and Barman replication support the on-prem/eu-central-1 hybrid. Gaps: no IaC or cloud abstraction is described, and the Azure AD/Keycloak choice is left open."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 2,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.46875,
+  "by_quality_attribute": {
+   "Performance": 2.5,
+   "Availability": 2.5,
+   "Modifiability": 3.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "elements": [
+     "Web Application Frontend",
+     "API Gateway & Edge Router",
+     "EMR Service",
+     "Clinical Record Manager",
+     "Transaction Coordinator",
+     "Data Persistence Layer"
+    ],
+    "sensitivity_points": [
+     "Encrypted Caffeine cache hit ratio",
+     "PgBouncer pooling under 500 concurrent loads",
+     "HSM column decryption latency"
+    ],
+    "tradeoffs": [
+     "Encryption and ABAC checks add latency versus speed",
+     "Cache freshness versus current-data requirement"
+    ],
+    "justification": "Cache, pooling and gateway exist, but no latency budget, load-test evidence or read replicas. Hop count and HSM column decryption put P95 below 1 s at risk. The EMR cache's invalidation is unspecified."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Integration Service",
+     "Message Router",
+     "FHIR Translator",
+     "Message Broker Container",
+     "Interoperability & FHIR Proxy Component",
+     "EMR Service"
+    ],
+    "sensitivity_points": [
+     "Kafka partitioning and consumer throughput",
+     "FHIR mapping cost",
+     "Database write contention with EMR reads"
+    ],
+    "tradeoffs": [
+     "Async ingestion adds visibility delay but isolates EMR reads",
+     "Schema validation costs throughput"
+    ],
+    "justification": "Kafka buffering decouples ingestion from EMR reads, so 10 minutes is plausible. However, the ingestion path into EMR persistence is not shown, there is no read/write isolation and no bulk-load mechanism."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "Data Persistence Layer",
+     "Failover Orchestrator",
+     "Replication & Backup Manager",
+     "MirrorMaker 2",
+     "Edge Router & TLS Termination Plugin"
+    ],
+    "sensitivity_points": [
+     "Asynchronous replication lag determines data loss",
+     "Patroni active-passive promotion time",
+     "GeoDNS TTL"
+    ],
+    "tradeoffs": [
+     "Active-passive DB contradicts active-active requirement",
+     "Async replication favours latency over zero data loss"
+    ],
+    "justification": "GeoDNS and Kafka MirrorMaker exist, but the database is active-passive with streaming replication, and the 1-minute failover and zero data loss are not guaranteed. MirrorMaker is asynchronous. Cross-region failover is undefined."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Billing Service",
+     "Billing Data Repository",
+     "Failover Orchestrator",
+     "Message Broker Container",
+     "Insurance Integration Adapter"
+    ],
+    "sensitivity_points": [
+     "Patroni failover within 30 s",
+     "Idempotent claim submission to clearinghouse",
+     "Outbox relay duplicates"
+    ],
+    "tradeoffs": [
+     "Outbox ensures consistency but adds latency and complexity",
+     "Retries risk duplicates without idempotency keys"
+    ],
+    "justification": "Patroni gives automated failover and the transactional outbox prevents lost events. But idempotency and deduplication for clearinghouse submission and retry/timeout policies aren't specified, so duplicates remain a risk."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "elements": [
+     "Insurance Integration Adapter",
+     "Billing Service",
+     "Claim Management Engine",
+     "Integration Service"
+    ],
+    "sensitivity_points": [
+     "Adapter interface stability",
+     "Claim format mapping coupling",
+     "Egress proxy rules"
+    ],
+    "tradeoffs": [
+     "Camel adapters isolate change but add per-partner maintenance"
+    ],
+    "justification": "Insurance Integration Adapter in Billing Service uses Camel EIP, confining change to one component; EMR is untouched. Minor gaps are the lack of an explicit adapter abstraction/plugin interface and possible egress and config changes."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "elements": [
+     "Patient API Controller",
+     "Patient Domain Manager",
+     "Patient Repository",
+     "Audit Interceptor",
+     "Patient Data Store",
+     "Web Application Frontend"
+    ],
+    "sensitivity_points": [
+     "Schema migration across Citus partitions",
+     "Shared database coupling",
+     "Event schema versioning"
+    ],
+    "tradeoffs": [
+     "Shared persistence layer eases consistency but couples schema change",
+     "Strict schema registry slows evolution"
+    ],
+    "justification": "The change touches UI, controller, domain, repository, DB schema and possibly the registry schema, about five or six elements, exceeding three. The AOP audit interceptor helps, but no migration tooling or generic field model is shown."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "JWT/OAuth2 Authentication Filter",
+     "Identity Provider (IdP)",
+     "Edge Router & TLS Termination Plugin",
+     "Regulatory Audit System"
+    ],
+    "sensitivity_points": [
+     "IdP MFA policy enforcement",
+     "Alerting pipeline latency",
+     "Rate limiting of login attempts"
+    ],
+    "tradeoffs": [
+     "Delegating MFA to the IdP reduces control but simplifies design"
+    ],
+    "justification": "The gateway filter enforces OIDC and MFA via the IdP, which should deny access. But no failed-login detection, alerting component or one-minute alert path exists, only audit log streaming. The alert requirement is unaddressed."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Clinical Record Manager",
+     "Audit Trail Publisher",
+     "EMR Audit Repository",
+     "Message Broker Container",
+     "Kafka Connect Cluster",
+     "Regulatory Audit System"
+    ],
+    "sensitivity_points": [
+     "Read access auditing completeness",
+     "WAL durability",
+     "Archival daemon retention enforcement"
+    ],
+    "tradeoffs": [
+     "Synchronous read auditing adds EMR latency versus completeness"
+    ],
+    "justification": "ABAC, signed audit events, WAL, append-only pgaudit tables and a 10-year archival daemon are strong. Gaps: the Audit Trail Publisher is not explicitly wired to read operations, and break-glass handling for non-treating users is not shown."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit Interceptor",
+     "Audit Trail Publisher",
+     "EMR Audit Repository",
+     "Regulatory Audit System",
+     "Data Persistence Layer",
+     "JWT/OAuth2 Authentication Filter",
+     "Kafka Connect Cluster"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Failover Orchestrator",
+     "Replication & Backup Manager",
+     "MirrorMaker 2",
+     "Message Broker Container",
+     "Strimzi Operator",
+     "Rate Limiting & Circuit Breaker"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Data Persistence Layer",
+     "Observability & Archival Agents",
+     "Replication & Backup Manager",
+     "Patient Data Store"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Service",
+     "Patient API Controller",
+     "Patient Domain Manager",
+     "Patient Repository",
+     "Patient Data Store"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Service",
+     "Resource Clash Checker",
+     "Distributed Lock Manager",
+     "Scheduling Engine",
+     "Scheduling Repository"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "Clinical Record Manager",
+     "Audit Trail Publisher",
+     "EMR Audit Repository",
+     "EMR API Controller"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service",
+     "Claim Management Engine",
+     "Insurance Integration Adapter",
+     "External Insurance Clearinghouses",
+     "Billing Data Repository"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "JWT/OAuth2 Authentication Filter",
+     "Identity Provider (IdP)",
+     "Data Persistence Layer",
+     "Clinical Record Manager",
+     "Patient Repository"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Failover Orchestrator",
+     "MirrorMaker 2",
+     "Replication & Backup Manager",
+     "Edge Router & TLS Termination Plugin",
+     "Message Broker Container"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Clinical Record Manager",
+     "Transaction Coordinator",
+     "Web Server Container"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Interoperability & FHIR Proxy Component",
+     "FHIR Transformer",
+     "Integration Service",
+     "FHIR Translator",
+     "mTLS Client"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

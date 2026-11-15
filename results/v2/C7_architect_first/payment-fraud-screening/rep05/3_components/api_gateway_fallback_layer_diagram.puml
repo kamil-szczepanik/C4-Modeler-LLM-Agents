@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the API Gateway & Fallback Layer container
+
+System_Ext(PaymentGatewayAcquirerSystems, "Payment Gateway / Acquirer Systems", "External systems")
+System_Ext(RealTimeScoringService, "Real-Time Scoring Service", "External system")
+System_Ext(ImmutableAuditLogSink, "Immutable Audit Log Sink", "External system")
+
+Container_Boundary(api_gateway_fallback_layer, "API Gateway & Fallback Layer") {
+    Component(IngressRouter, "Ingress Router", "Amazon API Gateway", "Terminates TLS, enforces WAF rules, and handles rate limiting with minimal operational overhead.")
+    Component(CircuitBreakerFallbackEngine, "Circuit Breaker & Fallback Engine", "AWS Lambda", "Executes serverless fallback logic to satisfy budget constraints and ensure zero merchant disruption.")
+    Component(TelemetryAuditEmitter, "Telemetry & Audit Emitter", "Amazon CloudWatch / AWS X-Ray", "Provides distributed tracing for sub-50ms P99 latency tracking and pushes sanitized request metadata.")
+    Component(AWSWAF, "AWS WAF", "AWS WAF", "Secures ingress REST/JSON traffic for the fraud screening system.")
+    Component(AWSCodeDeploy, "AWS CodeDeploy", "AWS CodeDeploy", "Manages canary deployments for zero-downtime rule updates.")
+    Component(CloudWatchSyntheticsCanary, "CloudWatch Synthetics Canary", "CloudWatch Synthetics", "Runs 24/7 mock payment checks for proactive availability monitoring.")
+}
+
+Rel(PaymentGatewayAcquirerSystems, IngressRouter, "Sends ingress REST/JSON traffic for authorization", "HTTPS / mTLS / SigV4")
+Rel(IngressRouter, CircuitBreakerFallbackEngine, "Routes scoring requests", "AWS Lambda internal invocation")
+Rel(CircuitBreakerFallbackEngine, RealTimeScoringService, "Forwards scoring requests", "REST/gRPC")
+Rel(TelemetryAuditEmitter, ImmutableAuditLogSink, "Pushes sanitized request metadata", "HTTPS")
+
+@enduml

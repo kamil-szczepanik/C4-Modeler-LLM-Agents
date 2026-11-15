@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Redis container
+
+System_Ext(Core_Domain_Service, "Core Domain Service", "Internal service")
+System_Ext(API_Gateway, "API Gateway", "External entrypoint")
+
+Container_Boundary(Redis, "Redis") {
+    Component(Session_Store_Component, "Session Store Component", "Redis In-Memory Data Store", "Manages active Patron and Librarian authentication states.")
+    Component(Catalog_Cache_Component, "Catalog Cache Component", "Redis In-Memory Data Store", "Caches frequent catalogue metadata to offload PostgreSQL.")
+    Component(Rate_Limiter_Component, "Rate Limiter Component", "Lua Scripting / Redis", "Protects API Gateway from abuse on self-service endpoints using Lua scripting for atomicity.")
+    Component(Persistence_Replication_Engine, "Persistence & Replication Engine", "RDB/AOF Snapshotting", "Handles asynchronous RDB/AOF snapshotting to EU-bound local storage.")
+    Component(Pub_Sub_Messaging_Component, "Pub/Sub Messaging Component", "Redis Pub/Sub", "Manages event broadcasting for cache invalidation.")
+    Component(Cluster_Sentinel_Management_Component, "Cluster & Sentinel Management Component", "Redis Cluster & Sentinel", "Handles node health checks and automatic failover.")
+    Component(Security_TLS_Termination_Component, "Security & TLS Termination Component", "TLS 1.3 / RESP", "Manages inbound cryptographic handshakes using TLS 1.3.")
+    Component(EU_Memory_Bound_Storage_Engine, "EU Memory-Bound Storage Engine", "Redis Memory Management", "Enforces hardware/runtime constraints for EU-only data residency.")
+}
+
+Rel(Core_Domain_Service, Security_TLS_Termination_Component, "Sends session and metadata requests", "RESP over TLS 1.3")
+Rel(API_Gateway, Security_TLS_Termination_Component, "Sends rate-limit checks", "RESP over TLS 1.3")
+Rel(Security_TLS_Termination_Component, Session_Store_Component, "Routes decrypted commands", "In-Memory IPC")
+Rel(Security_TLS_Termination_Component, Catalog_Cache_Component, "Routes decrypted commands", "In-Memory IPC")
+Rel(Security_TLS_Termination_Component, Rate_Limiter_Component, "Routes decrypted commands", "In-Memory IPC")
+Rel(Session_Store_Component, Persistence_Replication_Engine, "Asynchronously persists snapshots", "Local I/O")
+Rel(Catalog_Cache_Component, Persistence_Replication_Engine, "Asynchronously persists snapshots", "Local I/O")
+Rel(Core_Domain_Service, Pub_Sub_Messaging_Component, "Publishes cache eviction events", "RESP over TLS 1.3")
+Rel(Pub_Sub_Messaging_Component, Catalog_Cache_Component, "Triggers targeted key invalidations", "In-Memory Call")
+
+@enduml

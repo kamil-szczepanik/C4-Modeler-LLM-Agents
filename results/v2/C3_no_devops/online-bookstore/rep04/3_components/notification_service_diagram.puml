@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(RegisteredCustomer, "Registered Customer", "End-user receiving localized transactional alerts and preference-managed marketing communications via email and SMS.")
+Person(StoreAdministrator, "Store Administrator", "System user accessing delivery success rates, bounce logs, and troubleshooting metrics.")
+
+System_Ext(CheckoutOrder, "Checkout & Order", "Upstream container triggering order and notification events.")
+
+Container_Boundary(NotificationService, "Notification Service") {
+    Component(EventConsumerComponent, "Event Consumer Component", "Node.js / Express, AWS SDK", "Polls AWS SQS queues and verifies HMAC message signatures.")
+    Component(TemplateRendererComponent, "Template Renderer Component", "Node.js / Express, Handlebars / MJML, AWS Secrets Manager", "Generates localized, multi-currency messages using AWS Secrets Manager for configuration.")
+    Component(PreferenceValidationMiddleware, "Preference Validation Middleware", "Node.js / Express", "Security middleware evaluating GDPR/CCPA marketing opt-outs and consent flags.")
+    Component(DispatchEngineComponent, "Dispatch Engine Component", "Node.js / Express, AWS SES, Amazon SNS", "Routing engine utilizing token-bucket rate limiting to send messages via AWS SES and Amazon SNS.")
+    Component(AuditMetricsComponent, "Audit & Metrics Component", "Node.js / Express, Amazon CloudWatch", "Logging service recording non-PII delivery statuses to Amazon CloudWatch.")
+}
+
+Rel(CheckoutOrder, EventConsumerComponent, "Triggers order and notification events", "AWS SQS via HTTPS/TLS 1.3")
+Rel(EventConsumerComponent, TemplateRendererComponent, "Passes parsed event payloads", "In-memory asynchronous function calls")
+Rel(TemplateRendererComponent, PreferenceValidationMiddleware, "Forwards rendered messages with consent context", "In-memory asynchronous function calls")
+Rel(PreferenceValidationMiddleware, DispatchEngineComponent, "Authorizes compliant messages", "In-memory asynchronous function calls")
+Rel(DispatchEngineComponent, RegisteredCustomer, "Delivers emails and SMS", "SMTP/HTTPS via AWS SES and Amazon SNS")
+Rel(AuditMetricsComponent, StoreAdministrator, "Exposes secured delivery and bounce logs", "OAuth2/OIDC secured HTTPS interface via Identity Provider")
+
+@enduml

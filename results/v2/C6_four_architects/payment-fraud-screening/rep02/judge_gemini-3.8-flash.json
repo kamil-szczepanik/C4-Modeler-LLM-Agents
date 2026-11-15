@@ -1,0 +1,345 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 via Real-Time Scoring Engine and Decision Evaluator, R-02 through Case Management Backend and Fraud Analyst UI, and R-03 through Model & Rule Management Service coupled with the Model Hot-Swapper.",
+   "performance_efficiency": "Achieves sub-50ms P99 latency at 3,000 req/s using in-process ONNX Runtime execution, ElastiCache Redis for microsecond velocity lookups, gRPC/HTTP2 ingress, and asynchronous offloading of audit events to Amazon Kinesis Data Streams.",
+   "compatibility": "Interoperates cleanly with Payment Gateway / Acquirer using standard gRPC over TLS 1.3, integrates with Tokenization Vault via Tokenization Gateway Client, and authenticates with external Identity Providers through Spring Security OAuth2.",
+   "usability": "Fraud Analysts are well served by a dedicated Fraud Analyst UI comprising Case Management View, Review Decision Form, and Rule Management Dashboard, accessed securely via HTTPS and IAM/VPN.",
+   "reliability": "Protects against payment blocking exceeding 1 minute (R-07) via Resilience4j Circuit Breaker & Fallback Handler. Resilience is reinforced by Kinesis event buffering, Aurora read replicas, and Audit Worker DLQs.",
+   "security": "Fulfills PCI-DSS and R-05/R-06 using Tokenization Gateway Client and Tokenized Entity Cache to isolate PANs. Tamper-Evident Signer, AWS KMS envelope encryption, and Aurora PostgreSQL ensure 7-year auditable and tamper-evident decision logs.",
+   "maintainability": "Components have distinct, modular responsibilities with loose coupling via APIs and event streaming. However, supporting three distinct tech stacks (Java, Node.js, Python) imposes high cognitive overhead on a three-engineer team.",
+   "portability": "Effectively targets AWS eu-west-1 with containerized core engines. However, significant structural reliance on proprietary AWS integrations (Kinesis, KMS, ElastiCache, Aurora) limits multi-cloud or on-premises portability without refactoring adapters."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.90625,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "In-process ONNX inference via JNI and Redis feature caching avoid network bottlenecks on the critical path. Asynchronous log dispatching to Kinesis guarantees decision latency remains well under 50 ms P99 at 3,000 authorizations per second.",
+    "elements": [
+     "API Gateway & Ingress",
+     "Real-Time Scoring Engine",
+     "Feature Aggregator",
+     "Amazon ElastiCache",
+     "Inference Engine",
+     "Audit Event Publisher",
+     "Amazon Kinesis Data Streams"
+    ],
+    "sensitivity_points": [
+     "ElastiCache network latency and Redis connection pool sizing under 3,000 RPS",
+     "In-process ONNX runtime CPU contention and JNI overhead"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit publishing risks unpersisted events during sudden host failure for ultra-low latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Analyst workloads are physically separated from real-time scoring. Case management requests query dedicated Aurora read replicas and separate backend services, preventing database locks or CPU starvation from impacting the real-time scoring engine.",
+    "elements": [
+     "Fraud Analyst UI",
+     "Case Management Backend",
+     "Amazon Aurora PostgreSQL",
+     "Read Replicas",
+     "Real-Time Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Aurora replication lag between writer and read replicas during high peak writes"
+    ],
+    "tradeoffs": [
+     "Reading cases from read replicas may introduce eventual consistency in analyst screens"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Resilience4j circuit breakers in the API Gateway and Scoring Engine detect failures and route to fallback paths within seconds. However, the specific fallback decision strategy and standalone audit path during complete scoring container outage are insufficiently detailed.",
+    "elements": [
+     "API Gateway & Ingress",
+     "Rate Limiting & Circuit Breaker Module",
+     "Real-Time Scoring Engine",
+     "Circuit Breaker & Fallback Handler",
+     "Amazon Kinesis Data Streams"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker trip thresholds and failure rate detection sensitivity",
+     "Availability of API gateway fallback handler when backend instances terminate"
+    ],
+    "tradeoffs": [
+     "Permitting fallback approvals during outages reduces fraud protection to preserve payment continuity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The scoring path decouples audit persistence using Kinesis Data Streams. If Aurora becomes unavailable, Kinesis buffers events according to retention settings, and the Audit Worker leverages dead-letter queues without degrading scoring throughput or latency.",
+    "elements": [
+     "Audit Event Publisher",
+     "Amazon Kinesis Data Streams",
+     "Audit Worker",
+     "Amazon Aurora PostgreSQL",
+     "Dead Letter Queue (DLQ) Handler",
+     "Amazon SQS (DLQ)"
+    ],
+    "sensitivity_points": [
+     "Kinesis shard capacity and retention period configuration during prolonged database outages"
+    ],
+    "tradeoffs": [
+     "Buffering high-throughput events increases Kinesis storage costs during extended Aurora degradation"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Model Hot-Swapper performs atomic in-memory pointer swaps to switch ONNX models without dropping requests or restarting instances. The Version Registry tracks semantic model versions, which are recorded alongside every decision emitted to the audit pipeline.",
+    "elements": [
+     "Model & Rule Management Service",
+     "Distribution Publisher",
+     "Model Hot-Swapper",
+     "Inference Engine",
+     "Version Registry",
+     "Decision Evaluator"
+    ],
+    "sensitivity_points": [
+     "Memory overhead during dual-model residency during active hot-swap",
+     "Thread-safe pointer update synchronization across concurrent scoring requests"
+    ],
+    "tradeoffs": [
+     "Holding multiple model versions in memory increases RAM footprint per container"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Rule updates are validated, bundled, and published via SNS/S3 to the scoring engine for dynamic reload without downtime. The Decision Evaluator captures and tags all applied rule IDs and scores directly into the audit event payload.",
+    "elements": [
+     "Fraud Analyst UI",
+     "Model & Rule Management Service",
+     "Rule & Model Validator",
+     "Distribution Publisher",
+     "Model Hot-Swapper",
+     "Decision Evaluator"
+    ],
+    "sensitivity_points": [
+     "Validation rigor for dynamic rule definitions to avoid runtime evaluation exceptions"
+    ],
+    "tradeoffs": [
+     "Extensive explanation tracking per rule adds metadata payload overhead to audit records"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The architecture protects PANs using tokenization vaults and masked entity caches. However, it lacks security monitoring, SIEM integration, or behavioral anomaly detection components required to detect and alert on compromised analyst accounts within 15 minutes.",
+    "elements": [
+     "Fraud Analyst UI",
+     "Case Management Backend",
+     "Tokenization Gateway Client",
+     "Card Networks & Tokenization Vault",
+     "Amazon ElastiCache",
+     "Authentication & Security Filter"
+    ],
+    "sensitivity_points": [
+     "Completeness of tokenization boundaries preventing clear-text PAN exposure",
+     "Absence of real-time security telemetry and anomaly detection mechanisms"
+    ],
+    "tradeoffs": [
+     "Tokenizing all entities protects PANs but adds latency when resolving non-sensitive token attributes"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Audit Worker cryptographically seals every decision, model version, and input using AWS KMS and pgcrypto into Aurora PostgreSQL. The append-only tamper-evident structure allows rapid query retrieval of six-year-old decisions well within one working day.",
+    "elements": [
+     "Audit Worker",
+     "Tamper-Evident Signer",
+     "AWS KMS",
+     "Amazon Aurora PostgreSQL",
+     "Primary Writer Database",
+     "Case Management Backend"
+    ],
+    "sensitivity_points": [
+     "Long-term cryptographic key rotation management and algorithm longevity in AWS KMS",
+     "Database indexing strategy on 7-year historical audit log tables"
+    ],
+    "tradeoffs": [
+     "Cryptographic signing per record adds worker processing overhead and increases database storage size"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.6818181818181818,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "API Gateway & Ingress",
+     "Authentication & Security Filter",
+     "Tokenization Gateway Client",
+     "Card Networks & Tokenization Vault",
+     "Tokenized Entity Cache"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Audit Worker",
+     "Tamper-Evident Signer",
+     "Audit Persistence Adapter"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Scoring API Controller",
+     "Feature Aggregator",
+     "Inference Engine",
+     "Decision Evaluator"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Fraud Analyst UI",
+     "Case Management View",
+     "Review Decision Form",
+     "Case Management Backend",
+     "Case API Controller",
+     "Case Workflow Service",
+     "Data Access Repository"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model & Rule Management Service",
+     "Rule & Model Validator",
+     "Sandbox Evaluator",
+     "Artifact Bundler",
+     "Distribution Publisher",
+     "Model Hot-Swapper",
+     "Inference Engine",
+     "Rule Management Dashboard"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Inference Engine",
+     "Feature Aggregator",
+     "Amazon ElastiCache",
+     "Feature Store Cache",
+     "Audit Event Publisher",
+     "Amazon Kinesis Data Streams"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Tokenization Gateway Client",
+     "Tokenized Entity Cache",
+     "Card Networks & Tokenization Vault"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Event Publisher",
+     "Audit Worker",
+     "Tamper-Evident Signer",
+     "KMS Integration Wrapper",
+     "Audit Persistence Adapter",
+     "Amazon Aurora PostgreSQL",
+     "Version Registry"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Circuit Breaker & Fallback Handler",
+     "Rate Limiting & Circuit Breaker Module",
+     "Spring Cloud Gateway Route Handler"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

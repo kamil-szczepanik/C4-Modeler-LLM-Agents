@@ -1,0 +1,327 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are directly fulfilled: R-01 via Customer Portal, R-02 via Adjuster Web App, and R-03 via the Feature/Routing Service, Feature Toggle Engine, and Claims Core Services routing.",
+   "performance_efficiency": "R-05 is achieved by isolating adjusters from 5s mainframe latency using asynchronous messaging (Azure Service Bus), the Integration / Anti-Corruption Layer, Local Draft Cache, and Azure SQL relational tables.",
+   "compatibility": "Interoperability with the COBOL/DB2 mainframe is handled effectively by the Integration / Anti-Corruption Layer, Schema Validation Filter, and ExpressRoute. However, explicit scheduling mechanisms respecting the fixed 23:00-05:00 batch window are absent.",
+   "usability": "Both target personas are explicitly supported with purpose-built interfaces: Customer Portal SPA for customers/brokers and Adjuster Web App with an Optimized Claim View & Form Engine for internal adjusters.",
+   "reliability": "R-04 is thoroughly addressed with the Idempotency & Outbox Processor, Transactional Outbox Table, DLQ Manager, and Polly circuit breakers, ensuring zero data loss and preventing duplicate processing.",
+   "security": "R-07 is met through Active Directory federation (OIDC/OAuth 2.0). Security is reinforced by Claims API Gateway policies, Azure Key Vault managed identities, mTLS, and end-to-end TLS 1.3.",
+   "maintainability": "R-06 is well supported via dynamic routing flags in Azure App Configuration and Feature Toggle Engine. However, adopting event-sourcing and multi-service ACA architectures imposes high complexity for a team with little cloud experience.",
+   "portability": "The design satisfies the hybrid deployment target but relies heavily on proprietary Azure PaaS offerings (Azure App Configuration, Azure Service Bus, Static Web Apps Functions), limiting cloud and on-premise portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.9375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The Adjuster Web App uses a Mainframe Latency Handler and BFF proxy to render screens asynchronously under 2 seconds, but claims partially resident on the mainframe still rely on efficient background hydration and caching strategies.",
+    "elements": [
+     "Adjuster Web App",
+     "BFF Proxy Layer",
+     "Mainframe Latency Handler",
+     "Claims API Gateway",
+     "Claims Core Services",
+     "Integration / Anti-Corruption Layer (ACA Worker)"
+    ],
+    "sensitivity_points": [
+     "BFF and frontend asynchronous state hydration mechanisms",
+     "Mainframe socket query response latency"
+    ],
+    "tradeoffs": [
+     "Immediate partial UI rendering versus eventual consistency of displayed claim details"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Inbound claim submissions are decoupled from the mainframe by Azure API Gateway, Claims Core Services, and Azure Service Bus queues, allowing peak loads to buffer asynchronously without encroaching on the nightly batch window.",
+    "elements": [
+     "Customer Portal",
+     "Claims API Gateway",
+     "Claims Core Services",
+     "Transactional Outbox Table",
+     "Azure Service Bus with DLQs",
+     "Mainframe Sync Queue"
+    ],
+    "sensitivity_points": [
+     "Queue capacity and message persistence throughput in Service Bus",
+     "Controlled rate of message draining to legacy systems"
+    ],
+    "tradeoffs": [
+     "Immediate ingestion availability traded against delayed synchronization with legacy records"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The architecture incorporates the Transactional Outbox pattern and Azure Service Bus queues, allowing claims to be accepted and stored locally in Azure SQL during mainframe batch downtime and dispatched automatically once the window closes.",
+    "elements": [
+     "Claims Core Services",
+     "Transactional Outbox Table",
+     "Azure Service Bus with DLQs",
+     "Mainframe Sync Queue",
+     "Integration / Anti-Corruption Layer (ACA Worker)"
+    ],
+    "sensitivity_points": [
+     "Persistence reliability of Azure SQL transactional outbox during legacy outages"
+    ],
+    "tradeoffs": [
+     "Buffering changes locally trades real-time legacy consistency for high ingestion availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Reliability is achieved through an Idempotency & Outbox Processor, Azure Service Bus DLQs, and the Audit and Reconciliation Log Table, ensuring failed synchronizations can be retried or reconciled without data loss or duplicate records.",
+    "elements": [
+     "Idempotency & Outbox Processor",
+     "Azure Service Bus with DLQs",
+     "DLQ Manager",
+     "Integration / Anti-Corruption Layer (ACA Worker)",
+     "Audit and Reconciliation Log Table"
+    ],
+    "sensitivity_points": [
+     "Strict idempotency key enforcement and transactional state commits"
+    ],
+    "tradeoffs": [
+     "Storage and processing overhead of audit logs and deduplication tracking tables"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The dedicated Feature/Routing Service backed by Azure App Configuration enables dynamic routing and fast switch-back of claim types within minutes, while the Anti-Corruption Layer isolates legacy interfaces from breaking changes.",
+    "elements": [
+     "Feature/Routing Service",
+     "Routing Controller",
+     "Feature Toggle Engine",
+     "Azure App Configuration",
+     "Integration / Anti-Corruption Layer (ACA Worker)"
+    ],
+    "sensitivity_points": [
+     "Dynamic configuration propagation latency from Azure App Configuration"
+    ],
+    "tradeoffs": [
+     "Architectural overhead of running an extra routing hop versus deployment flexibility"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Client applications interface exclusively with the Claims API Gateway and BFF, completely abstracting the backend transition and ensuring that retiring the mainframe requires zero UI refactoring.",
+    "elements": [
+     "Customer Portal",
+     "Adjuster Web App",
+     "BFF Proxy Layer",
+     "Claims API Gateway",
+     "Claims Core Services"
+    ],
+    "sensitivity_points": [
+     "Contract stability of API Gateway endpoints exposed to client SPAs"
+    ],
+    "tradeoffs": [
+     "Maintaining API abstraction layers introduces minor serialization and routing overhead"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The Claims API Gateway enforces JWT validation and Claims-Based Access Control (CBAC), while downstream services validate broker tenant identity and emit structured audit events to Azure Monitor.",
+    "elements": [
+     "Claims API Gateway",
+     "Edge Security Component",
+     "Authorization & Context Injection Component",
+     "Claims Core Services",
+     "Audit Logger Component"
+    ],
+    "sensitivity_points": [
+     "Accuracy of CBAC context extraction and enforcement policies in APIM"
+    ],
+    "tradeoffs": [
+     "Latency incurred by policy-based token inspection and context injection"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Revocation in Active Directory terminates access to modern apps via OIDC/OAuth 2.0 federation; however, achieving a strict sub-15-minute cutoff requires configuring short token lifetimes or continuous access evaluation to invalidate active access tokens.",
+    "elements": [
+     "Active Directory / Identity Provider",
+     "Claims API Gateway",
+     "Edge Security Component",
+     "Adjuster Web App"
+    ],
+    "sensitivity_points": [
+     "OAuth access token expiration time limits and token revocation policies"
+    ],
+    "tradeoffs": [
+     "Short token lifetimes improve revocation speed but increase token refresh traffic"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7272727272727273,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Legacy Mainframe System (COBOL/DB2)",
+     "Integration / Anti-Corruption Layer (ACA Worker)",
+     "Mainframe Sync Queue",
+     "Legacy Adaptor Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Integration / Anti-Corruption Layer (ACA Worker)",
+     "Translation / Mapper Component",
+     "Legacy Adaptor Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers and Brokers",
+     "Customer Portal",
+     "Customer Portal SPA",
+     "Azure Blob Storage",
+     "Claims API Gateway"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Adjuster Web App",
+     "Claim Workspace Shell",
+     "Optimized Claim View & Form Engine"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Feature/Routing Service",
+     "Feature Toggle Engine",
+     "Azure App Configuration",
+     "Migration Router & Feature Toggles Component",
+     "Routing Dispatcher"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Idempotency & Outbox Processor",
+     "Transactional Outbox Table",
+     "Azure Service Bus with DLQs",
+     "DLQ Manager",
+     "Outbox / Audit Dispatcher Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Local Draft Cache",
+     "Mainframe Latency Handler",
+     "Claims Relational Tables",
+     "Resilience & Circuit Breaker Component",
+     "Optimized Claim View & Form Engine"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Feature/Routing Service",
+     "Feature Toggle Engine",
+     "Azure App Configuration",
+     "Audit and Reconciliation Log Table",
+     "Routing Dispatcher"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Active Directory / Identity Provider",
+     "Claims API Gateway",
+     "Edge Security Component",
+     "Authorization & Context Injection Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

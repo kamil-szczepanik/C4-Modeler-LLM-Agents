@@ -1,0 +1,333 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "All requirements are met: 'Real-Time Scoring Engine Container' scores authorizations (R-01), 'Case Management Backend Container' and 'Fraud Analyst SPA' provide review workflows (R-02), and 'Model/Rule Deployment Pipeline Container' supports zero-downtime rule/model deployments (R-03).",
+   "performance_efficiency": "The sub-50ms P99 target at 3,000 req/s is supported by 'Edge Router & TLS Terminator' in Go, 'Inference Executioner' using Rust and ONNX, 'Amazon ElastiCache Serverless' for fast velocity lookups, and asynchronous audit streaming via 'Asynchronous Ingestion' with Firehose.",
+   "compatibility": "'Edge Router & TLS Terminator' accepts gRPC and REST over TLS from 'Payment Gateway / Core Processing System'. Standard formats such as ONNX runtime models and Athena SQL exports guarantee smooth external and cross-system data exchange.",
+   "usability": "'Fraud Analyst SPA' provides tailored interfaces including 'Case Management View & Feedback Component' and 'XAI Visualization Component' for decision explainability, while Data Scientists interact smoothly via standard Git workflows through 'GitHub' and 'AWS CodePipeline'.",
+   "reliability": "The 1-minute availability constraint (R-07) is enforced by 'Circuit Breaker & Fallback Handler' with a 40ms timeout failing open to review, paired with 'Ingestion API Handler & Circuit Breaker' and DLQ mechanisms in 'Amazon SNS & Amazon SQS DLQ'.",
+   "security": "PCI-DSS compliance and R-05/R-06 are satisfied via 'Tokenization & Payload Scrubber', 'Request Router & Token Masker', column-level encryption in 'Encryption & Masking Proxy Component', and tamper-evident 7-year storage via 'Audit Log Store' using S3 Object Lock.",
+   "maintainability": "The design matches a 3-engineer operational budget by offloading operations to serverless components ('Compliance Export Container', 'Amazon Aurora PostgreSQL Serverless v2', 'Amazon Athena') and automating deployments using 'Model/Rule Deployment Pipeline Container' with automated canary rollbacks.",
+   "portability": "The system fulfills the AWS eu-west-1 deployment target using containerized services on ECS Fargate. However, deep coupling to AWS-specific proprietary features ('S3 Object Lock', 'Amazon Athena', 'Amazon RDS Proxy') reduces portability to alternative cloud providers."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "In-memory channels in Go, compiled Rust execution with ONNX Runtime, and Redis-backed velocity aggregation satisfy sub-50ms processing. However, direct synchronous SDK logging from the inference executioner to S3 in the scoring component poses latency jitter risks at 3,000 requests per second.",
+    "elements": [
+     "API Gateway / Ingestion Service Container",
+     "Edge Router & TLS Terminator",
+     "Real-Time Scoring Engine Container",
+     "Inference Executioner",
+     "Feature Aggregator",
+     "Amazon ElastiCache Serverless"
+    ],
+    "sensitivity_points": [
+     "In-process ONNX runtime inference execution",
+     "ElastiCache Serverless latency under 3,000 RPS"
+    ],
+    "tradeoffs": [
+     "Rust and ONNX minimize latency at the cost of operational deployment complexity"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Complete container and datastore separation ensures analyst queries cannot starve scoring traffic. Case management uses Aurora Serverless with RDS connection pooling, while scoring runs isolated on ECS Fargate using ElastiCache and S3/Firehose, preventing database contention.",
+    "elements": [
+     "Fraud Analyst SPA",
+     "Case Management Backend Container",
+     "Primary Operational Datastore",
+     "Amazon RDS Proxy",
+     "Real-Time Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Datastore isolation between case management and the real-time scoring path"
+    ],
+    "tradeoffs": [
+     "Duplicating decision data across stores increases storage cost to preserve runtime isolation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Both the Ingestion API Handler and the Scoring Engine implement circuit breakers with explicit 40ms timeouts failing open to review, preventing authorizations from blocking over 1 minute. However, fallback persistence during total scoring engine crashes depends on the gateway handling audit buffering.",
+    "elements": [
+     "Ingestion API Handler & Circuit Breaker",
+     "Circuit Breaker & Fallback Handler",
+     "Real-Time Scoring Engine Container",
+     "API Gateway / Ingestion Service Container"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker timeout threshold and fallback routing logic"
+    ],
+    "tradeoffs": [
+     "Failing open to review preserves authorization availability but increases manual analyst queue backlogs"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Asynchronous ingestion via Amazon Kinesis Firehose decouples audit persistence from the scoring path, buffering events during S3 slowdowns to preserve P99 latency. However, conflicting relationships in the scoring engine show direct S3 SDK writes alongside Firehose decoupling.",
+    "elements": [
+     "Audit & Feature Store",
+     "Asynchronous Ingestion",
+     "Audit Log Store",
+     "Inference Executioner"
+    ],
+    "sensitivity_points": [
+     "Buffer capacity and retry durability of Kinesis Firehose under persistent downstream outages"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit decoupling protects request latency but risks eventual consistency for immediate lookups"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The automated deployment pipeline compiles ONNX artifacts and triggers ECS zero-downtime task updates. CloudWatch alarms monitor P99 latency and error rates for automated canary rollbacks within minutes, while inference execution explicitly attaches model version metadata to decisions.",
+    "elements": [
+     "Model/Rule Deployment Pipeline Container",
+     "AWS CodePipeline",
+     "AWS CodeBuild",
+     "Amazon CloudWatch",
+     "Amazon ECS Fargate",
+     "Inference Executioner"
+    ],
+    "sensitivity_points": [
+     "Automated canary rollback trigger sensitivity in CloudWatch"
+    ],
+    "tradeoffs": [
+     "Canary rolling deployments require spare ECS Fargate capacity within the fixed monthly budget"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Rule updates follow the automated CodePipeline GitOps process into the ONNX runtime with zero downtime, and decisions record explanations. However, shipping all analyst business rules via full container deployment pipelines may create friction for rapid ad-hoc updates.",
+    "elements": [
+     "Model/Rule Deployment Pipeline Container",
+     "Inference Executioner",
+     "Feature Aggregator",
+     "Amazon ElastiCache Serverless"
+    ],
+    "sensitivity_points": [
+     "End-to-end pipeline build and ECS container rollout cycle time"
+    ],
+    "tradeoffs": [
+     "Compiling rules via CI/CD guarantees immutability but increases deployment lead time versus dynamic scripting"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Tokenization at ingestion and column-level encryption with row-level security prevent clear-text card numbers from reaching analysts. However, anomalous account access detection within 15 minutes is not supported by any intrusion detection, SIEM, or automated alerting mechanism.",
+    "elements": [
+     "Tokenization & Payload Scrubber",
+     "Request Router & Token Masker",
+     "Encryption & Masking Proxy Component",
+     "Case Management Schema & Repository Component",
+     "Routing & Auth Module"
+    ],
+    "sensitivity_points": [
+     "Early payload scrubbing and tokenization before entering downstream storage"
+    ],
+    "tradeoffs": [
+     "Tokenization minimizes PCI-DSS scope but prevents analysts from performing primary account number matching"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The design directly satisfies 7-year regulatory audits using S3 Object Lock in WORM compliance mode. The serverless Compliance Export Lambda and Amazon Athena query orchestrator can reconstruct decision inputs, model versions, and explanations well within one working day without always-on infrastructure costs.",
+    "elements": [
+     "Compliance Export Container",
+     "Athena Query Orchestrator",
+     "Audit Log Store",
+     "Amazon Athena",
+     "Audit & Feature Store"
+    ],
+    "sensitivity_points": [
+     "S3 Object Lock retention policy and Athena query partitioning structure"
+    ],
+    "tradeoffs": [
+     "On-demand serverless Athena querying avoids idle compute costs but incurs query execution runtime"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Tokenization & Payload Scrubber",
+     "Request Router & Token Masker",
+     "Encryption & Masking Proxy Component",
+     "Case Management Schema & Repository Component",
+     "Edge Router & TLS Terminator"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Audit Log Store",
+     "Compliance Export Container",
+     "Inference Executioner",
+     "XAI Visualization Component",
+     "Audit Query Engine"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Primary Operational Datastore",
+     "Amazon ElastiCache Serverless",
+     "Amazon Athena",
+     "Feature Store"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Model/Rule Deployment Pipeline Container",
+     "AWS CodePipeline",
+     "AWS CodeBuild",
+     "Amazon ECS Fargate",
+     "Audit Query Engine"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine Container",
+     "Inference Executioner",
+     "Circuit Breaker & Fallback Handler",
+     "API Gateway / Ingestion Service Container"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Backend Container",
+     "Workflow & Assignment Engine",
+     "Case API Router / Controller",
+     "Fraud Analyst SPA",
+     "Case Management View & Feedback Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model/Rule Deployment Pipeline Container",
+     "AWS CodePipeline",
+     "AWS CodeBuild",
+     "Amazon ECS Fargate",
+     "Amazon CloudWatch"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine Container",
+     "API Gateway / Ingestion Service Container",
+     "Feature Aggregator",
+     "Amazon ElastiCache Serverless",
+     "Asynchronous Ingestion"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Tokenization & Payload Scrubber",
+     "Request Router & Token Masker",
+     "Encryption & Masking Proxy Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Inference Executioner",
+     "Audit & Feature Store",
+     "Audit Log Store",
+     "Asynchronous Ingestion"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Circuit Breaker & Fallback Handler",
+     "Ingestion API Handler & Circuit Breaker"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

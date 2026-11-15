@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalystRiskOperationsManager, "Fraud Analyst & Risk Operations Manager", "Internal users reviewing cases and updating rules.")
+
+System_Ext(PaymentGatewayAcquiringSystem, "Payment Gateway / Acquiring System", "External actor submitting authorization requests.")
+System_Ext(ExternalFraudIntelligenceFeeds, "External Fraud Intelligence Feeds", "External sources providing risk data via webhooks.")
+System_Ext(AWSApiGatewayEnvoyProxy, "AWS API Gateway / Envoy Proxy", "Edge layer handling mTLS termination and traffic routing.")
+System_Ext(AWSCognito, "AWS Cognito", "Managed Identity Provider handling OIDC/OAuth2 authentication and RBAC.")
+System_Ext(AWSS3ObjectLock, "AWS S3 Object Lock", "Immutable storage backend configured in Compliance Mode for audit logging.")
+System_Ext(AWSKMS, "AWS KMS", "Cryptographic service managing envelope encryption and hardware-isolated keys.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(ScoringServiceContainer, "Scoring Service Container", "Go / AWS Fargate", "Guarantees predictable low memory footprint and sub-50ms P99 latency for real-time fraud scoring.")
+    Container(CaseManagementContainer, "Case Management Container", "Node.js / TypeScript / AWS Fargate", "Powers analyst workflows and UI rendering.")
+    ContainerDb(AmazonElastiCacheforRedis, "Amazon ElastiCache for Redis", "in-memory cache", "Provides in-memory feature storage and hot rules caching for sub-millisecond lookups.")
+    ContainerDb(AmazonAuroraPostgreSQLServerlessv2, "Amazon Aurora PostgreSQL Serverless v2", "relational database", "Persists case management metadata and review actions securely.")
+}
+
+Rel(PaymentGatewayAcquiringSystem, AWSApiGatewayEnvoyProxy, "Submits payment authorization requests", "gRPC over mTLS")
+Rel(FraudAnalystRiskOperationsManager, AWSCognito, "Authenticates to the web frontend", "OIDC/OAuth2 over HTTPS/REST")
+Rel(AWSApiGatewayEnvoyProxy, ScoringServiceContainer, "Routes real-time payment authorization screening requests", "gRPC")
+Rel(ScoringServiceContainer, AmazonElastiCacheforRedis, "Fetches in-memory features and hot rules", "RESP over TLS")
+Rel(ScoringServiceContainer, AWSS3ObjectLock, "Archives scoring inputs and decisions", "AWS SDK / HTTPS")
+Rel(CaseManagementContainer, AmazonAuroraPostgreSQLServerlessv2, "Persists case management metadata and review actions", "PostgreSQL wire protocol over TLS")
+Rel(ExternalFraudIntelligenceFeeds, RealTimePaymentFraudScreeningSystem, "Ingests risk data", "HTTPS/REST webhooks")
+
+@enduml

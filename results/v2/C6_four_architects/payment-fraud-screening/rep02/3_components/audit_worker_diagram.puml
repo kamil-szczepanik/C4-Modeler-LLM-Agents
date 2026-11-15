@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Audit Worker container
+
+Container_Boundary(audit_worker, "Audit Worker") {
+    Component(Audit_Event_Consumer, "Audit Event Consumer", "Python, boto3", "Polls streaming events and manages stream offsets.")
+    Component(Stream_Offset_Manager, "Stream Offset Manager", "Python, AWS SDK", "Tracks Kinesis shard iterator positions.")
+    Component(Tamper_Evident_Signer, "Tamper-Evident Signer", "Python, cryptography", "Generates cryptographic hashes for audit payloads.")
+    Component(KMS_Integration_Wrapper, "KMS Integration Wrapper", "Python, boto3", "Interfaces with AWS KMS for envelope encryption.")
+    Component(Audit_Persistence_Adapter, "Audit Persistence Adapter", "Python, psycopg2", "Handles database writes for audit logs.")
+    Component(Dead_Letter_Queue_DLQ_Handler, "Dead Letter Queue (DLQ) Handler", "Python", "Captures failed payloads and routes them to SQS.")
+}
+
+Component(Amazon_Kinesis_Data_Streams, "Amazon Kinesis Data Streams", "AWS Kinesis", "Streaming platform for audit events.")
+Component(Amazon_SQS_DLQ, "Amazon SQS (DLQ)", "Amazon SQS", "Dead letter queue for failed audit events.")
+Component(AWS_KMS, "AWS KMS", "AWS KMS", "Provides signing keys and cryptographic operations.")
+Component(Amazon_Aurora_PostgreSQL, "Amazon Aurora PostgreSQL", "PostgreSQL", "Stores durable and compliant audit records.")
+
+Rel(Audit_Event_Consumer, Amazon_Kinesis_Data_Streams, "Polls and commits stream offsets", "HTTPS")
+Rel(Audit_Event_Consumer, Tamper_Evident_Signer, "Passes raw audit payload", "In-memory")
+Rel(Audit_Event_Consumer, Amazon_SQS_DLQ, "Forwards failed audit events", "HTTPS")
+Rel(Tamper_Evident_Signer, AWS_KMS, "Requests signing keys/operations", "HTTPS/TLS")
+Rel(Tamper_Evident_Signer, Audit_Persistence_Adapter, "Passes signed record", "In-memory")
+Rel(Audit_Persistence_Adapter, Amazon_Aurora_PostgreSQL, "Inserts audit log", "TLS/TCP")
+
+@enduml

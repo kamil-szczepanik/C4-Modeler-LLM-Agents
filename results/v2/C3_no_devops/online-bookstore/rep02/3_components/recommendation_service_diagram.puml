@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(ActiveShopperMarketingManager, "Active Shopper & Marketing Manager", "Primary users and internal personas driving discovery and promotional rules.")
+
+Container(AmazonAPIGateway, "Amazon API Gateway", "AWS API Gateway", "Routes incoming recommendation requests using mTLS and TLS 1.3.")
+Container(CoreECommerceAPI, "Core E-Commerce API", "Microservice", "Requests personalized recommendations via gRPC.")
+Container(AmazonS3, "Amazon S3", "AWS S3", "Stores pre-computed models secured with AWS KMS encryption.")
+Container(AmazonElastiCacheRedis, "Amazon ElastiCache (Redis)", "Redis", "Delivers low-latency access to real-time user session data.")
+Container(AmazonSQS, "Amazon SQS", "AWS SQS", "Decouples telemetry publishing to protect critical API latency SLAs.")
+
+Container_Boundary(RecommendationService, "Recommendation Service") {
+    Component(APIController, "API Controller", "FastAPI / Python", "Manages inbound gRPC and REST requests with RBAC.")
+    Component(RecommendationEngine, "Recommendation Engine", "Python, Scikit-learn, LightFM", "Performs collaborative filtering for 'Customers also bought' features.")
+    Component(MerchandisingRulesProcessor, "Merchandising & Rules Processor", "Python", "Applies promotional weights for sponsored book placements.")
+    Component(ModelStoreClient, "Model Store Client", "AWS SDK / Python", "Fetches pre-computed machine learning models from Amazon S3.")
+    Component(FeatureCacheClient, "Feature Cache Client", "Redis Client / Python", "Retrieves real-time user clickstream data from Amazon ElastiCache (Redis).")
+    Component(AsyncTelemetryPublisher, "Async Telemetry Publisher", "Python Background Worker", "Manages asynchronous metric collection.")
+}
+
+Rel(AmazonAPIGateway, APIController, "Routes incoming recommendation requests", "mTLS / TLS 1.3")
+Rel(CoreECommerceAPI, APIController, "Requests personalized recommendations", "gRPC")
+Rel(APIController, RecommendationEngine, "Coordinates business logic", "Synchronous in-process method calls")
+Rel(APIController, MerchandisingRulesProcessor, "Coordinates business logic", "Synchronous in-process method calls")
+Rel(ModelStoreClient, AmazonS3, "Fetches models using encrypted AWS SDK calls", "HTTPS")
+Rel(FeatureCacheClient, AmazonElastiCacheRedis, "Queries session features", "TCP")
+Rel(AsyncTelemetryPublisher, AmazonSQS, "Publishes pseudonymized metrics asynchronously", "HTTPS")
+
+@enduml

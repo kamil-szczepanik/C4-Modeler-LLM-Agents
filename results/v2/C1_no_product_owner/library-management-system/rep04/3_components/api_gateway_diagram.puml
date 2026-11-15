@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the API Gateway container
+
+Container(WebFrontend, "Web Frontend", "Web Technologies", "Sends API requests via HTTPS/REST with TLS 1.3.")
+System_Ext(IdP, "IdP", "Identity Provider", "Provides authentication and tokens.")
+
+System_Boundary(api_gateway, "API Gateway") {
+    Component(RoutingDispatcherComponent, "Routing & Dispatcher Component", "Spring Cloud Gateway Core, Java 21", "Enforces security policies and high-performance request dispatching to satisfy strict EU data residency and sub-800ms search latency requirements.")
+    Component(AuthenticationAuthorizationFilter, "Authentication & Authorization Filter", "Spring Security OAuth2 Resource Server, Java 21", "Validates user sessions and handles OIDC token validation and audience checks.")
+    Component(RateLimitingThrottlingFilter, "Rate Limiting & Throttling Filter", "Redis-backed Token Bucket, Java 21", "Provides traffic throttling and rate limiting using a localized Redis cluster instance for EU nodes.")
+    Component(ResilienceCircuitBreakerFilter, "Resilience & Circuit Breaker Filter", "Resilience4j, Java 21", "Implements circuit breakers and bulkheading for downstream fault tolerance.")
+}
+
+Container(CatalogueService, "Catalogue Service", "Microservice", "Downstream service receiving protected calls via gRPC with mTLS.")
+Container(CirculationService, "Circulation Service", "Microservice", "Downstream service receiving protected calls via gRPC with mTLS.")
+Container(NotificationService, "Notification Service", "Microservice", "Downstream service receiving protected calls via gRPC with mTLS.")
+
+Rel(WebFrontend, AuthenticationAuthorizationFilter, "Validates user sessions via", "HTTPS/REST")
+Rel(AuthenticationAuthorizationFilter, RoutingDispatcherComponent, "Forwards validated requests via", "Internal Java Method Call")
+Rel(RoutingDispatcherComponent, ResilienceCircuitBreakerFilter, "Passes requests for fault-tolerance checks via", "Internal Java Method Call")
+Rel(ResilienceCircuitBreakerFilter, CatalogueService, "Routes protected calls via", "gRPC with mTLS, propagated JWTs, OpenTelemetry headers")
+Rel(ResilienceCircuitBreakerFilter, CirculationService, "Routes protected calls via", "gRPC with mTLS, propagated JWTs, OpenTelemetry headers")
+Rel(ResilienceCircuitBreakerFilter, NotificationService, "Routes protected calls via", "gRPC with mTLS, propagated JWTs, OpenTelemetry headers")
+
+@enduml

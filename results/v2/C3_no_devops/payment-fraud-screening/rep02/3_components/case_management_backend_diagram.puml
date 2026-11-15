@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Case Management Backend container
+
+System_Ext(case_management_web_app, "Case Management Web App", "Frontend application used by analysts.")
+System_Ext(aws_cognito, "AWS Cognito", "Provides OAuth 2.0/OIDC authentication and JWT validation.")
+System_Ext(feature_store_db, "Feature Store & Metadata DB", "PostgreSQL (RDS) persisting case states, audit logs, and operational metrics.")
+System_Ext(amazon_s3, "Amazon S3 Object Lock", "Ensures tamper-evident, 7-year retention of decision and audit logs.")
+System_Ext(regulators_system, "Regulators / Audit & Compliance System", "External system receiving signed audit trails.")
+
+Container_Boundary(case_management_backend, "Case Management Backend") {
+    Component(case_api_router, "Case API Router", "NestJS / TypeScript", "Enforces JWT validation, RBAC, rate limiting, and input sanitization for incoming API requests.")
+    Component(data_masking_interceptor, "Data Masking Interceptor", "NestJS Interceptor / TypeScript", "Strips Primary Account Numbers (PAN) to ensure analysts never see full card data.")
+    Component(case_workflow_engine, "Case Workflow Engine", "NestJS Service / TypeScript", "Manages state transitions, bulk resolutions, and analyst SLA tracking.")
+    Component(audit_compliance_exporter, "Audit & Compliance Exporter", "NestJS Service / TypeScript", "Generates cryptographically signed compliance extracts for 7-year auditability.")
+}
+
+Rel(case_management_web_app, case_api_router, "Routes incoming API requests", "HTTPS / REST, AWS Cognito OAuth 2.0 / OIDC")
+Rel(case_api_router, aws_cognito, "Validates JSON Web Tokens (JWT)", "HTTPS / OIDC")
+Rel(case_api_router, data_masking_interceptor, "Passes sanitized request data for security enforcement", "")
+Rel(data_masking_interceptor, case_workflow_engine, "Forwards masked payload to workflow logic", "")
+Rel(case_workflow_engine, feature_store_db, "Persists case states, analyst notes, and SLA timestamps", "TCP / PostgreSQL Wire Protocol")
+Rel(audit_compliance_exporter, amazon_s3, "Reads tamper-evident decision logs", "HTTPS / AWS SDK")
+Rel(audit_compliance_exporter, regulators_system, "Pushes cryptographically signed compliance extracts", "HTTPS / REST")
+
+@enduml

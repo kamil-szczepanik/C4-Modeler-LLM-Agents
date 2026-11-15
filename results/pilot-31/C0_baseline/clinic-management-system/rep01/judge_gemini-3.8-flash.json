@@ -1,0 +1,321 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "While EMR Service, Billing Service, and Patient Portal address R-01, R-03, and R-04, the system entirely omits elements for appointment scheduling and resource clash checks (R-02), leaving a core clinical requirement unfulfilled.",
+   "performance_efficiency": "EMR Service implements CQRS with Clinical Read Model for low-latency P95 targets. Clinical API Gateway leverages Envoy and gRPC-Web Adapter. Celery and Kafka handle asynchronous workloads, though an explicit caching layer is absent.",
+   "compatibility": "The dedicated FHIR Integration Service features Transformation Engine (HAPI FHIR), Schema Registry (R4/R5 validation), and Outbox/Message Queue, directly fulfilling HL7 FHIR interoperability with Lab/Imaging Systems and Clearinghouse Gateway.",
+   "usability": "Patients are supported via the responsive Patient Portal. However, clinical staff lack a dedicated frontend presentation layer or client application container, interacting directly through the Clinical API Gateway.",
+   "reliability": "Service Mesh, Envoy circuit-breakers, and Kafka buffering support fault tolerance. However, explicit active-active replication and failover mechanisms between on-prem-k8s and AWS eu-central-1 needed to achieve 99.99% availability are not detailed.",
+   "security": "Thoroughly addressed: MFA/OIDC via Identity Provider, mTLS in Service Mesh, OPA Access Control Provider, Emergency Access Controller (break-glass), PostgreSQL TDE/RLS, and immutable WORM storage in Audit Log Service for HIPAA/GDPR.",
+   "maintainability": "Strong modular decomposition across bounded contexts (EMR, Billing, FHIR). Components are loosely coupled using asynchronous messaging (Kafka), gRPC interfaces, and sidecars, enabling high reusability, testability, and isolated service evolution.",
+   "portability": "Containers are designed for Kubernetes and standard Linux stacks (Go, Java, Node.js, Python). Some components have cloud-specific dependencies (AWS S3 Glacier), but deployment across hybrid target regions (on-prem-k8s and eu-central-1) is feasible."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 3.0,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The EMR service employs CQRS with a dedicated Clinical Read Model projection engine, while the Clinical API Gateway leverages Envoy and gRPC-web to minimize latency and meet the sub-second P95 target.",
+    "elements": [
+     "Clinical API Gateway",
+     "Request Router",
+     "gRPC-Web Adapter",
+     "EMR Service",
+     "Clinical Read Model"
+    ],
+    "sensitivity_points": [
+     "Latency of read model projections synchronization",
+     "gRPC-web serialization overhead on high concurrency"
+    ],
+    "tradeoffs": [
+     "Eventual consistency in read projections versus immediate read availability"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "FHIR Integration Service buffers incoming bulk results asynchronously via Kafka, preventing write saturation. EMR's CQRS read model isolates clinician query performance from high-volume background ingestion, sustaining sub-second P95 latency.",
+    "elements": [
+     "FHIR Integration Service",
+     "FHIR Facade Controller",
+     "Transformation Engine",
+     "Outbox/Message Queue",
+     "EMR Service",
+     "Clinical Read Model"
+    ],
+    "sensitivity_points": [
+     "Kafka message ingestion throughput and consumer lag",
+     "HAPI FHIR transformation and validation processing time"
+    ],
+    "tradeoffs": [
+     "Asynchronous ingestion latency versus real-time clinician query isolation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "Core cloud services (Patient Portal, Billing) are hosted exclusively in eu-central-1 without on-premise replicas or cross-site database synchronization defined in the architecture, making active-active failover within 1 minute unachievable without major topology redesign.",
+    "elements": [
+     "Patient Portal",
+     "Billing Service",
+     "EMR Core",
+     "Service Mesh"
+    ],
+    "sensitivity_points": [
+     "Cross-environment replication lag between on-prem and cloud",
+     "DNS failover convergence time across hybrid infrastructure"
+    ],
+    "tradeoffs": [
+     "Active-active hybrid redundancy cost versus single-region cloud hosting simplicity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Claim processing is decoupled via asynchronous Celery/RabbitMQ workers and state machine orchestration, ensuring claims can be safely retried. However, specific PostgreSQL clustering and automated failover topology to guarantee sub-30s DB recovery are not detailed.",
+    "elements": [
+     "Billing Service",
+     "Claim Processor",
+     "Payment Orchestrator",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "PostgreSQL failover and connection re-establishment duration",
+     "Celery message acknowledgement and retry backoff tuning"
+    ],
+    "tradeoffs": [
+     "Strict message idempotency enforcement versus worker throughput"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Claim processing logic is fully encapsulated within the Claim Processor component in the Billing Service, isolating clearinghouse communication behind circuit breakers and queues without impacting the EMR Service.",
+    "elements": [
+     "Billing Service",
+     "Claim Processor",
+     "Clearinghouse Gateway",
+     "EMR Service"
+    ],
+    "sensitivity_points": [
+     "Coupling between clearinghouse API specifications and Claim Processor logic"
+    ],
+    "tradeoffs": [
+     "Custom gateway adapters versus generic abstraction complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are localized to EMR Service data models and the Patient Portal UI/API. Because audit logging uses event streaming with dynamic or schema-validated envelopes, impact is contained, comfortably meeting the three-component limit.",
+    "elements": [
+     "EMR Service",
+     "Clinical Record Manager",
+     "Patient Portal",
+     "Audit Log Service",
+     "Log Processor"
+    ],
+    "sensitivity_points": [
+     "Schema registry flexibility across event payloads",
+     "Backward compatibility of patient demographic APIs"
+    ],
+    "tradeoffs": [
+     "Strict schema validation overhead versus evolutionary data model agility"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Authentication Manager enforces MFA via the OIDC Identity Provider with token binding, blocking single-factor access. Audit logging streams failed events, though automated real-time security alerting within 1 minute relies on generic telemetry without an explicit SIEM mechanism.",
+    "elements": [
+     "Clinical API Gateway",
+     "Authentication Manager",
+     "Identity Provider",
+     "Audit Log Service",
+     "Telemetry Collector"
+    ],
+    "sensitivity_points": [
+     "Strict enforcement of RFC 8471 token binding",
+     "Latency of asynchronous security event alerting"
+    ],
+    "tradeoffs": [
+     "Stringent MFA and token validation latency versus user login convenience"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "EMR enforces ABAC via OPA and break-glass controllers, while an asynchronous sidecar captures 100% of read events. The Audit Log Service guarantees non-repudiation and 10-year retention via cryptographic hashing and S3 Glacier WORM Object Lock.",
+    "elements": [
+     "EMR Service",
+     "Access Control Provider",
+     "Emergency Access Controller",
+     "Audit Log Service",
+     "Storage Controller"
+    ],
+    "sensitivity_points": [
+     "OPA policy evaluation latency per read request",
+     "Reliability of sidecar local buffer during log shipping"
+    ],
+    "tradeoffs": [
+     "Comprehensive immutable logging overhead versus storage cost and write throughput"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "none",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.6818181818181818,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Engine",
+     "Audit Log Service",
+     "Access Control Provider",
+     "Emergency Access Controller",
+     "Sidecar Proxies"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Service Mesh",
+     "Service Orchestrator",
+     "Clinical API Gateway"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Billing Service",
+     "S3 Glacier",
+     "Audit Log Service",
+     "Storage Controller"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "EMR Service",
+     "Clinical Record Manager",
+     "Patient Portal"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "none",
+    "elements": []
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Core",
+     "EMR Service",
+     "Clinical Record Manager",
+     "Clinical Read Model",
+     "Audit Log Service",
+     "Sidecar"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service",
+     "Invoice Manager",
+     "Claim Processor",
+     "Clearinghouse Gateway",
+     "Payment Orchestrator"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Identity Provider Interface",
+     "Authentication Manager",
+     "PostgreSQL"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Service Mesh",
+     "Service Orchestrator",
+     "Clinical API Gateway"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Clinical Read Model",
+     "gRPC-Web Adapter",
+     "Request Router"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Integration Broker",
+     "FHIR Integration Service",
+     "FHIR Facade Controller",
+     "Transformation Engine",
+     "Schema Registry",
+     "Lab and Imaging Services"
+    ]
+   }
+  }
+ }
+}

@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Audit & Event Store container
+
+System_Ext(Fraud_Scoring_Engine, "Fraud Scoring Engine", "External system sending fraud decisions.")
+
+Container_Boundary(Audit_and_Event_Store, "Audit & Event Store") {
+    Component(Ingest_API_Router, "Ingest API / Router", "Go", "Receives fraud decisions and routes incoming requests.")
+    Component(Ledger_Writer, "Ledger Writer", "Go", "Consumes messages and writes audit data to persistent storage.")
+    Component(Retention_Archival_Worker, "Retention & Archival Worker", "Go", "Manages data lifecycle and archival for 7-year retention.")
+    Component(Ingestion_Buffer_WAL, "Ingestion Buffer / WAL", "Amazon SQS FIFO", "Asynchronous buffering ensuring zero data loss and traffic spike absorption.")
+    Component(Audit_Query_Adapter, "Audit Query Adapter", "Go", "Provides isolated read queries against the audit store.")
+    Component(Amazon_Aurora_PostgreSQL, "Amazon Aurora PostgreSQL", "Amazon Aurora PostgreSQL (with Ledger/Table features)", "Relational persistence with tamper-evident ledger features.")
+    Component(Amazon_S3_with_Object_Lock, "Amazon S3 with Object Lock", "Amazon S3 with Object Lock (Compliance Mode)", "Immutable, cost-effective 7-year cold tier storage.")
+}
+
+Rel(Fraud_Scoring_Engine, Ingest_API_Router, "gRPC over TLS", "Internal RPC")
+Rel(Ingest_API_Router, Ingestion_Buffer_WAL, "AWS SDK (HTTPS)", "Message Queuing")
+Rel(Ledger_Writer, Ingestion_Buffer_WAL, "AWS SDK (HTTPS)", "Stream Consumption")
+Rel(Ledger_Writer, Amazon_Aurora_PostgreSQL, "SQL/TCP", "Data Persistence")
+Rel(Retention_Archival_Worker, Amazon_S3_with_Object_Lock, "HTTPS", "Object Lock API")
+Rel(Audit_Query_Adapter, Amazon_Aurora_PostgreSQL, "SQL/TCP (Read Replica)", "Query Isolation")
+
+@enduml

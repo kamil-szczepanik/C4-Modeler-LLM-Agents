@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(Fraud_Analyst, "Fraud Analyst", "Internal persona reviewing flagged transactions and suspicious payments using a secure Web UI.")
+
+System_Ext(Payment_Gateway_Core_Ledger, "Payment Gateway / Core Ledger", "External system submitting tokenized payment authorizations.")
+System_Ext(Identity_Provider, "Identity Provider", "External system managing analyst authentication using OIDC/OAuth2.")
+System_Ext(Audit_Archival_Storage, "Audit Archival Storage", "Amazon S3 with WORM storage for 7-year tamper-evident audit retention.")
+
+System_Boundary(Fraud_Screening_System, "Fraud Screening System") {
+    Container(API_Gateway_Ingestion_Service, "API Gateway / Ingestion Service", "AWS API Gateway / ECS Fargate with Go", "Ingests payment authorization requests securely and routes them internally.")
+    Container(Scoring_Engine, "Scoring Engine", "AWS ECS Fargate with Go and in-memory model caching", "Evaluates card-not-present payment authorizations to detect fraud prior to approval with sub-50ms latency.")
+    Container(Case_Management_Backend, "Case Management Backend", "ECS Fargate with Node.js/Java", "Provides case management workflows for human analysts and handles transactional case data.")
+    Container(Audit_Event_Bus, "Audit & Event Bus", "Amazon MSK / Kafka", "Provides reliable asynchronous event streaming for decision events and audit logs.")
+    ContainerDb(Feature_Store, "Feature Store", "Amazon DynamoDB", "Ensures predictable single-digit millisecond reads for real-time feature lookups.")
+    ContainerDb(Transactional_Data_Store, "Transactional Data Store", "Amazon Aurora PostgreSQL", "Stores transactional case data for the case management backend.")
+}
+
+Rel(Payment_Gateway_Core_Ledger, API_Gateway_Ingestion_Service, "Sends authorization requests", "HTTPS/REST (TLS 1.3)")
+Rel(API_Gateway_Ingestion_Service, Scoring_Engine, "Forwards requests for fraud evaluation", "gRPC over mTLS")
+Rel(Scoring_Engine, Feature_Store, "Queries for real-time feature lookups", "AWS SDK / NoSQL API")
+Rel(Scoring_Engine, Audit_Event_Bus, "Publishes decision events", "Apache Kafka Protocol / Amazon MSK")
+Rel(Fraud_Analyst, Case_Management_Backend, "Reviews flagged transactions and manages cases", "HTTPS")
+Rel(Case_Management_Backend, Transactional_Data_Store, "Reads and writes transactional case data", "PostgreSQL Wire Protocol")
+Rel(Audit_Event_Bus, Audit_Archival_Storage, "Writes decision payloads for compliance", "AWS SDK / S3 API with WORM")
+Rel(Case_Management_Backend, Identity_Provider, "Authenticates analysts", "OIDC/OAuth2")
+
+@enduml

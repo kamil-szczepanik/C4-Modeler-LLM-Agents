@@ -1,0 +1,54 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(Patients, "Patients", "Patients using the self-service portal for booking and real-time updates.")
+Person(Receptionists, "Receptionists", "Staff managing front-desk operations, admissions, and scheduling.")
+Person(Clinical_Staff, "Clinical Staff", "Medical professionals accessing electronic medical records and clinical workflows.")
+Person(Billing_Specialists, "Billing Specialists", "Personnel managing patient billing, payments, and insurance claims.")
+
+System_Ext(External_Labs_Imaging, "External Labs/Imaging", "External laboratory and imaging systems for diagnostic data exchange.")
+System_Ext(Insurance_Clearinghouses, "Insurance Clearinghouses", "External systems for processing insurance claims via X12/EDI.")
+System_Ext(Payment_Gateways, "Payment Gateways", "External payment processing services.")
+System_Ext(Identity_Provider, "Identity Provider", "External or internal IDP for multi-factor authentication via OIDC/SAML 2.0.")
+
+System_Boundary(Clinic_Management_System, "Clinic Management System") {
+    Container(API_Gateway, "API Gateway", "Envoy / Kong", "Handles ingress routing, JWT validation, and rate limiting.")
+    Container(Patient_Portal_Service, "Patient Portal Service", "Microservice / Kubernetes", "Manages patient interactions and self-service portal functionality.")
+    Container(Scheduling_Service, "Scheduling Service", "Microservice / Kubernetes", "Manages appointments, scheduling, and calendar operations.")
+    Container(EMR_Service, "EMR Service", "Microservice / Kubernetes", "Manages electronic medical records and clinical documentation.")
+    Container(Billing_Service, "Billing Service", "Microservice / Kubernetes", "Manages patient billing, invoices, and insurance claims.")
+    Container(HL7_FHIR_Integration_Service, "HL7 FHIR Integration Service", "Microservice / Kubernetes", "Handles interoperability and data exchange with external labs and imaging systems.")
+    Container(Analytics_Service, "Analytics Service", "Microservice / AWS eu-central-1", "Processes platform analytics with PHI stripped for reporting and insights.")
+    ContainerDb(PostgreSQL_Database, "PostgreSQL Database", "PostgreSQL with AES-256", "Core transactional database for EMR and scheduling with streaming replication.")
+    Container(Apache_Kafka_Message_Broker, "Apache Kafka Message Broker", "Apache Kafka", "Event broker for decoupled, asynchronous workflow triggers.")
+    Container(External_Vault_HSM, "External Vault/HSM", "Hardware Security Module / Vault", "Secures encryption keys and sensitive secrets.")
+}
+
+Rel(Patients, API_Gateway, "Accesses patient portal and services", "HTTPS (OAuth2/OIDC, Multi-Factor Auth)")
+Rel(Receptionists, API_Gateway, "Manages front-desk and scheduling operations", "HTTPS (OAuth2/OIDC, Multi-Factor Auth)")
+Rel(Clinical_Staff, API_Gateway, "Accesses electronic medical records and clinical workflows", "HTTPS (OAuth2/OIDC, Multi-Factor Auth)")
+Rel(Billing_Specialists, API_Gateway, "Manages billing and financial workflows", "HTTPS (OAuth2/OIDC, Multi-Factor Auth)")
+
+Rel(API_Gateway, Patient_Portal_Service, "Routes patient portal requests", "gRPC over mTLS")
+Rel(API_Gateway, Scheduling_Service, "Routes scheduling requests", "gRPC over mTLS")
+Rel(API_Gateway, EMR_Service, "Routes EMR requests", "gRPC over mTLS")
+Rel(API_Gateway, Billing_Service, "Routes billing requests", "gRPC over mTLS")
+
+Rel(Patient_Portal_Service, PostgreSQL_Database, "Reads and writes patient data", "TLS with AES-256 at rest")
+Rel(Scheduling_Service, PostgreSQL_Database, "Reads and writes scheduling data", "TLS with AES-256 at rest")
+Rel(EMR_Service, PostgreSQL_Database, "Reads and writes medical records", "TLS with AES-256 at rest")
+Rel(Billing_Service, PostgreSQL_Database, "Reads and writes billing data", "TLS with AES-256 at rest")
+
+Rel(Patient_Portal_Service, Apache_Kafka_Message_Broker, "Publishes asynchronous events", "Internal TLS")
+Rel(Scheduling_Service, Apache_Kafka_Message_Broker, "Publishes asynchronous events", "Internal TLS")
+Rel(EMR_Service, Apache_Kafka_Message_Broker, "Publishes asynchronous events", "Internal TLS")
+Rel(Billing_Service, Apache_Kafka_Message_Broker, "Publishes asynchronous events", "Internal TLS")
+
+Rel(HL7_FHIR_Integration_Service, External_Labs_Imaging, "Exchanges clinical data and lab results", "HL7 FHIR REST APIs")
+Rel(Billing_Service, Insurance_Clearinghouses, "Submits insurance claims", "Secure REST/HTTPS")
+Rel(Billing_Service, Payment_Gateways, "Processes payment transactions", "Secure REST/HTTPS")
+Rel(API_Gateway, Identity_Provider, "Validates user identities and tokens", "OIDC/OAuth2")
+Rel(EMR_Service, Analytics_Service, "Streams telemetry and usage data with PHI stripped", "Secure TLS tunnels")
+Rel(Billing_Service, Analytics_Service, "Streams telemetry and usage data with PHI stripped", "Secure TLS tunnels")
+@enduml

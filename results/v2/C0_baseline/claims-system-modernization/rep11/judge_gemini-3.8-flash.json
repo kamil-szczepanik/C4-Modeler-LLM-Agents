@@ -1,0 +1,329 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively fulfilled. Online submissions are handled via Web Portal (SPA), adjuster operations via Adjuster Portal (SPA), and incremental migration via the Feature Flag / Routing Service and Mainframe Adapter.",
+   "performance_efficiency": "The 2s loading requirement is achieved despite 5s mainframe latency by decoupling adjusters using Azure Cosmos DB as a low-latency Claim Read-Model Store and caching views through the Claims API (BFF).",
+   "compatibility": "The architecture excels at coexistence: the Mainframe Adapter connects securely via mTLS and ExpressRoute to the Legacy COBOL/DB2 Mainframe, while the Authentication Middleware seamlessly integrates with Active Directory / Azure AD.",
+   "usability": "Target user groups receive dedicated frontends: Web Portal (SPA) for Customers and Brokers, Adjuster Portal (SPA) for Claims Adjusters, and Dispute & Exception Dashboard for Operations Managers, all featuring dynamic, reactive forms.",
+   "reliability": "Azure Service Bus, Cosmos DB Reconciliation State Store, and Outbound Resilience Policy Engine guarantee consistency and fault tolerance, though explicit handling of the strict nightly batch window constraint is not fully detailed.",
+   "security": "Security is addressed thoroughly via Azure AD SSO, Authentication Middleware, HttpOnly cookies, Azure Key Vault with Managed Identities, mTLS over ExpressRoute, and immutable WORM storage in Audit Trail Storage Container.",
+   "maintainability": "Feature Flag / Routing Service enables instant claim type rollback within one day. Modularity is well-defined, though deploying Node.js into Azure Kubernetes Service creates maintainability overhead for a team with little cloud experience.",
+   "portability": "The hybrid deployment target (on-premise and Azure West Europe) is correctly realized using ExpressRoute and Mainframe Adapter, though components are tightly coupled to proprietary Azure PaaS offerings."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture incorporates a dedicated Claim Read-Model Store in Azure Cosmos DB and caching view-model handlers in the BFF, serving adjuster screens directly without synchronous calls to the legacy mainframe.",
+    "elements": [
+     "Adjuster Portal (SPA)",
+     "Claims API (BFF)",
+     "Aggregator / ViewModel Builder",
+     "Azure Cosmos DB",
+     "Claim Read-Model Store"
+    ],
+    "sensitivity_points": [
+     "Cache synchronization latency between the mainframe and Cosmos DB read model",
+     "Cosmos DB read throughput and partition key design"
+    ],
+    "tradeoffs": [
+     "Eventual consistency in adjuster views in exchange for sub-second UI response times"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Azure Service Bus topics and queues decouple online submission ingestion from mainframe processing during peak volume. However, explicit scheduling mechanisms to throttle or pause sync traffic during the 23:00-05:00 batch window are not fully specified.",
+    "elements": [
+     "Web Portal (SPA)",
+     "Claims API (BFF)",
+     "Azure Service Bus",
+     "Claim Submission Topic",
+     "Mainframe Sync Queue",
+     "Mainframe Adapter"
+    ],
+    "sensitivity_points": [
+     "Queue depth and buffering capacity in Azure Service Bus under sustained peak",
+     "Rate-limiting policies implemented in the Mainframe Adapter"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission processing delays immediate mainframe confirmation to protect batch windows"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Online claims are accepted into Azure Service Bus persistent queues while the mainframe is offline. The Mainframe Adapter consumes queued sync messages when the batch window closes, preventing submission loss.",
+    "elements": [
+     "Claims API (BFF)",
+     "Azure Service Bus",
+     "Mainframe Sync Queue",
+     "Mainframe Adapter",
+     "Mainframe Integration Client"
+    ],
+    "sensitivity_points": [
+     "Message retention duration and queue quotas in Azure Service Bus",
+     "Adapter reconnect and backoff policy after batch window completion"
+    ],
+    "tradeoffs": [
+     "Queue backlog processing after batch window may increase initial morning sync latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The architecture includes a Reconciliation State Store, Cosmos Change Feed, immutable Audit Trail Storage, and a Dispute & Exception Dashboard for handling synchronization failures, though two-phase distributed state mechanics remain partially abstract.",
+    "elements": [
+     "Azure Cosmos DB",
+     "Reconciliation State Store",
+     "Change Feed Processor",
+     "Dispute & Exception Dashboard",
+     "Audit Trail Storage",
+     "Mainframe Adapter"
+    ],
+    "sensitivity_points": [
+     "Idempotency token tracking between cloud adapter and legacy DB2 tables",
+     "Operational speed of dispute resolution via exception dashboard"
+    ],
+    "tradeoffs": [
+     "Asynchronous reconciliation requires manual dispute intervention workflows for edge cases"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The dedicated Feature Flag / Routing Service (Azure App Configuration) supports atomic rule swaps and circuit breakers. Combined with the Mainframe Adapter, claim types can be rerouted or rolled back instantaneously without code deployment.",
+    "elements": [
+     "Feature Flag / Routing Service",
+     "Routing Evaluation Engine",
+     "Mainframe Adapter",
+     "Feature Flag Manager",
+     "Claims API (BFF)"
+    ],
+    "sensitivity_points": [
+     "Cache TTL of feature flags in the BFF and Mainframe Adapter",
+     "Mainframe interface schema backward compatibility during rollback"
+    ],
+    "tradeoffs": [
+     "Runtime routing evaluation overhead against immediate rollback flexibility"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Frontends interact solely with the Claims API (BFF) and do not couple to the mainframe. Retiring the mainframe requires updating the BFF routing mediator to persist to Azure data stores and decommissioning the Mainframe Adapter.",
+    "elements": [
+     "Web Portal (SPA)",
+     "Adjuster Portal (SPA)",
+     "Claims API (BFF)",
+     "Routing Mediator",
+     "Mainframe Adapter",
+     "Azure Cosmos DB"
+    ],
+    "sensitivity_points": [
+     "Strict adherence to API contract isolation between BFF and client SPAs",
+     "Data model migration from DB2 schema to target cloud databases"
+    ],
+    "tradeoffs": [
+     "BFF abstraction layer introduces extra network hop to keep frontend decoupled"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The architecture provides authentication middleware, token management, schema validation, and immutable audit logs. However, multi-tenant broker authorization policies and resource-level access control enforcement are not explicitly specified in the components.",
+    "elements": [
+     "Claims API (BFF)",
+     "Authentication Middleware",
+     "Payload Schema Validator",
+     "Audit Logger",
+     "Audit Trail Storage"
+    ],
+    "sensitivity_points": [
+     "Enforcement point for broker-to-claim ownership validation",
+     "Completeness of security logging on unauthorized access attempts"
+    ],
+    "tradeoffs": [
+     "Fine-grained data-level access checks increase BFF request processing time"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Adjuster access is mediated through Azure AD SSO and token validation middleware in the BFF. Adjusters do not hold direct mainframe accounts. Revocation depends on Azure AD token expiration and session invalidation mechanisms.",
+    "elements": [
+     "Azure AD",
+     "Adjuster Portal (SPA)",
+     "Claims API (BFF)",
+     "Authentication Middleware",
+     "Session & Token Manager"
+    ],
+    "sensitivity_points": [
+     "JWT token lifetime and refresh token revocation latency in Azure AD",
+     "Session invalidation policy in Session & Token Manager"
+    ],
+    "tradeoffs": [
+     "Short-lived access tokens require frequent re-validation, adding slight auth overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7272727272727273,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy COBOL/DB2 Mainframe",
+     "Mainframe Adapter",
+     "Reconciliation State Store"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Abstraction-Layer Gateway / Message Queue",
+     "Mainframe Adapter",
+     "Mainframe Integration Client"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Web Portal (SPA)",
+     "Dynamic Form Renderer",
+     "Claims API (BFF)",
+     "Claim Submission Topic"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Portal (SPA)",
+     "Claims Management Module",
+     "Claims API (BFF)"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Feature Flag / Routing Service",
+     "Routing Evaluation Engine",
+     "Routing Mediator",
+     "Feature Flag Manager"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Azure Service Bus",
+     "Mainframe Sync Queue",
+     "Reconciliation State Store",
+     "Dispute & Exception Dashboard",
+     "Audit Trail Storage Container"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Azure Cosmos DB",
+     "Claim Read-Model Store",
+     "Aggregator / ViewModel Builder",
+     "Fallback & Graceful Degradation Handler"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Feature Flag / Routing Service",
+     "Routing Evaluation Engine",
+     "Feature Flag Manager",
+     "Configuration Management UI"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Azure AD",
+     "Authentication Middleware",
+     "Authentication Client",
+     "Routing & Shell Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

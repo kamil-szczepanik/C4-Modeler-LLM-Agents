@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Analytics Event Collector & Datastore container
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway")
+System_Ext(core_services_api, "Core Services API", "External Core Services API")
+
+Container_Boundary(analytics_container, "Analytics Event Collector & Datastore") {
+    Component(Ingestion_Proxy_Collector, "Ingestion Proxy / Collector", "Fluentd", "Collects raw events, handles high-throughput buffering, pipeline filtering, and PII masking.")
+    Component(Stream_Buffer, "Stream Buffer", "Apache Kafka", "Decouples ingestion from persistence, absorbs traffic spikes, and routes poison pills to a DLQ.")
+    Component(Analytics_Datastore_Engine, "Analytics Datastore Engine", "ClickHouse", "Columnar database for fast OLAP queries, massive write throughput, and automated partition TTL policies supporting EU data residency.")
+    Component(ETL_Aggregation_Worker, "ETL / Aggregation Worker", "Python", "Computes materialized views and executes scheduled TTL rollups for metrics computation.")
+    Component(Dead_Letter_Queue_DLQ, "Dead-Letter Queue (DLQ)", "Apache Kafka Topic", "Routes and stores poison pills and failed events.")
+}
+
+Rel(api_gateway, Ingestion_Proxy_Collector, "Forwards raw events", "HTTP/2 / TLS 1.3 with mTLS")
+Rel(Ingestion_Proxy_Collector, Stream_Buffer, "Publishes pseudonymized events", "TCP / Kafka Wire Protocol with SASL/SCRAM and TLS 1.3")
+Rel(Stream_Buffer, Analytics_Datastore_Engine, "Consumes and flushes events to disk", "TCP")
+Rel(Analytics_Datastore_Engine, core_services_api, "Serves OLAP queries and BI exports", "HTTP/gRPC")
+Rel(ETL_Aggregation_Worker, Analytics_Datastore_Engine, "Computes materialized views and executes scheduled TTL rollups", "Internal TCP")
+
+@enduml

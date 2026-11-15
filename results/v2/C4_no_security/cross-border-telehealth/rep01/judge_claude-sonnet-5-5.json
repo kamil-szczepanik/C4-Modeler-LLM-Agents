@@ -1,0 +1,363 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 3,
+   "portability": 3
+  },
+  "mean": 3.125,
+  "justifications": {
+   "functional_suitability": "Covers video (WebRTC SFU Media Server, Consultation Orchestrator), e-prescriptions (Prescription Coordinator, Interoperability Adapter) and AI (AI Gateway). Consent management is only a Consent & Policy Engine for validation, with no patient-facing consent UI or per-purpose management. Clinician interfaces are thin.",
+   "performance_efficiency": "Has Bandwidth Adapter, Firestore caching, Pub/Sub asynchronous events, HTTP/3 QUIC in Edge Router, and Cloud CDN. Lacks explicit autoscaling, SFU scaling strategy, or capacity targets. Audit logging is synchronous through the gateway.",
+   "compatibility": "US FHIR Translator Component and EU National Gateway Adapter Component map to R-08 inside the Interoperability Adapter. Identity Providers are integrated and mTLS is used. Gaps: no per-country EU adapters, and the AI engine is an external dependency with no contract versioning.",
+   "usability": "Patient Portal (React/Flutter) with Offline Storage Manager serves patients and clinicians with the same portal. Notification Service is included. No clinician-specific interface, accessibility, or localization elements, and the consent UI is absent.",
+   "reliability": "Offline Storage Manager, Janus fallback, Bandwidth Adapter, Pub/Sub retry queues with dead letters, and Throttling & Fallback Proxy. No multi-zone/DR, backups, circuit breakers, or explicit degraded-mode audio-only behavior. Data Layer failover is unspecified.",
+   "security": "Strong: Geo-fencing & Context Injector, OPA-based Consent & Policy Engine, CMEK via Cloud KMS, row-level security, mTLS, TLS 1.3, AES-GCM offline encryption, write-once AI audit log. Gaps: the AI engine is external and may fall outside regional residency, and no explicit authorization model or secrets management is shown.",
+   "maintainability": "Clear container and component decomposition with separate Interoperability Adapter, AI Gateway, and Audit service. But the Core Telehealth Service is monolithic-ish, the shared tech stack is vague, and the Data Layer is shared. Several relationships between components are missing or inconsistent.",
+   "portability": "GKE containers, Envoy, LiveKit/Janus, and PostgreSQL are fairly portable. However, Cloud Endpoints, Pub/Sub, Firestore, and KMS tie the design to GCP. Regional deployment on europe-west3 and us-central1 is implied but not explicitly modeled."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 2,
+   "PERF-01": 3,
+   "PERF-02": 2,
+   "SEC-01": 4,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.4375,
+  "by_quality_attribute": {
+   "Performance": 2.5,
+   "Availability": 2.5,
+   "Modifiability": 3.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "WebRTC SFU Media Server",
+     "LiveKit SFU Node",
+     "Consultation Orchestrator",
+     "API Gateway / Region Router",
+     "GKE"
+    ],
+    "sensitivity_points": [
+     "SFU scaling not specified",
+     "Join time depends on signaling path and Core Service load"
+    ],
+    "tradeoffs": [
+     "Residency-based regional routing limits capacity pooling across regions"
+    ],
+    "justification": "SFU and regional routing support the load, but there is no autoscaling, capacity plan or join-time mechanism. The Core Service is a single container on the signaling path. Plausible, but unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "elements": [
+     "AI Gateway",
+     "Throttling & Fallback Proxy",
+     "AI Symptom Checker Engine",
+     "Audit & Version Logger"
+    ],
+    "sensitivity_points": [
+     "External engine latency and capacity",
+     "Synchronous audit write on request path",
+     "Throttling may reject requests at peak"
+    ],
+    "tradeoffs": [
+     "Throttling protects the engine but hurts latency and availability",
+     "Audit logging adds latency"
+    ],
+    "justification": "About 14 requests/s is modest, but the architecture has no caching, autoscaling or latency budget. The external engine is a dependency, and throttling and a synchronous SQL audit write sit on the path. The 3 s p95 is unaddressed."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "elements": [
+     "Bandwidth Adapter",
+     "LiveKit SFU Node",
+     "Janus Gateway",
+     "Offline Storage Manager",
+     "Firestore (Regional)",
+     "Edge Router & TLS Terminator"
+    ],
+    "sensitivity_points": [
+     "Adaptive bitrate floor below 200 kbit/s",
+     "Clinical note sync conflict handling",
+     "Audio-only fallback not defined"
+    ],
+    "tradeoffs": [
+     "Offline caching improves resilience but adds local PHI and sync complexity"
+    ],
+    "justification": "Bitrate adaptation, a Janus fallback, QUIC and encrypted offline storage with Firestore sync address it. However, the audio-only fallback, note-loss guarantee and reconnection behaviour are not explicit, and notes are not clearly kept on the clinician side."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "API Gateway / Region Router",
+     "Data Layer",
+     "Cloud SQL PostgreSQL",
+     "Cloud KMS",
+     "GKE"
+    ],
+    "sensitivity_points": [
+     "No stated DR or backup region within the US",
+     "Single us-central1 region",
+     "Recovery runbook and RTO unspecified"
+    ],
+    "tradeoffs": [
+     "Strict residency prevents failover to the EU, so recovery needs in-US redundancy"
+    ],
+    "justification": "Regional deployments preserve residency, but there is no multi-zone or secondary US region, no replication or failover design and no RTO mechanism. A one-hour restoration is not demonstrated."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "elements": [
+     "Interoperability Adapter",
+     "EU National Gateway Adapter Component",
+     "Prescription Status & Retry Queue Component",
+     "Prescription Coordinator"
+    ],
+    "sensitivity_points": [
+     "One EU adapter component serves all countries",
+     "Core payload canonical model stability"
+    ],
+    "tradeoffs": [
+     "A shared EU adapter is simple, but per-country plugins would isolate change better"
+    ],
+    "justification": "The Interoperability Adapter isolates national standards behind a dedicated adapter and shared status and retry queues. Changes are mostly confined, though a single EU component for all countries and a routing change are likely."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "elements": [
+     "AI Gateway",
+     "Audit & Version Logger",
+     "AI Symptom Checker Engine",
+     "Cloud SQL PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Model version must be returned by the external engine",
+     "No version pinning or routing",
+     "No rollback mechanism"
+    ],
+    "tradeoffs": [
+     "The external engine eases updates but reduces control over versions and rollback"
+    ],
+    "justification": "The Audit & Version Logger persists metadata, so traceability is plausible. But the external engine owns its versions, and there is no version pinning, canary or rollback mechanism. Linking every recommendation to a version relies on the engine reporting it."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "elements": [
+     "Geo-fencing & Context Injector",
+     "Consent & Policy Engine",
+     "Audit & Compliance Reporting Service",
+     "Cloud SQL PostgreSQL",
+     "API Gateway / Region Router"
+    ],
+    "sensitivity_points": [
+     "Policy engine must check per-purpose consent for every request",
+     "Regional data stores must be physically separated",
+     "Denied-request logging path"
+    ],
+    "tradeoffs": [
+     "Strict geo-fencing blocks legitimate cross-border care without a consent flow"
+    ],
+    "justification": "Geo-fencing, an OPA-based consent engine, regional storage and audit logging together deny access without consent and log it. Cross-region consent lookup is unclear, since consent state is regional, and the engine is invoked only from the Orchestrator."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "elements": [
+     "Consent & Policy Engine",
+     "Cloud SQL PostgreSQL",
+     "Audit & Compliance Reporting Service",
+     "Compliance & Export Orchestrator",
+     "Notification Event Publisher"
+    ],
+    "sensitivity_points": [
+     "No consent withdrawal propagation to downstream consumers",
+     "Verification evidence is not defined",
+     "Cached or exported data copies"
+    ],
+    "tradeoffs": [
+     "Fast revocation needs synchronous checks, which add coupling and latency"
+    ],
+    "justification": "Consent states are stored and the policy engine enforces them, but there is no revocation propagation, no research-sharing component and no 24 h SLA mechanism. Audit logs help verification, but stopping existing exports is not shown."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.7916666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Consent & Policy Engine",
+     "Audit & Compliance Reporting Service",
+     "Cloud KMS",
+     "Cloud SQL PostgreSQL",
+     "Geo-fencing & Context Injector"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Geo-fencing & Context Injector",
+     "API Gateway / Region Router",
+     "Jurisdictional Storage Router",
+     "Cloud Storage",
+     "Cloud KMS",
+     "Firestore (Regional)"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Audit & Version Logger",
+     "AI Gateway",
+     "Triage Explanation Formatter",
+     "Cloud SQL PostgreSQL"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Patient Portal",
+     "Offline Storage Manager",
+     "Edge Router & TLS Terminator",
+     "Bandwidth Adapter",
+     "WebRTC SFU Media Server",
+     "Firestore (Regional)",
+     "Janus Gateway"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "WebRTC SFU Media Server",
+     "Consultation Orchestrator",
+     "LiveKit SFU Node",
+     "Patient Portal",
+     "Core Telehealth Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Interoperability Adapter",
+     "Prescription Coordinator",
+     "EU National Gateway Adapter Component",
+     "US FHIR Translator Component",
+     "Prescription Status & Retry Queue Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Gateway",
+     "AI Symptom Checker Engine",
+     "Triage Explanation Formatter",
+     "Throttling & Fallback Proxy"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Consent & Policy Engine",
+     "Cloud SQL PostgreSQL"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Geo-fencing & Context Injector",
+     "Consent & Policy Engine",
+     "Jurisdictional Storage Router",
+     "Policy & Data Residency Interceptor",
+     "Cloud Storage",
+     "Cloud KMS"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Bandwidth Adapter",
+     "LiveKit SFU Node",
+     "Janus Gateway",
+     "Consultation Orchestrator",
+     "Edge Router & TLS Terminator",
+     "Offline Storage Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Audit & Version Logger",
+     "Triage Explanation Formatter",
+     "Cloud SQL PostgreSQL",
+     "AI Gateway"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "US FHIR Translator Component",
+     "EU National Gateway Adapter Component",
+     "Interoperability Adapter"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

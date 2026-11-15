@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Notification Dispatcher container
+
+System_Ext(api_gateway, "API Gateway", "External System")
+System_Ext(notification_service, "Notification Service", "Receives formatted alerts.")
+System_Ext(audit_logging_container, "Audit Logging Container", "Receives unrecoverable DLQ failures.")
+System_Ext(hashicorp_vault, "HashiCorp Vault", "Secures and dynamically retrieves API keys and mTLS certificates.")
+
+Container_Boundary(notification_dispatcher, "Notification Dispatcher") {
+    Component(ingress_controller, "Ingress Controller", "Python, FastAPI", "Ingests notification tasks routed from the API Gateway.")
+    Component(preference_policy_engine, "Preference & Policy Engine", "Python, Pydantic", "Evaluates embedded preferences and validates transient payloads for GDPR compliance.")
+    Component(template_renderer, "Template Renderer", "Jinja2", "Renders localized messages with auto-escaping enabled for SSTI prevention.")
+    Component(dispatch_worker, "Dispatch Worker", "Celery, Python", "Manages background tasks for resilient, retry-enabled message delivery and handles DLQ failures.")
+    Component(message_broker, "Message Broker", "RabbitMQ / Kafka", "Features Dead Letter Queues (DLQ) and queue-depth HPA metrics for asynchronous queuing.")
+}
+
+Rel(api_gateway, ingress_controller, "Routes notification tasks", "gRPC over mTLS")
+Rel(ingress_controller, preference_policy_engine, "Passes validated tasks", "Internal Async")
+Rel(dispatch_worker, notification_service, "Forwards formatted alerts", "TLS-secured AMQP")
+Rel(dispatch_worker, audit_logging_container, "Forwards unrecoverable DLQ failures", "Async via RabbitMQ")
+Rel(dispatch_worker, hashicorp_vault, "Retrieves API keys and mTLS certificates", "REST/HTTPS")
+
+@enduml

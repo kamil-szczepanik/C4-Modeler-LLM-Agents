@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Fraud Scoring Engine container
+
+System_Ext(aws_api_gateway_nlb, "AWS API Gateway / NLB", "AWS Gateway / NLB", "External system that invokes scoring evaluation.")
+System_Ext(aws_elasticache_for_redis, "AWS ElastiCache for Redis", "AWS ElastiCache for Redis", "External system serving as the Feature Store for real-time features.")
+System_Ext(amazon_sqs, "Amazon SQS", "Amazon SQS with AWS KMS", "External message queue for asynchronous audit logs.")
+
+Container_Boundary(fraud_scoring_engine, "Fraud Scoring Engine") {
+    Component(api_router_fallback_handler, "API Router & Fallback Handler", "Go net/http", "Invokes scoring evaluation and handles graceful outages to protect merchant revenue.")
+    Component(feature_aggregator, "Feature Aggregator", "Go concurrent routines", "Concurrently fetches features using Go channels and in-memory function calls.")
+    Component(scoring_evaluator_with_feature_contribution_formatter, "Scoring Evaluator with Feature Contribution Formatter", "Go in-memory engine", "Evaluates transactions in real time and generates explainable risk scores.")
+    Component(audit_publisher, "Audit Publisher", "Go SDK with HMAC-SHA256", "Dispatches decision metadata and risk drivers securely using envelope encryption and tamper-evident signing.")
+}
+
+Rel(aws_api_gateway_nlb, api_router_fallback_handler, "Invokes scoring evaluation", "mTLS / gRPC or HTTP/2")
+Rel(api_router_fallback_handler, feature_aggregator, "Concurrently fetches features", "Go channels / In-memory function calls")
+Rel(feature_aggregator, aws_elasticache_for_redis, "Queries real-time features", "Low-latency TCP / Redis Protocol")
+Rel(scoring_evaluator_with_feature_contribution_formatter, audit_publisher, "Dispatches decision metadata and risk drivers", "Buffered Go channel")
+Rel(audit_publisher, amazon_sqs, "Publishes signed decision payloads", "AWS SDK for Go over HTTPS")
+
+@enduml

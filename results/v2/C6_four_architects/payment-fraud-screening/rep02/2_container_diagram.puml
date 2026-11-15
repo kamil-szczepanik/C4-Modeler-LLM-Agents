@@ -1,0 +1,32 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening
+
+Person(FraudAnalysts, "Fraud Analysts", "Human analysts who review cases and manage fraud workflows.")
+System_Ext(PaymentGatewayAcquirer, "Payment Gateway / Acquirer", "Initiates payment authorizations and routes them to the screening system.")
+
+System_Boundary(RealTimePaymentFraudScreening, "Real-Time Payment Fraud Screening") {
+    Container(FraudAnalystUI, "Fraud Analyst UI", "React SPA via Amazon S3 / CloudFront", "Hosts secure single-page analyst interface.")
+    Container(APIGatewayIngress, "API Gateway & Ingress", "Java / Spring Cloud Gateway", "Handles secure public ingress and enforces PCI-DSS boundaries.")
+    Container(RealTimeScoringEngine, "Real-Time Scoring Engine", "Java / Spring Boot + ONNX", "Provides sub-50ms P99 latency scoring with embedded machine learning models.")
+    Container(CaseManagementBackend, "Case Management Backend", "Node.js / TypeScript", "Powers lightweight case management backend workflows.")
+    Container(ModelRuleManagementService, "Model & Rule Management Service", "Python / FastAPI", "Manages zero-downtime model and rule updates.")
+    Container(AuditWorker, "Audit Worker", "Node.js / Python worker", "Decouples scoring latency from durable audit logging.")
+    Container(AmazonKinesisDataStreams, "Amazon Kinesis Data Streams", "Amazon Kinesis", "Streams and decouples event data for durability and audit.")
+    ContainerDb(AmazonAuroraPostgreSQL, "Amazon Aurora PostgreSQL", "Amazon Aurora PostgreSQL", "Provides tamper-evident append-only storage for 7-year audit requirements and scoring DB.")
+    Container(AmazonElastiCache, "Amazon ElastiCache", "Amazon ElastiCache (Redis)", "Delivers microsecond-latency feature lookups.")
+}
+
+Rel(PaymentGatewayAcquirer, APIGatewayIngress, "Sends payment authorizations for fraud evaluation", "HTTPS (REST/gRPC)")
+Rel(FraudAnalysts, FraudAnalystUI, "Accesses case management workflows and web UI", "HTTPS")
+Rel(FraudAnalystUI, CaseManagementBackend, "Performs case reviews and workflow actions", "HTTPS")
+Rel(APIGatewayIngress, RealTimeScoringEngine, "Forwards requests for real-time scoring", "gRPC over HTTP/2")
+Rel(RealTimeScoringEngine, AmazonElastiCache, "Performs feature lookups", "RESP over TCP")
+Rel(RealTimeScoringEngine, AmazonKinesisDataStreams, "Publishes scoring events and telemetry", "HTTPS (AWS SDK)")
+Rel(AuditWorker, AmazonAuroraPostgreSQL, "Writes audit logs and screening history", "TLS/TCP")
+Rel(CaseManagementBackend, AmazonAuroraPostgreSQL, "Reads and writes case management data", "TLS/TCP")
+Rel(ModelRuleManagementService, RealTimeScoringEngine, "Updates models and rules", "internal REST API over HTTPS")
+
+@enduml

@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Search Worker Container
+
+Container(Database, "Database", "PostgreSQL Database", "Primary database source for change data capture.")
+Container(Message_Broker, "Message Broker", "RabbitMQ Message Broker", "Handles raw change events, batched payloads, and dead-letter routing.")
+Container(Search_Container, "Search Container", "Elasticsearch Search Container", "Receives bulk indexed documents for search operations.")
+System_Ext(Monitoring, "Monitoring", "External monitoring system for operational metrics.")
+
+Container_Boundary(Search_Worker_Container, "Search Worker Container") {
+    Component(CDC_Source_Connector_Component, "CDC Source Connector Component", "Java/Quarkus, Debezium Embedded", "Tails database Write-Ahead Logs to capture raw change events.")
+    Component(Search_Transformer_Indexer_Component, "Search Transformer/Indexer Component", "Java/Quarkus, Apache Camel", "Consumes batched sync payloads and bulk indexes documents.")
+    Component(Local_DLQ_Retry_Handler_Component, "Local DLQ/Retry Handler Component", "Camel Error Handler", "Handles local retries and routes permanently failed payloads.")
+    Component(Metrics_Exporter_Component, "Metrics Exporter Component", "Micrometer", "Exposes Prometheus-compatible metrics to track replication lag.")
+}
+
+Rel(Database, CDC_Source_Connector_Component, "Tails database Write-Ahead Logs", "PostgreSQL Replication Protocol")
+Rel(CDC_Source_Connector_Component, Message_Broker, "Publishes raw change events", "AMQP")
+Rel(Message_Broker, Search_Transformer_Indexer_Component, "Consumes batched sync payloads", "AMQP")
+Rel(Search_Transformer_Indexer_Component, Search_Container, "Bulk indexes documents", "HTTPS/REST")
+Rel(Local_DLQ_Retry_Handler_Component, Message_Broker, "Routes permanently failed payloads to DLX", "AMQP")
+Rel(Metrics_Exporter_Component, Monitoring, "Exposes Prometheus-compatible metrics", "HTTP")
+@enduml

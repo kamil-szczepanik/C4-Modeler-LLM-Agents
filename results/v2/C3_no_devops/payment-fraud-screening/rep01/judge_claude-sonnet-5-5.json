@@ -1,0 +1,317 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 3,
+   "portability": 2
+  },
+  "mean": 3.125,
+  "justifications": {
+   "functional_suitability": "Fraud Scoring Engine scores requests and Case Management Backend with Relational Store covers case management. But R-03 zero-downtime rule/model updates has no element (no rule/model registry or deployment mechanism); Flyway only migrates schemas. Approve/decline/review routing to cases is not connected.",
+   "performance_efficiency": "Feature Store (ElastiCache Redis) gives sub-millisecond reads, Feature Aggregator fetches concurrently, in-memory Scoring Evaluator, and Audit Publisher/Message Queue (SQS) move auditing off the hot path. Gaps: no autoscaling or capacity plan for 3,000 TPS, and the gateway chain adds latency.",
+   "compatibility": "Payment Gateway integrates via gRPC/mTLS and HTTPS, with OIDC/OAuth2 for identity. Gaps: inconsistent protocols (HTTPS at L2 versus gRPC at L1), no adapter for Card Schemes data, and no ISO 8583 or standard payment API mentioned.",
+   "usability": "React UI via Case Query Controller serves analysts, with Cognito authentication and Metrics Aggregator dashboards. Roles such as ML engineers and compliance officers are listed, but no model monitoring or audit-review interface exists, and explanations are not shown in the UI.",
+   "reliability": "API Router & Fallback Handler addresses R-07 outages, and the fraud-decisions-dlq plus SQS decoupling give retry handling. Gaps: no Multi-AZ, redundancy or failover is described, the fallback policy is unspecified, and the single Redis feature store is a risk. Recovery is not described.",
+   "security": "mTLS, WAF, KMS-encrypted SQS, Redis encryption, TLS 1.3, and Cognito OIDC with RBAC/MFA are in place. S3 Object Lock Compliance Mode, signing via AWS KMS and HMAC give tamper evidence. Gaps: the tokenization service is unclear, no card-number masking for analysts, and no PCI network segmentation.",
+   "maintainability": "Containers and components are decomposed with clear responsibilities (Audit Logger pipeline, Case Domain Service, Data Access Repository). Weaknesses: duplicate Feature Aggregator and Feature Store definitions, inconsistent Audit Logger technology (Lambda vs Go), tangled Relational Store audit index, and no model/rule management. A three-engineer team faces many components.",
+   "portability": "The design is tightly bound to AWS managed services (SQS, KMS, S3 Object Lock, Cognito, ElastiCache) with no abstraction layer. It targets only eu-west-1 as the brief states, with no IaC or containerization shown. Replaceability of infrastructure is only implied by Go and Spring."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 2,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.40625,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 3.0,
+   "Modifiability": 2.0,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "AWS API Gateway / NLB",
+     "Fraud Scoring Engine",
+     "Feature Store",
+     "Feature Aggregator"
+    ],
+    "sensitivity_points": [
+     "API Gateway plus WAF plus VPC Link hops consume latency budget",
+     "Redis lookups on critical path; extra Feature API gRPC hop"
+    ],
+    "tradeoffs": [
+     "Managed edge adds security but latency",
+     "In-memory Go scoring is fast but limits model complexity"
+    ],
+    "justification": "Go in-memory scoring, Redis features and async audit favor low latency. But the multi-hop edge (NLB, WAF, API Gateway), an inconsistent Feature Store hop and no scaling or capacity mechanism leave the 50ms P99 at 3,000 rps unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Case Management Backend",
+     "Relational Store",
+     "Fraud Scoring Engine",
+     "Feature Store"
+    ],
+    "sensitivity_points": [
+     "Scoring and case management are separate containers and data stores",
+     "Shared Redis or SQS between flows is ambiguous"
+    ],
+    "tradeoffs": [
+     "Separation isolates load but increases operational burden for three engineers"
+    ],
+    "justification": "Case screens use a separate backend and PostgreSQL, isolated from the scoring path, so interference is likely low. But the Feature Store's RDS and queue sharing is ambiguous, and no caching or load-isolation evidence exists for the 2s target."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "API Router & Fallback Handler",
+     "Fraud Scoring Engine",
+     "AWS API Gateway / NLB"
+    ],
+    "sensitivity_points": [
+     "Fallback handler lives inside the crashing scoring container",
+     "Fallback decision rule undefined"
+    ],
+    "tradeoffs": [
+     "Approving on outage protects revenue but raises fraud exposure"
+    ],
+    "justification": "A fallback handler is named, but it runs inside the Fraud Scoring Engine that crashes. No redundancy, health checks, multi-AZ deployment, or independent fallback path at the edge is shown. Fallback decisions' audit is unspecified."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "elements": [
+     "Audit Publisher",
+     "Message Queue",
+     "Audit Logger",
+     "Tamper-Evident Storage",
+     "fraud-decisions-dlq"
+    ],
+    "sensitivity_points": [
+     "Audit Publisher buffered Go channel may lose records on crash",
+     "SQS publish failure handling unspecified"
+    ],
+    "tradeoffs": [
+     "Async audit protects latency but gives eventual audit consistency"
+    ],
+    "justification": "The SQS decoupling, DLQ and retry from Audit Logger to S3 Object Lock let decisions continue when the store is slow. The in-memory buffered channel before SQS is a loss risk if the process crashes or SQS is unavailable."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "elements": [
+     "Scoring Evaluator with Feature Contribution Formatter",
+     "Fraud Scoring Engine",
+     "Audit Publisher"
+    ],
+    "sensitivity_points": [
+     "Model embedded in Go in-memory engine",
+     "No model registry or deployment strategy"
+    ],
+    "tradeoffs": [
+     "Embedded model gives speed but couples deployment to the service"
+    ],
+    "justification": "No model registry, canary or blue/green mechanism, hot reload, or rollback process is shown. Model version in decisions is not explicitly captured. Zero downtime and 5-minute rollback would need significant additions."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "elements": [
+     "Scoring Evaluator with Feature Contribution Formatter",
+     "Fraud Scoring Engine",
+     "Audit Publisher"
+    ],
+    "sensitivity_points": [
+     "No rules engine or rule management interface",
+     "Rules applied not listed in audit payload"
+    ],
+    "tradeoffs": [
+     "Hard-coded in-memory logic is fast but slows rule changes"
+    ],
+    "justification": "No rule authoring, versioning, or hot-loading component exists, and analysts have no path to deploy rules. Explainability covers feature contributions, not named rules. Active-within-an-hour without downtime is unsupported."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "elements": [
+     "AWS API Gateway / NLB",
+     "React UI",
+     "Case Management Backend",
+     "Relational Store",
+     "Feature Store"
+    ],
+    "sensitivity_points": [
+     "Tokenization location and card data masking in case data unspecified",
+     "No anomaly detection or alerting component"
+    ],
+    "tradeoffs": [
+     "Strong MFA/RBAC protects access but does not detect misuse"
+    ],
+    "justification": "OIDC, RBAC/MFA, tokenization at the edge and encryption reduce the exposure of card numbers. But no detokenization boundary, masking guarantee, or anomaly detection and alerting within 15 minutes is shown."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Tamper-Evident Storage",
+     "Audit Logger",
+     "Audit Publisher",
+     "Audit Ledger Index Component",
+     "Scoring Evaluator with Feature Contribution Formatter"
+    ],
+    "sensitivity_points": [
+     "Payload contents (inputs, model version, explanation) not explicitly specified",
+     "Retrieval path from S3 for regulators missing"
+    ],
+    "tradeoffs": [
+     "WORM storage ensures integrity but retrieval needs an index and query tooling"
+    ],
+    "justification": "S3 Object Lock compliance mode with KMS and HMAC signing, plus an RDS index, gives tamper-evident 7-year retention and explanations. But model version and inputs aren't clearly stored, and there's no query or retrieval mechanism for old records."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "none",
+   "C-04": "partial",
+   "R-01": "partial",
+   "R-02": "partial",
+   "R-03": "none",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "partial"
+  },
+  "coverage": 0.5,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "AWS API Gateway / NLB",
+     "AWS WAF",
+     "Message Queue",
+     "Tamper-Evident Storage"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Scoring Evaluator with Feature Contribution Formatter",
+     "Audit Publisher",
+     "Audit Logger",
+     "Tamper-Evident Storage",
+     "Message Queue"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "AWS Lambda / Worker",
+     "Amazon SQS",
+     "Amazon RDS for PostgreSQL"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Scoring Evaluator with Feature Contribution Formatter",
+     "Feature Store",
+     "API Router & Fallback Handler"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Case Management Backend",
+     "Relational Store",
+     "Case Domain Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "none",
+    "elements": []
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Feature Store",
+     "Message Queue",
+     "Feature Aggregator"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "AWS API Gateway / NLB",
+     "Message Queue",
+     "Feature Cache"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Publisher",
+     "Audit Logger",
+     "Storage Writer Component",
+     "Tamper-Evident Storage"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "API Router & Fallback Handler",
+     "Message Queue"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

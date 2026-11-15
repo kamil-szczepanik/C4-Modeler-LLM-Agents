@@ -1,0 +1,328 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "Requirements R-01, R-02, and shipping/currency constraints are covered by 'Catalogue Module', 'Cart Module', 'Checkout Module', and 'Global Tax and Currency Conversion Service'. However, R-03 (reviews) and R-04 (recommendations) rely solely on data storage in 'AWS DynamoDB Core Tables' without dedicated processing or UI review components.",
+   "performance_efficiency": "Performance and 1M MAU targets are thoroughly addressed by 'Global CDN', in-memory 'Redis' caching, 'DynamoDB Accelerator (DAX)', 'PgBouncer Connection Pooling Sidecar', Aurora 'Read Replicas', and asynchronous decoupled processing via 'Amazon SQS & SNS'.",
+   "compatibility": "External interoperability requirements are well satisfied via 'Outbound Adapters' interfacing over HTTPS/REST with 'Third-Party Shipping Providers', 'Payment Gateway APIs', and 'Global Tax and Currency Conversion Service'.",
+   "usability": "'Customers' and 'Administrators' are served with distinct paths and views via 'Routing and Security Layer' into 'Catalogue Module' and 'Administration Module'. However, mobile channel support cited in the Context diagram lacks explicit container-level modeling.",
+   "reliability": "Exceeds 99.95% uptime requirements through 'AWS DynamoDB Global Tables' multi-region replication, 'Amazon Aurora PostgreSQL Read Replicas', multi-AZ 'Amazon ElastiCache' automatic failover, and fault isolation with 'Dead-Letter Queues (DLQs)'.",
+   "security": "Implements OWASP mitigations via 'AWS WAF', 'DOMPurify' in 'Routing and Security Layer', TLS 1.3/mTLS, and 'AWS Secrets Manager'. Specific GDPR/CCPA mechanisms (data deletion, export, consent tracking) are not explicitly detailed in the services.",
+   "maintainability": "'ECS Fargate Go Microservices' demonstrates clean architectural layering (Routers, Handlers, Business Logic, Repositories). However, several container diagrams incorrectly model external AWS services (KMS, CloudWatch) as internal container components.",
+   "portability": "Multi-region deployment across us-east-1, eu-west-1, and ap-southeast-1 is well-realized for AWS. However, heavy reliance on proprietary services like 'AWS DynamoDB Global Tables' and 'DynamoDB Accelerator (DAX)' limits cross-cloud portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 3.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Global CDN edge caching, DynamoDB Accelerator (DAX), and Redis for currency rates effectively offload read traffic under 10x peak load. However, the ECS Fargate autoscaling policies and compute saturation under sudden traffic spikes are not fully specified.",
+    "elements": [
+     "Global CDN",
+     "React Single Page Application",
+     "DynamoDB Accelerator (DAX)",
+     "AWS DynamoDB Core Tables",
+     "Redis",
+     "Amazon Aurora PostgreSQL Read Replicas"
+    ],
+    "sensitivity_points": [
+     "Hit ratio on CloudFront and DAX caches during burst traffic",
+     "Concurrency limits and connection pooling efficiency in PgBouncer"
+    ],
+    "tradeoffs": [
+     "Aggressive edge caching improves response time but introduces eventual consistency for catalog updates"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Recommendation reads are served directly from DynamoDB and DAX. Background recomputation offloaded via SQS/SNS and DynamoDB Streams isolates processing from synchronous browsing workflows, ensuring catalog query performance remains unaffected.",
+    "elements": [
+     "AWS DynamoDB Core Tables",
+     "DynamoDB Accelerator (DAX)",
+     "DynamoDB Streams",
+     "Amazon SQS & SNS",
+     "ECS Fargate Go Microservices"
+    ],
+    "sensitivity_points": [
+     "DynamoDB write throughput consumption during bulk batch recomputation",
+     "Cache eviction rates on DAX while recommendation keys update"
+    ],
+    "tradeoffs": [
+     "Asynchronous recommendation generation saves compute latency but serves stale recommendations temporarily"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Checkout writes order transactions synchronously to Aurora PostgreSQL, while shipping fulfillment is decoupled through asynchronous SNS topics, SQS fulfillment queues, and dead-letter queues. Third-party shipping API outages do not block checkout execution.",
+    "elements": [
+     "Checkout Module",
+     "ECS Fargate Go Microservices",
+     "Amazon Aurora PostgreSQL Primary Write Instance",
+     "Amazon SQS & SNS",
+     "Dead-Letter Queues (DLQs)",
+     "Third-Party Shipping Providers"
+    ],
+    "sensitivity_points": [
+     "SQS retention period and DLQ redrive configurations during prolonged shipping provider outages",
+     "Idempotency guarantees when retrying dispatch calls to shipping endpoints"
+    ],
+    "tradeoffs": [
+     "Asynchronous order fulfillment ensures checkout availability but delays immediate tracking number generation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "DynamoDB employs Global Tables across all three target regions, but Amazon Aurora PostgreSQL is modeled with only a single-region primary write instance and multi-AZ read replicas. An outage in us-east-1 halts writes and prevents zero-data-loss failover for transactions.",
+    "elements": [
+     "AWS DynamoDB Global Tables",
+     "Amazon Aurora PostgreSQL Primary Write Instance",
+     "Amazon Aurora PostgreSQL Read Replicas",
+     "Global CDN"
+    ],
+    "sensitivity_points": [
+     "Cross-region replication lag and lack of Aurora Global Database deployment",
+     "Regional failover routing at the edge CDN tier"
+    ],
+    "tradeoffs": [
+     "Avoiding cross-region database replication simplifies transactional consistency but sacrifices multi-region disaster recovery"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Multi-currency support is decoupled through Redis caching and the external Global Tax and Currency Conversion Service. Adding JPY requires updating external service mappings and frontend display configurations without deep architectural modifications.",
+    "elements": [
+     "Redis",
+     "In-Memory Data Store Engine",
+     "Global Tax and Currency Conversion Service",
+     "ECS Fargate Go Microservices",
+     "Catalogue Module",
+     "Checkout Module"
+    ],
+    "sensitivity_points": [
+     "Redis schema flexibility for storing multi-currency conversion rates",
+     "Payment Gateway API capabilities handling JPY non-decimal currency rules"
+    ],
+    "tradeoffs": [
+     "Caching currency rates in Redis reduces API latency but risks slight price slippage"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "The Go microservices container groups all domain logic into monolithic components ('Business Logic Services' and 'Domain Handlers') rather than independent microservices. Swapping recommendation logic requires modifying and redeploying the core shared backend codebase.",
+    "elements": [
+     "ECS Fargate Go Microservices",
+     "Business Logic Services",
+     "Domain Handlers",
+     "AWS DynamoDB Core Tables"
+    ],
+    "sensitivity_points": [
+     "Coupling between recommendation algorithms and general catalog domain services",
+     "Contract stability between recommendation outputs and the DynamoDB storage schema"
+    ],
+    "tradeoffs": [
+     "Co-locating services in a unified container reduces network hops but tightens deployment coupling"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Defense-in-depth is implemented via AWS WAF at the ingress, DOMPurify for frontend XSS sanitization, parameterized access within the Data Access Repositories, and IAM SigV4 authorization for NoSQL data stores.",
+    "elements": [
+     "React Single Page Application",
+     "Routing and Security Layer",
+     "ECS Fargate Go Microservices",
+     "Data Access Repositories",
+     "AWS IAM",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "WAF rule maintenance against evolving OWASP zero-day injection attack vectors",
+     "Strict sanitization coverage across all React dynamic HTML rendering sinks"
+    ],
+    "tradeoffs": [
+     "Multi-tier payload sanitization and inspection slightly increases latency on incoming requests"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Personal data is split across Aurora (orders), DynamoDB (reviews), and S3 backups. While SQS/SNS can broadcast deletion events, there is no specialized privacy orchestration service, customer key erasure mechanism, or compliance auditing component documented.",
+    "elements": [
+     "ECS Fargate Go Microservices",
+     "Amazon Aurora PostgreSQL Primary Write Instance",
+     "AWS DynamoDB Core Tables",
+     "Amazon SQS & SNS",
+     "Amazon CloudWatch and RDS Data Protection"
+    ],
+    "sensitivity_points": [
+     "Completeness of data discovery across relational tables, DynamoDB, and cold backups",
+     "Handling irreversible deletion in immutable S3 continuous backups within 30 days"
+    ],
+    "tradeoffs": [
+     "Purging personal records from read replicas and backups complicates immutable disaster recovery archives"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Amazon CloudWatch and RDS Data Protection",
+     "AWS KMS"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Global Tax and Currency Conversion Service",
+     "Redis",
+     "In-Memory Data Store Engine",
+     "Catalogue Module",
+     "Amazon Aurora PostgreSQL Primary Write Instance"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Third-Party Shipping Providers",
+     "Outbound Adapters",
+     "ECS Fargate Go Microservices"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalogue Module",
+     "AWS DynamoDB",
+     "AWS DynamoDB Core Tables",
+     "DynamoDB Global Secondary Indexes (GSIs)"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Cart Module",
+     "Checkout Module",
+     "Payment Gateway APIs",
+     "Amazon Aurora PostgreSQL Primary Write Instance"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Administration Module",
+     "AWS DynamoDB Core Tables"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "AWS DynamoDB",
+     "AWS DynamoDB Core Tables"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Global CDN",
+     "ECS Fargate Go Microservices",
+     "DynamoDB Accelerator (DAX)",
+     "DynamoDB Table Partitions",
+     "Amazon Aurora PostgreSQL Read Replicas",
+     "PgBouncer Connection Pooling Sidecar",
+     "Redis",
+     "Amazon SQS & SNS"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Global CDN",
+     "React Single Page Application",
+     "DynamoDB Accelerator (DAX)",
+     "Redis"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Amazon Aurora PostgreSQL Read Replicas",
+     "Amazon ElastiCache",
+     "AWS DynamoDB Global Tables",
+     "Dead-Letter Queues (DLQs)"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "React Single Page Application",
+     "Routing and Security Layer",
+     "AWS KMS",
+     "AWS IAM",
+     "AWS Secrets Manager"
+    ]
+   }
+  }
+ }
+}

@@ -1,0 +1,299 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "The Fraud Scoring Engine addresses R-01, while Case Management Service satisfies R-02. However, a dedicated mechanism or workflow for hot-reloading rules and scoring models without downtime (R-03) is only vaguely indicated via the Rule Cache Component without ingestion or deployment mechanisms.",
+   "performance_efficiency": "Tonic gRPC in Rust, Tokio async I/O, ElastiCache Redis caching, and asynchronous SQS audit publishing support 3,000 RPS under 50 ms. However, Fraud Scoring Engine's direct synchronous connection to Amazon Aurora PostgreSQL risks adding database contention to the critical scoring path.",
+   "compatibility": "The architecture integrates cleanly with the external Payment Gateway via gRPC/REST with mTLS, the Identity Provider via standard OIDC/SAML, and AWS KMS via PrivateLink, adhering to expected enterprise standards.",
+   "usability": "Fraud Analysts are supported with a dedicated web interface through the Case API Controller, authenticated via IdP. However, operational interfaces for engineers updating rules or monitoring fallback states are not explicitly detailed.",
+   "reliability": "Multi-AZ Aurora and SQS DLQs provide baseline resilience, but the architecture omits a fail-open, circuit breaker, or fallback mechanism to satisfy R-07 (ensuring payments are not blocked for more than 1 minute during scoring outages).",
+   "security": "PCI-DSS compliance is well-addressed via TLS 1.3, mTLS, AWS KMS envelope encryption, PAN masking through the Tokenization / Masking Proxy Component, and tamper-evident audit archiving using Amazon S3 Object Lock in Compliance Mode.",
+   "maintainability": "There is a clean modular separation between scoring and review domains using Rust and Node.js microservices. Managed services (ECS Fargate, Aurora, ElastiCache) align well with the maintenance capacity of a three-engineer team.",
+   "portability": "Well-tailored for the AWS eu-west-1 target using standard container definitions on ECS Fargate. Decoupling relies somewhat heavily on proprietary AWS primitives (S3 Object Lock, KMS, SQS/SNS), slightly hindering portability beyond AWS."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 3.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Rust engine on ECS with Tokio and Redis feature caching comfortably meets sub-50ms latency. However, synchronous database queries via Data Access Component to Aurora under 3,000 rps introduce latency risk without strict read-caching.",
+    "elements": [
+     "API Gateway / Application Load Balancer",
+     "Fraud Scoring Engine",
+     "Amazon ElastiCache Redis",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Eliminating synchronous relational database queries on the critical scoring path"
+    ],
+    "tradeoffs": [
+     "In-memory caching improves latency but risks transient feature staleness"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Asynchronous decoupling via SNS/SQS separates analyst workload from scoring engine. However, both Case Management and Fraud Scoring Engine share the same Aurora database cluster, which could cause query contention during peak analyst activity.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Case Management Service",
+     "Amazon SQS / SNS",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Database connection pooling and resource isolation between analytical and transactional workloads"
+    ],
+    "tradeoffs": [
+     "Shared Aurora cluster reduces infrastructure cost but risks query contention"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture lacks an automated fallback, fail-open, or stand-in scoring mechanism in the ALB or API Gateway when the Fraud Scoring Engine crashes, failing the requirement to unblock payments within 1 minute.",
+    "elements": [
+     "API Gateway / Application Load Balancer",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Presence of circuit breakers or automated fallback routing at load balancer"
+    ],
+    "tradeoffs": [
+     "Fail-open scoring maintains payment availability but increases immediate fraud exposure"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Fraud Scoring Engine emits decision payloads asynchronously to SQS FIFO and DLQ without waiting for Aurora or S3 persistence, ensuring decision latency is unaffected if long-term audit stores become slow or unavailable.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Audit Logger Component",
+     "Amazon SQS / SNS",
+     "Amazon S3 Immutable Vault"
+    ],
+    "sensitivity_points": [
+     "Decoupled asynchronous buffering for all audit log dispatch paths"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging isolates latency but introduces eventual consistency for audit records"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "ECS Fargate deployment with ALB supports zero-downtime rolling updates and fast container rollbacks. Scoring components handle execution and logging, though automated model registry or dynamic traffic splitting mechanisms are not explicitly documented.",
+    "elements": [
+     "API Gateway / Application Load Balancer",
+     "Fraud Scoring Engine",
+     "Amazon ElastiCache Redis"
+    ],
+    "sensitivity_points": [
+     "Deployment automation and task drain timeouts in ECS Fargate"
+    ],
+    "tradeoffs": [
+     "Container redeployments ensure clean environments but roll out slower than in-process model hot-reloading"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "Redis contains a Rule Cache Component read by scoring tasks, but there is no documented relationship or pipeline allowing analysts or the Case Management Service to author, validate, and publish rules into Redis.",
+    "elements": [
+     "Case Management Service",
+     "Amazon ElastiCache Redis",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Missing publishing pathway from case management to rule cache storage"
+    ],
+    "tradeoffs": [
+     "Runtime rule updates avoid redeployments but require strict schema validation"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The Tokenization / Masking Proxy Component and KMS envelope encryption prevent analysts from accessing raw PANs. However, the architecture specifies no SIEM, behavior monitoring, or automated intrusion alerting to detect compromised accounts within 15 minutes.",
+    "elements": [
+     "Tokenization / Masking Proxy Component",
+     "Case Management Service",
+     "Identity Provider",
+     "AWS Key Management Service (KMS) / HSM"
+    ],
+    "sensitivity_points": [
+     "Absence of security event monitoring and automated anomaly detection systems"
+    ],
+    "tradeoffs": [
+     "Deterministic tokenization protects PAN data but incurs KMS cryptographic processing overhead"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The architecture directly incorporates Amazon S3 with Object Lock in Compliance Mode, KMS envelope encryption, and audit verification Lambdas, ensuring decision inputs, model versions, and explanations remain immutable and auditable for 7 years.",
+    "elements": [
+     "Amazon S3 Immutable Vault",
+     "Vault Ingestion Interceptor",
+     "Audit Verification Worker",
+     "AWS Key Management Service (KMS) / HSM"
+    ],
+    "sensitivity_points": [
+     "Object Lock compliance retention policy enforcement and cryptographic integrity validation"
+    ],
+    "tradeoffs": [
+     "Immutable write-once compliance storage guarantees auditability but prevents retrospective record modifications"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "none"
+  },
+  "coverage": 0.6363636363636364,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Tokenization / Masking Proxy Component",
+     "TLS Termination Engine",
+     "AWS Key Management Service (KMS) / HSM"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Audit Logger Component",
+     "Amazon S3 Immutable Vault",
+     "S3 Object Lock Manager",
+     "Audit Event Queue (Amazon SQS FIFO)"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none"
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none"
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "API Handler Component",
+     "Scoring Engine Core Component",
+     "Fraud Event Topic (Amazon SNS)"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Service",
+     "Case API Controller",
+     "Case Domain Service",
+     "Review Queue (Amazon SQS Standard)",
+     "Fraud Analyst"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Rule Cache Component",
+     "Amazon ElastiCache Redis"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "API Handler Component",
+     "Scoring Engine Core Component",
+     "Feature Aggregator Component",
+     "Amazon ElastiCache Redis"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Tokenization / Masking Proxy Component",
+     "AWS Key Management Service (KMS) / HSM",
+     "Case Domain Service"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Logger Component",
+     "Amazon S3 Immutable Vault",
+     "S3 Object Lock Manager",
+     "Audit Verification Worker",
+     "AWS Key Management Service (KMS) / HSM"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none"
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

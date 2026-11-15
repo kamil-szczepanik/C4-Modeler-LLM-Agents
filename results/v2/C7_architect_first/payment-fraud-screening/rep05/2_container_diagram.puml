@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Core Fraud Screening System
+
+Person(FraudAnalystsandRiskOperationsManagers, "Fraud Analysts and Risk Operations Managers", "Internal users responsible for case management, reporting, and reviewing flagged payment authorizations.")
+System_Ext(PaymentGatewayAcquirerSystems, "Payment Gateway / Acquirer Systems", "External software systems submitting card-not-present payment authorizations for real-time fraud screening.")
+System_Ext(ImmutableAuditLogSink, "Immutable Audit Log Sink", "AWS-based storage utilizing S3 Object Lock, KMS, and CloudTrail Lake for automated cryptographic log shipping and 7-year audit retention.")
+
+System_Boundary(CoreFraudScreeningSystem, "Core Fraud Screening System") {
+    Container(APIGatewayFallbackLayer, "API Gateway & Fallback Layer", "Amazon API Gateway", "Ingress point for REST/JSON traffic over HTTPS with a built-in circuit breaker.")
+    Container(RealTimeScoringService, "Real-Time Scoring Service", "Go, AWS ECS Fargate", "Microservice that evaluates authorizations to guarantee low, predictable latency without GC pauses.")
+    Container(CaseManagementBackend, "Case Management Backend", "Node.js/TypeScript, AWS ECS Fargate", "Microservice that manages analyst reviews and case operations.")
+    ContainerDb(FeatureCache, "Feature Cache", "Amazon DynamoDB", "Low-latency data store for feature reads and writes over VPC endpoints.")
+    ContainerDb(AuditandCaseDataStore, "Audit and Case Data Store", "Amazon Aurora PostgreSQL", "Transactional data store for audit and case data over VPC endpoints.")
+    Container(MessagingEventBus, "Messaging & Event Bus", "Amazon SQS and SNS", "Asynchronous messaging infrastructure for audit event publishing.")
+    ContainerDb(AuditStorage, "Audit Storage", "Amazon S3 with Object Lock", "Tamper-evident log archival using S3 Object Lock (WORM).")
+}
+
+Rel(PaymentGatewayAcquirerSystems, APIGatewayFallbackLayer, "Sends ingress REST/JSON traffic for authorization", "HTTPS")
+Rel(FraudAnalystsandRiskOperationsManagers, CaseManagementBackend, "Manages and reviews flagged payment authorizations", "HTTPS")
+Rel(APIGatewayFallbackLayer, RealTimeScoringService, "Internal routing of scoring requests", "REST/gRPC")
+Rel(RealTimeScoringService, FeatureCache, "Reads and writes low-latency features", "VPC endpoints over AWS")
+Rel(CaseManagementBackend, AuditandCaseDataStore, "Performs transactional case queries", "VPC endpoints over AWS")
+Rel(RealTimeScoringService, MessagingEventBus, "Publishes asynchronous audit events", "Amazon SQS/SNS")
+Rel(CaseManagementBackend, MessagingEventBus, "Publishes asynchronous audit events", "Amazon SQS/SNS")
+Rel(MessagingEventBus, AuditStorage, "Archives tamper-evident logs", "SQS to S3 Object Lock")
+Rel(AuditStorage, ImmutableAuditLogSink, "Sends cryptographic log shipping and retention", "AWS S3 Object Lock, KMS, and CloudTrail Lake")
+
+@enduml

@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Fraud Scoring Service container
+
+Container_Boundary(fraud_scoring_service, "Fraud Scoring Service") {
+    Component(api_handler, "API Handler Component", "Python, FastAPI", "Screens card-not-present payment authorizations in real-time, handling request validation and routing.")
+    Component(feature_aggregator, "Feature Aggregator Component", "Python, async Redis client", "Retrieves user profiling data and user velocity features.")
+    Component(inference_engine, "Inference Engine Component", "C-based ONNX Runtime via Python bindings", "Invokes ONNX model for probabilistic scoring to meet sub-50ms latency targets.")
+    Component(rules_evaluator, "Rules Evaluator Component", "Python, lightweight expression engine", "Evaluates hard-coded and dynamic business rules.")
+    Component(audit_dispatcher, "Audit Dispatcher Component", "Python, boto3", "Dispatches payloads for asynchronous logging and publishes tamper-evident audit events.")
+    Component(model_rule_manager, "Model & Rule Manager Component", "Python, background thread/async task", "Fetches artifacts and updates active models and rules via thread-safe reference swap.")
+}
+
+ContainerDb(amazon_elasticache_redis, "Amazon ElastiCache (Redis)", "Amazon ElastiCache (Redis)", "Stores low-latency feature states and velocity counters.")
+Container(amazon_s3_model_registry, "Amazon S3 Model Registry", "Amazon S3", "Stores versioned ML models and JSON rules for zero-downtime hot-reloading.")
+Container(amazon_sqs, "Amazon SQS", "Amazon SQS", "Receives published tamper-evident audit events.")
+
+Rel(api_handler, feature_aggregator, "Requests user velocity features", "In-memory async call")
+Rel(api_handler, rules_evaluator, "Evaluates hard-coded and dynamic business rules", "In-memory call")
+Rel(api_handler, inference_engine, "Invokes ONNX model for probabilistic scoring", "In-memory C-binding call")
+Rel(api_handler, audit_dispatcher, "Dispatches payload for asynchronous logging", "Non-blocking queue")
+Rel(model_rule_manager, amazon_s3_model_registry, "Fetches artifacts", "HTTPS")
+Rel(model_rule_manager, inference_engine, "Updates active models/rules", "Thread-safe reference swap")
+Rel(model_rule_manager, rules_evaluator, "Updates active models/rules", "Thread-safe reference swap")
+Rel(feature_aggregator, amazon_elasticache_redis, "Retrieves user profiling data", "TCP/RESP")
+Rel(audit_dispatcher, amazon_sqs, "Publishes tamper-evident audit events", "HTTPS")
+
+@enduml

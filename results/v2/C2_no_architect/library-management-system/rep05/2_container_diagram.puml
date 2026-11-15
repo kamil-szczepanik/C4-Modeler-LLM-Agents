@@ -1,0 +1,34 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Library Management System
+
+Person(LibraryPatrons, "Library Patrons", "Students and public citizens who use self-service portals.")
+Person(Librarians, "Librarians", "Staff members managing library operations and circulation.")
+Person(LibraryAdministrators, "Library Administrators", "Administrators managing the Library Management System and analytics.")
+
+System_Ext(CatalogueDatabaseandReadReplicaDataStore, "Catalogue Database and Read-Replica Data Store", "Database storing library catalogue data with read-replicas.")
+System_Ext(ExternalInstitutionalBIToolsandMunicipalDashboards, "External Institutional BI Tools and Municipal Dashboards", "External systems receiving aggregated data from analytics.")
+
+System_Boundary(LibraryManagementSystem, "Library Management System") {
+    Container(APIGateway, "API Gateway", "OAuth2/OIDC, JWT", "Entry point for authentication, RBAC, and routing.")
+    Container(SelfServicePortalContainer, "Self-Service Portal Container", "Kubernetes, Istio", "Provides self-service portals for library patrons.")
+    Container(CirculationManagementContainer, "Circulation Management Container", "Kubernetes, Istio", "Manages circulation and library operations.")
+    Container(AnalyticsReportingContainer, "Analytics/Reporting Container", "Kubernetes, OpenTelemetry", "Processes asynchronous events and provides aggregated reporting.")
+    Container(MessageBroker, "Message Broker", "Kafka / RabbitMQ", "Handles asynchronous event ingestion for analytics.")
+}
+
+Rel(LibraryPatrons, APIGateway, "Interacts with self-service portals", "HTTPS via OAuth2/OIDC with short-lived JWTs")
+Rel(Librarians, APIGateway, "Interacts with circulation management", "HTTPS via OAuth2/OIDC with short-lived JWTs")
+Rel(LibraryAdministrators, APIGateway, "Interacts with system administration and analytics", "HTTPS via OAuth2/OIDC with short-lived JWTs")
+Rel(APIGateway, SelfServicePortalContainer, "Routes requests", "mTLS via Istio")
+Rel(APIGateway, CirculationManagementContainer, "Routes requests", "mTLS via Istio")
+Rel(SelfServicePortalContainer, CatalogueDatabaseandReadReplicaDataStore, "Queries and reads catalogue data", "TLS 1.3")
+Rel(CirculationManagementContainer, CatalogueDatabaseandReadReplicaDataStore, "Queries and updates catalogue data", "TLS 1.3")
+Rel(CirculationManagementContainer, MessageBroker, "Publishes events asynchronously", "Kafka / RabbitMQ protocol over TLS 1.3")
+Rel(MessageBroker, AnalyticsReportingContainer, "Streams events for analytics", "Kafka / RabbitMQ protocol over TLS 1.3")
+Rel(AnalyticsReportingContainer, ExternalInstitutionalBIToolsandMunicipalDashboards, "Provides aggregated data", "HTTPS / TLS 1.3")
+Rel(AnalyticsReportingContainer, LibraryAdministrators, "Provides aggregated reporting data", "HTTPS")
+
+@enduml

@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the FHIR Integration Broker container
+
+System_Ext(External_Labs_Imaging_Systems, "External Labs & Imaging Systems", "External partners exchanging medical data")
+
+Container_Boundary(FHIR_Integration_Broker, "FHIR Integration Broker") {
+    Component(FHIR_API_Route_Engine, "FHIR API Route Engine", "Apache Camel REST DSL", "Exposes RESTful FHIR endpoints")
+    Component(FHIR_Security_Validation_Interceptor, "FHIR Security & Validation Interceptor", "Camel Policy / JSON Schema Validator", "Enforces access control and schema validation")
+    Component(Data_Transformation_Processor, "Data Transformation Processor", "Apache Camel / Python", "Translates payloads to standardized FHIR resources")
+    Component(FHIR_Persistence_Adapter, "FHIR Persistence Adapter", "Python FastAPI / SQLAlchemy", "Manages transactional persistence and database queries")
+    Component(FHIR_Outbound_Dispatcher, "FHIR Outbound Dispatcher", "Camel HTTP4 / Webhook Client", "Manages outgoing FHIR queries and event notifications")
+    Component(FHIR_Audit_Compliance_Logger, "FHIR Audit & Compliance Logger", "Camel / Python / Fluentbit", "Captures transactions for immutable audit logging")
+    Component(Async_Message_Broker, "Async Message Broker", "Apache Kafka / RabbitMQ", "Propagates domain events")
+    Component(Audit_Compliance_Log_Shipper, "Audit & Compliance Log Shipper", "Fluentbit / Vector", "Forwards audit payloads")
+}
+
+Rel(External_Labs_Imaging_Systems, FHIR_API_Route_Engine, "Submits lab and imaging data", "HTTPS / REST, JSON/XML")
+Rel(FHIR_API_Route_Engine, FHIR_Security_Validation_Interceptor, "Delegates incoming requests", "In-Memory Route")
+Rel(FHIR_Security_Validation_Interceptor, Data_Transformation_Processor, "Forwards validated payloads", "In-Memory Route")
+Rel(Data_Transformation_Processor, FHIR_Persistence_Adapter, "Sends normalized resources", "gRPC")
+Rel(Data_Transformation_Processor, FHIR_Outbound_Dispatcher, "Forwards outbound payloads", "In-Memory Route")
+Rel(FHIR_Outbound_Dispatcher, External_Labs_Imaging_Systems, "Dispatches notifications", "HTTPS / REST, JSON/XML")
+Rel(FHIR_Security_Validation_Interceptor, FHIR_Audit_Compliance_Logger, "Emits audit events", "Asynchronous In-Memory Queue")
+Rel(FHIR_Audit_Compliance_Logger, Audit_Compliance_Log_Shipper, "Writes audit payloads", "Local Unix Domain Socket / File Tail")
+Rel(FHIR_Persistence_Adapter, Async_Message_Broker, "Publishes domain events", "AMQP/TCP")
+
+@enduml

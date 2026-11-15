@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Asynchronous Notification Worker container
+
+System_Ext(CoreCirculationCatalogService, "Core Circulation & Catalog Service", "Java, Spring Boot", "Triggers notification events via gRPC over TLS with HMAC-SHA256 payload signing.")
+System_Ext(ExternalSMTPRelaysandSMSGateways, "External SMTP Relays and SMS Gateways", "EU-region SMTP/SMS Protocols", "Receives final dispatched notifications over TLS 1.3 with certificate pinning.")
+
+Container_Boundary(AsynchronousNotificationWorker, "Asynchronous Notification Worker") {
+    Component(QueueConsumerComponent, "Queue Consumer Component", "Python, asyncio, HMAC-SHA256", "Consumes queued events with HMAC-SHA256 validation.")
+    Component(TemplateEngineComponent, "Template Engine Component", "Jinja2", "Renders ephemeral memory templates with zero PII logging.")
+    Component(GatewayDispatcherComponent, "Gateway Dispatcher Component", "TLS 1.3, Circuit Breakers", "Dispatches messages securely to external providers with circuit breakers.")
+    Component(RedisCacheTier, "Redis Cache Tier", "Redis, RESP3", "Handles deduplication, rate-limiting, and durable retry state machine.")
+}
+
+Rel(CoreCirculationCatalogService, QueueConsumerComponent, "Triggers events via mTLS [gRPC over TLS] with HMAC-SHA256 payload signing", "gRPC over TLS")
+Rel(QueueConsumerComponent, RedisCacheTier, "Deduplicates messages and manages retry states", "RESP3")
+Rel(QueueConsumerComponent, TemplateEngineComponent, "Renders notification templates", "In-memory")
+Rel(TemplateEngineComponent, GatewayDispatcherComponent, "Sends rendered messages for dispatch", "In-memory")
+Rel(GatewayDispatcherComponent, ExternalSMTPRelaysandSMSGateways, "Dispatches messages with certificate pinning", "TLS 1.3")
+
+@enduml

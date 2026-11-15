@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the AI Symptom Checker Service container
+
+Container_Boundary(ai_symptom_checker_service, "AI Symptom Checker Service") {
+    Component(api_router_component, "API Router Component", "Python / FastAPI", "Powers the core container services and REST/gRPC routing.")
+    Component(consent_enforcement_interceptor, "Consent Enforcement Interceptor", "Open Policy Agent SDK", "Enforces regional consent policies locally.")
+    Component(clinical_inference_orchestrator, "Clinical Inference Orchestrator", "Python", "Orchestrates clinical inference workflows.")
+    Component(payload_sanitizer_pii_redactor, "Payload Sanitizer & PII Redactor", "Python / Presidio", "Strips PII locally before external AI inference for GDPR/HIPAA compliance.")
+    Component(region_aware_model_router, "Region-Aware Model Router", "Python", "Resolves regional endpoints for AI inference.")
+    Component(symptom_session_cache, "Symptom Session Cache", "Async-LRU / Redis client", "Caches multi-turn session states for rural connectivity resilience.")
+    Component(fhir_interoperability_mapper, "FHIR Interoperability Mapper", "Custom Pydantic-FHIR", "Standardizes clinical outputs to HL7 FHIR resources for interoperability.")
+    Component(audit_traceability_logger, "Audit & Traceability Logger", "Python", "Passes structured FHIR audit payloads.")
+}
+
+Component_Ext(ai_model_provider_inference_service, "AI Model Provider / Inference Service", "External AI Service", "External AI inference service that receives de-identified clinical payloads.")
+Component_Ext(gcp_cloud_storage_with_object_retention_worm, "GCP Cloud Storage with Object Retention (WORM)", "GCP Cloud Storage (WORM)", "Stores immutable audit logs for EU MDR traceability compliance.")
+
+Rel(api_router_component, consent_enforcement_interceptor, "Validates user consent", "In-memory function call")
+Rel(consent_enforcement_interceptor, clinical_inference_orchestrator, "Triggers analysis", "In-memory function call")
+Rel(clinical_inference_orchestrator, payload_sanitizer_pii_redactor, "Sanitizes symptom text", "In-memory function call")
+Rel(payload_sanitizer_pii_redactor, ai_model_provider_inference_service, "Sends de-identified clinical payloads", "HTTPS / REST")
+Rel(clinical_inference_orchestrator, region_aware_model_router, "Resolves regional endpoint", "In-memory function call")
+Rel(region_aware_model_router, ai_model_provider_inference_service, "Sends de-identified payload to region-specific AI instance", "HTTPS / REST")
+Rel(api_router_component, symptom_session_cache, "Manages multi-turn conversation state", "In-memory / Redis")
+Rel(clinical_inference_orchestrator, symptom_session_cache, "Manages multi-turn conversation state", "In-memory / Redis")
+Rel(clinical_inference_orchestrator, fhir_interoperability_mapper, "Normalizes symptom assessment output", "In-memory function call")
+Rel(fhir_interoperability_mapper, audit_traceability_logger, "Passes structured FHIR audit payload", "In-memory queue")
+Rel(audit_traceability_logger, gcp_cloud_storage_with_object_retention_worm, "Writes immutable logs", "GCP IAM / HTTPS")
+
+@enduml

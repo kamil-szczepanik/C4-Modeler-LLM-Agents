@@ -1,0 +1,32 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Amazon API Gateway container
+
+Person(SinglePageAppSPA, "Single Page App (SPA)", "Client-to-backend communication via HTTPS / REST.")
+Person(StoreAdministrators, "Store Administrators", "Accesses management operations via HTTPS with mTLS.")
+
+System_Ext(Auth0AWSCognito, "Auth0 / AWS Cognito", "External identity provider.")
+System_Ext(NodejsBFF, "Node.js BFF", "Internal backend container.")
+System_Ext(CheckoutService, "Checkout Service", "Internal backend container.")
+System_Ext(RecommendationsService, "Recommendations Service", "Internal backend container.")
+
+Container_Boundary(AmazonAPIGateway, "Amazon API Gateway") {
+    Component(EdgeRouterSSLTerminus, "Edge Router & SSL Terminus", "AWS Edge locations / Amazon API Gateway", "Handles TLS termination and global traffic distribution via AWS Edge locations.")
+    Component(JWTValidatorAuthorizer, "JWT Validator Authorizer", "Auth0 / AWS Cognito / AWS Lambda Authorizer", "Evaluates OAuth2/JWT tokens against Auth0/AWS Cognito with strict claim validation and guest session support.")
+    Component(WAFRateLimiterComponent, "WAF & Rate Limiter Component", "AWS WAF & AWS Shield", "Enforces AWS WAF managed rules, OWASP Top-10 mitigations, and tier-based throttling with custom fallback responses.")
+    Component(APIRouteDispatcher, "API Route Dispatcher", "AWS App Mesh & Private VPC Links", "Forwards validated traffic to internal backend containers via private VPC links using mTLS.")
+}
+
+Rel(SinglePageAppSPA, EdgeRouterSSLTerminus, "Client-to-backend communication via HTTPS / REST.")
+Rel(StoreAdministrators, EdgeRouterSSLTerminus, "Accesses management operations via HTTPS with mTLS.")
+Rel(EdgeRouterSSLTerminus, WAFRateLimiterComponent, "Inspects incoming traffic for security rules and rate limiting.")
+Rel(WAFRateLimiterComponent, JWTValidatorAuthorizer, "Passes filtered requests for token validation.")
+Rel(JWTValidatorAuthorizer, Auth0AWSCognito, "Authenticates requests via OAuth2/OpenID Connect with Auth0/AWS Cognito.")
+Rel(JWTValidatorAuthorizer, APIRouteDispatcher, "Forwards authenticated and authorized requests.")
+Rel(APIRouteDispatcher, NodejsBFF, "Routes public and dynamic catalogue traffic via mTLS and internal VPC endpoints.")
+Rel(APIRouteDispatcher, CheckoutService, "Routes secure transaction requests via mTLS and internal VPC endpoints.")
+Rel(APIRouteDispatcher, RecommendationsService, "Routes recommendation requests via mTLS and internal VPC endpoints.")
+
+@enduml

@@ -1,0 +1,39 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Library Management System
+
+Person(PatronsAndStaff, "Library Patrons & Staff", "End-users interacting via self-service portals and staff interfaces.")
+
+System_Ext(ExternalPaymentGateway, "External Payment Gateway", "Handles payment processing securely.")
+System_Ext(DigitalRepositoryDRMProvider, "Digital Repository / DRM Provider", "Provides digital assets and DRM management.")
+System_Ext(ExternalNotificationService, "External Notification Service", "Sends asynchronous alerts to users.")
+System_Ext(AWSCloudFrontFrankfurt, "AWS CloudFront Frankfurt", "CDN serving the Single Page Application.")
+
+System_Boundary(LibraryManagementSystem, "Library Management System") {
+    Container(WebApplication, "Web Application", "React, TypeScript, AWS CloudFront Frankfurt", "Single Page Application providing client interfaces for patrons and staff.")
+    Container(APIGateway, "API Gateway", "Kong, Node.js", "Reverse proxy handling client entry, token validation, and secure traffic.")
+    Container(CatalogueSearchService, "Catalogue & Search Service", "Java, Spring Boot, Elasticsearch", "High-throughput service for cataloging and searching items.")
+    Container(CirculationUserService, "Circulation & User Service", "Go, Spring Boot", "Service managing loans and patrons.")
+    Container(NotificationWorkerService, "Notification Worker Service", "Go", "Background worker processing asynchronous alerts.")
+    Container(ApacheKafkaAWSMSK, "Apache Kafka (AWS MSK)", "Apache Kafka, AWS MSK", "Event-driven broker for decoupled domain events.")
+    ContainerDb(Database, "Database", "PostgreSQL", "Managed relational database cluster.")
+}
+
+Rel(PatronsAndStaff, AWSCloudFrontFrankfurt, "Interacts with user interfaces", "HTTPS")
+Rel(AWSCloudFrontFrankfurt, WebApplication, "Serves static assets and application", "HTTPS")
+Rel(WebApplication, APIGateway, "Sends API requests", "HTTPS / REST")
+Rel(APIGateway, CatalogueSearchService, "Routes catalogue and search queries", "gRPC with mTLS")
+Rel(APIGateway, CirculationUserService, "Routes circulation and user requests", "gRPC with mTLS")
+Rel(CatalogueSearchService, ApacheKafkaAWSMSK, "Publishes and consumes domain events", "Avro/JSON over TLS")
+Rel(CirculationUserService, ApacheKafkaAWSMSK, "Publishes and consumes domain events", "Avro/JSON over TLS")
+Rel(NotificationWorkerService, ApacheKafkaAWSMSK, "Consumes asynchronous alert events", "Avro/JSON over TLS")
+Rel(CatalogueSearchService, Database, "Reads and writes relational data", "Internal VPC TCP")
+Rel(CirculationUserService, Database, "Reads and writes relational data", "Internal VPC TCP")
+Rel(CatalogueSearchService, Database, "Backs search capabilities with Elasticsearch", "Internal VPC TCP")
+Rel(NotificationWorkerService, ExternalNotificationService, "Dispatches external notifications with strict egress filtering", "Outbound HTTPS")
+Rel(CirculationUserService, ExternalPaymentGateway, "Processes payments", "HTTPS / REST")
+Rel(CatalogueSearchService, DigitalRepositoryDRMProvider, "Manages digital assets and DRM", "HTTPS / REST")
+
+@enduml

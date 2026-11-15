@@ -1,0 +1,243 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 and the brief directly through 'Catalogue Management Component', 'Circulation Component', 'OpenSearch Engine', and 'Circulation Portal Component', fully accommodating physical and digital cataloguing, circulation workflows, and self-service portals.",
+   "performance_efficiency": "R-05 is explicitly targeted via 'OpenSearch Engine' delivering sub-800ms searches, supplemented by 'API Gateway' direct search routing, TanStack Query caching in 'Catalogue & Search Component', 'PgBouncer', read replication in 'PostgreSQL', and asynchronous indexing via 'Message Broker'.",
+   "compatibility": "The system interfaces smoothly with external services ('Stripe EU', 'SendGrid EU', 'Keycloak/Auth0 EU tenant') using open standards including OIDC, OAuth 2.0, and HTTPS REST, though library-specific protocols (e.g., SIP2, NCIP, Z39.50) are not explicitly depicted.",
+   "usability": "All target personas are served via dedicated self-service and circulation interfaces in 'Web Application'. Accessibility and patron inclusiveness are explicitly addressed by the 'Localization & Accessibility Module' supporting WCAG 2.1 AA compliance and multi-language features.",
+   "reliability": "Reliability is supported by the 'Primary Database Instance' to 'Read Replica Instance' replication, a 'DLQ Handler' in 'Message Broker' for failed event recovery, and connection resilience via 'PgBouncer'. Automated backup and service failover mechanisms are slightly abstracted.",
+   "security": "The EU-only residency constraint is enforced across components ('AWS RDS EU', 'Stripe EU', 'SendGrid EU', 'Keycloak/Auth0 EU tenant'). Transport security is rigorous, utilizing TLS 1.3, internal mTLS, token-based rate limiting, and PII sanitization via 'Schema Registry'.",
+   "maintainability": "The architecture exhibits high modularity and loose coupling across components like 'Catalogue Management Component', 'Circulation Component', and 'Search Synchronization Component', with responsibilities cleanly segregated and interconnected via well-defined REST, gRPC, and Kafka event interfaces.",
+   "portability": "Deployments rely on standard technologies (Spring Boot, React, Nginx, PostgreSQL, Kafka, OpenSearch) enabling containerized execution across any EU cloud or on-premise infrastructure, though specific elements name 'AWS RDS EU'."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.625,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 4.0,
+   "Modifiability": 2.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Search requests are routed directly from API Gateway to a dedicated OpenSearch Engine, completely offloading the relational database. Client-side caching further assists performance, though OpenSearch cluster sizing and scaling policies are not explicitly detailed.",
+    "elements": [
+     "API Gateway",
+     "Search Container",
+     "OpenSearch Engine",
+     "Catalogue & Search Component"
+    ],
+    "sensitivity_points": [
+     "OpenSearch indexing strategy and query execution efficiency under peak load",
+     "API Gateway concurrency thresholds and connection pooling limits"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of indexed catalogue data versus low-latency search response times"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Catalogue updates are persisted in PostgreSQL and synchronized to OpenSearch via dedicated Search Synchronization and Kafka event streaming. Write workloads are decoupled from search queries, easily achieving 5-minute indexing freshness without impacting read performance.",
+    "elements": [
+     "Catalogue Management Component",
+     "Search Synchronization Component",
+     "Search Container",
+     "Message Broker",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Indexing throughput and backpressure handling in Search Synchronization Component",
+     "Event consumer lag in the Message Broker under heavy catalog updates"
+    ],
+    "tradeoffs": [
+     "Asynchronous replication lag between transactional database and search index"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Circulation functions depend entirely on PostgreSQL and Core Services Container, completely isolating loan transactions from search engine failure. While OpenSearch naturally supports shard clustering, multi-node clustering specifics are not explicitly detailed in the component model.",
+    "elements": [
+     "Search Container",
+     "OpenSearch Engine",
+     "Circulation Component",
+     "PostgreSQL",
+     "Primary Database Instance"
+    ],
+    "sensitivity_points": [
+     "OpenSearch shard replication factor and master node election timeout"
+    ],
+    "tradeoffs": [
+     "Resource overhead of index replicas versus availability during node outage"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Web Application is a stateless SPA served by Nginx, routing through Spring Cloud Gateway to stateless backend services. Transactions are committed to PostgreSQL, preventing loan transaction loss, though upstream load balancer failover is not explicitly diagrammed.",
+    "elements": [
+     "Web Application",
+     "Web Server",
+     "API Gateway",
+     "Circulation Component",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Health check interval and gateway rerouting latency upon web instance failure"
+    ],
+    "tradeoffs": [
+     "Stateless architecture complexity versus rapid recovery and simple node failover"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "There is no dedicated integration component or adapter interface for third-party digital item providers. Incorporating a new e-book provider would require modifying the monolithic Catalogue Management Component directly rather than confining changes to an external integration module.",
+    "elements": [
+     "Catalogue Management Component",
+     "Core Services Container"
+    ],
+    "sensitivity_points": [
+     "Absence of pluggable provider adapters within the catalogue subsystem"
+    ],
+    "tradeoffs": [
+     "Simpler initial domain model versus higher coupling and effort when integrating providers"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The architecture does not include a dynamic business rules engine, policy management store, or externalized configuration service. Changing circulation policies between academic and public institutions would require modifying and redeploying the Circulation Component code.",
+    "elements": [
+     "Circulation Component",
+     "Core Services Container",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Hardcoded circulation workflows versus externalized runtime rule evaluation"
+    ],
+    "tradeoffs": [
+     "Low architectural complexity versus inflexibility to runtime policy changes"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "EU data residency is rigorously enforced across all layers: AWS RDS EU PostgreSQL, EU-restricted third-party endpoints (Keycloak, SendGrid, Stripe), and message broker schema registry with PII sanitization to prevent unapproved egress.",
+    "elements": [
+     "PostgreSQL",
+     "Primary Database Instance",
+     "Keycloak/Auth0 EU tenant",
+     "SendGrid EU",
+     "Stripe EU",
+     "Schema Registry"
+    ],
+    "sensitivity_points": [
+     "Strict adherence of external third-party endpoints to EU residency guarantees",
+     "Effective PII filtering and sanitization within Message Broker schemas"
+    ],
+    "tradeoffs": [
+     "Vendor lock-in to EU-only service tiers versus regulatory compliance"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Authentication is established via Keycloak/Auth0 and API Gateway, but the architecture omits explicit attribute-based access control (ABAC) or resource ownership validation in the Circulation Component, and lacks a centralized audit logging mechanism for security access violations.",
+    "elements": [
+     "Keycloak/Auth0 EU tenant",
+     "API Gateway",
+     "Circulation Component",
+     "Routing & Auth Module"
+    ],
+    "sensitivity_points": [
+     "Resource ownership verification within the Circulation Component",
+     "Auditing and logging coverage for unauthorized data access attempts"
+    ],
+    "tradeoffs": [
+     "Granular per-resource authorization checks versus service execution overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Primary Database Instance",
+     "PostgreSQL",
+     "Stripe EU",
+     "Keycloak/Auth0 EU tenant",
+     "SendGrid EU",
+     "Library Management System"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalogue Management Component",
+     "Catalogue & Search Component",
+     "Core Services Container",
+     "Search Container"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "OpenSearch Engine",
+     "Internal Search Components",
+     "Search Container",
+     "Catalogue & Search Component",
+     "API Gateway"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

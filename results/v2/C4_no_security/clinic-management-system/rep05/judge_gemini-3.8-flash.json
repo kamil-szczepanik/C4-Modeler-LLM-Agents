@@ -1,0 +1,345 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are represented across EMR Core Service, Billing & Claims Service, and Audit & Compliance Service. However, resource clash checking for scheduling is only generically referenced inside EMR Business Logic Engine without explicit clash detection mechanisms.",
+   "performance_efficiency": "Sub-second P95 latency is well supported by Redis Cluster caching, PgBouncer connection pooling, Spring WebFlux asynchronous processing, and Kafka event streaming across services.",
+   "compatibility": "Integration Gateway with Apache Camel and FHIR Mapping & Interoperability Component thoroughly fulfills HL7 FHIR API integration for lab, imaging, and clearinghouse external systems.",
+   "usability": "The SPA Frontend provides role-based UI routing and views for clinicians, receptionists, billing specialists, and compliance officers, though the patient portal is deferred as a future external system.",
+   "reliability": "High availability is supported via Patroni-managed PostgreSQL failover, Redis CRDT active-active replication, Resilience4j circuit breakers, and Strimzi Kafka clusters, though PostgreSQL primary-replica limits true cross-region active-active writes.",
+   "security": "Security is thoroughly addressed via Enterprise IdP integration, AES-256 at rest, gRPC over mTLS with eBPF, pgAudit, Ranger ACLs, and AWS S3 Object Lock for HIPAA/GDPR WORM compliance.",
+   "maintainability": "Microservices are clearly decoupled by domain with well-defined component responsibilities, Schema Registry for event evolution, and Apache Camel for protocol abstraction.",
+   "portability": "Containerized workloads on Kubernetes via Strimzi and Spring Boot deploy smoothly to hybrid on-prem and AWS environments, with minor dependency on AWS S3 Object Lock APIs."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "EMR Core Service leverages a dedicated multi-node Redis Cluster for low-latency caching alongside PgBouncer connection pooling, ensuring screen requests resolve sub-second even under concurrent morning rounds load.",
+    "elements": [
+     "SPA Frontend",
+     "EMR Core Service",
+     "Data Access Repository",
+     "Redis Cluster",
+     "PostgreSQL",
+     "Connection Pooler"
+    ],
+    "sensitivity_points": [
+     "Redis Cluster cache hit ratio for active clinical records",
+     "PgBouncer connection pool sizing under sudden concurrent bursts"
+    ],
+    "tradeoffs": [
+     "Aggressive caching improves read latency but risks serving stale clinical records"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Integration Gateway receives FHIR payloads and streams them asynchronously via Kafka, decoupling ingestion from synchronous EMR queries and ensuring EMR read latency remains under one second.",
+    "elements": [
+     "Integration Gateway",
+     "Protocol Translation Engine",
+     "Apache Kafka",
+     "EMR Core Service",
+     "Data Access Repository",
+     "Redis Cluster"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer throughput and partition parallelism during burst ingestion",
+     "Circuit breaker configuration on outbound integration routes"
+    ],
+    "tradeoffs": [
+     "Asynchronous processing buffers peak load but introduces eventual consistency for lab results"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "While Redis supports active-active CRDT, PostgreSQL relies on standard Patroni primary-replica failover. Multi-site hybrid replication over WAN creates potential replication lag and unaddressed cross-site DNS failover routing mechanisms.",
+    "elements": [
+     "PostgreSQL",
+     "HA & Failover Manager",
+     "Redis Active-Active (CRDT)",
+     "EMR Core Service",
+     "Routing & Load Balancer Router"
+    ],
+    "sensitivity_points": [
+     "PostgreSQL Patroni replication lag across hybrid WAN links",
+     "Cross-site traffic rerouting latency between on-prem and cloud"
+    ],
+    "tradeoffs": [
+     "Synchronous WAN replication increases write latency to guarantee zero data loss"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Patroni with etcd orchestrates automated PostgreSQL failover within 30 seconds. Resilience4j retries and Kafka event streaming ensure in-flight claims are safely replayed without duplicate submissions.",
+    "elements": [
+     "PostgreSQL",
+     "HA & Failover Manager",
+     "Billing & Claims Service",
+     "Claim Generation & Scrubbing Engine",
+     "Insurance Clearinghouse Adapter",
+     "Apache Kafka"
+    ],
+    "sensitivity_points": [
+     "Patroni etcd leader election timeout threshold",
+     "Idempotency token enforcement across clearinghouse retry loops"
+    ],
+    "tradeoffs": [
+     "Fast failover detection thresholds increase risk of false-positive split-brain scenarios"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Integration is isolated to the Insurance Clearinghouse Adapter and Camel-based Integration Gateway. Decoupled microservices architecture ensures the EMR Core Service remains completely unaffected.",
+    "elements": [
+     "Insurance Clearinghouse Adapter",
+     "Billing & Claims Service",
+     "Integration Gateway",
+     "Protocol Translation Engine"
+    ],
+    "sensitivity_points": [
+     "Camel route modularity in the Protocol Translation Engine",
+     "Clean boundary between claim scrubbing and external payload mapping"
+    ],
+    "tradeoffs": [
+     "Dedicated adapter layer increases internal hop latency to gain integration modularity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Modifications are strictly confined to three components: SPA UI Views, EMR Business Logic Engine, and the PostgreSQL schema, with the Audit Interceptor automatically propagating audit event changes.",
+    "elements": [
+     "UI Router & Views",
+     "EMR Business Logic Engine",
+     "Audit Interceptor",
+     "Database Engine",
+     "Schema Registry"
+    ],
+    "sensitivity_points": [
+     "Coupling between EMR relational schema and internal domain transfer objects",
+     "Avro/Protobuf schema evolution compatibility rules in Schema Registry"
+    ],
+    "tradeoffs": [
+     "Strict schema validation prevents runtime errors but requires synchronized multi-component updates"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "MFA enforcement is delegated to the Enterprise IdP before issuance of tokens. The Audit & Compliance Service's Drools rules engine ingests access events via Kafka to alert on anomalies rapidly.",
+    "elements": [
+     "Enterprise Identity Provider",
+     "Edge Security & Audit Interceptor",
+     "Integration Gateway",
+     "Compliance Rules Engine",
+     "Audit & Compliance Service"
+    ],
+    "sensitivity_points": [
+     "Token cache validation performance in Redis",
+     "Drools rule evaluation throughput for real-time security alerts"
+    ],
+    "tradeoffs": [
+     "Delegating authentication to external IdP adds network hops during login flows"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "EMR Audit Interceptor and pgAudit capture read access, Drools evaluates access policies for anomalies, and the Retention Manager offloads audit trails to S3 Object Lock for 10-year WORM compliance.",
+    "elements": [
+     "Audit Interceptor",
+     "Audit Logging Extension",
+     "Compliance Rules Engine",
+     "Retention & Archival Manager",
+     "Object Storage Gateway",
+     "Object Storage"
+    ],
+    "sensitivity_points": [
+     "Performance overhead of synchronous read audit interception",
+     "Correctness of S3 Object Lock compliance retention modes"
+    ],
+    "tradeoffs": [
+     "Comprehensive read auditing increases persistent storage volume and database write load"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Service",
+     "Audit Interceptor",
+     "Audit Event Ingestion Engine",
+     "Compliance Rules Engine",
+     "Audit Logging Extension",
+     "Kafka ACL & RBAC Authorizer"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "HA & Failover Manager",
+     "Redis Active-Active (CRDT)",
+     "Redis Replica Nodes / Cluster Replicas",
+     "Apache Kafka Broker Cluster",
+     "Resilience & Circuit Breaker Manager"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Retention & Archival Manager",
+     "Object Storage Gateway",
+     "Object Storage",
+     "Partitioning & Retention Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "EMR Business Logic Engine",
+     "SPA Frontend",
+     "Receptionists / Front Desk Staff"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "EMR Business Logic Engine"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Core Service",
+     "Clinical Data Controller",
+     "EMR Business Logic Engine",
+     "Audit Interceptor",
+     "Audit & Compliance Service",
+     "Audit Event Ingestion Engine",
+     "Audit Logging Extension"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Service",
+     "Billing Controller",
+     "Payment Gateway Module",
+     "Claim Generation & Scrubbing Engine",
+     "Insurance Clearinghouse Adapter",
+     "Insurance Clearinghouses"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Enterprise Identity Provider",
+     "PostgreSQL",
+     "Redis Cluster",
+     "Audit Event Ingestion Engine"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Redis Active-Active (CRDT)",
+     "HA & Failover Manager",
+     "Apache Kafka Broker Cluster"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Redis Cluster",
+     "EMR Core Service",
+     "Data Access Repository",
+     "SPA Frontend",
+     "Connection Pooler"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Gateway",
+     "Protocol Translation Engine",
+     "FHIR Mapping & Interoperability Component",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

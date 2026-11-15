@@ -1,0 +1,39 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(FraudAnalyst, "Fraud Analyst", "User reviewing suspicious cases via a Web Browser.")
+
+System_Ext(PaymentGatewayAcquirer, "Payment Gateway / Acquirer", "External system sending authorization requests via REST/HTTPS (HTTP/2).")
+System_Ext(IdentityProviderIdP, "Identity Provider (IdP)", "External authentication and RBAC provider using OIDC/OAuth2 over HTTPS.")
+System_Ext(MLTrainingPlatform, "ML Training Platform", "External offline system supplying scoring models via Amazon S3.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(AWSApplicationLoadBalancerALB, "AWS Application Load Balancer (ALB)", "AWS ALB", "Routes incoming traffic from payment gateway and analyst frontend to internal services.")
+    Container(FraudScoringEngine, "Fraud Scoring Engine", "Java / Spring Boot, AWS ECS Fargate, embedded ONNX/LightGBM", "Scores authorizations in under 50 milliseconds.")
+    Container(CaseManagementService, "Case Management Service", "Node.js / Python, AWS ECS Fargate", "Provides case management workflows and operations for fraud analysts.")
+    ContainerDb(FeatureStoreCache, "Feature Store / Cache", "Amazon ElastiCache Redis & Amazon DynamoDB", "Provides low-latency feature lookups and session state.")
+    ContainerDb(TransactionalDatabase, "Transactional Database", "Amazon Aurora PostgreSQL", "Utilized for relational case management transactions.")
+    ContainerDb(AuditStorage, "Audit Storage", "Amazon S3 with Object Lock", "Tamper-evident 7-year audit log storage satisfying PCI-DSS.")
+    ContainerDb(RuleModelArtifactRepository, "Rule/Model Artifact Repository", "Amazon S3", "Stores rule and model artifacts for the scoring engine.")
+    Container(AsynchronousMessaging, "Asynchronous Messaging", "Amazon SQS & Amazon SNS", "Handles asynchronous messaging and notifications between services.")
+    Container(AnalystFrontend, "Analyst Frontend", "Amazon S3 + Amazon CloudFront SPA", "Single page application for fraud analysts to review cases.")
+}
+
+Rel(PaymentGatewayAcquirer, AWSApplicationLoadBalancerALB, "Sends synchronous authorization scoring requests", "REST/HTTPS (HTTP/2)")
+Rel(FraudAnalyst, AnalystFrontend, "Accesses case management interface", "HTTPS")
+Rel(AnalystFrontend, AWSApplicationLoadBalancerALB, "API requests for case management", "REST/HTTPS (JSON over HTTP/2)")
+Rel(AWSApplicationLoadBalancerALB, FraudScoringEngine, "Forwards authorization requests", "HTTP/2")
+Rel(AWSApplicationLoadBalancerALB, CaseManagementService, "Forwards analyst API requests", "REST/HTTPS (JSON over HTTP/2)")
+Rel(FraudScoringEngine, FeatureStoreCache, "Performs low-latency feature lookups and state management", "TCP/TLS")
+Rel(FraudScoringEngine, RuleModelArtifactRepository, "Fetches rule and model artifacts", "HTTPS (TLS 1.3)")
+Rel(FraudScoringEngine, AsynchronousMessaging, "Publishes scoring events and asynchronous data", "AWS SDK (HTTPS/TLS 1.3)")
+Rel(AsynchronousMessaging, CaseManagementService, "Delivers queued events for case processing", "AWS SDK")
+Rel(CaseManagementService, TransactionalDatabase, "Persists case management transactions", "TCP/TLS")
+Rel(CaseManagementService, AuditStorage, "Writes tamper-evident audit logs", "AWS SDK (HTTPS/TLS 1.3)")
+Rel(CaseManagementService, AsynchronousMessaging, "Publishes notifications", "AWS SDK (HTTPS/TLS 1.3)")
+Rel(AnalystFrontend, IdentityProviderIdP, "Authenticates users", "OIDC/OAuth2 over HTTPS")
+Rel(CaseManagementService, IdentityProviderIdP, "Validates authentication tokens", "OIDC/OAuth2 over HTTPS")
+Rel(MLTrainingPlatform, RuleModelArtifactRepository, "Uploads trained model artifacts", "HTTPS/S3")
+
+@enduml

@@ -1,0 +1,348 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "Thoroughly addresses all functional requirements: R-01 via 'Consultation Manager' and 'WebRTC SFU Video Service', R-02 via 'Prescription Coordinator' and 'E-Prescription Integrator', R-03 via 'Model Orchestrator', and R-04 via 'Consent & Privacy Enforcement' and 'Consent Enforcement Proxy'.",
+   "performance_efficiency": "Performance and low-bandwidth needs are handled by 'Bandwidth Adaptation Controller' (simulcast adaptation), 'Local State & Storage Manager' (offline caching), and asynchronous processing via 'FHIR Event Bus'. Traffic routing is optimized regionally through 'Region Routing Router'.",
+   "compatibility": "Directly matches external requirements: 'US Pharmacy Adapter Component' implements HL7 FHIR over HTTPS, while 'EU National Gateway Adapter Component' connects to EU networks (eHDSI/NCPeH) over mTLS, governed by 'FHired Schema Validator'.",
+   "usability": "'Patients & Clinicians' are served by 'Web/Mobile Frontend App' featuring 'UI Presentation Layer' and offline support for rural users. However, distinct clinician workflows and patient interfaces are bundled together without dedicated operational interfaces.",
+   "reliability": "Addressed thoroughly: 'Bandwidth Adaptation Controller' guarantees degraded consultations under 300 kbit/s, 'Local State & Storage Manager' facilitates client resilience, and 'Rate Limiting & Resilience Component' protects gateway availability during disruptions.",
+   "security": "Enforces GDPR and HIPAA via 'Regional Isolation Enforcer', isolated regional storage instances, and 'Consent Enforcement Proxy'. Traceability for EU MDR compliance is ensured through 'Audit & Lineage Logger' and 'Audit & Traceability Logger'.",
+   "maintainability": "Excellent modularity and loose coupling across containers and components. Domain logic is decoupled into 'AI Inference Service', 'Core Telehealth Service', and 'E-Prescription Integrator', isolating country-specific logic into modular adapter components.",
+   "portability": "Accurately targets GCP europe-west3 and us-central1 using 'EU Data Store Instance', 'US Data Store Instance', and 'FHIR Event Bus'. Portability is slightly constrained by architectural dependencies on specific GCP proprietary managed services."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Mediasoup workers and WebRTC SFU components distribute media forwarding efficiently. However, horizontal autoscaling across multiple SFU cluster nodes is not explicitly detailed in the container specifications, posing potential contention during sudden connection spikes of 5,000 sessions.",
+    "elements": [
+     "WebRTC SFU Video Service",
+     "Media Router Node",
+     "Signaling & Room Manager",
+     "WebRTC Media Client"
+    ],
+    "sensitivity_points": [
+     "SFU worker thread scaling limits under high concurrent streams",
+     "Signaling server connection handling during simultaneous join spikes"
+    ],
+    "tradeoffs": [
+     "Simulcast stream quality degradation versus server CPU and network utilization"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "At approximately 14 requests per second, the FastAPI AI Inference Service with dedicated Model Orchestrator and asynchronous database logging comfortably meets the 3-second response threshold under peak load.",
+    "elements": [
+     "API Gateway",
+     "AI Inference Service",
+     "Model Orchestrator",
+     "Audit & Lineage Logger"
+    ],
+    "sensitivity_points": [
+     "Inference execution latency on PyTorch model worker instances",
+     "Synchronous database logging overhead per inference request"
+    ],
+    "tradeoffs": [
+     "Granular audit logging completeness versus inference endpoint response throughput"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The dedicated Bandwidth Adaptation Controller and Mediasoup workers process telemetry to throttle video and prioritize audio below 300 kbit/s. Local State and Storage Manager with SQLCipher caches consultation notes offline without data loss.",
+    "elements": [
+     "Bandwidth Adaptation Controller",
+     "Media Router Node",
+     "Local State & Storage Manager",
+     "WebRTC Media Client"
+    ],
+    "sensitivity_points": [
+     "Telemetry feedback sensitivity for timely stream degradation",
+     "Local offline storage synchronization reliability upon reconnection"
+    ],
+    "tradeoffs": [
+     "Drastically reducing video resolution to preserve uninterrupted audio and notes"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The architecture specifies only us-central1 in the US with no secondary US cloud region or defined disaster recovery failover. If us-central1 suffers an outage, US services cannot be restored within 1 hour while preserving strict US data residency.",
+    "elements": [
+     "Regional Data Stores",
+     "US Data Store Instance"
+    ],
+    "sensitivity_points": [
+     "Absence of a secondary US failover region in cloud configuration",
+     "Cross-zone backup restoration time for database instances"
+    ],
+    "tradeoffs": [
+     "Strict data residency isolation versus single-region disaster recovery availability"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The E-Prescription Integrator isolates external standards using the EU National Gateway Adapter Component and Jurisdiction Routing Guard. However, adding distinct national protocols may require modifying the monolithic EU gateway adapter rather than deploying an isolated new adapter.",
+    "elements": [
+     "E-Prescription Integrator",
+     "EU National Gateway Adapter Component",
+     "Jurisdiction Routing Guard Component",
+     "FHIR Event Bus"
+    ],
+    "sensitivity_points": [
+     "Modularity of EU National Gateway Adapter for diverse protocols",
+     "Canonical FHIR translation mappings for diverse national payload formats"
+    ],
+    "tradeoffs": [
+     "Single shared EU adapter component versus decoupled per-country micro-adapters"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The Model Orchestrator and Audit and Lineage Logger record model versions alongside inputs and outputs to regional stores. While model version tracing is explicitly provided, zero-downtime runtime model switching and automated rollback mechanisms are not detailed.",
+    "elements": [
+     "AI Inference Service",
+     "Model Orchestrator",
+     "Audit & Lineage Logger",
+     "Regional Data Stores"
+    ],
+    "sensitivity_points": [
+     "Runtime dynamic model reloading without restarting inference service",
+     "Schema consistency for lineage tracking across model versions"
+    ],
+    "tradeoffs": [
+     "Dynamic runtime model hot-swapping versus immutable container deployment stability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Cross-region access requests from EU clinicians to the US Data Store Instance must pass through the Consent & Privacy Enforcement component and Consent Enforcement Proxy. Requests without valid consent are blocked and recorded in append-only audit logs.",
+    "elements": [
+     "Consent Enforcement Proxy",
+     "Consent & Privacy Enforcement",
+     "Audit & Traceability Logger",
+     "Regional Data Stores"
+    ],
+    "sensitivity_points": [
+     "Enforcement proxy interception of all cross-region database queries",
+     "Tamper-evident append-only logging of unauthorized access attempts"
+    ],
+    "tradeoffs": [
+     "Consent scope verification latency versus direct database query execution performance"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Consent withdrawal is verified at query time by the Consent Enforcement Proxy and policy enforcers. However, the architecture omits dedicated analytical or research pipelines, data lakes, or purge mechanisms to verify that previously exported research datasets cease being shared.",
+    "elements": [
+     "Consent & Privacy Enforcement",
+     "Consent Enforcement Proxy",
+     "Regional Data Stores",
+     "AI Inference Service"
+    ],
+    "sensitivity_points": [
+     "Real-time invalidation of consent caches across services",
+     "Absence of asynchronous research data deletion and purging mechanisms"
+    ],
+    "tradeoffs": [
+     "Synchronous query-time consent verification versus asynchronous batch revocation management"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9166666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent & Privacy Enforcement",
+     "Consent Enforcement Proxy",
+     "EU Data Store Instance",
+     "US Data Store Instance",
+     "Audit & Traceability Logger"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Regional Region-Routing / Config Module",
+     "Region Routing Router",
+     "Regional Isolation Enforcer",
+     "EU Data Store Instance",
+     "US Data Store Instance"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Inference Service",
+     "Model Orchestrator",
+     "Audit & Lineage Logger",
+     "Symptom Assessment Logger"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Web/Mobile Frontend App",
+     "Local State & Storage Manager",
+     "Bandwidth Adaptation Controller",
+     "Media Router Node"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patients & Clinicians",
+     "WebRTC Media Client",
+     "Consultation Manager",
+     "WebRTC SFU Video Service",
+     "Signaling & Room Manager",
+     "Media Router Node"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Prescription Coordinator",
+     "FHIR Event Bus",
+     "E-Prescription Integrator",
+     "Jurisdiction Routing Guard Component",
+     "US Pharmacy Adapter Component",
+     "EU National Gateway Adapter Component",
+     "National E-Prescription Networks (EU)",
+     "Pharmacy Systems (US)"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "AI Inference Service",
+     "API Controller",
+     "Model Orchestrator"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "API Client & Sync Engine",
+     "Consent & Privacy Enforcement",
+     "Consent & Policy Enforcer",
+     "Consent Enforcement Proxy"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Region Routing Router",
+     "Regional Isolation Enforcer",
+     "Consent Enforcement Proxy",
+     "EU Data Store Instance",
+     "US Data Store Instance"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Bandwidth Adaptation Controller",
+     "Media Router Node",
+     "WebRTC Media Client"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Audit & Lineage Logger",
+     "Model Orchestrator",
+     "Symptom Assessment Logger"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Event Bus",
+     "FHired Schema Validator",
+     "E-Prescription Integrator",
+     "US Pharmacy Adapter Component",
+     "EU National Gateway Adapter Component",
+     "National E-Prescription Networks (EU)",
+     "Pharmacy Systems (US)"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

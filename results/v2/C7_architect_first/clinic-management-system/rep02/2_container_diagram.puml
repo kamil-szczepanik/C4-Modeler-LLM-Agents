@@ -1,0 +1,46 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patients, "Patients", "Patients who interact with the system for self-service scheduling and viewing lab results.")
+Person(Doctors_Nurses_and_Clinic_Staff, "Doctors, Nurses, and Clinic Staff", "Clinical staff who access the system for patient care and management.")
+Person(Hospital_Administrators, "Hospital Administrators", "Administrative staff managing overall clinic operations.")
+Person(Billing_Specialists___Revenue_Cycle_Managers, "Billing Specialists / Revenue Cycle Managers", "Staff handling billing and financial transactions.")
+
+System_Ext(Payment_Gateway, "Payment Gateway", "External service processing billing transactions.")
+System_Ext(Insurance_Verification_Service, "Insurance Verification Service", "External service used for verifying patient insurance.")
+System_Ext(External_Lab___Imaging_Systems, "External Lab & Imaging Systems", "External systems providing laboratory and imaging data.")
+System_Ext(Public_Health_Registries, "Public Health Registries", "External registries for public health reporting.")
+
+System_Boundary(Clinic_Management_System, "Clinic Management System") {
+    Container(API_Gateway, "API Gateway", "Nginx / Envoy", "Handles entry routing, TLS termination, and rate limiting.")
+    Container(Identity___Access_Management, "Identity & Access Management", "Keycloak / OAuth2 Proxy", "Handles MFA and RBAC for system security.")
+    Container(Core_Services, "Core Services", "Spring Boot / Java", "Microservices for patient registration, scheduling, EMR with audit trails, and billing.")
+    Container(Integration_Service, "Integration Service", "Node.js / Apache Camel", "Handles HL7 FHIR transformations and external communications.")
+    Container(Message_Broker, "Message Broker", "Kafka / RabbitMQ", "Asynchronous messaging with Dead Letter Queues (DLQ) for billing retries and event-driven workflows.")
+    ContainerDb(Data_Tier, "Data Tier", "PostgreSQL", "Regional active-passive transactional database with column-level AES-256 encryption.")
+    Container(Storage, "Storage", "WORM Object Storage", "Provides 10-year audit log retention for regulatory compliance.")
+}
+
+Rel(Patients, API_Gateway, "Accesses system features via self-service.", "HTTPS / gRPC over TLS")
+Rel(Doctors_Nurses_and_Clinic_Staff, API_Gateway, "Accesses clinical and administrative workflows.", "HTTPS / gRPC over TLS")
+Rel(Hospital_Administrators, API_Gateway, "Accesses system management tools.", "HTTPS / gRPC over TLS")
+Rel(Billing_Specialists___Revenue_Cycle_Managers, API_Gateway, "Accesses billing functions.", "HTTPS / gRPC over TLS")
+
+Rel(API_Gateway, Identity___Access_Management, "Authenticates users and enforces authorization.", "OAuth2 / OpenID Connect")
+Rel(API_Gateway, Core_Services, "Routes internal API requests.", "gRPC over mTLS")
+Rel(API_Gateway, Integration_Service, "Routes integration requests.", "gRPC over mTLS")
+
+Rel(Core_Services, Data_Tier, "Persists and queries transactional data.", "SQL over encrypted connections")
+Rel(Core_Services, Message_Broker, "Publishes and consumes asynchronous billing and event messages.", "AMQP / Kafka with client-side envelope encryption over mTLS")
+Rel(Core_Services, Storage, "Archives audit logs for long-term retention.", "Encrypted Object Storage Protocol")
+
+Rel(Integration_Service, External_Lab___Imaging_Systems, "Exchanges health data.", "HL7 FHIR APIs over HTTPS")
+
+Rel(Clinic_Management_System, Payment_Gateway, "Connects for billing transactions.", "REST over TLS 1.3")
+Rel(Clinic_Management_System, Insurance_Verification_Service, "Integrates for verifying insurance.", "REST and OAuth2 over HTTPS")
+Rel(Clinic_Management_System, Public_Health_Registries, "Integrates for public health reporting.", "REST and OAuth2 over HTTPS")
+
+@enduml

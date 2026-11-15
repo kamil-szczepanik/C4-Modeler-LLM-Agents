@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(Core_Services_Container, "Core Services Container", "External system container interacting with the database")
+
+Container_Boundary(Database, "Database") {
+    Component(Connection_Pooler, "Connection Pooler", "PgBouncer", "Manages connection pools and routing targets to prevent thread exhaustion.")
+    Component(Relational_Engine_Primary, "Relational Engine - Primary", "PostgreSQL", "Primary relational storage providing transactional storage with Write-Ahead Logging (WAL) for durability and point-in-time recovery.")
+    Component(Relational_Engine_Read_Replica, "Relational Engine - Read Replica", "PostgreSQL", "Read replica relational storage handling read queries to separate workloads and improve performance.")
+    Component(Replication_Manager, "Replication Manager", "Patroni/Stolon", "Automates High Availability and failover across EU availability zones.")
+    Component(Audit_Container, "Audit Container", "Go", "Streams and processes audit logs (pgaudit) for GDPR and compliance adherence.")
+}
+
+Rel(Core_Services_Container, Connection_Pooler, "Read queries [TCP/mTLS] routed to Read Replica", "TCP/mTLS")
+Rel(Core_Services_Container, Connection_Pooler, "Writes and transactions [TCP/mTLS] routed to Primary", "TCP/mTLS")
+Rel(Connection_Pooler, Relational_Engine_Read_Replica, "Routes read queries", "TCP")
+Rel(Connection_Pooler, Relational_Engine_Primary, "Routes writes and transactions", "TCP")
+Rel(Replication_Manager, Relational_Engine_Primary, "Manages HA and failover", "Internal")
+Rel(Replication_Manager, Relational_Engine_Read_Replica, "Manages HA and failover", "Internal")
+Rel(Relational_Engine_Primary, Audit_Container, "Stream audit logs (pgaudit)", "mTLS sidecar")
+
+@enduml

@@ -1,0 +1,314 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01, R-02, and R-03 through the 'React Claims Single Page App', 'Claim Management Component' in the Adjuster Backend, and the 'Migration Policy Engine' in APIM for phased claim-type migration.",
+   "performance_efficiency": "Requirement R-05 is directly addressed by the 'Read-Side Query Component' using CQRS local projections, isolating adjuster read latencies under 2 seconds from the 5-second mainframe response times. Asynchronous synchronization via 'Azure Service Bus' handles background updates.",
+   "compatibility": "Compatibility constraints are met by the 'Mainframe Integration Adapter' and 'Transformation & Mapping Engine', which bridge modern formats with the legacy COBOL/DB2 mainframe over mTLS without requiring invasive mainframe modifications. Entra ID handles AD compatibility.",
+   "usability": "The 'React Claims Single Page App' provides tailored interfaces for both policyholders/brokers and claims adjusters. However, serving both public brokers and internal adjusters from a single UI container slightly blurs interface-specific workflows.",
+   "reliability": "The 'Reconciliation Engine' compares DB2 audit logs with Cosmos DB, and 'Dead-Letter Manager Function' mitigates message loss (R-04). However, explicit deduplication and idempotency controls inside the 'Sync Orchestrator Function' are only briefly touched upon.",
+   "security": "Requirement R-07 is comprehensively fulfilled via 'MSAL.js Authentication Module' and 'Security & Context Middleware' integrating with Entra ID. Infrastructure security is reinforced by mTLS 1.3, Private Link, and 'Azure Key Vault' HSM-backed secret management.",
+   "maintainability": "Requirement R-06 is well supported: dynamic rule flags stored in 'State Store' and evaluated by 'Migration Policy Engine' and 'Control Dashboard Backend' allow switching claim types back to the mainframe well within one day without redeployments.",
+   "portability": "The hybrid environment (on-premise and Azure West Europe) is correctly realized using Container Apps and hybrid networking. Reliance on proprietary Azure PaaS services (Cosmos DB, Azure Service Bus) limits multi-cloud portability, though it fits the stated constraints."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture explicitly incorporates a CQRS pattern with a local Read-Side Query Component in the Adjuster Backend, isolating screen reads from slow mainframe synchronous calls.",
+    "elements": [
+     "React Claims Single Page App",
+     "Read-Side Query Component",
+     "Azure Container Apps (Adjuster Backend)",
+     "Sync Orchestrator Function"
+    ],
+    "sensitivity_points": [
+     "Projection data freshness depends on asynchronous sync latency"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of query views traded for sub-2-second response times"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Submissions are ingested asynchronously through API Management and buffered in Azure Service Bus, absorbing traffic spikes without forcing immediate load onto the legacy mainframe batch window.",
+    "elements": [
+     "Azure API Management / Migration Router",
+     "Claim Event Topic",
+     "Sync Orchestrator Function",
+     "Azure Service Bus & Azure Functions"
+    ],
+    "sensitivity_points": [
+     "Queue capacity and message throughput thresholds in Azure Service Bus"
+    ],
+    "tradeoffs": [
+     "Decoupled asynchronous ingestion traded for delayed persistence to mainframe"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Online claims are buffered persistently in Azure Service Bus during the mainframe nightly batch window, allowing normal submission and forwarding after the batch window closes.",
+    "elements": [
+     "Azure API Management / Migration Router",
+     "Azure Service Bus & Azure Functions",
+     "Claim Event Topic",
+     "Sync Orchestrator Function"
+    ],
+    "sensitivity_points": [
+     "Message retention duration configured on Service Bus during extended batch outages"
+    ],
+    "tradeoffs": [
+     "Accepting submissions without immediate mainframe verification"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Dead-letter queues capture failed sync attempts, and the Reconciliation Engine compares Cosmos DB state with DB2 logs; however, automated two-way compensation logic requires detailed implementation.",
+    "elements": [
+     "Sync Orchestrator Function",
+     "Dead-Letter Manager Function",
+     "Reconciliation Engine",
+     "State Store",
+     "Mapping Audit Publisher"
+    ],
+    "sensitivity_points": [
+     "Accuracy of DB2 audit log integration for automated drift detection"
+    ],
+    "tradeoffs": [
+     "Asynchronous reconciliation complexity traded for non-blocking transaction processing"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Dynamic routing in Azure API Management via the Migration Policy Engine and Migration Control Service enables instant claim-type switching and rollbacks without redeploying applications.",
+    "elements": [
+     "Migration Policy Engine",
+     "Migration API Controller",
+     "State Store",
+     "Transformation & Mapping Engine",
+     "Azure API Management / Migration Router"
+    ],
+    "sensitivity_points": [
+     "Dynamic routing rule cache refresh intervals in API Management"
+    ],
+    "tradeoffs": [
+     "Centralized routing overhead traded for rapid one-day switch-back capability"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Strangler Fig implementation cleanly separates frontend clients from the backend via APIM, allowing retirement of the Mainframe Integration Adapter without modifying user interfaces.",
+    "elements": [
+     "Azure Static Web Apps / React Claims Web App",
+     "Azure API Management / Migration Router",
+     "Azure Container Apps (Adjuster Backend)",
+     "Migration Control Service"
+    ],
+    "sensitivity_points": [
+     "Completeness of data migration to Azure Cosmos DB prior to decommissioning"
+    ],
+    "tradeoffs": [
+     "Maintaining dual routing adapters during migration traded for zero UI rework"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Authentication and RBAC are enforced via MSAL.js, Entra ID, and Security & Context Middleware, but domain-level object tenancy validation rules for brokers are not explicitly detailed.",
+    "elements": [
+     "Security & Context Middleware",
+     "MSAL.js Authentication Module",
+     "Active Directory / Entra ID",
+     "Audit & Compliance Logger"
+    ],
+    "sensitivity_points": [
+     "Propagation of tenant/broker authorization claims across API boundaries"
+    ],
+    "tradeoffs": [
+     "Granular authorization checks at service layers add processing overhead"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Disabling the user in Entra ID revokes cloud access quickly, but the model does not specify an automated mechanism to invalidate active mainframe sessions or revoked credentials within 15 minutes.",
+    "elements": [
+     "Active Directory / Entra ID",
+     "Access Control Component",
+     "Security & Context Middleware",
+     "Mainframe Secure Connector"
+    ],
+    "sensitivity_points": [
+     "JWT token lifetimes and synchronization frequency between Entra ID and mainframe RACF/security"
+    ],
+    "tradeoffs": [
+     "Short-lived access tokens require frequent re-authentication overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Azure Container Apps (Mainframe Integration Adapter)",
+     "Azure Service Bus & Azure Functions (Integration & Sync Service)"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Legacy Mainframe",
+     "Azure Container Apps (Mainframe Integration Adapter)"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Azure Container Apps (Mainframe Integration Adapter)",
+     "Transformation & Mapping Engine"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Policyholder / Broker",
+     "Azure API Management / Migration Router",
+     "Azure Static Web Apps / React Claims Web App",
+     "React Claims Single Page App"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjuster",
+     "Azure Static Web Apps / React Claims Web App",
+     "React Claims Single Page App",
+     "Azure Container Apps (Adjuster Backend)",
+     "Claim Management Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Azure API Management / Migration Router",
+     "Migration Policy Engine",
+     "Azure App Service & Azure Cosmos DB (Migration Control Service)",
+     "Migration API Controller",
+     "State Store"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Azure Service Bus & Azure Functions (Integration & Sync Service)",
+     "Claim Event Topic",
+     "Sync Orchestrator Function",
+     "Dead-Letter Manager Function",
+     "Reconciliation Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Read-Side Query Component",
+     "Azure Container Apps (Adjuster Backend)"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Migration Policy Engine",
+     "Azure App Service & Azure Cosmos DB (Migration Control Service)",
+     "Control Dashboard Backend",
+     "State Store"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Active Directory / Entra ID",
+     "MSAL.js Authentication Module",
+     "Security & Context Middleware"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

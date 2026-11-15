@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Message Broker container
+
+System_Ext(order_checkout_service, "Order & Checkout Service", "External container")
+System_Ext(downstream_services, "Review & Notification Service / Recommendation Service / Catalog Service", "External containers")
+
+Container_Boundary(message_broker, "Message Broker") {
+    Component(event_publisher, "Event Publisher", "Amazon SNS", "Publishes order lifecycle events via HTTPS (AWS SDK).")
+    Component(event_queue_manager, "Event Queue Manager", "Amazon SQS", "Delivers queued events via HTTP long-polling and manages queues.")
+    Component(dead_letter_queue_manager, "Dead Letter Queue Manager", "Amazon SQS DLQ", "Routes unprocessable messages after max retry attempts via AWS SQS redrive policy.")
+    Component(event_payload_encryption_component, "Event Payload Encryption Component", "AWS KMS", "Encrypts and decrypts sensitive message payloads via AWS KMS API.")
+    Component(schema_validator, "Schema Validator", "JSON Schema", "Validates event structures and payloads.")
+    Component(message_routing_filtering_router, "Message Routing & Filtering Router", "Amazon SNS Filter Policies", "Evaluates filter attributes during message broadcast and forwards matched events.")
+}
+
+Rel(order_checkout_service, event_publisher, "Publishes order lifecycle events", "HTTPS (AWS SDK)")
+Rel(event_publisher, message_routing_filtering_router, "Evaluates filter attributes during message broadcast", "Amazon SNS")
+Rel(message_routing_filtering_router, event_queue_manager, "Forwards matched events to targeted SQS queues")
+Rel(event_queue_manager, dead_letter_queue_manager, "Routes unprocessable messages after max retry attempts", "AWS SQS redrive policy")
+Rel(event_queue_manager, downstream_services, "Delivers queued events", "HTTP long-polling (AWS SDK)")
+Rel(event_publisher, event_payload_encryption_component, "Encrypts and decrypts sensitive message payloads", "AWS KMS API")
+Rel(event_queue_manager, event_payload_encryption_component, "Encrypts and decrypts sensitive message payloads", "AWS KMS API")
+
+@enduml

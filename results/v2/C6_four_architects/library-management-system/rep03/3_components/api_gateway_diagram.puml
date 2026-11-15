@@ -1,0 +1,42 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the API Gateway container
+
+Person(web_app, "Web Application", "React, TypeScript client")
+Person(kiosk_app, "Self-Service Kiosk App", "Electron, C# WPF client")
+System_Ext(identity_provider, "Identity Provider", "External OIDC/OAuth2 provider")
+System_Ext(redis, "Distributed Cache (Redis)", "Provides fast, distributed state storage for rate-limiting counters")
+System_Ext(core_domain_service, "Core Domain Service", "Java, Spring Boot")
+System_Ext(search_service, "Search Service", "Elasticsearch")
+
+Container_Boundary(api_gateway, "API Gateway") {
+    Component(ssl_module, "SSL Termination Module", "Kong on Nginx", "Terminates incoming SSL/TLS connections and handles HTTPS traffic.")
+    Component(geo_module, "Geo-Filtering & Compliance Module", "Lua / Kong Plugin", "Enforces strict EU-only data residency constraints and filters traffic based on geography.")
+    Component(ip_module, "IP Whitelisting & Threat Protection Plugin", "Lua / Kong Plugin", "Provides threat protection and validates IP whitelisting for incoming traffic.")
+    Component(auth_filter, "Authentication & Authorization Filter", "JWT / OAuth2", "Validates tokens and enforces stateless token-based authentication at the edge.")
+    Component(routing_engine, "Routing Engine", "Lua / Kong Router", "Powers internal routing and matches incoming routes to downstream services.")
+    Component(protocol_translation, "Protocol Translation Module", "Kong / Internal IPC", "Translates client requests and routes business payloads to downstream microservices.")
+    Component(request_transformation, "Request Transformation Component", "Kong Plugin", "Transforms request payloads and structures as needed.")
+    Component(rate_limiting, "Rate Limiting & Throttling Component", "Kong / Redis", "Tracks rate-limit counters and throttles excessive requests.")
+    Component(load_balancing, "Load Balancing & Upstream Circuit Breaker", "Kong Upstream", "Ensures resilience and sub-800ms responses via load balancing and circuit breaking.")
+    Component(api_versioning, "API Versioning & Deprecation Filter", "Kong Plugin", "Manages API versioning and deprecation policies.")
+    Component(metrics_exporter, "Metrics & Logging Exporter", "Kong Plugin", "Exports metrics and access logs for monitoring.")
+}
+
+Rel(web_app, ssl_module, "Makes API requests", "HTTPS (REST/JSON)")
+Rel(kiosk_app, ssl_module, "Makes API requests", "HTTPS (REST/JSON)")
+
+Rel(ssl_module, geo_module, "Passes decrypted traffic", "Internal IPC")
+Rel(geo_module, ip_module, "Passes filtered traffic", "Internal IPC")
+Rel(ip_module, routing_engine, "Passes validated traffic", "Internal IPC")
+Rel(routing_engine, protocol_translation, "Forwards matched routes", "Internal IPC")
+
+Rel(rate_limiting, redis, "Tracks rate-limit counters", "RESP over TLS")
+Rel(auth_filter, identity_provider, "Validates tokens", "OAuth2/OIDC")
+
+Rel(protocol_translation, core_domain_service, "Routes translated business payloads", "gRPC over TLS")
+Rel(protocol_translation, search_service, "Routes search queries", "gRPC over TLS")
+
+@enduml

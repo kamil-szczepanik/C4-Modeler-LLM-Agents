@@ -1,0 +1,326 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 2,
+   "security": 3,
+   "maintainability": 3,
+   "portability": 3
+  },
+  "mean": 2.875,
+  "justifications": {
+   "functional_suitability": "Scoring Engine (R-01), Case Management & Admin UI (R-02) and ML Runtime Evaluator hot-reloading (R-03) exist. Gaps: no rules engine or model registry for updates, no explicit approve/decline/review routing, and no case store in the L2 model (Aurora appears only at L1).",
+   "performance_efficiency": "Embedded ML runtimes, memory-mapped model files, gRPC/Protobuf, a stateless Fargate Scoring Engine, and asynchronous batched S3 audit flushes support 50 ms P99. Gaps: no autoscaling or caching specifics, no feature store or lookup design, and the extra hop through API Gateway/Ingestion Service.",
+   "compatibility": "External Payment Gateway integrates via HTTPS/REST with OpenAPI validation, gRPC/Protobuf internally, and OIDC for Cognito. Gaps: no named payment standards (ISO 8583, 3-D Secure), inconsistent protocols between levels (gRPC/JSON vs REST), and no gateway contract details.",
+   "usability": "Fraud Analysts get a Case Management & Admin UI with an SPA Frontend, a BFF and Cognito RBAC. Gaps: no explanation or decision-evidence view, no case workflow components, an undefined 'Downstream Services' target, and the analyst-to-Aurora link at L1 is inconsistent.",
+   "reliability": "The circuit breaker metrics in Telemetry & Circuit Breaker Manager, SQS DLQs and stateless Fargate help. But there is no fail-open fallback for R-07, no multi-AZ or redundancy statement, no recovery design, and a single-region deployment. Circuit breaking is only telemetry; the fail-open decision path is missing.",
+   "security": "S3 Object Lock compliance mode with chained audit logs, Cognito RBAC, OpenAPI validation and TLS cover integrity, audit and authentication. Gaps: no tokenization or encryption service (R-05), no KMS, no PCI network segmentation, no card-number masking for analysts, and no WAF.",
+   "maintainability": "Containers are clearly decomposed (Ingestion, Scoring Engine, UI, S3, SQS) and the BFF is separated from the SPA. Gaps: the L3 'AWS ECS with Fargate' diagram wrongly nests containers, there are inconsistent levels and technologies (Rust/Go/Java undecided), thin components, and no rules or model management.",
+   "portability": "Containerized Fargate workloads with Go/Rust and gRPC are reasonably portable and fit the AWS eu-west-1 target. But heavy reliance on managed AWS services (S3 Object Lock, SQS, Cognito) with no abstraction layers, and the technology choices are left undecided."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 3,
+   "PERF-02": 2,
+   "SEC-01": 2,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.375,
+  "by_quality_attribute": {
+   "Performance": 2.5,
+   "Availability": 2.5,
+   "Modifiability": 2.5,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "API Gateway / Ingestion Service",
+     "Scoring Engine",
+     "AWS ECS with Fargate",
+     "ML Runtime Evaluator"
+    ],
+    "sensitivity_points": [
+     "Extra hop gRPC between ingestion and scoring",
+     "No feature store or cache shown",
+     "Autoscaling for 3,000 rps not specified"
+    ],
+    "tradeoffs": [
+     "Embedded models give low latency but couple scaling with model size",
+     "Duplicate gateway layers add latency"
+    ],
+    "justification": "Stateless Fargate scoring with embedded ML and Protobuf plausibly meets 50 ms. But no scaling, feature lookup or load-test mechanism is shown, and the L1/L2 ingress is inconsistent."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "elements": [
+     "Case Management & Admin UI",
+     "Amazon Aurora Serverless",
+     "Scoring Engine",
+     "BFF Container"
+    ],
+    "sensitivity_points": [
+     "L1 shows Aurora shared by scoring and analysts",
+     "L2 has no case database",
+     "Analyst queries compete with scoring resources"
+    ],
+    "tradeoffs": [
+     "Shared store is cheaper but risks interference",
+     "Serverless scaling lag vs cost"
+    ],
+    "justification": "The UI is separated, but the case store is missing at L2 and L1 has scoring writing to the same Aurora that analysts query. No read replica or isolation is shown. Interference is unaddressed."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "AWS API Gateway",
+     "Scoring Engine",
+     "Telemetry & Circuit Breaker Manager",
+     "Amazon SQS"
+    ],
+    "sensitivity_points": [
+     "Fallback decision path is undefined",
+     "Circuit breaker only reports metrics",
+     "Fallback decisions need auditing"
+    ],
+    "tradeoffs": [
+     "Fail-open reduces blocking but raises fraud exposure",
+     "Redundant tasks raise cost"
+    ],
+    "justification": "Fargate restarts and a circuit breaker are mentioned, but no fallback decision path (static rules or default approve) or audit of fallback decisions exists. The 1-minute bound is not achieved by explicit mechanism."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Scoring Engine",
+     "Amazon S3 with Object Lock",
+     "Amazon SQS"
+    ],
+    "sensitivity_points": [
+     "Asynchronous batching of audit logs",
+     "Local buffering durability before flush",
+     "DLQ usage for audit failures not stated"
+    ],
+    "tradeoffs": [
+     "Async audit protects latency but risks loss on crash",
+     "Batching reduces cost but delays durability"
+    ],
+    "justification": "Async batched flush to S3 and SQS DLQ decouple decisions from the audit store. But the durable buffering of unflushed records is not specified, so loss on a scoring crash is possible."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "ML Runtime Evaluator",
+     "Scoring Engine",
+     "Amazon S3 with Object Lock"
+    ],
+    "sensitivity_points": [
+     "Hot reload of model weights",
+     "No model registry or versioning shown",
+     "Rollback within 5 minutes not defined"
+    ],
+    "tradeoffs": [
+     "In-process hot reload is fast but risks unvalidated models",
+     "Fewer components reduces operations load"
+    ],
+    "justification": "Zero-downtime hot-reload is explicit, and model versions are persisted in audit. But there is no model registry, deployment pipeline, canary or rollback mechanism, so the rollback measure is unaddressed."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "elements": [
+     "Case Management & Admin UI",
+     "Scoring Engine",
+     "ML Runtime Evaluator"
+    ],
+    "sensitivity_points": [
+     "No rule engine or rule store shown",
+     "Rule versioning and applied-rule logging absent",
+     "UI claims rule updates without backend path"
+    ],
+    "tradeoffs": [
+     "Embedded rules are fast but harder to change at runtime",
+     "Analyst-edited rules need governance"
+    ],
+    "justification": "The SPA description mentions updating fraud rules, but no rule engine, store, distribution path, or recording of applied rules exists. Rules are only mentioned in the Fargate description."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "elements": [
+     "AWS Cognito",
+     "BFF Container",
+     "Amazon CloudWatch",
+     "Amazon Aurora Serverless"
+    ],
+    "sensitivity_points": [
+     "No tokenization service shown",
+     "Anomaly detection and alerting on analyst access absent",
+     "Analysts access Aurora directly in L1"
+    ],
+    "tradeoffs": [
+     "Managed Cognito reduces ops but offers limited detection",
+     "CloudWatch logs aid detection but need rules"
+    ],
+    "justification": "Cognito RBAC and CloudWatch logs help, but no tokenization or card-data isolation, no analyst anomaly alerting, and L1 shows analysts hitting Aurora directly. Clear-text unreachability is unproven."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Amazon S3 with Object Lock",
+     "Audit Log Storage Component",
+     "Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Explanation content not stated in audit records",
+     "Glacier retrieval and query tooling",
+     "Hash chain verification process"
+    ],
+    "tradeoffs": [
+     "Glacier lowers cost but slows retrieval",
+     "Compliance-mode WORM prevents deletion but blocks corrections"
+    ],
+    "justification": "Object Lock WORM with chained logs and 7-year retention gives tamper-evident storage, with inputs and model versions persisted. But explanation storage, indexing and retrieval tooling for the one-day answer are not defined."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "partial",
+   "R-02": "partial",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "none",
+   "R-06": "partial",
+   "R-07": "partial"
+  },
+  "coverage": 0.45454545454545453,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "API Gateway / Ingestion Service",
+     "Amazon S3 with Object Lock",
+     "AWS Cognito"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Amazon S3 with Object Lock",
+     "Audit Log Storage Component",
+     "Scoring Engine"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "AWS ECS with Fargate",
+     "Standard Queues",
+     "Amazon S3 with Object Lock"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "AWS ECS with Fargate",
+     "AWS Cognito"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Scoring Engine",
+     "ML Runtime Evaluator",
+     "API Gateway / Ingestion Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Case Management & Admin UI",
+     "Single Page Application (SPA) Frontend",
+     "Backend-For-Frontend (BFF) Container",
+     "AWS Cognito"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "ML Runtime Evaluator"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Scoring Engine",
+     "Ingestion Handler",
+     "ML Runtime Evaluator",
+     "Telemetry & Circuit Breaker Manager"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "none",
+    "elements": []
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Amazon S3 with Object Lock",
+     "Audit Log Storage Component",
+     "Scoring Engine"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Telemetry & Circuit Breaker Manager",
+     "Amazon SQS",
+     "DLQs and Quarantine Queues"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

@@ -1,0 +1,36 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Library Management System
+
+Person(LibraryPatron, "Library Patron", "Library user who searches for and borrows physical and digital items.")
+Person(LibrarianStaff, "Librarian / Staff", "Library staff member who catalogues items and manages circulation.")
+
+System_Ext(PaymentGateway, "Payment Gateway", "External system that processes fines with tokenized payments.")
+System_Ext(NotificationService, "Notification Service", "External service that sends due date reminders.")
+System_Ext(DigitalContentProvider, "Digital Content Provider", "External provider that supplies e-books and digital media.")
+
+System_Boundary(LibraryManagementSystem, "Library Management System") {
+    Container(WebApp, "Web Application", "React, Nginx", "Powers self-service portals for low latency.")
+    Container(APIGateway, "API Gateway", "Envoy", "Handles high-performance routing, mTLS termination, and tracing.")
+    Container(CoreDomainMicroservice, "Core Domain Microservice", "Java 17, Spring Boot", "Delivers reliable core domain circulation logic.")
+    Container(SearchMicroservice, "Search Microservice", "Elasticsearch", "Satisfies R-05 (<800ms P99 search) via dedicated indexing.")
+    ContainerDb(Database, "Database", "PostgreSQL", "Stores relational data with enforced EU data residency.")
+    Container(AsyncWorker, "Async Worker", "Python, Celery", "Manages asynchronous workloads and event-driven updates.")
+    Container(MessageBroker, "Message Broker", "RabbitMQ", "Facilitates asynchronous catalog indexing events and background jobs.")
+    Container(ObservabilityStack, "Observability Stack", "Prometheus, Grafana, OpenTelemetry Collector", "Centralizes tracing and metrics.")
+    Container(SecureVault, "Secure Vault", "HashiCorp Vault", "Securely injects dynamic runtime secrets and TLS certificates.")
+}
+
+Rel(LibraryPatron, WebApp, "Accesses self-service portal", "HTTPS")
+Rel(LibrarianStaff, WebApp, "Accesses management portal", "HTTPS")
+Rel(WebApp, APIGateway, "Forwards client requests", "HTTPS")
+Rel(APIGateway, CoreDomainMicroservice, "Routes domain requests with RBAC", "mTLS, REST/JSON")
+Rel(APIGateway, SearchMicroservice, "Routes search queries", "mTLS, REST/JSON")
+Rel(CoreDomainMicroservice, Database, "Reads and writes relational data", "JDBC")
+Rel(CoreDomainMicroservice, MessageBroker, "Publishes asynchronous catalog indexing events", "AMQPS")
+Rel(AsyncWorker, MessageBroker, "Consumes background payment and notification jobs", "AMQPS")
+Rel(ObservabilityStack, CoreDomainMicroservice, "Scrapes metrics and telemetry", "Prometheus/OpenTelemetry")
+
+@enduml

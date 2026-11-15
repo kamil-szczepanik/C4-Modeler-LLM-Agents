@@ -1,0 +1,334 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 2
+  },
+  "mean": 3.375,
+  "justifications": {
+   "functional_suitability": "Catalog Service (CatalogController, SearchService), Order Controller, Payment Service and Recommendation Service cover browse, search, checkout and recommendations. Reviews/ratings (R-03) have no container or component, and there is no cart component, user or analytics service for Authors.",
+   "performance_efficiency": "CloudFront SPA, lazy loading, ElastiCache Redis, OpenSearch, DynamoDB cached scores, SQS/SNS async processing and API Gateway rate limiting support R-05/R-06. No explicit autoscaling or load-test targets, and no read replicas for RDS.",
+   "compatibility": "Shipping Integration Service and Payment Service integrate external REST APIs with circuit breakers; PricingService and the localization component handle multi-currency. Notifications are decoupled via SNS/SQS. No anti-corruption layer or adapter abstraction for multiple shipping providers, and the interfaces are not standardised.",
+   "usability": "A responsive SPA (Routing & View Manager, UI Component Library) serves customers, admins and authors, and the localization component handles locale. There are no dedicated admin or author interfaces or reporting components, and no accessibility mechanisms.",
+   "reliability": "Circuit breakers in Payment Service and Shipping Integration Service, SQS decoupling, Fallback Handler Component, and DynamoDB Global Tables across regions support 99.95%. Multi-AZ/multi-region deployment for RDS and the services is not shown, and backup/recovery is unspecified.",
+   "security": "WAF, JWT Authentication & Authorization Filter, Scope & RBAC Enforcement Component, mTLS via App Mesh, TLS 1.3, admin MFA and rate limiting map to OWASP. Audit logging is only implied via X-Ray/CloudWatch, and GDPR/CCPA mechanisms (consent, erasure, data residency) and secrets management are absent.",
+   "maintainability": "Clear service decomposition with layered components (controllers, repositories, SearchService, PricingService), separate admin controller, and an observability component. The merged 'Order Management & Payment Integration Containers' blurs responsibilities, and there is no review service.",
+   "portability": "The design is tightly bound to AWS managed services (API Gateway, DynamoDB, SQS, App Mesh, OpenSearch). Three regions are targeted only via DynamoDB Global Tables. There is no containerisation, IaC or abstraction layer for replacing infrastructure."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 2,
+   "MOD-01": 3,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 1
+  },
+  "responsiveness_index": 0.46875,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 2.5,
+   "Modifiability": 3.5,
+   "Security": 2.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "SPA",
+     "API Gateway",
+     "Catalog Service",
+     "Amazon ElastiCache (Redis)",
+     "Amazon OpenSearch"
+    ],
+    "sensitivity_points": [
+     "CDN caching of catalogue responses is not specified",
+     "RDS scaling and autoscaling are not described"
+    ],
+    "tradeoffs": [
+     "Caching improves latency but risks stale prices"
+    ],
+    "justification": "CloudFront SPA, lazy loading, OpenSearch, Redis and rate limiting help. But there is no autoscaling, read replicas or API caching, and the Catalog Service is a single container. Meeting 2s at 10x load is unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "elements": [
+     "Recommendation Service",
+     "Amazon SQS",
+     "Model Ingestion Worker",
+     "Amazon DynamoDB",
+     "Fallback Handler Component"
+    ],
+    "sensitivity_points": [
+     "Bulk DynamoDB writes can consume capacity for reads",
+     "Catalog and Recommendation isolated by separate stores"
+    ],
+    "tradeoffs": [
+     "Async precompute gives fast reads but stale recommendations"
+    ],
+    "justification": "Offline ingestion is decoupled via SQS from cached-score reads, and recommendations use a separate service and DynamoDB, isolating browsing. The fallback handler helps. Capacity isolation on bulk recompute is not explicit."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "elements": [
+     "Order Management & Payment Integration Containers",
+     "Shipping Integration Service",
+     "Shipping Provider API",
+     "AWS SQS"
+    ],
+    "sensitivity_points": [
+     "Shipping call is synchronous with circuit breaker",
+     "No retry queue for shipping requests"
+    ],
+    "tradeoffs": [
+     "Circuit breakers fail fast but do not defer work"
+    ],
+    "justification": "Shipping is described as asynchronous at context level, but the container and component levels show a synchronous call with circuit breakers. No queued deferral, retry or dead-letter mechanism for shipping is shown, so orders may fail."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Amazon DynamoDB",
+     "Amazon RDS (PostgreSQL)",
+     "API Gateway",
+     "SPA"
+    ],
+    "sensitivity_points": [
+     "RDS has no cross-region replica or failover defined",
+     "No Route 53 or global routing defined"
+    ],
+    "tradeoffs": [
+     "Multi-region active-active increases cost and consistency complexity"
+    ],
+    "justification": "Only DynamoDB Global Tables is multi-region. The architecture shows no regional deployment, DNS failover, or RDS/OpenSearch/order data replication, so orders could be lost and 99.95% is not assured."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "PricingService",
+     "API Gateway",
+     "Request Transformation & Localization Component",
+     "Payment Service",
+     "Amazon RDS (PostgreSQL)"
+    ],
+    "sensitivity_points": [
+     "Currency handling spread across gateway, pricing and payment",
+     "Payment Gateway JPY support and rounding rules"
+    ],
+    "tradeoffs": [
+     "Centralised pricing eases change but couples checkout to catalog"
+    ],
+    "justification": "PricingService and localization injection centralise currency logic, but checkout and payment currency handling is not modelled, and the catalogue is a separate service. Changes likely touch several components beyond configuration."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "elements": [
+     "Scoring Engine",
+     "Recommendation API Router",
+     "Recommendation Service",
+     "Data Access Repository"
+    ],
+    "sensitivity_points": [
+     "Stored DynamoDB score schema coupling to algorithm",
+     "Ingestion worker tied to model format"
+    ],
+    "tradeoffs": [
+     "Encapsulation aids replacement but limits shared data reuse"
+    ],
+    "justification": "Recommendations are an isolated service with a distinct Scoring Engine behind a stable API router, so swapping the algorithm stays local. The ingestion worker and score schema may also change, but all remain inside the recommendation container."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "API Gateway",
+     "AWS WAF",
+     "Catalog Service",
+     "SearchService",
+     "Amazon OpenSearch",
+     "Edge Observability & Telemetry Component"
+    ],
+    "sensitivity_points": [
+     "WAF rules cover SQLi and XSS only if configured",
+     "Reviews service is absent from the model"
+    ],
+    "tradeoffs": [
+     "WAF filtering adds latency and possible false positives"
+    ],
+    "justification": "WAF, JWT, mTLS and telemetry give edge blocking and logging. But no reviews component exists, input validation and parameterisation are not described, and there is no output encoding or CSP, so injection mitigation is only partial."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 1,
+    "elements": [
+     "Amazon RDS (PostgreSQL)",
+     "Amazon DynamoDB",
+     "Order Management & Payment Integration Containers"
+    ],
+    "sensitivity_points": [
+     "No data inventory or deletion propagation exists",
+     "Backups, logs and analytics copies hold personal data"
+    ],
+    "tradeoffs": [
+     "Order retention obligations conflict with erasure requests"
+    ],
+    "justification": "No privacy or deletion mechanism, customer data service, deletion workflow or audit trail is modelled. Personal data is spread across stores and events with no way to verify erasure within 30 days."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "none",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.6818181818181818,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Online Bookstore System",
+     "API Gateway",
+     "Amazon DynamoDB"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "PricingService",
+     "Amazon ElastiCache (Redis)",
+     "Amazon RDS (PostgreSQL)",
+     "Request Transformation & Localization Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Integration Service",
+     "Shipping Provider API",
+     "Order Management & Payment Integration Containers"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog Service",
+     "CatalogController",
+     "SearchService",
+     "Amazon OpenSearch",
+     "Amazon RDS (PostgreSQL)"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Order Management & Payment Integration Containers",
+     "Order Controller",
+     "Payment Service",
+     "Payment Gateway"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "none",
+    "elements": []
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Service",
+     "Scoring Engine",
+     "Model Ingestion Worker",
+     "Amazon DynamoDB",
+     "Amazon SQS",
+     "Recommendation API Router"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Amazon ElastiCache (Redis)",
+     "AWS SQS",
+     "Amazon DynamoDB",
+     "Routing & Rate Limiting Component",
+     "Amazon OpenSearch"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Single Page Application (SPA)",
+     "Routing & View Manager",
+     "Amazon ElastiCache (Redis)",
+     "Amazon OpenSearch"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Order Management & Payment Integration Containers",
+     "Payment Service",
+     "Shipping Integration Service",
+     "Amazon DynamoDB",
+     "Fallback Handler Component",
+     "Amazon SQS"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "Authentication & Authorization Filter",
+     "Scope & RBAC Enforcement Component",
+     "Routing & Rate Limiting Component",
+     "Customer"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

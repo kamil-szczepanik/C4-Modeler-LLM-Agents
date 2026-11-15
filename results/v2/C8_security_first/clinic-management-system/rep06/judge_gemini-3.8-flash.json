@@ -1,0 +1,315 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: 'EMR Management' and 'Appointment Scheduler' handle patient records and clash checks, 'Billing & Claims Service' processes claims, and 'Audit Logger Sidecar' and 'Audit Dispatcher' ensure comprehensive audit trails.",
+   "performance_efficiency": "Non-blocking buffering in 'Audit Logger Sidecar', asynchronous message processing via 'Integration Queue', and Redis locking in 'Appointment Scheduler' support high throughput, though dedicated caching for sub-second EMR screen loads is absent.",
+   "compatibility": "'Interoperability Service' thoroughly addresses external integration using 'FHIR Transformer Engine', 'Outbound Dispatcher', and 'External Lab & Imaging Systems' integration using HL7 FHIR over HTTPS/mTLS as required.",
+   "usability": "Human actors ('Patient', 'Clinician / Doctor', 'Receptionist / Front Desk') connect directly to 'API Gateway' via HTTPS, but client applications or dedicated presentation interfaces (web/mobile portals) are omitted.",
+   "reliability": "'Outbound Dispatcher' includes Polly circuit breakers and 'Integration Queue' provides DLQ support. However, mechanisms achieving 99.99% active-active cross-region hybrid synchronization across on-prem-k8s and eu-central-1 are not defined.",
+   "security": "Addressed thoroughly through 'WAF', 'Identity Provider (IdP)' validating MFA/OIDC, mTLS on 'API Gateway', envelope AES-256 encryption in 'Integration Queue', and PII scrubbing with cryptographic framing in 'Scrubbing & Hashing Component'.",
+   "maintainability": "The architecture exhibits clear microservice separation into 'EMR & Scheduling Service', 'Billing & Claims Service', and 'Interoperability Service', utilizing sidecars ('Audit Logger Sidecar') for decoupled cross-cutting concerns.",
+   "portability": "Containers and sidecars rely on Kubernetes-compatible technologies (Spring Boot, Node.js, .NET Core, Kong/Envoy), but specific hybrid deployment mechanisms bridging on-prem-k8s and AWS eu-central-1 are not modeled."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.625,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 2.5,
+   "Modifiability": 4.5,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "Direct reads to PostgreSQL via Spring Boot lack a read-caching layer for medical records, leaving concurrent peak query performance vulnerable under 500 simultaneous clinician requests.",
+    "elements": [
+     "API Gateway",
+     "Kong / Envoy Router",
+     "EMR & Scheduling Service",
+     "EMR Management",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Database connection pool sizing and read replica scaling under concurrent load",
+     "Absence of an EMR read cache creates database query bottlenecks"
+    ],
+    "tradeoffs": [
+     "Querying primary database directly ensures strong data freshness at the expense of query latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "The Interoperability Service buffers high-volume HL7 FHIR messages using RabbitMQ and Apache Camel, effectively decoupling ingestion throughput from synchronous EMR read operations.",
+    "elements": [
+     "Interoperability Service",
+     "API Gateway",
+     "FHIR Transformer Engine",
+     "Integration Queue",
+     "Outbound Dispatcher",
+     "EMR & Scheduling Service"
+    ],
+    "sensitivity_points": [
+     "Integration Queue buffer capacity and message consumption rates",
+     "Asynchronous transformer throughput under sudden bursts"
+    ],
+    "tradeoffs": [
+     "Asynchronous queuing protects system stability but introduces slight eventual consistency for incoming results"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "While hybrid deployment targets are stated, the architecture specifies no cross-region active-active database replication, distributed consensus, or automated global DNS failover mechanisms between regions.",
+    "elements": [
+     "EMR & Scheduling Service",
+     "PostgreSQL",
+     "Billing & Claims Service",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Cross-region database replication latency and failover automation",
+     "Global traffic routing and DNS cutover mechanisms"
+    ],
+    "tradeoffs": [
+     "Achieving zero RPO across hybrid cloud sites typically degrades write latency significantly"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "RabbitMQ buffers asynchronous billing tasks, but transactional outbox patterns, database failover mechanics, and idempotency guarantees towards external clearinghouses are not defined in the architecture.",
+    "elements": [
+     "Billing & Claims Service",
+     "Billing Controller",
+     "Claims Processor",
+     "Payment Reconciliation Worker",
+     "RabbitMQ",
+     "Insurance Clearinghouses"
+    ],
+    "sensitivity_points": [
+     "Idempotency tracking in the claims processing pipeline",
+     "Message deduplication on broker or worker reconnects"
+    ],
+    "tradeoffs": [
+     "Idempotent claim retry handling introduces state-checking overhead on every submission"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Claims processing is isolated within the dedicated Billing & Claims Service, completely separated from EMR, allowing clearinghouse additions without touching clinical core services.",
+    "elements": [
+     "Billing & Claims Service",
+     "Claims Processor",
+     "Insurance Clearinghouses"
+    ],
+    "sensitivity_points": [
+     "Adapter modularity within Claims Processor for external clearinghouse protocols",
+     "Coupling between claims logic and external clearinghouse API formats"
+    ],
+    "tradeoffs": [
+     "Isolating billing into an independent service adds inter-service network boundaries"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are restricted to EMR Management, the PostgreSQL schema, and the Audit Logger redaction filters, fitting well within the three-component limit.",
+    "elements": [
+     "EMR & Scheduling Service",
+     "EMR Management",
+     "PostgreSQL",
+     "Audit Dispatcher",
+     "Audit Logger Sidecar",
+     "Scrubbing & Hashing Component"
+    ],
+    "sensitivity_points": [
+     "Schema migration flexibility in the EMR relational database",
+     "VRL scrubbing rule updates for newly added demographic attributes"
+    ],
+    "tradeoffs": [
+     "Extending audit redaction rules adds minor regex evaluation overhead per logged event"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Authentication delegates step-up MFA to the external Identity Provider with WAF and API Gateway enforcement, though specific sub-minute security alerting pipelines remain implicit.",
+    "elements": [
+     "API Gateway",
+     "WAF",
+     "Kong / Envoy Router",
+     "Identity Provider (IdP)",
+     "Telemetry Sidecar"
+    ],
+    "sensitivity_points": [
+     "Strict enforcement of MFA before session token issuance",
+     "Latency of telemetry log streaming to security monitoring infrastructure"
+    ],
+    "tradeoffs": [
+     "Enforcing strict MFA checks at the gateway increases login workflow latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "The Audit Logger Sidecar provides non-blocking, Merkle-tree tamper-evident logging, but relationship-based access control policies and 10-year archival repositories are not explicitly modeled.",
+    "elements": [
+     "EMR Management",
+     "Audit Dispatcher",
+     "Audit Logger Sidecar",
+     "Log Ingestor Component",
+     "Scrubbing & Hashing Component",
+     "Log Exporter Component"
+    ],
+    "sensitivity_points": [
+     "Coverage of read-access interception on every patient record lookup",
+     "Tamper-proofing integrity via Merkle tree hashing"
+    ],
+    "tradeoffs": [
+     "Auditing every read access increases log volume and storage retention costs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "none",
+   "C-03": "none",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "none",
+   "R-07": "none",
+   "R-08": "full"
+  },
+  "coverage": 0.5,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Audit Logger Sidecar",
+     "Scrubbing & Hashing Component",
+     "Audit & Compliance Interceptor",
+     "Identity Provider (IdP)"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "EMR & Scheduling Service",
+     "EMR Management"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "EMR & Scheduling Service",
+     "Appointment Scheduler"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR & Scheduling Service",
+     "EMR Management",
+     "Audit Dispatcher",
+     "Audit Logger Sidecar"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Service",
+     "Billing Controller",
+     "Claims Processor",
+     "Insurance Clearinghouses"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Identity Provider (IdP)",
+     "API Gateway",
+     "Integration Queue",
+     "EMR & Scheduling Service"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "none",
+    "elements": []
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Interoperability Service",
+     "FHIR Transformer Engine",
+     "Outbound Dispatcher",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

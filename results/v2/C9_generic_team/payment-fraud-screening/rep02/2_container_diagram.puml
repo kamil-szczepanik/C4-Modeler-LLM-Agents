@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening
+
+Person(FraudAnalyst, "Fraud Analyst", "Reviews cases and manages fraud analysis via the Case Management Web Application.")
+System_Ext(PaymentGatewayAcquirer, "Payment Gateway / Acquirer", "Sends synchronous authorization requests for card-not-present payments.")
+
+System_Boundary(RealTimePaymentFraudScreening, "Real-Time Payment Fraud Screening") {
+    Container(APIGatewayIngestionContainer, "API Gateway / Ingestion Container", "AWS API Gateway / Envoy proxy", "Handles ingress security, rate limiting, and tokenization stripping.")
+    Container(HighPerformanceScoringEngine, "High-Performance Scoring Engine", "AWS ECS on Fargate", "Evaluates card-not-present payment authorizations in real time.")
+    ContainerDb(FeatureStore, "Feature Store", "Redis", "In-memory feature store for ultra-low latency lookups.")
+    Container(AsyncEventBus, "Async Event Bus", "AWS EventBridge / SQS", "Decouples asynchronous event processing for audits and case management.")
+    Container(CaseManagementWebApp, "Case Management Web Application", "AWS ECS on Fargate", "Enables fraud analysts to review suspicious transactions.")
+    Container(ModelRuleRegistryContainer, "Model & Rule Registry Container", "Container Service", "Manages models and rules for the scoring engine.")
+    ContainerDb(AuditComplianceStorage, "Audit & Compliance Storage", "AWS S3 with Object Lock and Parquet format", "Tamper-evident, cost-effective 7-year audit storage.")
+    Container(ConfigurationSecretsManagement, "Configuration & Secrets Management", "AWS Secrets Manager / Parameter Store", "Manages configuration settings and secrets securely.")
+}
+
+Rel(PaymentGatewayAcquirer, APIGatewayIngestionContainer, "Sends payment authorizations", "HTTPS/TLS")
+Rel(APIGatewayIngestionContainer, HighPerformanceScoringEngine, "Routes authorization requests", "Internal VPC gRPC/REST")
+Rel(HighPerformanceScoringEngine, FeatureStore, "Fetches features for scoring", "Redis Protocol")
+Rel(HighPerformanceScoringEngine, AsyncEventBus, "Publishes transaction events", "AWS SDK (JSON/Protobuf over SQS/EventBridge)")
+Rel(AsyncEventBus, CaseManagementWebApp, "Dispatches case events", "AWS SQS/SNS")
+Rel(AsyncEventBus, AuditComplianceStorage, "Streams audit logs", "AWS SQS/SNS")
+Rel(FraudAnalyst, CaseManagementWebApp, "Reviews suspicious transactions", "HTTPS/TLS")
+
+@enduml

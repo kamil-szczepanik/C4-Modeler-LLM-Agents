@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the AI Symptom Checker Service container
+
+System_Ext(Core_Telehealth_Backend, "Core Telehealth Backend", "External Backend", "Requests AI symptom analysis via mTLS with OAuth2/JWT tokens.")
+System_Ext(GCP_Vertex_AI, "GCP Vertex AI", "Cloud AI Service", "Hosts regionally isolated model endpoints in `europe-west3` and `us-central1`.")
+System_Ext(Google_Cloud_Pub_Sub, "Google Cloud Pub/Sub", "Cloud Messaging Service", "Enables asynchronous, reliable audit logging.")
+System_Ext(WORM_Buckets, "WORM Buckets", "Cloud Storage", "Stores cryptographically signed, CMEK-encrypted audit records.")
+
+Container_Boundary(AI_Symptom_Checker_Service, "AI Symptom Checker Service") {
+    Component(API_Router_Auth_Middleware, "API Router & Auth Middleware", "Python, FastAPI", "Handles lightweight routing, validation, and middleware logic, receiving requests via mTLS with OAuth2/JWT tokens.")
+    Component(Input_Sanitization_Guardrail_Component, "Input Sanitization & Guardrail Component", "Python, FastAPI", "Sanitizes patient inputs and strips PII from validated payloads.")
+    Component(Clinical_Inference_Proxy, "Clinical Inference Proxy", "GCP Vertex AI endpoints, gRPC", "Forwards sanitized prompts via internal VPC to invoke regionally isolated ML models.")
+    Component(Output_Validation_Guardrail, "Output Validation Guardrail", "Python, FastAPI", "Validates model outputs before returning recommendations to patients.")
+    Component(Traceability_Audit_Component, "Traceability & Audit Component", "Google Cloud Pub/Sub, WORM storage, Google Cloud KMS", "Pushes audit logs via TLS and stores cryptographically signed, CMEK-encrypted immutable records.")
+    Component(Data_Residency_Validator, "Data Residency Validator", "GCP VPC Service Controls", "Enforces data residency and regional isolation at the network layer for EU and US compliance.")
+}
+
+Rel(Core_Telehealth_Backend, API_Router_Auth_Middleware, "Requests AI symptom analysis", "mTLS, OAuth2/JWT")
+Rel(API_Router_Auth_Middleware, Input_Sanitization_Guardrail_Component, "Forwards validated payloads for PII stripping", "")
+Rel(Input_Sanitization_Guardrail_Component, Clinical_Inference_Proxy, "Forwards sanitized prompts", "Internal VPC")
+Rel(Clinical_Inference_Proxy, GCP_Vertex_AI, "Invokes ML models across `europe-west3` and `us-central1`", "gRPC")
+Rel(Traceability_Audit_Component, Google_Cloud_Pub_Sub, "Pushes audit logs", "TLS")
+Rel(Traceability_Audit_Component, WORM_Buckets, "Stores cryptographically signed, CMEK-encrypted records", "")
+
+@enduml

@@ -1,0 +1,349 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: SFU Media Relay handles video consultations, Backend Service and Integration Adapter manage e-prescriptions, AI Symptom Checker Service handles triage, and Consent & Policy Service enforces consent management.",
+   "performance_efficiency": "Performance is addressed thoroughly via PgBouncer connection pooling, Memorystore for Redis caching, Symptom Session Cache, Envoy Compression Filter, and ABR Controller for adaptive video streaming over constrained connections.",
+   "compatibility": "Interoperability is thoroughly addressed by the Integration Adapter Container, featuring the FHIR Translation Component for US HIEs and EU National e-Prescription Adapter for European pharmacy networks over mTLS.",
+   "usability": "While the ABR Controller provides degraded video for rural patients, user-facing client applications (e.g., patient mobile apps, clinician portals) are omitted, showing users connecting directly to the infrastructure load balancer.",
+   "reliability": "Reliability is well addressed: ABR Controller maintains consultations below 300 kbit/s, while Envoy provides circuit breaking, rate limiting, and active health checks across GCP regional backends.",
+   "security": "Security is thoroughly designed with Google Cloud Armor, Istio mTLS, OPA consent enforcement, Payload Sanitizer & PII Redactor, Cloud KMS regional envelope encryption, and WORM storage for MDR audit logs.",
+   "maintainability": "The architecture exhibits clean modularity, separating concerns into autonomous containers and components like the Integration Adapter Container and Consent & Policy Engine, enabling isolated maintenance and regional extensions.",
+   "portability": "Target GCP regions (europe-west3, us-central1) are explicitly targeted using GKE containers. However, heavy reliance on GCP-specific services (Cloud Armor, Cloud SQL, Memorystore, GCS WORM) limits cross-cloud portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The SFU Media Relay, Redis session caching, and Envoy gateway enable rapid connection setup, but horizontal auto-scaling and clustering details for handling 5,000 concurrent media streams are not fully articulated.",
+    "elements": [
+     "SFU Media Relay",
+     "ABR Controller",
+     "Token Auth & Session Validator",
+     "Memorystore for Redis (Cluster Mode)",
+     "Envoy API Gateway"
+    ],
+    "sensitivity_points": [
+     "Signaling and session handshake latency in Redis cluster"
+    ],
+    "tradeoffs": [
+     "Centralized session verification vs. connection setup latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "The Symptom Session Cache and FastAPI routing provide fast local execution, but response latency remains heavily dependent on external third-party AI inference providers.",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Symptom Session Cache",
+     "Clinical Inference Orchestrator",
+     "Payload Sanitizer & PII Redactor",
+     "AI Model Provider / Inference Service"
+    ],
+    "sensitivity_points": [
+     "External AI inference endpoint latency and rate limits"
+    ],
+    "tradeoffs": [
+     "Inline PII redaction overhead vs. strict privacy compliance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The SFU Media Relay includes a dedicated ABR Controller for localized degradation on low-bandwidth rural connections, while consultation state and clinical notes remain decoupled in the backend.",
+    "elements": [
+     "SFU Media Relay",
+     "ABR Controller",
+     "SFU Core Routing Engine",
+     "ICE/TURN Server",
+     "Backend Service & Consent & Policy Service"
+    ],
+    "sensitivity_points": [
+     "Threshold sensitivity of the ABR Controller under packet loss"
+    ],
+    "tradeoffs": [
+     "Lower video resolution to maintain continuous audio and session stability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Only two target regions (us-central1 and europe-west3) are provisioned. If us-central1 suffers a total regional outage, US patients cannot be served without violating data residency constraints or failing over to an unmodeled secondary US region.",
+    "elements": [
+     "US Telehealth System (GCP us-central1)",
+     "GCP Global HTTPS Load Balancer with Geo-routing",
+     "Cloud SQL for PostgreSQL (Enterprise Plus Edition)"
+    ],
+    "sensitivity_points": [
+     "Absence of secondary regional disaster recovery deployment in the US"
+    ],
+    "tradeoffs": [
+     "Strict regional residency prevents cross-region failover to EU during outages"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The integration layer explicitly isolates national prescription protocols into dedicated adapters (EU National e-Prescription Adapter using Apache Camel), allowing changes to be localized without affecting core backend services.",
+    "elements": [
+     "Integration Adapter Container",
+     "EU National e-Prescription Adapter",
+     "E-Prescription Translation Adapter Component",
+     "FHIR & E-Prescription Domain Component"
+    ],
+    "sensitivity_points": [
+     "Interface consistency between translation components and national gateways"
+    ],
+    "tradeoffs": [
+     "Adapter translation complexity vs. core clinical domain stability"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The architecture explicitly captures model versions and inputs via the AI Traceability & Logging Interceptor and writes immutable audit logs to GCP Cloud Storage WORM, while the Region-Aware Model Router handles version routing.",
+    "elements": [
+     "AI Symptom Checker Service",
+     "AI Traceability & Logging Interceptor Component",
+     "Audit & Traceability Logger",
+     "Region-Aware Model Router",
+     "GCP Cloud Storage with Object Retention (WORM)"
+    ],
+    "sensitivity_points": [
+     "Atomic logging of model identifiers with inference requests"
+    ],
+    "tradeoffs": [
+     "Storage retention overhead vs. EU MDR auditability and compliance"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Cross-region requests are routed via secure gRPC channels and intercepted by Open Policy Agent (Consent & Policy Engine) to verify consent before data retrieval, with all events logged.",
+    "elements": [
+     "Consent & Policy Engine Component",
+     "Data Residency Router Component",
+     "External Authorization Filter",
+     "Audit & Traceability Logger Component",
+     "Envoy API Gateway"
+    ],
+    "sensitivity_points": [
+     "Policy evaluation latency during inter-regional mTLS token validation"
+    ],
+    "tradeoffs": [
+     "Strict real-time consent checks vs. cross-border access performance"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Consent updates in Cloud SQL are immediately evaluated by OPA to block access, and changes are audited. However, specific asynchronous batch data-pipeline revocation mechanisms for pre-shared research extracts are not explicitly described.",
+    "elements": [
+     "Consent & Policy Engine Component",
+     "Cloud SQL for PostgreSQL (Enterprise Plus Edition)",
+     "Audit & Traceability Logger Component",
+     "Backend Service & Consent & Policy Service"
+    ],
+    "sensitivity_points": [
+     "Cache invalidation latency for cached consent policies in Redis"
+    ],
+    "tradeoffs": [
+     "Instant query-time policy evaluation vs. batch data purging overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9583333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "EU Telehealth System (GCP europe-west3)",
+     "US Telehealth System (GCP us-central1)",
+     "External Authorization Filter",
+     "Consent & Policy Engine Component",
+     "Payload Sanitizer & PII Redactor"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "EU Telehealth System (GCP europe-west3)",
+     "US Telehealth System (GCP us-central1)",
+     "GCP Global HTTPS Load Balancer with Geo-routing",
+     "GCP URL Map",
+     "Data Residency Router Component",
+     "Cloud SQL for PostgreSQL (Enterprise Plus Edition)",
+     "Adapter Security & Audit Proxy"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Telemetry & Audit Logging Component",
+     "AI Traceability & Logging Interceptor Component",
+     "Audit & Traceability Logger",
+     "AI Gateway Intermediary",
+     "GCP Cloud Storage with Object Retention (WORM)"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "WebRTC/SFU Media Relay",
+     "SFU Media Relay",
+     "ABR Controller",
+     "Symptom Session Cache"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patients and Clinicians",
+     "WebRTC/SFU Media Relay",
+     "SFU Media Relay",
+     "SFU Core Routing Engine",
+     "ICE/TURN Server",
+     "Token Auth & Session Validator"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Regional Pharmacy Networks and Health Information Exchanges (HIEs)",
+     "FHIR & E-Prescription Domain Component",
+     "E-Prescription Translation Adapter Component",
+     "EU National e-Prescription Adapter",
+     "External Pharmacy Networks",
+     "Integration Adapter Container"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Clinical Inference Orchestrator",
+     "Region-Aware Model Router",
+     "AI Model Provider / Inference Service",
+     "FHIR Interoperability Mapper"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Backend Service & Consent & Policy Service",
+     "Consent & Policy Engine Component",
+     "Consent Enforcement Interceptor",
+     "Cloud SQL for PostgreSQL & Memorystore for Redis"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Data Residency Router Component",
+     "Consent & Policy Engine Component",
+     "External Authorization Filter",
+     "EU Telehealth System (GCP europe-west3)",
+     "US Telehealth System (GCP us-central1)"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "SFU Media Relay",
+     "ABR Controller",
+     "SFU Core Routing Engine"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "AI Traceability & Logging Interceptor Component",
+     "Audit & Traceability Logger",
+     "GCP Cloud Storage with Object Retention (WORM)",
+     "Bucket Manager / Retention Policy Enforcer"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Translation Component",
+     "EU National e-Prescription Adapter",
+     "FHIR & E-Prescription Domain Component",
+     "E-Prescription Translation Adapter Component",
+     "External HIEs",
+     "External Pharmacy Networks"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

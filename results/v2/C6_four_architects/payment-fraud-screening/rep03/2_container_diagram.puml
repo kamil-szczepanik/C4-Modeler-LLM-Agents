@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalysts, "Fraud Analysts", "System users for case management and fraud reviews.")
+System_Ext(PaymentGatewayCoreLedger, "Payment Gateway / Core Ledger", "Source of authorization requests.")
+System_Ext(MLFeatureStoreThreatIntelligenceProvider, "ML Feature Store / Threat Intelligence Provider", "External feature store for scoring enrichment.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(AWSApplicationLoadBalancerALB, "AWS Application Load Balancer (ALB)", "AWS ALB Circuit Breaker", "Edge-level fail-open mechanism routing external authorization and analyst traffic.")
+    Container(ScoringEngineContainer, "Scoring Engine Container", "Go, ONNX Runtime, AWS ECS Fargate", "Screens card-not-present payment authorizations within milliseconds using embedded C++ scoring.")
+    Container(CaseManagementBackendContainer, "Case Management Backend Container", "Node.js, TypeScript, AWS ECS Fargate", "Manages suspicious payment reviews and investigation workflows.")
+    Container(TokenizationProxyContainer, "Tokenization Proxy Container", "AWS Nitro Enclaves", "Provides hardware-level isolation for tokenization to ensure PCI-DSS compliance and protect card data.")
+    ContainerDb(AmazonDynamoDB, "Amazon DynamoDB", "Amazon DynamoDB", "Stores hot state and investigation data.")
+    ContainerDb(AmazonS3ObjectLock, "Amazon S3 Object Lock", "Amazon S3 Object Lock", "Compliance-mode storage ensuring tamper-evident 7-year audit retention.")
+}
+
+Rel(FraudAnalysts, AWSApplicationLoadBalancerALB, "Interact with Case Management Backend via AWS ALB", "HTTPS")
+Rel(PaymentGatewayCoreLedger, AWSApplicationLoadBalancerALB, "Routes external authorization traffic", "HTTPS/gRPC")
+Rel(AWSApplicationLoadBalancerALB, ScoringEngineContainer, "Routes external authorization traffic to Scoring Engine", "HTTPS/gRPC")
+Rel(ScoringEngineContainer, MLFeatureStoreThreatIntelligenceProvider, "Communicates with external Feature Stores", "gRPC")
+Rel(ScoringEngineContainer, AmazonDynamoDB, "Writes hot state", "AWS SDK")
+Rel(ScoringEngineContainer, AmazonS3ObjectLock, "Writes audit logs", "AWS SDK")
+Rel(CaseManagementBackendContainer, AmazonDynamoDB, "Reads and writes investigation data", "VPC Endpoints")
+
+@enduml

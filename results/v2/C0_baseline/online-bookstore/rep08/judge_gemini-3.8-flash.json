@@ -1,0 +1,347 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "Most requirements are fulfilled including multi-currency and GDPR/CCPA. However, while 'Recommendation & Review UI Component' exists on the frontend, there is no explicit backend component or data persistence model for customer reviews and ratings (R-03).",
+   "performance_efficiency": "Performance and scalability (1M MAU, <2s load) are addressed via Amazon CloudFront CDN, Amazon OpenSearch Service, ElastiCache Redis, SQS asynchronous processing, and Aurora Global Database read replicas across regions.",
+   "compatibility": "Compatibility is thoroughly addressed with dedicated external integrations: 'Shipping Integrator' for logistics APIs, 'Payment Gateway Client' with mTLS and webhooks, and 'Token Authorizer' for external OIDC/OAuth 2.0 Identity Providers.",
+   "usability": "Both end-users and administrators are well-supported via the 'Single Page Application', featuring dedicated modules such as 'Catalog & Search UI Component', 'Checkout & Cart UI Component', and a lazily-loaded 'Admin Management UI Component'.",
+   "reliability": "Meets the 99.95% uptime target using Multi-AZ Aurora Global Database, Redis Global Datastore, SQS Dead-Letter Queues, and explicit circuit breaker patterns in 'Payment Gateway Client' and 'FallbackManager'.",
+   "security": "OWASP Top-10 and compliance constraints are mitigated through AWS WAF, Lambda Authorizers, TLS 1.3/mTLS, Zod validation, AWS KMS encryption, column-level PII encryption, and an isolated 'User Privacy & Compliance Service'.",
+   "maintainability": "Services are modular and decoupled via Amazon SQS and microservice containers. However, maintainability is slightly impeded by grouping transactional and catalog domains into a monolithic 'Data Stores' container sharing Aurora PostgreSQL.",
+   "portability": "The design directly maps to the specified AWS regions (us-east-1, eu-west-1, ap-southeast-1) using ECS Fargate, CloudFront, and Global Aurora, though strong coupling to proprietary AWS primitives limits non-AWS portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.9375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront CDN caches static frontend assets and OpenSearch decouples search queries from transactional storage. Auto-scaling ECS Fargate services and Redis caching mitigate high traffic spikes, though achieving sub-2s loads on 3G during 10x spikes remains constrained by mobile bandwidth.",
+    "elements": [
+     "Single Page Application (SPA)",
+     "Amazon API Gateway",
+     "Catalog & Search Service",
+     "Amazon OpenSearch Service",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Edge cache hit ratio for catalog searches",
+     "OpenSearch cluster auto-scaling thresholds"
+    ],
+    "tradeoffs": [
+     "Aggressive caching reduces database load but risks serving slightly stale product catalog data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendation retrieval is decoupled from computational batch jobs using pre-computed entries in Redis. The search and catalog services run on separate containers and databases, ensuring background recommendation updates cannot degrade catalog browsing performance.",
+    "elements": [
+     "Recommendation Service",
+     "RecommendationEngine",
+     "CacheManager",
+     "Amazon ElastiCache for Redis",
+     "Catalog & Search Service"
+    ],
+    "sensitivity_points": [
+     "Redis cache read throughput during recommendation updates",
+     "Resource separation between recommendation and browsing workloads"
+    ],
+    "tradeoffs": [
+     "Pre-computed recommendations save live CPU cycles but can serve outdated suggestions"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Checkout Orchestrator uses circuit breakers and resilience patterns via the Shipping Integrator. When external shipping APIs fail, the order transaction persists to Aurora and fulfillment events buffer into Amazon SQS for asynchronous retries without blocking checkout.",
+    "elements": [
+     "Checkout Orchestrator",
+     "Shipping Integrator",
+     "Order Repository",
+     "Order/Compliance Event Publisher",
+     "Amazon SQS"
+    ],
+    "sensitivity_points": [
+     "Dead Letter Queue retry policy configuration for shipping tasks",
+     "Shipping Integrator circuit breaker trip timeout"
+    ],
+    "tradeoffs": [
+     "Accepting orders asynchronously guarantees availability but requires manual or delayed compensation if fulfillment ultimately fails"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Aurora Global Database and ElastiCache Global Datastore replicate across specified regions. CloudFront handles global ingress routing. However, automated cross-region database failover promotion and DNS rerouting require precise orchestration to prevent split-brain issues.",
+    "elements": [
+     "Catalog & Transaction DB",
+     "Recommendation Cache",
+     "Single Page Application (SPA)",
+     "Amazon API Gateway",
+     "Checkout & Order Service"
+    ],
+    "sensitivity_points": [
+     "Cross-region replication latency and RPO/RTO configuration",
+     "Automated Aurora Global Database failover promotion speed"
+    ],
+    "tradeoffs": [
+     "Cross-region synchronous data replication incurs latency; asynchronous replication risks minimal data loss during failover"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Multi-currency support is encapsulated within the Currency Conversion Processor and supported in the Catalog & Transaction DB. The decoupled Payment Gateway Client and Checkout Orchestrator isolate price formatting and external settlement changes from other system components.",
+    "elements": [
+     "Currency Conversion Processor",
+     "Catalog & Transaction DB",
+     "Checkout Orchestrator",
+     "Payment Gateway Client"
+    ],
+    "sensitivity_points": [
+     "Isolation of exchange rate configuration and precision rules",
+     "Extensibility of payment gateway multi-currency handling"
+    ],
+    "tradeoffs": [
+     "Centralized currency conversion avoids duplication but adds an extra processing step in checkout"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Recommendation Service is fully isolated behind the API Gateway with discrete components for recommendation logic and traffic splitting. Replacing the recommendation algorithm only touches the RecommendationEngine or ABTestRouter without impacting external services or data stores.",
+    "elements": [
+     "Recommendation Service",
+     "RecommendationEngine",
+     "ABTestRouter",
+     "CacheManager",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Consistency of internal algorithm interfaces and contracts",
+     "Decoupling of recommendation pipeline from catalog mutations"
+    ],
+    "tradeoffs": [
+     "Container-level isolation increases deployment independence but introduces distributed network overhead"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "AWS WAF at ingress filters SQLi and XSS payloads, while Token Authorizers enforce JWT validation. Internally, services utilize typed input schemas with Zod and parameterized data access via Spring Data JPA and Prisma, eliminating SQL injection.",
+    "elements": [
+     "WAF Protection",
+     "API Gateway",
+     "Token Authorizer",
+     "Checkout Orchestrator",
+     "Catalog Management Service"
+    ],
+    "sensitivity_points": [
+     "Coverage and tuning of AWS WAF managed rule sets",
+     "Strictness of input validation schemas across controllers"
+    ],
+    "tradeoffs": [
+     "Strict WAF inspection and schema validation increase latency slightly for all inbound requests"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The User Privacy & Compliance Service manages right-to-be-forgotten requests. Anonymization & Purging Workers asynchronously delete and mask records across Aurora PostgreSQL and DynamoDB, using SQS queues and long-term encrypted S3 archives for verifiable compliance.",
+    "elements": [
+     "User Privacy & Compliance Service",
+     "Compliance API Controller",
+     "Anonymization & Purging Worker",
+     "Compliance & Audit Store",
+     "Amazon SQS"
+    ],
+    "sensitivity_points": [
+     "Transactional consistency across relational and NoSQL stores during purge",
+     "Audit logging fidelity without retaining identifiable personal information"
+    ],
+    "tradeoffs": [
+     "Asynchronous cascading deletion ensures system stability but requires tracking eventual consistency of purges"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "User Privacy & Compliance Service",
+     "Compliance API Controller",
+     "Data Extraction Engine",
+     "Anonymization & Purging Worker",
+     "Compliance & Audit Store",
+     "ComplianceExportQueue",
+     "Event Archive",
+     "Order/Compliance Event Publisher"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Currency Conversion Processor",
+     "Checkout Orchestrator",
+     "Catalog & Transaction DB"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Integrator",
+     "Shipping Provider",
+     "Checkout & Order Service"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search UI Component",
+     "Catalog & Search Service",
+     "Search Controller",
+     "Search Indexer / Sync Worker",
+     "Catalog Management Service",
+     "Amazon OpenSearch Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Checkout & Cart UI Component",
+     "Checkout & Order Service",
+     "Checkout Orchestrator",
+     "Payment Gateway Client",
+     "Order Repository",
+     "Third-Party Payment Gateway"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Recommendation & Review UI Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Service",
+     "RecommendationEngine",
+     "CacheManager",
+     "FallbackManager",
+     "Recommendation Cache",
+     "Recommendation & Review UI Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Catalog & Transaction DB",
+     "Recommendation Cache",
+     "CacheManager",
+     "Messaging Service",
+     "Amazon OpenSearch Service",
+     "AWS ECS Fargate"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Single Page Application (SPA)",
+     "Amazon CloudFront",
+     "Admin Management UI Component",
+     "Recommendation Cache"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Catalog & Transaction DB",
+     "Recommendation Cache",
+     "FallbackManager",
+     "Dead-Letter Queues",
+     "WAF Protection"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "WAF Protection",
+     "Token Authorizer",
+     "API Gateway",
+     "Security & Governance",
+     "Checkout Orchestrator",
+     "Order Repository"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

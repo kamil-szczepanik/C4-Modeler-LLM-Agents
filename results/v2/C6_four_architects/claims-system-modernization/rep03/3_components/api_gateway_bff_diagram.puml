@@ -1,0 +1,40 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(Web Portal, "Web Portal", "External user interface")
+Person(Adjuster Web Application, "Adjuster Web Application", "Internal adjuster user interface")
+
+System_Ext(Claim Routing Service, "Claim Routing Service", "Downstream domain services")
+System_Ext(Observability & Audit Container, "Observability & Audit Container", "Telemetry and audit storage")
+
+Container_Boundary(api_gateway_bff, "API Gateway / BFF") {
+    Component(Azure API Management, "Azure API Management", "Azure API Management", "External ingress and rate limiting, offloading enterprise-grade security.")
+    Component(Customer BFF, "Customer BFF", "Node.js / Express", "Node.js / Express service for Web Portal handling request aggregation.")
+    Component(Adjuster BFF, "Adjuster BFF", "Node.js / Express", "Node.js / Express service for Adjuster Web Application handling request aggregation.")
+    Component(BFF Response Cache, "BFF Response Cache", "Redis", "Redis caching coordinator for sub-2s response times.")
+    Component(Token Exchange Middleware, "Token Exchange Middleware", "Node.js Active Directory", "Node.js Active Directory JWT validation and enriched security context.")
+    Component(Circuit Breaker Proxy, "Circuit Breaker Proxy", "Opossum", "Opossum-based resilience layer to prevent cascading failures.")
+    Component(API Composition & Transformation Engine, "API Composition & Transformation Engine", "Node.js", "Payload shaping orchestrator.")
+    Component(API Metrics & Telemetry Exporter, "API Metrics & Telemetry Exporter", "OpenTelemetry SDK", "Vendor-agnostic telemetry collection for hybrid cloud latency tracking.")
+}
+
+Rel(Web Portal, Azure API Management, "Public HTTPS traffic", "HTTPS")
+Rel(Adjuster Web Application, Azure API Management, "Public HTTPS traffic", "HTTPS")
+Rel(Azure API Management, Customer BFF, "Routes public traffic", "HTTPS")
+Rel(Azure API Management, Adjuster BFF, "Routes internal adjuster traffic", "HTTPS")
+Rel(Token Exchange Middleware, Customer BFF, "Passes enriched security context", "In-Memory")
+Rel(Token Exchange Middleware, Adjuster BFF, "Passes enriched security context", "In-Memory")
+Rel(Adjuster BFF, BFF Response Cache, "Queries cached claims data", "TCP/Redis")
+Rel(Customer BFF, Claim Routing Service, "Forwards domain commands/queries", "gRPC")
+Rel(Adjuster BFF, Claim Routing Service, "Forwards domain commands/queries", "gRPC")
+Rel(Azure API Management, API Metrics & Telemetry Exporter, "Emits telemetry metrics", "In-Memory")
+Rel(Customer BFF, API Metrics & Telemetry Exporter, "Emits telemetry metrics", "In-Memory")
+Rel(Adjuster BFF, API Metrics & Telemetry Exporter, "Emits telemetry metrics", "In-Memory")
+Rel(BFF Response Cache, API Metrics & Telemetry Exporter, "Emits telemetry metrics", "In-Memory")
+Rel(Token Exchange Middleware, API Metrics & Telemetry Exporter, "Emits telemetry metrics", "In-Memory")
+Rel(Circuit Breaker Proxy, API Metrics & Telemetry Exporter, "Emits telemetry metrics", "In-Memory")
+Rel(API Composition & Transformation Engine, API Metrics & Telemetry Exporter, "Emits telemetry metrics", "In-Memory")
+Rel(API Metrics & Telemetry Exporter, Observability & Audit Container, "Exports traces and metrics", "OpenTelemetry/HTTPS")
+
+@enduml

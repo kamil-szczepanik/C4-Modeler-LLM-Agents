@@ -1,0 +1,250 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.75,
+  "justifications": {
+   "functional_suitability": "Catalog & Search Service with Elasticsearch covers R-01 for catalogue items, and Circulation Engine, Fine & Fee Manager and Notification Dispatcher cover circulation. Gaps: no explicit digital-item storage or access, and no reporting component for Library Administrators.",
+   "performance_efficiency": "Elasticsearch Cluster backs search, Local Availability Cache (BigCache, <5ms) serves lookups, and Indexing Worker updates indices asynchronously. Redis-backed Rate Limiting, the Message Broker and HPA metrics add scaling. No explicit p99 <800 ms budget or load-test mechanism.",
+   "compatibility": "Standard protocols are used: OIDC with the Identity Provider, REST over mTLS to Payment Gateway and Notification Service, OTLP to the Observability Platform, gRPC internally. Inconsistencies: the AMQP/MQTT link to Notification Service and the Catalog service authenticating via IdP. No library standards such as MARC or Z39.50.",
+   "usability": "Frontend Container (React SPA) with Catalog UI and Circulation UI components serves patrons, librarians and admins, with localized templates in Template Renderer. Gaps: no dedicated admin/reporting UI, no accessibility or responsive-design mechanism beyond a mention, and no digital-item access.",
+   "reliability": "PostgreSQL (EU Instance) has primary-replica streaming, Dispatch Worker retries with DLQ, the outbox pattern, and the Local Buffer Manager (SQLite WAL) buffers audit events. Gaps: no multi-instance or failover for Elasticsearch or gateway, no backup/DR, no circuit breakers, and the in-memory cache is volatile.",
+   "security": "Strong layered controls: WAF & Threat Protection, JWT Validator, Access Control (ACL), PKCE in Routing & Auth Module, mTLS everywhere, HashiCorp Vault, TDE, and hash-chained immutable audit via Event Normalizer and Compliance Storage Writer with RBAC Compliance Query Service. EU-hosted components support residency.",
+   "maintainability": "Clear modular decomposition into separate containers and components with defined responsibilities, gRPC contracts, and the Telemetry Exporter and correlation IDs in API Client Service. Weaknesses: polyglot stack (Node, Go, Java, Python), inconsistent model naming, duplicated components, and the Compliance Officers actor missing from the context.",
+   "portability": "Containerized services, Kubernetes HPA hints, and replaceable brokers (RabbitMQ/Kafka) and Vault help. EU-only residency is respected via the EU CDN and PostgreSQL (EU Instance). Gaps: no explicit deployment model, no IaC, and no cloud-vendor abstraction."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.40625,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 2.5,
+   "Modifiability": 2.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Catalog & Search Service",
+     "Search API Controller",
+     "Elasticsearch Cluster",
+     "API Gateway",
+     "Local Availability Cache Component"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch sizing and shard count",
+     "Gateway WAF and JWT overhead per request"
+    ],
+    "tradeoffs": [
+     "Cache speed versus availability freshness",
+     "WAF security versus latency"
+    ],
+    "justification": ""
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Indexing Worker",
+     "Elasticsearch Cluster",
+     "Event Consumer Worker",
+     "Search API Controller"
+    ],
+    "sensitivity_points": [
+     "Indexing load competes with query load",
+     "Event delivery path to indexer undefined"
+    ],
+    "tradeoffs": [
+     "Near-real-time indexing versus search latency"
+    ],
+    "justification": "Indexing worker consumes change events, plausibly meeting the 5-minute target. The event source and broker are unspecified, and no isolation of indexing from query load is shown. Plausible but unproven."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "Elasticsearch Cluster",
+     "Circulation & Core Service",
+     "PostgreSQL (EU Instance)",
+     "Routing & Load Balancer"
+    ],
+    "sensitivity_points": [
+     "Replica count and failover time unspecified",
+     "Postgres failover automation not described"
+    ],
+    "tradeoffs": [
+     "Replication cost versus availability"
+    ],
+    "justification": "Elasticsearch is called a cluster, but replicas and failover are not specified. PostgreSQL has primary-replica streaming without automated failover. Circulation is isolated from search, and ACID persistence protects loans, but the 1-minute recovery is unsubstantiated."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Frontend Container",
+     "EU CDN",
+     "API Gateway",
+     "Routing & Load Balancer"
+    ],
+    "sensitivity_points": [
+     "Gateway itself may be a single point of failure",
+     "Token and session handling is stateless"
+    ],
+    "tradeoffs": [
+     "CDN static hosting simplicity versus offline capability"
+    ],
+    "justification": "The SPA is served from a CDN, so a portal instance failure is largely moot. The gateway has load balancing, but its redundancy is not stated. Loan transactions are persisted server-side. Reasonably covered but not explicit."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "elements": [
+     "Catalog & Search Service",
+     "Indexing Worker",
+     "Event Consumer Worker"
+    ],
+    "sensitivity_points": [
+     "No provider integration or adapter component exists",
+     "Catalogue ingestion path for digital items missing"
+    ],
+    "tradeoffs": [
+     "Single service simplicity versus extension isolation"
+    ],
+    "justification": "There is no integration or adapter component for external e-book providers. Changes would likely touch the Catalog service workers, and no plugin or anti-corruption layer confines them to one component."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "elements": [
+     "Circulation Engine Component",
+     "Patron Account Coordinator Component"
+    ],
+    "sensitivity_points": [
+     "No rules engine or configuration store shown",
+     "Rules likely hardcoded in Java"
+    ],
+    "tradeoffs": [
+     "Hardcoded rules simplicity versus runtime flexibility"
+    ],
+    "justification": "Loan rules live in the Circulation Engine with no configurable rules or policy component. Per-library rules would probably require code changes and redeployment, so the runtime configuration requirement is unmet."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "PostgreSQL (EU Instance)",
+     "EU CDN",
+     "Identity Provider",
+     "Payment Gateway",
+     "Notification Service",
+     "Observability Platform"
+    ],
+    "sensitivity_points": [
+     "Telemetry may carry patron data",
+     "Kafka, Elasticsearch and cache region placement unspecified"
+    ],
+    "tradeoffs": [
+     "Managed external services versus residency control"
+    ],
+    "justification": "Context states EU-hosted external systems and an EU PostgreSQL instance and CDN. No technical enforcement such as region policies or telemetry scrubbing is shown, and Elasticsearch and broker locations are not stated. Residency is by declaration, not by design."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "JWT Validator",
+     "Access Control (ACL)",
+     "Audit Logging Container",
+     "Circulation Engine Component",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Object-level ownership check not located in the service",
+     "Denied attempts are not clearly routed to audit"
+    ],
+    "tradeoffs": [
+     "Gateway-level ACL versus fine-grained service authorization"
+    ],
+    "justification": "JWT validation and ACLs exist at the gateway, and an immutable audit log exists. But object-level patron ownership checks are not modelled in the Circulation service, and denied-access logging flow is not defined. Partial coverage."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.6666666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Frontend Container",
+     "PostgreSQL (EU Instance)",
+     "External Identity Provider",
+     "Payment Gateway",
+     "Notification Service",
+     "Observability Platform",
+     "Library Management System"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Catalog & Search Service",
+     "Elasticsearch Cluster",
+     "Indexing Worker",
+     "Search API Controller",
+     "Catalog UI Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Service",
+     "Elasticsearch Cluster",
+     "Local Availability Cache Component",
+     "Search API Controller",
+     "Rate Limiting",
+     "Observability Platform"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

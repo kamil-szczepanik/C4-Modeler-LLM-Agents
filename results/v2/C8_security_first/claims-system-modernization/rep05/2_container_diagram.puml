@@ -1,0 +1,37 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Modern Insurance Platform
+
+Person(EndCustomersBrokers, "End Customers & Brokers", "End users who submit and manage online claims.")
+Person(ClaimsAdjusters, "Claims Adjusters", "Internal staff who review and process insurance claims.")
+Person(OperationsMigrationTeam, "Operations & Migration Team", "Team responsible for managing hybrid migration, monitoring, and operations.")
+
+System_Ext(LegacyMainframe, "Legacy Mainframe", "30-year-old on-premise COBOL/DB2 system handling legacy claims and nightly batch windows.")
+System_Ext(MicrosoftEntraID, "Microsoft Entra ID", "Identity Provider for authentication and authorization using OIDC.")
+System_Ext(AzureServiceBus, "Azure Service Bus", "Messaging service to queue messages during the mainframe batch window.")
+System_Ext(AzureKeyVault, "Azure Key Vault", "Stores customer-managed encryption keys (CMK) and secrets.")
+
+System_Boundary(ModernInsurancePlatform, "Modern Insurance Platform") {
+    Container(CustomerPortalContainer, "Customer Portal Container", "Next.js / React", "Web frontend allowing customers and brokers to interact with the claims system.")
+    Container(AdjusterWebAppContainer, "Adjuster Web App Container", "Next.js / React", "Web frontend for claims adjusters to process and review claims.")
+    Container(APIGateway, "API Gateway", "Azure Front Door / APIM", "Entry point managing external traffic, routing, and token validation.")
+    Container(ClaimsOrchestratorContainer, "Claims Orchestrator Container", "Node.js / .NET Core", "Core backend service handling claims workflow logic and orchestration.")
+    Container(LegacyMainframeAdapterContainer, "Legacy Mainframe Adapter Container", "Azure Container Apps", "Anti-corruption layer adapting modern requests to legacy mainframe protocols.")
+    ContainerDb(ClaimsStateDatabase, "Claims State Database", "Azure SQL / Azure Cosmos DB", "Enterprise-grade transactional data store supporting Transactional Outbox pattern.")
+}
+
+Rel(EndCustomersBrokers, CustomerPortalContainer, "Submit and manage online claims", "HTTPS/REST over TLS 1.3")
+Rel(ClaimsAdjusters, AdjusterWebAppContainer, "Review and process claims", "HTTPS/REST over TLS 1.3")
+Rel(CustomerPortalContainer, APIGateway, "API requests with OIDC token validation", "HTTPS/REST")
+Rel(AdjusterWebAppContainer, APIGateway, "API requests with OIDC token validation", "HTTPS/REST")
+Rel(APIGateway, ClaimsOrchestratorContainer, "Routes requests to core backend", "HTTPS/REST and gRPC")
+Rel(ClaimsOrchestratorContainer, ClaimsStateDatabase, "Reads and writes transactional state", "Database Protocol")
+Rel(ClaimsOrchestratorContainer, LegacyMainframeAdapterContainer, "Asynchronous messaging and synchronous requests", "Azure Service Bus and gRPC")
+Rel(LegacyMainframeAdapterContainer, LegacyMainframe, "Communicates with legacy CICS/MQ protocols", "mTLS over Site-to-Site VPN / Azure ExpressRoute")
+Rel(CustomerPortalContainer, MicrosoftEntraID, "Validates OIDC tokens", "OpenID Connect")
+Rel(AdjusterWebAppContainer, MicrosoftEntraID, "Validates OIDC tokens", "OpenID Connect")
+Rel(ClaimsOrchestratorContainer, AzureKeyVault, "Retrieves secrets and encryption keys", "HTTPS / REST")
+
+@enduml

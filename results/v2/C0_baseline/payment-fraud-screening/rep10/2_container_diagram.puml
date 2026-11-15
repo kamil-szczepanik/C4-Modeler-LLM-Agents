@@ -1,0 +1,36 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening
+
+Person(Manual_Analyst, "Manual Analyst", "Reviews flagged payment cases and handles manual fraud investigations.")
+Person(Merchant_Risk_Manager, "Merchant Risk Manager", "Configures rules, thresholds, and risk parameters.")
+Person(Compliance_Auditor_Officer, "Compliance / Auditor Officer", "Ensures adherence to PCI-DSS Level 1 and accesses audit logs.")
+
+System_Ext(Payment_Gateway_Acquirer_Systems, "Payment Gateway / Acquirer Systems", "Sends payment authorization requests to be evaluated for fraud.")
+System_Ext(Third_Party_Fraud_Intelligence_Feeds, "Third-Party Fraud Intelligence Feeds", "Provides external fraud intelligence data used by the scoring engine.")
+System_Ext(Case_Management_SaaS, "Case Management SaaS", "Manages manual review workflows and cases for analysts.")
+System_Ext(Identity_Provider_AWS_Cognito_Okta, "Identity Provider (AWS Cognito / Okta)", "Handles user authentication and identity management.")
+System_Ext(Decision_Audit_Store_AWS_S3_Object_Lock_AWS_KMS, "Decision Audit Store (AWS S3 Object Lock & AWS KMS)", "Provides tamper-evident, write-once-read-many storage for audit logs.")
+
+System_Boundary(Real_Time_Payment_Fraud_Screening, "Real-Time Payment Fraud Screening") {
+    Container(API_Gateway_Routing_Layer, "API Gateway & Routing Layer", "AWS API Gateway / ALB", "Handles incoming routing and entry points for authorization traffic.")
+    Container(Real_Time_Scoring_Engine, "Real-Time Scoring Engine", "AWS ECS Fargate, Go/Java, ONNX Runtime", "Evaluates payment authorization requests against fraud models and rules to meet sub-50ms P99 latency SLA.")
+    Container(Analyst_Rules_Portal, "Analyst & Rules Portal", "AWS Amplify / S3 + CloudFront", "Single-page application for manual analysts and risk managers to review cases and configure rules.")
+    Container(Case_Management_Backend, "Case Management Backend", "AWS ECS Fargate", "Processes and manages fraud cases and analyst workflows.")
+    Container(Audit_Event_Stream, "Audit & Event Stream", "Amazon SQS / EventBridge + Kinesis Data Firehose", "Streams events and audit logs asynchronously for compliance and traceability.")
+}
+
+Rel(Payment_Gateway_Acquirer_Systems, API_Gateway_Routing_Layer, "Sends payment authorization requests", "HTTPS/JSON")
+Rel(API_Gateway_Routing_Layer, Real_Time_Scoring_Engine, "Routes authorization payloads for scoring", "mTLS / HTTPS")
+Rel(Manual_Analyst, Analyst_Rules_Portal, "Accesses portal to review cases and manage rules", "HTTPS")
+Rel(Merchant_Risk_Manager, Analyst_Rules_Portal, "Configures rules and thresholds", "HTTPS")
+Rel(Analyst_Rules_Portal, Case_Management_Backend, "Interacts with case management backend APIs", "REST/GraphQL")
+Rel(Real_Time_Scoring_Engine, Audit_Event_Stream, "Streams scoring decisions and audit events", "Amazon SQS / EventBridge")
+Rel(Case_Management_Backend, Audit_Event_Stream, "Streams case workflow events", "Amazon SQS / EventBridge")
+Rel(Audit_Event_Stream, Decision_Audit_Store_AWS_S3_Object_Lock_AWS_KMS, "Persists immutable audit logs", "Kinesis Data Firehose")
+Rel(Real_Time_Scoring_Engine, Third_Party_Fraud_Intelligence_Feeds, "Queries external threat intelligence", "AWS PrivateLink")
+Rel(Analyst_Rules_Portal, Identity_Provider_AWS_Cognito_Okta, "Authenticates users", "OIDC / OAuth2")
+
+@enduml

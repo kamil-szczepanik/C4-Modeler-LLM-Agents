@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(Order_Checkout_Service, "Order & Checkout Service", "External service publishing domain events.")
+System_Ext(Recommendation_Service, "Recommendation Service", "External service consuming recommendation events.")
+System_Ext(Catalog_Service, "Catalog Service", "External service consuming catalog update events.")
+
+Container_Boundary(aws_eventbridge_sqs, "AWS EventBridge / SQS") {
+    Component(Event_Bus, "Event Bus", "AWS EventBridge", "Central event router utilizing JSON-based rules.")
+    Component(Event_Archive, "Event Archive", "AWS EventBridge Archive", "Retains historical domain events for 30 days for disaster recovery.")
+    Component(Order_Processing_Queue, "Order Processing Queue", "Amazon SQS", "Buffers order-related events.")
+    Component(Recommendation_Queue, "Recommendation Queue", "Amazon SQS", "Decouples the Recommendation Service from traffic spikes.")
+    Component(Catalog_Update_Queue, "Catalog Update Queue", "Amazon SQS", "Decouples inventory and product updates.")
+    Component(Dead_Letter_Queues, "Dead-Letter Queues", "Amazon SQS DLQ", "Attached to SQS queues for isolating failed messages.")
+}
+
+Rel(Order_Checkout_Service, Event_Bus, "Publishes domain events", "HTTPS")
+Rel(Event_Bus, Recommendation_Queue, "Forwards filtered events", "AWS API / IAM")
+Rel(Event_Bus, Catalog_Update_Queue, "Routes inventory events", "AWS API")
+Rel(Recommendation_Service, Recommendation_Queue, "Polls for asynchronous events", "HTTPS/Long Polling")
+Rel(Catalog_Service, Catalog_Update_Queue, "Consumes inventory events", "HTTPS/Long Polling")
+
+@enduml

@@ -1,0 +1,356 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 3,
+   "usability": 2,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 3.625,
+  "justifications": {
+   "functional_suitability": "Patient Intake Container, Scheduling Engine Container (Resource Allocation Coordinator locking, Conflict Resolution Service), EMR Workspace Container with Audit & Event Emitter, and Billing & Claims Container cover R-01 to R-04. Gaps: no patient-facing portal and EMR internals lack a persistence component.",
+   "performance_efficiency": "Distributed L2 Cache (Redis), Go/gRPC EMR Workspace, Citus sharding, PgBouncer, analytical read replicas, and Redpanda async events support the <1 s P95 target. Gaps: no explicit load targets or autoscaling, and the cache holds only session state.",
+   "compatibility": "Integration & FHIR Mediator (HAPI FHIR R4, SMART-on-FHIR, mTLS) and FHIR APIs to External Lab & Imaging Systems address R-08. Gaps: EMR Workspace connects directly to labs, bypassing the mediator, with no mediator container-level relationships; claims use generic REST/SOAP.",
+   "usability": "All six user groups reach the system via Envoy / NGINX API Gateway over HTTPS, but no UI containers (web app, patient portal) exist. Grafana UI serves compliance reporting, yet there are no role-specific interfaces.",
+   "reliability": "Citus Worker Nodes with synchronous replication, Redpanda Raft consensus, Outbox Processor, DLQ, and Redis active-active geo-replication help. Gaps: no explicit active-active deployment for services, no failover or backup/DR design, and a single Coordinator Node.",
+   "security": "MFA, TLS 1.3, mTLS, and OIDC in the Authentication Filter; WAF; PHI Crypto Middleware with Tink and KMS; Vault; Falco; immutable audit logs; Tiered Storage Encryption Interceptor; GDPR Purge & Tombstone Controller. Strong match to R-05 and HIPAA/GDPR.",
+   "maintainability": "Clear service decomposition with layered components (router, service, repository), event-driven decoupling via Event Broker, and an Observability Stack. Weaknesses: polyglot stack raises overhead, some component diagrams are incomplete, and the Patient Intake component view wrongly embeds external containers.",
+   "portability": "Kubernetes-oriented, vendor-neutral technologies (Redpanda, PostgreSQL/Citus, Envoy, Vault) with S3-compatible tiered storage and KMS or on-prem HSM suit the hybrid on-prem-k8s and eu-central-1 targets. Gaps: no explicit deployment view, with Cloud KMS and Redis Enterprise as dependencies."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.5,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 2.5,
+   "Modifiability": 3.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "EMR Workspace Container",
+     "Distributed L2 Cache",
+     "Primary Database",
+     "PHI Crypto Middleware",
+     "Envoy / NGINX API Gateway"
+    ],
+    "sensitivity_points": [
+     "Per-read column decryption and KMS key fetch latency",
+     "Cache hit ratio for hot session state"
+    ],
+    "tradeoffs": [
+     "Application-level encryption costs latency versus security",
+     "Cache freshness versus current data"
+    ],
+    "justification": "Go/gRPC, Redis cache and PgBouncer pooling support sub-second loads, but no cache of clinical data, no latency budget, and crypto overhead are unaddressed. The cache holds only session state. Plausible, unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Integration & FHIR Mediator",
+     "Event Broker",
+     "EMR Workspace Container",
+     "Primary Database",
+     "Transformation Engine Component"
+    ],
+    "sensitivity_points": [
+     "Ingestion throughput of Camel transformation and DB writes",
+     "Resource isolation between ingestion and EMR reads"
+    ],
+    "tradeoffs": [
+     "Async buffering gives throughput but delays visibility",
+     "Schema validation costs throughput versus integrity"
+    ],
+    "justification": "Redpanda buffering and Camel K scaling suit the burst, but the path from mediator to EMR persistence is undefined (no relationship to the DB or EMR). Read isolation exists only through analytical replicas. Needs significant design."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "Primary Database",
+     "Event Broker",
+     "Envoy / NGINX API Gateway",
+     "Identity Provider (IdP) with local on-premise cache proxy",
+     "Distributed L2 Cache"
+    ],
+    "sensitivity_points": [
+     "Cross-site replication mode and failover detection time",
+     "Global traffic routing mechanism between sites"
+    ],
+    "tradeoffs": [
+     "Synchronous cross-site replication gives zero data loss but adds latency",
+     "Active-active complexity versus recovery speed"
+    ],
+    "justification": "Hybrid regions are stated, and Raft, synchronous replicas and Redis geo-replication help. But there is no deployment view, no global load balancing or failover design, and cross-site DB replication is unspecified. One-minute RTO with no data loss is unsupported."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Billing & Claims Container",
+     "Outbox Processor",
+     "Primary Database",
+     "Worker Nodes (Shard Replicas)",
+     "Payment & Clearinghouse Adapter"
+    ],
+    "sensitivity_points": [
+     "Failover time of the Citus coordinator",
+     "Idempotency of claim submission to external processors"
+    ],
+    "tradeoffs": [
+     "Synchronous replication protects data but raises write latency",
+     "Outbox gives reliability but at-least-once duplicates"
+    ],
+    "justification": "Synchronous shard replicas and the transactional outbox protect against loss, but the coordinator has no stated HA. There is no idempotency key or retry design for external submission, so duplicates are a risk, and the 30 s recovery is unproven."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "elements": [
+     "Payment & Clearinghouse Adapter",
+     "Billing & Claims Container",
+     "Claims & Invoicing Engine",
+     "Integration & FHIR Mediator"
+    ],
+    "sensitivity_points": [
+     "Adapter interface stability toward Claims & Invoicing Engine",
+     "Shared billing data model across clearinghouses"
+    ],
+    "tradeoffs": [
+     "Single adapter is simple but may need a plugin abstraction",
+     "Isolation from EMR versus duplicated integration logic"
+    ],
+    "justification": "A dedicated Payment & Clearinghouse Adapter inside Billing isolates external integration, and EMR is a separate container, so change is confined. However, no explicit per-provider strategy or abstraction is defined, so a new clearinghouse may touch the adapter internals."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "elements": [
+     "Patient Intake Container",
+     "Intake API Router",
+     "Patient Intake Service",
+     "Data Access Repository",
+     "Primary Database",
+     "Event Publisher"
+    ],
+    "sensitivity_points": [
+     "Schema migration process for Citus-sharded tables",
+     "Absence of any UI container in the model"
+    ],
+    "tradeoffs": [
+     "Layered Intake components keep change local but couple schema to repository",
+     "Event schema registry adds validation versus extra change"
+    ],
+    "justification": "Intake components are layered and audit events are published, so about three components may change (router, service, repository) plus the DB schema. But no UI container exists, and schema migration and audit trail propagation are undefined."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "Authentication Filter Component",
+     "Identity Provider (IdP) with local on-premise cache proxy",
+     "Envoy / NGINX API Gateway",
+     "Observability Stack",
+     "Falco"
+    ],
+    "sensitivity_points": [
+     "IdP enforcing MFA and token claims verification",
+     "Alert path from failed logins to security alert"
+    ],
+    "tradeoffs": [
+     "IdP token caching boosts availability but delays revocation",
+     "Centralised gateway auth is simple but a single choke point"
+    ],
+    "justification": "TLS with MFA is stated and the gateway validates tokens against the IdP, so a password alone should fail. But the model does not show failed-login alerting within 1 minute; Falco covers kernel events only and the SIEM is not modelled."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "EMR Workspace Container",
+     "Audit & Event Emitter",
+     "Event Broker",
+     "Storage & Raft Consensus Engine",
+     "GDPR Purge & Tombstone Controller"
+    ],
+    "sensitivity_points": [
+     "Absence of policy-enforcement component for treating relationships",
+     "Immutability versus GDPR purge conflict"
+    ],
+    "tradeoffs": [
+     "Immutable audit retention conflicts with GDPR erasure",
+     "Audit emission on every read adds latency"
+    ],
+    "justification": "Audit emitter, immutable logs and tiered storage with 10-year retention exist, but no access policy check (relationship-based authorization) is modelled, no tamper-evidence is described, and the emitter has no wiring. Purge controller may undermine audit integrity."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "PHI Crypto Middleware",
+     "GDPR Purge & Tombstone Controller",
+     "Audit & Compliance Logger Component",
+     "Falco",
+     "Rate Limiting & WAF Filter Component",
+     "Tiered Storage Encryption Interceptor",
+     "Audit & Event Emitter",
+     "External Auditors / Compliance Officers"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Primary Database",
+     "Worker Nodes (Shard Replicas)",
+     "Storage & Raft Consensus Engine",
+     "Distributed L2 Cache",
+     "Routing & Load Balancing Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Storage & Raft Consensus Engine",
+     "Tiered Storage Encryption Interceptor",
+     "Event Broker"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Intake Container",
+     "Intake API Router",
+     "Patient Intake Service",
+     "Data Access Repository"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Engine Container",
+     "Conflict Resolution Service",
+     "Resource Allocation Coordinator",
+     "Calendar & Slot Manager",
+     "Booking API Controller"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Workspace Container",
+     "EMR Business Logic Engine",
+     "Audit & Event Emitter",
+     "PHI Crypto Middleware",
+     "Event Broker"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Container",
+     "Claims & Invoicing Engine",
+     "Payment & Clearinghouse Adapter",
+     "Denial & Exception Handler",
+     "Outbox Processor"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Authentication Filter Component",
+     "Identity Provider (IdP) with local on-premise cache proxy",
+     "PHI Crypto Middleware",
+     "Tiered Storage Encryption Interceptor",
+     "Listener & TLS Termination Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Primary Database",
+     "Worker Nodes (Shard Replicas)",
+     "Distributed L2 Cache",
+     "Storage & Raft Consensus Engine",
+     "Routing & Load Balancing Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "EMR Workspace Container",
+     "Distributed L2 Cache",
+     "Connection Pooling Proxy (PgBouncer)",
+     "Analytical Read Replicas"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration & FHIR Mediator",
+     "Inbound Gateway Component",
+     "Transformation Engine Component",
+     "Outbound Dispatcher Component",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

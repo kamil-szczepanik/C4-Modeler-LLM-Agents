@@ -1,0 +1,321 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: online claim submission via Customer Portal, claims adjuster workflows via Adjuster Workspace, and incremental migration of claim types supported by the Dynamic Migration Router and Feature Flag & Routing Dispatcher.",
+   "performance_efficiency": "The sub-2s target despite mainframe latency is effectively addressed using Local State & Caching Component (TanStack Query), Claim State Cache (Redis), and asynchronous decoupling via Message Broker. However, handling of the fixed nightly batch window is not detailed.",
+   "compatibility": "The architecture coexists seamlessly with the Legacy Mainframe using the Mainframe Integration Adapter, COBOL Gateway Client, and Apache Camel Message Translator. Interoperability with Insurer's Active Directory is supported via standard OAuth2/OIDC.",
+   "usability": "Dedicated interfaces serve each user group: Customers and Brokers interact with the Customer Portal's Claim Submission Module and Status Tracker, while Claims Adjusters use the tailored Claim Management Module in Adjuster Workspace.",
+   "reliability": "R-04 consistency is thoroughly satisfied by Mainframe Outbox Queue sessions, Resilience & Queue Manager deduplication, Retry & Backoff Policy Engine, and Dead-Letter Handler, preventing message loss or duplicate processing.",
+   "security": "R-07 SSO is implemented using MSAL.js with PKCE and Insurer's Active Directory. Security is reinforced via Token Validation policies, mTLS, Azure Key Vault, Azure Managed Identities, database encryption, and the AuditLog Schema.",
+   "maintainability": "Clear decoupling between Claims BFF, Claims Core Service, and adapters. Switching claim types back within a day (R-06) is directly enabled by Dynamic Migration Router and Feature Flag & Routing Dispatcher, though multi-stack diversity challenges the inexperienced team.",
+   "portability": "The hybrid topology (on-premises mainframe and Azure West Europe) matches the brief well. While portable across the required hybrid boundaries, several components are tightly coupled to Azure-proprietary services (APIM, Azure SQL, Service Bus)."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "While Redis and TanStack Query provide caching, synchronous calls to fetch un-cached legacy mainframe data will still incur up to 5 s latency unless pre-synchronized into the SyncBuffer.",
+    "elements": [
+     "Adjuster Workspace",
+     "Claims BFF",
+     "Claims Core Service",
+     "Claim State Cache",
+     "Mainframe Integration Adapter",
+     "SyncBuffer Schema"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in Redis and client-side TanStack Query",
+     "Absence of proactive background data replication for legacy claims"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of cached mainframe data versus real-time data freshness"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Online submissions are ingested via scalable Azure App Services and buffered asynchronously in Azure Service Bus and SyncBuffer, fully decoupling ingestion spikes from the mainframe batch processing.",
+    "elements": [
+     "Customer Portal",
+     "Claims API Gateway",
+     "Claims Core Service",
+     "Message Broker",
+     "Mainframe Integration Adapter"
+    ],
+    "sensitivity_points": [
+     "Azure Service Bus queue capacity and worker throttling limits",
+     "Batch window duration adherence on the legacy mainframe"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission decoupling versus immediate end-to-end confirmation from the mainframe"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The asynchronous architecture buffers submissions in Azure Service Bus and Database SyncBuffer, allowing the platform to accept claims while the mainframe is offline and forward them once the batch completes.",
+    "elements": [
+     "Claims Core Service",
+     "Message Broker",
+     "Mainframe Outbox Queue",
+     "Mainframe Integration Adapter",
+     "SyncBuffer Schema"
+    ],
+    "sensitivity_points": [
+     "Persistence retention window of Service Bus messages during extended outages",
+     "Worker scheduling around the 23:00-05:00 batch window"
+    ],
+    "tradeoffs": [
+     "Queued claim delay versus system availability during mainframe downtime"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Azure Service Bus sessions, dead-letter queues, exponential backoff, and Resilience4j deduplication prevent message loss and duplicate processing, though automated bi-directional reconciliation logic is only partially specified.",
+    "elements": [
+     "Mainframe Integration Adapter",
+     "Resilience & Queue Manager",
+     "Mainframe Outbox Queue",
+     "Dead-Letter Handler",
+     "SyncBuffer Schema"
+    ],
+    "sensitivity_points": [
+     "Session ID management for ordered message processing",
+     "Idempotency handling in the COBOL Gateway Client"
+    ],
+    "tradeoffs": [
+     "Strict FIFO ordered session queuing versus message processing throughput"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Dynamic Migration Router in APIM and Feature Flag Dispatcher in Claims BFF enable seamless cutover and instantaneous one-day rollback without modifying legacy interfaces.",
+    "elements": [
+     "Claims API Gateway",
+     "Dynamic Migration Router",
+     "Claims BFF",
+     "Feature Flag & Routing Dispatcher",
+     "Integration Router"
+    ],
+    "sensitivity_points": [
+     "Centralized configuration management of migration feature flags",
+     "Backward compatibility of the Message Translator schema"
+    ],
+    "tradeoffs": [
+     "Routing complexity in APIM and BFF versus deployment independence"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The UI clients interact exclusively with Claims API Gateway and Claims BFF; retiring the legacy mainframe only involves removing the Mainframe Integration Adapter and legacy routing flags without impacting frontend applications.",
+    "elements": [
+     "Customer Portal",
+     "Adjuster Workspace",
+     "Claims API Gateway",
+     "Claims BFF",
+     "Claims Core Service"
+    ],
+    "sensitivity_points": [
+     "Complete encapsulation of legacy mainframe dependencies behind backend adapters",
+     "Schema completeness in MigratedClaims database"
+    ],
+    "tradeoffs": [
+     "BFF abstraction overhead versus total frontend decoupling from legacy systems"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Security tokens are validated at the APIM gateway and enriched for domain checks, while audit actions are recorded in AuditLog Schema, although explicit broker tenancy authorization rules are left to service-level logic.",
+    "elements": [
+     "Claims API Gateway",
+     "Token Validation & Claims Enriched Policy",
+     "Claims Core Service",
+     "AuditLog Schema"
+    ],
+    "sensitivity_points": [
+     "Fine-grained broker authorization checks in the Claims Core Service",
+     "Immutability of security audit logs in SQL Database"
+    ],
+    "tradeoffs": [
+     "Enforcing fine-grained authorization at core service versus centralized API gateway inspection"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Disabling an account in Active Directory stops new token issues via MSAL/Entra ID, but existing bearer tokens may remain valid until expiration, and legacy mainframe credential synchronization is not explicitly detailed.",
+    "elements": [
+     "Insurer's Active Directory",
+     "Authentication Component",
+     "Claims API Gateway",
+     "Token Validation & Claims Enriched Policy",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Access token TTL and Continuous Access Evaluation adoption in APIM",
+     "Propagation speed of AD revocation to mainframe access lists"
+    ],
+    "tradeoffs": [
+     "Short token lifetimes increasing token refresh overhead versus rapid revocation enforcement"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Mainframe Integration Adapter",
+     "SyncBuffer Schema",
+     "COBOL Gateway Client"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Mainframe Integration Adapter",
+     "Message Translator"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer Portal",
+     "Claim Submission Module",
+     "Claims API Gateway"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Workspace",
+     "Claim Management Module",
+     "Claims BFF"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Dynamic Migration Router",
+     "Feature Flag & Routing Dispatcher",
+     "Integration Router",
+     "MigratedClaims Schema"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Resilience & Queue Manager",
+     "Mainframe Outbox Queue",
+     "Dead-Letter Handler",
+     "Retry & Backoff Policy Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Local State & Caching Component",
+     "Claim State Cache",
+     "Azure Service Bus"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Dynamic Migration Router",
+     "Feature Flag & Routing Dispatcher",
+     "Integration Router"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Insurer’s Active Directory",
+     "Authentication Component",
+     "Token Validation & Claims Enriched Policy"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

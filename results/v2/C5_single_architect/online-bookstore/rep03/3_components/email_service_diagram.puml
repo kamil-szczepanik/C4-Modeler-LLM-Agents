@@ -1,0 +1,34 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Email Service container
+
+System_Ext(API_Gateway, "API Gateway", "AWS API Gateway", "Routes email notification triggers.")
+System_Ext(Amazon_SQS, "Amazon SQS", "Amazon SQS", "Delivers asynchronous events.")
+System_Ext(AWS_SES___SMTP, "AWS SES / SMTP", "AWS SES / SMTP", "Delivers final emails.")
+System_Ext(Amazon_RDS__PostgreSQL_, "Amazon RDS (PostgreSQL)", "PostgreSQL", "Stores audit metadata.")
+System_Ext(Amazon_DynamoDB, "Amazon DynamoDB", "Amazon DynamoDB", "Queries opt-out preferences.")
+
+Container_Boundary(Email_Service, "Email Service") {
+    Component(Email_API_Controller, "Email API Controller", "NestJS", "NestJS controller for synchronous REST triggers.")
+    Component(Event_Consumer, "Event Consumer", "Node.js", "Background worker consuming asynchronous domain events.")
+    Component(Template_Engine, "Template Engine", "Handlebars or EJS", "Component utilizing Handlebars or EJS for rendering localized email bodies.")
+    Component(Notification_Preference_Manager, "Notification Preference Manager", "Node.js", "Component checking user communication opt-outs.")
+    Component(Email_Dispatcher, "Email Dispatcher", "Node.js", "Service integrating with external email providers.")
+    Component(Email_Audit_Logger, "Email Audit Logger", "TypeORM / Node.js", "Component recording delivery metadata.")
+}
+
+Rel(API_Gateway, Email_API_Controller, "Routes email notification triggers", "HTTP")
+Rel(Amazon_SQS, Event_Consumer, "Delivers asynchronous events", "SQS")
+Rel(Event_Consumer, Notification_Preference_Manager, "Validates user consent", "In-memory")
+Rel(Email_API_Controller, Notification_Preference_Manager, "Validates user consent", "In-memory")
+Rel(Event_Consumer, Template_Engine, "Renders messages", "In-memory")
+Rel(Email_API_Controller, Template_Engine, "Renders messages", "In-memory")
+Rel(Template_Engine, Email_Dispatcher, "Sends rendered payloads", "In-memory")
+Rel(Email_Dispatcher, AWS_SES___SMTP, "Delivers final emails", "HTTPS / SMTP")
+Rel(Email_Dispatcher, Email_Audit_Logger, "Persists delivery logs", "TypeORM")
+Rel(Email_Audit_Logger, Amazon_RDS__PostgreSQL_, "Stores audit metadata", "SQL")
+Rel(Notification_Preference_Manager, Amazon_DynamoDB, "Queries opt-out preferences", "NoSQL")
+
+@enduml

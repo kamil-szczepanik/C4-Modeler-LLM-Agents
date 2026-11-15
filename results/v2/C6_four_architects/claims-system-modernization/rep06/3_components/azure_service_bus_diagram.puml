@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Azure Service Bus container
+
+Person(Claims Core Service, "Claims Core Service", "External component interacting with the service bus")
+Person(Mainframe Integration Adapter, "Mainframe Integration Adapter", "External component interacting with the service bus")
+
+Container_Boundary(azure_service_bus, "Azure Service Bus") {
+    Component(Claim Event Topic, "Claim Event Topic", "Azure Service Bus Topic (AMQP)", "Azure Service Bus Topic for domain events (`claims-events`) using AMQP.")
+    Component(Mainframe Sync Queue, "Mainframe Sync Queue", "Azure Service Bus Queue (AMQP, Sessions / FIFO)", "Azure Service Bus Queue utilizing AMQP and Sessions (FIFO) for mainframe order enforcement.")
+    Component(Duplicate Detection Filter, "Duplicate Detection Filter", "Azure Service Bus Native Property (RequiresDuplicateDetection)", "Enforces exactly-once semantics using native broker features.")
+    Component(Subscription Filter Rules, "Subscription Filter Rules", "Azure Service Bus SQL Filters", "Broker-level routing rules on topics to segment traffic by claim type.")
+    Component(DLQ Processor / Forwarder, "DLQ Processor / Forwarder", "Azure Service Bus Auto-Forwarding", "Auto-forwarding mechanism routing poisoned messages to a triage queue.")
+    Component(Session State Management, "Session State Management", "Azure Service Bus Session State", "Broker-native session state persistence on the sync queue.")
+}
+
+Rel(Claims Core Service, Claim Event Topic, "Publish domain events (`ClaimSubmitted`, `ClaimUpdated`)", "AMQP")
+Rel(Claim Event Topic, Subscription Filter Rules, "Route events based on claim type", "AMQP")
+Rel(Mainframe Integration Adapter, Mainframe Sync Queue, "Consume ordered messages and manage session state", "AMQP")
+Rel(Mainframe Sync Queue, DLQ Processor / Forwarder, "Forward poisoned sync messages", "AMQP")
+
+@enduml

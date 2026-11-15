@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Appointment Service container
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway routing requests.")
+System_Ext(identity_service, "Identity Service", "Provides identity and access management.")
+
+Container_Boundary(appointment_service, "Appointment Service") {
+    Component(AppointmentController, "AppointmentController", "HTTPS/mTLS REST endpoints, Spring Boot", "Handles incoming HTTPS/mTLS REST endpoints and JWT-based authorization.")
+    Component(SchedulingEngine, "SchedulingEngine", "Spring Boot, Java", "Enforces business logic, resource clash checks, and conflict-free slot allocation.")
+    Component(CalendarIntegration, "CalendarIntegration", "resilience4j circuit breakers", "Synchronizes with external provider calendars using resilience4j circuit breakers.")
+    Component(AppointmentRepository, "AppointmentRepository", "Spring Data JPA, Hibernate Envers, PostgreSQL", "Manages data persistence, PostgreSQL interactions, and Hibernate Envers audit trails.")
+    Component(RedisCluster, "Redis Cluster", "Redis, Redlock, TLS, AES-256", "Provides distributed locking with TLS encryption and AES-256 at rest.")
+    Component(ApacheKafka, "Apache Kafka", "Apache Kafka, JWE, Spring Cloud Stream", "Publishes encrypted AppointmentScheduled events using JWE and tokenized patient references.")
+}
+
+Rel(api_gateway, AppointmentController, "Routes scheduling requests", "HTTPS / mTLS (Istio)")
+Rel(AppointmentController, identity_service, "Validates JSON Web Tokens (JWT) locally", "JWT")
+Rel(SchedulingEngine, RedisCluster, "Executes distributed lock checks before writes", "TLS")
+Rel(SchedulingEngine, AppointmentRepository, "Queries and persists slot availability", "JDBC / Spring Data JPA")
+Rel(SchedulingEngine, ApacheKafka, "Publishes asynchronous domain events", "Spring Cloud Stream")
+
+@enduml

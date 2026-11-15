@@ -1,0 +1,34 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(ClinicManagementSystem, "Clinic Management System", "Hybrid Enterprise Architecture", "The overarching system providing healthcare and administrative workflows.")
+
+Container_Ext(ApacheKafkaStatefulSet, "Apache Kafka StatefulSet", "Apache Kafka", "Streaming platform supplying clinical and billing event streams.")
+Container_Ext(MinIOObjectStorageGatewayContainer, "MinIO Object Storage Gateway Container", "MinIO Object Storage", "Object storage receiving encrypted historical partitions and snapshots.")
+Container_Ext(ComplianceArchivalGateway, "Compliance Archival Gateway", "HTTPS Gateway", "Gateway receiving encrypted historical partitions and snapshots for compliance.")
+Container_Ext(AuditComplianceSidecarContainer, "Audit & Compliance Sidecar Container", "gRPC Service", "Sidecar container receiving security events and query audits.")
+Container_Ext(APIGatewayContainer, "API Gateway Container", "HTTP/TCP", "Gateway accessing analytical query endpoints.")
+Container_Ext(ReportingServices, "Reporting Services", "HTTP/TCP", "Services consuming analytical query endpoints.")
+Container_Ext(ObservabilityCollectorContainer, "Observability Collector Container", "Prometheus / HTTP", "Collector scraping telemetry metrics from the analytics engine.")
+
+Container_Boundary(ClickHouseAnalyticsEngine, "ClickHouse Analytics Engine") {
+    Component(ColumnarStorageEngineMergeTreeTableFamily, "Columnar Storage Engine & MergeTree Table Family", "ClickHouse Core & MergeTree", "Provides high-throughput analytical reporting, billing insights, and clinical data aggregation using columnar storage.")
+    Component(VectorizedQueryExecutionEngine, "Vectorized Query Execution Engine", "ClickHouse Vectorized Engine", "Executes analytical queries with sub-second performance using vectorized processing.")
+    Component(ClickHouseKeeperCluster, "ClickHouse Keeper Cluster", "ClickHouse Keeper", "Handles metadata coordination across hybrid Kubernetes nodes for active-active replication.")
+    Component(KafkaTableEngineDataIngestionCoordinator, "Kafka Table Engine & Data Ingestion Coordinator", "Kafka Table Engine (Engine = Kafka)", "Consumes clinical and billing event streams in real-time from Apache Kafka.")
+    Component(MutationExecutionControllerSchemaEvolutionManager, "Mutation Execution Controller & Schema Evolution Manager", "ClickHouse Mutation Controller", "Manages data mutations and schema evolution while adhering to 10-year data retention compliance.")
+    Component(NativeDiskEncryptionManager, "Native Disk Encryption Manager", "LUKS & PKCS#11 / HSM (AES-256)", "Ensures encrypted block storage and native disk encryption at rest.")
+    Component(AuditLoggingInterceptorResourceGovernanceGovernor, "Audit Logging Interceptor & Resource Governance Governor", "ClickHouse Interceptor & Governor", "Intercepts operations for audit logging and governs resource usage for strict compliance.")
+    Component(PrometheusMetricsExporter, "Prometheus Metrics Exporter", "Prometheus Exporter (Port 9363)", "Exposes telemetry and performance metrics over HTTP.")
+}
+
+Rel(KafkaTableEngineDataIngestionCoordinator, ApacheKafkaStatefulSet, "Consumes clinical and billing event streams", "Native Binary TCP")
+Rel(ColumnarStorageEngineMergeTreeTableFamily, MinIOObjectStorageGatewayContainer, "Exports encrypted historical partitions and snapshots", "HTTPS")
+Rel(ColumnarStorageEngineMergeTreeTableFamily, ComplianceArchivalGateway, "Exports encrypted historical partitions and snapshots", "HTTPS")
+Rel(AuditLoggingInterceptorResourceGovernanceGovernor, AuditComplianceSidecarContainer, "Forwards security events and query audits", "gRPC")
+Rel(VectorizedQueryExecutionEngine, APIGatewayContainer, "Exposes analytical query endpoints", "HTTP/TCP")
+Rel(VectorizedQueryExecutionEngine, ReportingServices, "Exposes analytical query endpoints", "HTTP/TCP")
+Rel(PrometheusMetricsExporter, ObservabilityCollectorContainer, "Scrapes telemetry metrics", "Prometheus over HTTP (Port 9363)")
+
+@enduml

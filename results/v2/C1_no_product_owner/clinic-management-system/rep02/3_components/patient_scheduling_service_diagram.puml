@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Patient & Scheduling Service container
+
+Person(API_Gateway_Envoy, "API Gateway (Envoy)", "External system")
+System_Ext(External_Notification_Gateway, "External Notification Gateway", "External system")
+
+Container_Boundary(Patient_Scheduling_Service, "Patient & Scheduling Service") {
+    Component(Patient_Registry_Controller, "Patient Registry Controller", "Go, chi/gRPC", "Handles REST/gRPC endpoints and JWT-based RBAC for patient demographics.")
+    Component(Scheduling_Engine, "Scheduling Engine", "Go", "Executes resource clash checks using an in-memory interval tree and atomic DB locks.")
+    Component(Audit_Interceptor, "Audit Interceptor", "Go middleware", "Provides cryptographic audit logging signed via HashiCorp Vault.")
+    Component(Notification_Dispatcher, "Notification Dispatcher", "Go worker pool", "Manages asynchronous patient reminders and appointment alerts.")
+    Component(PostgreSQL_with_Patroni, "PostgreSQL with Patroni", "PostgreSQL", "Relational database providing ACID-compliant storage with encrypted connections.")
+    Component(NATS_RabbitMQ, "NATS / RabbitMQ", "NATS / RabbitMQ", "Message broker handling domain events with DLQ configuration.")
+}
+
+Rel(API_Gateway_Envoy, Patient_Registry_Controller, "Routes external client requests", "gRPC over Istio mTLS")
+Rel(Scheduling_Engine, PostgreSQL_with_Patroni, "Executes booking transactions and clash checks", "Encrypted SQL")
+Rel(Patient_Registry_Controller, NATS_RabbitMQ, "Publishes domain events", "TLS 1.3")
+Rel(Scheduling_Engine, Notification_Dispatcher, "Triggers async notifications", "Internal channels / TLS 1.3")
+Rel(Notification_Dispatcher, External_Notification_Gateway, "Sends patient alerts with PII masking", "HTTPS / TLS 1.3 with certificate pinning")
+
+@enduml

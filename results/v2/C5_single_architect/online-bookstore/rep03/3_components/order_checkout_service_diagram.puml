@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Order & Checkout Service container
+
+Container_Boundary(order_checkout_service, "Order & Checkout Service") {
+    Component(CheckoutController, "CheckoutController", "NestJS Controller", "Entry point handling API requests, workflow orchestration, and request idempotency.")
+    Component(CheckoutFacade, "CheckoutFacade", "NestJS Facade", "Handles workflow orchestration.")
+    Component(IdempotencyGuard, "IdempotencyGuard", "NestJS Interceptor / Redis", "Interceptor leveraging Redis to prevent double-charging on retries.")
+    Component(OrderManager, "OrderManager", "NestJS Service", "Manages the order state machine and transactional database persistence.")
+    Component(PaymentClient, "PaymentClient", "NestJS Client / Circuit Breaker", "Integrates securely with external payment gateways using circuit breakers.")
+    Component(FulfillmentClient, "FulfillmentClient", "NestJS Client", "Coordinates third-party shipping provider APIs and regional tax calculations.")
+    Component(EventPublisher, "EventPublisher", "NestJS Event Publisher", "Publishes asynchronous domain events for downstream processing.")
+    
+    ComponentDb(Amazon_RDS_PostgreSQL, "Amazon RDS (PostgreSQL)", "PostgreSQL", "Relational database utilizing SERIALIZABLE isolation for ACID order consistency.")
+    ComponentDb(Amazon_ElastiCache_Redis, "Amazon ElastiCache (Redis)", "Redis", "In-memory data store for high-performance idempotency locking.")
+}
+
+Component(AWS_EventBridge_SQS, "AWS EventBridge & SQS", "AWS EventBridge", "Event bus for reliable, asynchronous message delivery.")
+Component(Payment_Gateway, "Payment Gateway", "HTTPS / REST", "External service that processes secure charges.")
+Component(Shipping_Provider_Tax_API, "Shipping Provider & Tax API", "HTTPS / REST", "External services coordinating shipping and tax.")
+
+Rel(CheckoutController, OrderManager, "In-process TypeScript method calls")
+Rel(OrderManager, PaymentClient, "In-process coordination")
+Rel(OrderManager, FulfillmentClient, "In-process coordination")
+Rel(EventPublisher, AWS_EventBridge_SQS, "Publishes OrderPlaced events", "AWS SDK / HTTPS")
+Rel(OrderManager, Amazon_RDS_PostgreSQL, "Persists transactional state", "PostgreSQL Protocol")
+Rel(PaymentClient, Payment_Gateway, "Processes secure charges", "HTTPS / REST")
+Rel(FulfillmentClient, Shipping_Provider_Tax_API, "Coordinates shipping and tax", "HTTPS / REST")
+Rel(IdempotencyGuard, Amazon_ElastiCache_Redis, "Caches request keys for deduplication", "Redis Protocol")
+
+@enduml

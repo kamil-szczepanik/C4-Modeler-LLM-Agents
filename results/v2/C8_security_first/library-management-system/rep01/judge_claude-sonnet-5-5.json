@@ -1,0 +1,259 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.5,
+  "justifications": {
+   "functional_suitability": "Catalogue & Search Service Container and Cataloguing & Bulk Ingestion Worker cover R-01 cataloguing, with Circulation & Loan Service as extra. Gaps: digital items have no storage or content delivery element, and Elasticsearch is absent from the container view. Catalogue persistence is unclear.",
+   "performance_efficiency": "Search Cache Component (Redis), Elasticsearch-based Search & Discovery Engine, BFF aggregation in GraphQL/REST API Layer, PgBouncer, HikariCP, Rate Limiting Module and async Event Publisher target the 800 ms p99. Gaps: no explicit scaling or autoscaling, and no load-test evidence.",
+   "compatibility": "Standards-based interfaces: OIDC/OAuth2 with External IdP, REST with mTLS to External Payment Gateway and Notification Service, gRPC internally. Gaps: no container integrates the Payment Gateway, and the IdP flow is inconsistent. No library standards such as MARC or Z39.50 are named.",
+   "usability": "Patrons, staff and administrators have routes via API Gateway / Ingress, Patron BFF Container and Staff Workflow Container. Notification Dispatcher localizes messages. Gaps: no explicit web/mobile UI container at L2, and no administrator-specific container or interface.",
+   "reliability": "Patroni/etcd with PostgreSQL Primary & Standby, Redis Sentinel, Resilience4j Fallback Handler, Temporal retries in Notification Workflow Engine, and the async Event Publisher provide fault tolerance. Gaps: no Elasticsearch HA, no backup or DR design, no gateway redundancy.",
+   "security": "Strong layers: mTLS gRPC, TLS 1.3, JWT/ABAC Middleware, Envoy WAF, immutable Audit Logging Interceptor, pgaudit streaming to SIEM, and SASL/SCRAM broker auth. Gaps: no encryption at rest or secrets management, and the data-residency enforcement claim in the Security and Authentication Engine is vague.",
+   "maintainability": "Clear decomposition into Patron BFF, Staff Workflow, Catalogue & Search, Circulation & Loan and Notification Dispatcher, with layered components and a CloudNativePG operator. Redis exporter gives observability. Gaps: inconsistent flows, an undefined event bus container, and a shared PostgreSQL.",
+   "portability": "Kubernetes-based CloudNativePG, Envoy/Traefik ingress and open-source Redis, PostgreSQL and Elasticsearch avoid vendor lock-in. Gaps: no explicit containerization or deployment diagram, no IaC, and no EU-region hosting specifics."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.375,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 2.0,
+   "Modifiability": 2.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "API Gateway / Ingress",
+     "Patron BFF Container",
+     "Catalogue & Search Service Container",
+     "Search Cache Component",
+     "Search & Discovery Engine"
+    ],
+    "sensitivity_points": [
+     "Redis cache hit ratio",
+     "Elasticsearch capacity and sizing",
+     "Rate limiting under spike load"
+    ],
+    "tradeoffs": [
+     "Caching speeds search but risks stale results",
+     "Rate limiting protects latency but may throttle users"
+    ],
+    "justification": "Elasticsearch, Redis search cache, BFF aggregation and gateway rate limiting support the target. However no autoscaling, replica or load-test mechanisms are shown, and the cache link is not clearly wired to the search path."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Cataloguing & Bulk Ingestion Worker",
+     "Batch Job Manager Component",
+     "Search & Discovery Engine",
+     "Data Access Repository",
+     "Search Cache Component"
+    ],
+    "sensitivity_points": [
+     "Index refresh interval",
+     "Bulk ingestion contention with search",
+     "Cache invalidation after updates"
+    ],
+    "tradeoffs": [
+     "Fast index freshness costs search throughput",
+     "Batch writes compete with interactive search"
+    ],
+    "justification": "Separate ingestion worker and batch manager exist, but the path from the worker to the Elasticsearch index is unclear (it persists to relational storage), and there is no cache invalidation, workload isolation or 5-minute freshness mechanism."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "Catalogue & Search Service Container",
+     "Search & Discovery Engine",
+     "PostgreSQL",
+     "Redis Sentinel",
+     "Circulation & Loan Service Container"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch replica and shard configuration",
+     "Failover detection time",
+     "Search fallback behaviour"
+    ],
+    "tradeoffs": [
+     "Replicas improve availability but increase cost and sync lag"
+    ],
+    "justification": "PostgreSQL has Patroni and standby, and Redis has Sentinel, protecting loan transactions. But the Elasticsearch cluster has no modelled nodes, replicas or failover, so search continuity on node failure is unaddressed."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "API Gateway / Ingress",
+     "Patron BFF Container",
+     "Session Manager",
+     "Redis",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "BFF instance redundancy",
+     "Gateway health checks",
+     "Redis session failover"
+    ],
+    "tradeoffs": [
+     "Shared Redis sessions enable stateless instances but add a dependency"
+    ],
+    "justification": "Sessions are held in Redis with Sentinel, and the BFF is stateless in principle. But instance replication, load balancing and health checks are not modelled, and the portal frontends are not shown at container level."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "elements": [
+     "Catalogue & Search Service Container",
+     "Cataloguing & Bulk Ingestion Worker",
+     "Batch Job Manager Component"
+    ],
+    "sensitivity_points": [
+     "Absence of provider adapter abstraction",
+     "Schema validation coupling"
+    ],
+    "tradeoffs": [
+     "A generic ingestion worker is simple but couples providers"
+    ],
+    "justification": "A bulk ingestion worker exists but there is no provider integration or plugin component, nor an external e-book provider system. Adding a provider would likely modify the ingestion worker and possibly more, so confinement is not assured."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "elements": [
+     "Circulation Policy Engine",
+     "Loan Management Controller"
+    ],
+    "sensitivity_points": [
+     "Whether policies are externalized or hardcoded",
+     "Per-tenant policy configuration"
+    ],
+    "tradeoffs": [
+     "Configurable rules add flexibility but need validation and governance"
+    ],
+    "justification": "A dedicated Circulation Policy Engine localizes rules, which is good. But it is a Spring bean with no externalized configuration, rules store or tenant-specific policy mechanism, so runtime change without redeployment is not shown."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "Security and Authentication Engine",
+     "Redis",
+     "PostgreSQL",
+     "External Notification Service",
+     "External Payment Gateway",
+     "External Identity Provider (IdP)"
+    ],
+    "sensitivity_points": [
+     "External services' hosting region",
+     "SIEM location",
+     "Notification payloads containing PII"
+    ],
+    "tradeoffs": [
+     "External SaaS integrations ease delivery but threaten residency"
+    ],
+    "justification": "EU Redis and a claimed gateway residency enforcement are present, but there is no concrete mechanism or region deployment view. External IdP, notification and payment services and the unspecified SIEM could process patron data outside the EU."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "JWT/ABAC Middleware",
+     "Patron BFF Container",
+     "Audit Logging Interceptor Component",
+     "pgaudit Extension",
+     "Security and Authentication Engine"
+    ],
+    "sensitivity_points": [
+     "ABAC policy correctness for ownership checks",
+     "Logging of denied attempts",
+     "Authorization at the Circulation service"
+    ],
+    "tradeoffs": [
+     "Strict ABAC checks add latency but prevent disclosure"
+    ],
+    "justification": "The BFF has JWT/ABAC middleware and the gateway validates JWTs, so ownership denial is plausible. But denial logging is not explicit for patrons (audit is on staff and pgaudit), and the Circulation service has no authorization component."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.6666666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Security and Authentication Engine",
+     "Session Manager",
+     "Library Management System"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Catalogue & Search Service Container",
+     "Cataloguing & Bulk Ingestion Worker",
+     "Search & Discovery Engine",
+     "Data Access Repository",
+     "PostgreSQL",
+     "Staff Workflow Container",
+     "Catalogue Integration Client",
+     "Batch Job Manager Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Catalogue & Search Service Container",
+     "Search & Discovery Engine",
+     "Search Cache Component",
+     "Redis",
+     "GraphQL/REST API Layer",
+     "Rate Limiting and Policy Module"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

@@ -1,0 +1,333 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 through R-03 directly: Real-Time Scoring Service evaluates authorizations, Case Management Backend handles flagged reviews via Case Workflow Engine, and AWS CodeDeploy alongside dynamic S3 rules loading enables zero-downtime scoring and model updates.",
+   "performance_efficiency": "Sub-50ms P99 latency at 3,000 req/s is supported by Go on ECS Fargate, In-Process Go Cache, DynamoDB Feature Cache via VPC endpoints, and asynchronous auditing via Messaging & Event Bus. However, routing ingress through Amazon API Gateway and Lambda introduces latency overhead.",
+   "compatibility": "The architecture supports Payment Gateway integration via gRPC and HTTPS/mTLS. While Card Networks / Tokenization Vault is identified in the System Context diagram, container and component diagrams omit direct interactions between the scoring pipeline and the external token vault.",
+   "usability": "Fraud Analysts and Risk Operations Managers access the system via HTTPS and ZTNA/SSO. However, only Case Management Backend is modeled without any dedicated UI, frontend client, or portal container to support analyst case review workflows.",
+   "reliability": "High availability is addressed through Circuit Breaker & Fallback Engine in API Gateway, Fallback Circuit Breaker Component in Go, and CloudWatch Synthetics Canary, ensuring payment processing is not blocked for over one minute during scoring outages.",
+   "security": "PCI-DSS compliance is strictly observed: PAN avoidance via Card Networks / Tokenization Vault, payload sanitization in Audit & Evidence Assembler, KMS encryption, AWS WAF, and tamper-evident 7-year storage via Amazon S3 with Object Lock in Compliance Mode.",
+   "maintainability": "Responsibilities are cleanly partitioned between Real-Time Scoring Service and Case Management Backend. Leveraging managed services (Fargate, DynamoDB, SQS, Firehose) aligns well with the 3-engineer operational constraint, though tight coupling to proprietary AWS primitives limits modular component replacement.",
+   "portability": "The system is tailored for AWS eu-west-1 using ECS Fargate, DynamoDB, SQS/SNS, Kinesis Firehose, and S3 Object Lock. While well-adapted to the target cloud, deep proprietary AWS lock-in significantly restricts portability to on-premises or alternate cloud providers."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 4.5,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "Routing all authorization traffic through API Gateway and a Lambda circuit breaker before reaching Fargate introduces invocation and serialization overheads that jeopardize the 50 ms P99 latency budget under 3,000 RPS.",
+    "elements": [
+     "API Gateway & Fallback Layer",
+     "Ingress Router",
+     "Circuit Breaker & Fallback Engine",
+     "Real-Time Scoring Service",
+     "Feature Cache"
+    ],
+    "sensitivity_points": [
+     "Lambda execution overhead in the synchronous request path",
+     "DynamoDB VPC endpoint read latency under 3,000 RPS"
+    ],
+    "tradeoffs": [
+     "Serverless ingress components reduce operational burden but introduce latency jitter"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Case Management Backend runs in a dedicated Fargate container querying Aurora PostgreSQL, completely isolated from the Go scoring service and DynamoDB feature cache used for authorization decisions.",
+    "elements": [
+     "Real-Time Scoring Service",
+     "Feature Cache",
+     "Case Management Backend",
+     "Audit and Case Data Store",
+     "Messaging & Event Bus"
+    ],
+    "sensitivity_points": [
+     "Physical isolation between scoring infrastructure and analyst review queries",
+     "Asynchronous replication between operational datastores"
+    ],
+    "tradeoffs": [
+     "Maintaining dual data stores increases consistency management complexity for operational data"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The ingress layer incorporates an AWS Lambda circuit breaker and fallback engine that executes default decisions if the scoring service fails, while emitting audit events to prevent payment blocking.",
+    "elements": [
+     "API Gateway & Fallback Layer",
+     "Circuit Breaker & Fallback Engine",
+     "Telemetry & Audit Emitter",
+     "Immutable Audit Log Sink"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker failure detection thresholds and execution timeout settings",
+     "Reliability of fallback audit emission without real-time scoring containers"
+    ],
+    "tradeoffs": [
+     "Failing open or closed maintains payment flow but risks fraud exposure or false declines"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The scoring service publishes audit events asynchronously using SNS and buffered SQS FIFO queues with DLQs, completely decoupling scoring latency and continuity from downstream audit persistence issues.",
+    "elements": [
+     "Real-Time Scoring Service",
+     "Audit Publisher Component",
+     "Messaging & Event Bus",
+     "Audit Buffer Queue (SQS)",
+     "Audit Storage"
+    ],
+    "sensitivity_points": [
+     "SQS queue retention limits and dead-letter queue buffering capacity",
+     "Asynchronous SDK non-blocking publish call durations"
+    ],
+    "tradeoffs": [
+     "Asynchronous buffering guarantees sub-50ms latency but introduces eventual audit persistence"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "AWS CodeDeploy provides automated canary deployments, while the scoring engine dynamically loads signed model binaries from S3 and tags every scored decision with the active model version.",
+    "elements": [
+     "Real-Time Scoring Service",
+     "AWS CodeDeploy",
+     "Amazon S3 with Object Lock",
+     "Scoring Engine Component",
+     "Audit Publisher Component"
+    ],
+    "sensitivity_points": [
+     "CodeDeploy canary health-check duration and rollback automation triggers",
+     "In-process model binary verification and hot-reloading stability"
+    ],
+    "tradeoffs": [
+     "Canary deployments lengthen deployment cycles slightly to ensure zero-downtime safety"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Dynamic loading of rules from S3 and cache invalidation via SNS/SQS enable rules to activate within one hour without service downtime, while decision explanations are captured by the scoring engine.",
+    "elements": [
+     "Real-Time Scoring Service",
+     "Amazon S3 with Object Lock",
+     "In-Process Go Cache",
+     "Audit Publisher Component"
+    ],
+    "sensitivity_points": [
+     "Eventual consistency delay of cache invalidation across distributed Go scoring containers",
+     "Rule syntax validation prior to dynamic runtime loading"
+    ],
+    "tradeoffs": [
+     "Dynamic rule reloading without container restarts increases runtime engine parsing complexity"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "PANs are never stored, tokenization is enforced externally, and the Audit & Evidence Assembler sanitizes payloads before presentation. However, specific UEBA detection mechanisms for 15-minute anomaly alerting are only generic.",
+    "elements": [
+     "Card Networks / Tokenization Vault",
+     "Case Management Backend",
+     "Audit & Evidence Assembler",
+     "Telemetry & Audit Emitter"
+    ],
+    "sensitivity_points": [
+     "Enforcement of field-level masking in the Audit & Evidence Assembler",
+     "Alerting threshold latency within CloudWatch and X-Ray telemetry"
+    ],
+    "tradeoffs": [
+     "Restricting analyst access to tokens simplifies compliance but impedes manual investigation"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Audit payloads with inputs, model versions, and explanations are stored via Kinesis Firehose into S3 with Object Lock in Compliance Mode and transitioned to Glacier, enabling retrieval within hours.",
+    "elements": [
+     "Audit Storage",
+     "Amazon S3 with Object Lock",
+     "Amazon S3 Glacier Flexible Retrieval",
+     "AWS KMS",
+     "Immutable Audit Log Sink"
+    ],
+    "sensitivity_points": [
+     "WORM compliance retention configuration preventing premature object deletion",
+     "Glacier Flexible Retrieval job initiation and restore turnaround times"
+    ],
+    "tradeoffs": [
+     "Glacier tiering drastically reduces 7-year storage costs but requires hours to restore data"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Card Networks / Tokenization Vault",
+     "AWS WAF",
+     "AWS KMS",
+     "Feature Cache",
+     "Audit and Case Data Store"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Amazon S3 with Object Lock",
+     "Amazon S3 Glacier Flexible Retrieval",
+     "Immutable Audit Log Sink",
+     "Audit & Evidence Assembler"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Circuit Breaker & Fallback Engine",
+     "Amazon S3 Glacier Flexible Retrieval"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Amazon Kinesis Data Firehose",
+     "Ingress Router",
+     "Amazon ECS Fargate"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Service",
+     "API Handler Component",
+     "Scoring Engine Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Backend",
+     "Case API Controller",
+     "Case Workflow Engine",
+     "Audit and Case Data Store",
+     "Fraud Analysts and Risk Operations Managers"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AWS CodeDeploy",
+     "Amazon S3 with Object Lock",
+     "Real-Time Scoring Service"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Service",
+     "Feature Cache",
+     "In-Process Go Cache",
+     "Amazon DynamoDB",
+     "Telemetry & Audit Emitter"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Card Networks / Tokenization Vault",
+     "Audit & Evidence Assembler",
+     "Telemetry & Audit Emitter",
+     "AWS KMS"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Publisher Component",
+     "Audit & Evidence Assembler",
+     "Amazon S3 with Object Lock",
+     "Immutable Audit Log Sink",
+     "Messaging & Event Bus"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "API Gateway & Fallback Layer",
+     "Circuit Breaker & Fallback Engine",
+     "Fallback Circuit Breaker Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

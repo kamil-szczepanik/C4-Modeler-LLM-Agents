@@ -1,0 +1,306 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 3,
+   "portability": 3
+  },
+  "mean": 3.5,
+  "justifications": {
+   "functional_suitability": "Video consultations (R-01), e-prescriptions (R-02), AI symptom checking (R-03), and consent (R-04) are modeled. However, Patient Portal Container has no connection to LiveKit WebRTC SFU or Clinical Workspace Container, leaving patient video consultations functionally disconnected. E-prescription and AI workflows are otherwise represented.",
+   "performance_efficiency": "Asynchronous e-prescription handling via Google Cloud Pub/Sub and UDP-optimized ingress for LiveKit SFU provide scalability. However, there are no specific mechanisms (such as adaptive bitrate streaming, audio-only degradation, or compression policies) to ensure consultations continue below 300 kbit/s.",
+   "compatibility": "The architecture explicitly supports external systems via standard protocols: E-Prescription Controller communicates with Local Pharmacies using HL7 FHIR (US) and EU national standards, while Vertex AI is integrated via gRPC/REST over mTLS.",
+   "usability": "Dedicated user interfaces are provided: Patient Portal Container (PWA) with Offline Storage Manager for resilient patient interaction, and Clinical Workspace Container for clinicians. Platform administrators have dedicated compliance access. Minor gap exists in direct patient consultation orchestration.",
+   "reliability": "Offline Storage Manager provides client-side offline resilience with IndexedDB. However, the architecture lacks concrete fault tolerance and degraded-mode mechanisms for low-bandwidth video (R-06), and multi-region deployment failover across europe-west3 and us-central1 is not explicitly articulated.",
+   "security": "Strong security controls are specified: Istio Service Mesh enforces mTLS, OPA Sidecars govern granular consent policies, Audit Logger targets WORM BigQuery for R-07 traceability, and Patient Portal leverages Web Crypto API and Identity-Aware Proxy for authentication.",
+   "maintainability": "Responsibilities are split across microservices and components, but Clinical Workspace Container combines frontend web interfaces, a LiveKit SFU, and backend GKE microservices into a single container. Both Patient Portal and Clinical Workspace duplicate AI client logic.",
+   "portability": "GKE, Pub/Sub, BigQuery, and Vertex AI align with the target GCP cloud. However, the architecture relies heavily on proprietary GCP-managed services, and explicit multi-region deployment patterns separating europe-west3 and us-central1 are missing from the container topologies."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 1,
+   "MOD-01": 3,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.625,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 2.5,
+   "Modifiability": 3.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "LiveKit WebRTC SFU on GKE provides a foundation for video streaming, but specific autoscaling policies, SFU media node clustering, and bandwidth capacity to handle 5,000 concurrent media streams are unspecified.",
+    "elements": [
+     "Web Interface & Video Module",
+     "Clinical Workspace Container",
+     "Patient Portal Container (PWA)"
+    ],
+    "sensitivity_points": [
+     "SFU cluster scaling and media bandwidth capacity under peak regional demand"
+    ],
+    "tradeoffs": [
+     "Centralized SFU media routing improves control but increases compute and bandwidth costs"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "A throughput of ~14 requests/second is easily handled by GCP Vertex AI via gRPC/REST over mTLS, though edge caching or queue throttling is not explicitly modeled.",
+    "elements": [
+     "AI Symptom Checker Client",
+     "Vertex AI",
+     "Patient Portal Container (PWA)"
+    ],
+    "sensitivity_points": [
+     "Vertex AI inference latency and endpoint quota management"
+    ],
+    "tradeoffs": [
+     "Direct managed AI service integration minimizes operational overhead but adds external latency dependency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "LiveKit WebRTC SFU handles adaptive degradation (simulcast/audio fallback) down to low bitrates, while the Offline Storage Manager secures cached health data and notes using IndexedDB.",
+    "elements": [
+     "Web Interface & Video Module",
+     "Offline Storage Manager",
+     "Patient Portal Container (PWA)"
+    ],
+    "sensitivity_points": [
+     "WebRTC adaptive bitrate threshold tuning for low-bandwidth connections"
+    ],
+    "tradeoffs": [
+     "Degrading to audio-only preserves connectivity at the expense of clinical visual assessment"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 1,
+    "justification": "The target cloud specification lists only a single US region (us-central1). Because data residency strictly forbids transferring US health data to europe-west3, a total US regional outage leaves no secondary US host to restore service.",
+    "elements": [
+     "Cross-Border Telehealth Platform"
+    ],
+    "sensitivity_points": [
+     "Multi-region US disaster recovery configuration within regional residency boundaries"
+    ],
+    "tradeoffs": [
+     "Single-region deployment lowers infrastructure complexity but prevents failover compliance"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "The E-Prescription Controller connects to Local Pharmacies, but it is modeled as an monolithic component rather than exposing an explicit, modular adapter plugin interface for diverse national standards.",
+    "elements": [
+     "E-Prescription Controller",
+     "Local Pharmacies"
+    ],
+    "sensitivity_points": [
+     "Modularity and abstraction of e-prescription protocol integrations"
+    ],
+    "tradeoffs": [
+     "Coupling multiple integration formats in one controller simplifies deployment but increases maintenance risk"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Vertex AI natively supports model versioning and traffic shifting, while the AI Symptom Checker Client and Audit Logger explicitly record inputs and model versions to immutable storage.",
+    "elements": [
+     "AI Symptom Checker Client",
+     "Vertex AI",
+     "Audit Logger",
+     "Consent & Compliance Container"
+    ],
+    "sensitivity_points": [
+     "Model version tagging in inference payloads and audit logging consistency"
+    ],
+    "tradeoffs": [
+     "Comprehensive model audit logging adds slight latency to each inference transaction"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Cross-region requests are intercepted by Istio and evaluated by OPA Sidecars against granular consent policies, with every access attempt logged to immutable audit storage via the Audit Logger.",
+    "elements": [
+     "OPA Sidecars",
+     "Istio Service Mesh",
+     "Audit Logger",
+     "Consent & Compliance Container"
+    ],
+    "sensitivity_points": [
+     "Strict policy evaluation rules in OPA for cross-border access control"
+    ],
+    "tradeoffs": [
+     "Synchronous policy checks on every access request add processing overhead"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Patient consent updates propagate immediately to the Consent & Compliance Container, allowing OPA sidecars to dynamically deny research data sharing, verified through WORM audit logs.",
+    "elements": [
+     "Consent & Compliance Container",
+     "OPA Sidecars",
+     "Audit Logger",
+     "Patient Portal Container (PWA)"
+    ],
+    "sensitivity_points": [
+     "Propagation speed of consent revocation to distributed policy decision points"
+    ],
+    "tradeoffs": [
+     "Immediate authorization invalidation requires frequent policy synchronization"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "full",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "none",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.6666666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Consent & Compliance Container",
+     "OPA Sidecars",
+     "Audit Logger"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Consent & Compliance Container",
+     "OPA Sidecars"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Client",
+     "Consent & Compliance Container",
+     "Audit Logger"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Patient Portal Container (PWA)",
+     "Offline Storage Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Portal Container (PWA)",
+     "Clinical Workspace Container",
+     "Telehealth Interface",
+     "Web Interface & Video Module"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Clinical Workspace Container",
+     "E-Prescription Controller",
+     "Local Pharmacies"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "AI Symptom Checker Client",
+     "Vertex AI"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Consent & Compliance Container",
+     "OPA Sidecars",
+     "Offline Storage Manager"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Consent & Compliance Container",
+     "OPA Sidecars",
+     "Istio Service Mesh"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "none"
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Client",
+     "Consent & Compliance Container",
+     "Audit Logger"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Clinical Workspace Container",
+     "E-Prescription Controller",
+     "Local Pharmacies"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

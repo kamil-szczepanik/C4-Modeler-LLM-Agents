@@ -1,0 +1,36 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Notification & Payment Worker / DRM Worker container
+
+System_Ext(MessageBroker, "Message Broker", "Apache Kafka")
+System_Ext(CachingLayer, "Caching Layer", "Redis")
+System_Ext(EUHostedPaymentGateway, "EU-Hosted Payment Gateway", "External Service")
+System_Ext(NotificationService, "Notification Service", "External Service")
+System_Ext(DigitalContentRepositoryDRMProvider, "Digital Content Repository / DRM Provider", "External Service")
+
+Container_Boundary(NotificationPaymentWorker_DRMWorker, "Notification & Payment Worker / DRM Worker") {
+    Component(KafkaTaskRouter, "Kafka Task Router", "Python / Celery", "Internal component for ingesting asynchronous task payloads.")
+    Component(PaymentTaskConsumer, "Payment Task Consumer", "Python / Celery", "Internal component processing financial events.")
+    Component(NotificationDispatcher, "Notification Dispatcher", "Python / Celery", "Internal component formatting and delivering alerts.")
+    Component(DRMLicenseManager, "DRM License Manager", "Python / Celery", "Internal component interacting with digital rights endpoints.")
+    Component(WorkerStateCacheManager, "Worker State Cache Manager", "Redis / redis-py", "Internal component tracking task idempotency and retry states.")
+    Component(WorkerDLQRetryHandler, "Worker DLQ & Retry Handler", "Python / Apache Kafka", "Internal component managing failed task exceptions and dead-letter queues.")
+}
+
+Rel(MessageBroker, KafkaTaskRouter, "Consumes asynchronous task events", "TCP / Kafka Protocol")
+Rel(KafkaTaskRouter, PaymentTaskConsumer, "Delegates tasks internally", "Python Function Calls / Celery routing")
+Rel(KafkaTaskRouter, NotificationDispatcher, "Delegates tasks internally", "Python Function Calls / Celery routing")
+Rel(KafkaTaskRouter, DRMLicenseManager, "Delegates tasks internally", "Python Function Calls / Celery routing")
+Rel(PaymentTaskConsumer, CachingLayer, "Stores task idempotency keys and retry states", "TCP / Redis Protocol")
+Rel(NotificationDispatcher, CachingLayer, "Stores task idempotency keys and retry states", "TCP / Redis Protocol")
+Rel(DRMLicenseManager, CachingLayer, "Stores task idempotency keys and retry states", "TCP / Redis Protocol")
+Rel(PaymentTaskConsumer, EUHostedPaymentGateway, "Processes secure financial transactions", "HTTPS/REST")
+Rel(NotificationDispatcher, NotificationService, "Dispatches alerts", "HTTPS/REST")
+Rel(DRMLicenseManager, DigitalContentRepositoryDRMProvider, "Provisions access tokens", "HTTPS/REST")
+Rel(PaymentTaskConsumer, WorkerDLQRetryHandler, "Offloads persistently failed jobs", "in-process Python exception handling")
+Rel(NotificationDispatcher, WorkerDLQRetryHandler, "Offloads persistently failed jobs", "in-process Python exception handling")
+Rel(DRMLicenseManager, WorkerDLQRetryHandler, "Offloads persistently failed jobs", "in-process Python exception handling")
+Rel(WorkerDLQRetryHandler, MessageBroker, "Publishes poisoned messages to a dedicated DLQ topic", "TCP / Kafka Protocol")
+@enduml

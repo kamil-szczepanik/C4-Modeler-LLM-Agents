@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Audit & Compliance Worker container
+
+Person(RiskComplianceOfficer, "Risk / Compliance Officer", "Internal persona auditing historical screening decisions independently.")
+
+System_Ext(AmazonSQS, "Amazon SQS", "Decouples real-time payment ingestion from asynchronous logging.")
+System_Ext(AWSKMS, "AWS KMS", "Provides asymmetric cryptographic signing for non-repudiation.")
+
+Container_Boundary(AuditComplianceWorker, "Audit & Compliance Worker") {
+    Component(EventConsumerComponent, "Event Consumer Component", "Python", "Python process polling Amazon SQS.")
+    Component(CanonicalFormatterComponent, "Canonical Formatter Component", "Python", "Python module normalizing raw payloads into strict JSON schemas.")
+    Component(CryptographicSignerComponent, "Cryptographic Signer Component", "Python", "Utility applying asymmetric AWS KMS signatures.")
+    Component(S3BatchWriterComponent, "S3 Batch Writer Component", "Python", "Python module buffering and writing partitioned Apache Parquet files.")
+    Component(AWSS3ObjectLock, "AWS S3 Object Lock", "AWS S3", "Tamper-evident storage vault with Compliance Mode enabled.")
+    Component(AmazonAthena, "Amazon Athena", "AWS Athena", "Query engine for compliance officers.")
+}
+
+Rel(AmazonSQS, EventConsumerComponent, "Polls decision payloads", "AWS SDK / SQS API")
+Rel(EventConsumerComponent, CanonicalFormatterComponent, "In-memory method call", "Python")
+Rel(CanonicalFormatterComponent, CryptographicSignerComponent, "In-memory method call", "Python")
+Rel(CryptographicSignerComponent, AWSKMS, "Requests asymmetric signature", "HTTPS / KMS API")
+Rel(CryptographicSignerComponent, S3BatchWriterComponent, "Internal method call", "Python")
+Rel(S3BatchWriterComponent, AWSS3ObjectLock, "Multipart upload with SSE-KMS", "HTTPS / S3 API")
+Rel(RiskComplianceOfficer, AmazonAthena, "Executes compliance verification queries", "HTTPS / Athena Console or API")
+
+@enduml

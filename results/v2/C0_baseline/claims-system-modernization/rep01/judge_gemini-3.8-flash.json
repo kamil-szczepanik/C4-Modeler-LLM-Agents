@@ -1,0 +1,323 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "Requirements R-01, R-02, and R-03 are addressed by Customer Portal, Adjuster Web Application, and Anti-Corruption Layer (ACL). However, the Customer Portal lacks an explicit relationship or API link to the backend Claims Processing Service to actually submit claims.",
+   "performance_efficiency": "R-05 is directly met: the Adjuster Web Application queries the PostgreSQL Read-Cache via the Claim Presentation & Triage Component for sub-2s responses, avoiding the 5s mainframe latency through asynchronous synchronization using Azure Service Bus and Sync Consumer.",
+   "compatibility": "Coexistence with the Legacy Mainframe is achieved through the Anti-Corruption Layer, featuring JSON-to-COBOL Mapper and gRPC Mainframe Client, ensuring minimal legacy interface changes while integrating smoothly with on-premises systems and Entra ID.",
+   "usability": "Both distinct user groups are accommodated with dedicated, purpose-built interfaces: Policyholders and Brokers interact via the Customer Portal SPA, while Claims Adjusters use the Adjuster Web Application BFF.",
+   "reliability": "Zero claim loss (R-04) is enforced using Azure Service Bus Dead-Letter Queues, Polly retries in Integration Client Component, Replay Coordinator in the ACL, and continuous discrepancy checks by the Reconciliation Engine.",
+   "security": "R-07 is thoroughly met via Microsoft Entra ID integration across the Auth & Session Component and Authentication Manager. Secrets are protected using Azure Key Vault, communications use TLS/mTLS, and audit trails use WORM storage.",
+   "maintainability": "Modular domain design isolates legacy dependencies. R-06 is explicitly supported by the Kill-Switch Orchestrator and Migration Operations Dashboard, enabling one-day switchbacks per claim type, supported by the JSON-to-COBOL Mapper.",
+   "portability": "Supports the hybrid deployment between on-prem mainframe and Azure West Europe using containerized services in Azure Container Apps. However, services are tightly coupled to Azure-specific PaaS (Service Bus, Key Vault, Container Apps)."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 4.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The Adjuster BFF queries pre-synchronized view models directly from the PostgreSQL Read-Cache, completely isolating UI screen rendering from the 5-second mainframe response time.",
+    "elements": [
+     "Adjuster Web Application",
+     "Claim Presentation & Triage Component",
+     "PostgreSQL Read-Cache",
+     "Cache Storage Engine",
+     "Sync Consumer Component"
+    ],
+    "sensitivity_points": [
+     "Asynchronous read-model replication latency from mainframe to PostgreSQL",
+     "Cache hit ratios for open adjuster claim views"
+    ],
+    "tradeoffs": [
+     "Read performance improved at the cost of eventual data consistency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Peak online submissions are absorbed into Azure Service Bus and autoscaled via KEDA. However, explicit scheduling mechanisms to throttle or pause mainframe write ingestion during the batch window are not fully specified.",
+    "elements": [
+     "Customer Portal",
+     "Azure Service Bus",
+     "Container Runtime Host",
+     "Anti-Corruption Layer (ACL)",
+     "Service Bus Message Listener"
+    ],
+    "sensitivity_points": [
+     "Queue depth buffer sizing in Azure Service Bus under 5x volume spikes",
+     "Rate-limiting rate on gRPC Mainframe Client during peak ingestion"
+    ],
+    "tradeoffs": [
+     "Buffering requests shields mainframe but increases downstream message processing latency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Submissions are queued in Azure Service Bus and processed asynchronously. When the mainframe is offline during the batch window, messages persist safely and resume delivery upon availability via Polly retries and DLQs.",
+    "elements": [
+     "Azure Service Bus",
+     "Claims Processing Service",
+     "Integration Client Component",
+     "Anti-Corruption Layer (ACL)",
+     "Service Bus Message Listener"
+    ],
+    "sensitivity_points": [
+     "Azure Service Bus message retention limits and DLQ configuration",
+     "Retry backoff policies in the Polly integration client"
+    ],
+    "tradeoffs": [
+     "Asynchronous store-and-forward maintains availability but delays mainframe write confirmation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Migration Operations Dashboard provides a Reconciliation Engine and Replay Coordinator alongside versioning and dead-letter queues. However, automated distributed compensation between the cloud database and legacy DB2 lacks detailed transactional semantics.",
+    "elements": [
+     "Reconciliation Engine",
+     "Replay Coordinator",
+     "Audit & Versioning Manager",
+     "Message Broker Interface",
+     "Exception Handler Component"
+    ],
+    "sensitivity_points": [
+     "Idempotency token enforcement across JSON-to-COBOL translations",
+     "Accuracy of automated reconciliation diffing between DB2 and PostgreSQL"
+    ],
+    "tradeoffs": [
+     "Manual replay coordination provides safety but increases operational overhead during discrepancies"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Anti-Corruption Layer encapsulates COBOL mapping, and the Kill-Switch Orchestrator enables quick rollback. However, claim type routing and selective filtering logic within the processing pipeline are not explicitly diagrammed.",
+    "elements": [
+     "Kill-Switch Orchestrator",
+     "JSON-to-COBOL Mapper",
+     "Anti-Corruption Layer (ACL)",
+     "Migration Operations Dashboard",
+     "Azure Service Bus"
+    ],
+    "sensitivity_points": [
+     "Decoupling of claim-type schemas in the JSON-to-COBOL mapping layer",
+     "Dynamic routing rules triggered by the kill-switch event"
+    ],
+    "tradeoffs": [
+     "Centralized ACL simplifies legacy isolation but risks becoming a maintenance bottleneck"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Both client applications connect exclusively to modern frontends and services. The legacy mainframe is completely abstracted behind the ACL and asynchronous bus, enabling seamless cutover to PostgreSQL as primary without modifying UIs.",
+    "elements": [
+     "Customer Portal",
+     "Adjuster Web Application",
+     "Claims Processing Service",
+     "PostgreSQL Read-Cache",
+     "Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Promoting PostgreSQL Read-Cache to an authoritative write-optimized data store",
+     "Complete migration of legacy domain logic from COBOL into Claims Processing Service"
+    ],
+    "tradeoffs": [
+     "Maintaining abstraction interfaces increases initial complexity but eliminates UI rework at decommissioning"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The Customer Portal integrates MSAL and Entra ID for identity verification, but fine-grained broker tenant isolation, customer-to-broker authorization boundaries, and security event auditing are not explicitly designed in the backend components.",
+    "elements": [
+     "Customer Portal",
+     "Authentication Manager",
+     "Microsoft Entra ID",
+     "Storage Sink"
+    ],
+    "sensitivity_points": [
+     "Enforcement point for broker-tenant access control policies in backend APIs",
+     "Audit trail coverage for denied authorization requests"
+    ],
+    "tradeoffs": [
+     "Delegating auth token handling to the client UI simplifies services but risks missing backend enforcement"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Adjuster access to the new web application is quickly terminated via Entra ID token revocation. However, no synchronization mechanism is defined to revoke legacy mainframe/DB2 direct access within the required 15-minute timeframe.",
+    "elements": [
+     "Microsoft Entra ID",
+     "Auth & Session Component",
+     "Adjuster Web Application",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Access token lifetimes and OIDC token revocation responsiveness",
+     "Absence of legacy RACF/mainframe identity synchronization tooling"
+    ],
+    "tradeoffs": [
+     "Centralized cloud IdP simplifies modern governance but leaves legacy identity management decoupled"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.6818181818181818,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "API Gateway / Integration Layer",
+     "Anti-Corruption Layer (ACL)",
+     "gRPC Mainframe Client"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Anti-Corruption Layer (ACL)",
+     "JSON-to-COBOL Mapper"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer Portal",
+     "Claim Submission UI",
+     "Policyholders and Brokers"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Web Application",
+     "Claim Presentation & Triage Component",
+     "Command & Workflow Component",
+     "Claims Adjusters"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "API Gateway / Integration Layer",
+     "Migration Operations Dashboard",
+     "Kill-Switch Orchestrator",
+     "Claims Processing Service"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Message Broker Interface",
+     "Exception Handler Component",
+     "Reconciliation Engine",
+     "Audit & Versioning Manager"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "PostgreSQL Read-Cache",
+     "Cache Storage Engine",
+     "Claim Presentation & Triage Component",
+     "Sync Consumer Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Migration Operations Dashboard",
+     "Kill-Switch Orchestrator",
+     "Dashboard UI",
+     "Replay Coordinator"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Insurer Active Directory / Microsoft Entra ID",
+     "Microsoft Entra ID",
+     "Auth & Session Component",
+     "Authentication Manager"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

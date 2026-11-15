@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Mainframe Integration Adapter container
+
+System_Ext(azure_api_management, "Azure API Management", "Azure API Management")
+System_Ext(azure_service_bus, "Azure Service Bus", "Azure Service Bus")
+
+Container_Boundary(mainframe_integration_adapter, "Mainframe Integration Adapter") {
+    Component(adapter_api_controller, "Adapter API Controller", ".NET 8 component", "Receives forwarded integration requests from Azure API Management.")
+    Component(mainframe_message_translator_with_versioning_feature_flags, "Mainframe Message Translator with Versioning & Feature Flags", ".NET 8 component", "Transforms payloads with versioning and feature flag management.")
+    Component(outbox_pattern_processor, "Outbox Pattern Processor", ".NET 8 + Entity Framework Core component", "Persists transaction state to guarantee zero data loss.")
+    Component(circuit_breaker_fallback_manager, "Circuit Breaker & Fallback Manager", ".NET 8 + Polly component", "Handles high mainframe latency and manages legacy fallback calls.")
+    Component(ibm_mq_cics_client, "IBM MQ / CICS Client", ".NET 8 component", "Executes legacy calls and secures persistent communication to the mainframe.")
+}
+
+Rel(azure_api_management, adapter_api_controller, "Forward integration requests", "HTTP/2")
+Rel(adapter_api_controller, mainframe_message_translator_with_versioning_feature_flags, "Transform payloads", "In-Memory")
+Rel(mainframe_message_translator_with_versioning_feature_flags, outbox_pattern_processor, "Persist transaction state", "In-Memory")
+Rel(outbox_pattern_processor, ibm_mq_cics_client, "Queue dispatch", "In-Memory")
+Rel(ibm_mq_cics_client, circuit_breaker_fallback_manager, "Execute legacy calls", "TCP/IP via Azure Hybrid Connections")
+Rel(circuit_breaker_fallback_manager, azure_service_bus, "Publish fallback events", "AMQP")
+
+@enduml

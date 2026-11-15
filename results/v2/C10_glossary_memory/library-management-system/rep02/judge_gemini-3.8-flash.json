@@ -1,0 +1,244 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "Circulation, self-service portals, and digital items are handled by Circulation Management Component, Patron UI SPA, and Digital Content Providers. However, dedicated business logic for physical cataloguing workflows within Core Services API is left partially implicit.",
+   "performance_efficiency": "The dedicated Search Engine Index using OpenSearch, gRPC routing via API Gateway, and connection pooling through PgBouncer provide concrete, efficient mechanisms to achieve the sub-800 ms 99th-percentile search requirement (R-05).",
+   "compatibility": "External interoperability is well addressed using industry standards: OIDC/SAML for Identity Provider / SSO, REST with mTLS for Digital Content Providers, and asynchronous webhooks for Notification Gateway.",
+   "usability": "Usability requirements are thoroughly met with dedicated interfaces: Patron UI SPA provides self-service portal capabilities, while Staff Dashboard SPA provides dedicated workflows for circulation staff and administrators.",
+   "reliability": "API Gateway includes circuit breaking and PgBouncer handles connection pooling, but explicit reliability mechanisms such as data replication, automated failover, and clustering for Relational Data Store and Search Engine Index are missing.",
+   "security": "EU data residency constraints are addressed with EU-hosted PostgreSQL and restricted Nginx containers. Additionally, end-to-end TLS 1.3, internal mTLS, token validation in API Gateway, and row/column encryption ensure robust data security.",
+   "maintainability": "The architecture exhibits modular decomposition across containers and components (e.g., Circulation Management Component, Search & Catalogue Service), clean interface boundaries via gRPC, and trace emission to Observability & Logging Platform.",
+   "portability": "Containerized components (Spring Boot, Nginx, Envoy, PostgreSQL) facilitate porting across different EU cloud or on-premises environments, though specific orchestration abstractions (e.g., Kubernetes) are not explicitly defined."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.65625,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 4.0,
+   "Modifiability": 3.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Search queries bypass the transactional database and target a dedicated OpenSearch index via gRPC and API Gateway, easily meeting the 800 ms P99 latency target.",
+    "elements": [
+     "API Gateway",
+     "Search & Catalogue Service",
+     "Search API Handler",
+     "Query Builder & Faceting Engine",
+     "Search Engine Index"
+    ],
+    "sensitivity_points": [
+     "OpenSearch cluster sizing and replica provisioning under 2,000 concurrent requests",
+     "Gateway gRPC proxy overhead and connection pooling"
+    ],
+    "tradeoffs": [
+     "Dedicated search index boosts performance but requires continuous synchronization with primary data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "justification": "The Indexing Worker updates the index, but no messaging broker or event bus connects transactional catalogue writes to the indexing pipeline, leaving real-time sync unspecified.",
+    "elements": [
+     "Core Services API",
+     "Database",
+     "Search & Catalogue Service",
+     "Indexing Worker",
+     "Search Engine Index"
+    ],
+    "sensitivity_points": [
+     "Indexing Worker processing frequency and database polling latency",
+     "Index refresh rate impacting search read throughput under peak load"
+    ],
+    "tradeoffs": [
+     "Asynchronous indexing isolates search latency from updates but introduces catalogue data staleness"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Core circulation transactions run independently in Core Services API backed by PostgreSQL, ensuring zero lost loans, while OpenSearch natively supports multi-node replica failover.",
+    "elements": [
+     "Search Engine Index",
+     "Search & Catalogue Service",
+     "Core Services API",
+     "Circulation Management Component",
+     "Database"
+    ],
+    "sensitivity_points": [
+     "OpenSearch master election and replica promotion speed",
+     "Decoupled service boundaries preventing cascading failures"
+    ],
+    "tradeoffs": [
+     "Index replica overhead improves query availability at the cost of additional compute infrastructure"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Web Portal consists of stateless React SPAs served by Nginx behind the API Gateway; failure of an instance is quickly mitigated by upstream routing and client retries.",
+    "elements": [
+     "Web Portal",
+     "Nginx Web Server",
+     "Patron UI SPA",
+     "API Gateway",
+     "Routing and Edge Router"
+    ],
+    "sensitivity_points": [
+     "Health check interval and eviction latency at the API Gateway or reverse proxy",
+     "Statelessness of patron sessions across portal instances"
+    ],
+    "tradeoffs": [
+     "Stateless client architecture eases horizontal failover but relies on client-side state reconstruction"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "External content ingestion and licensing are strictly encapsulated within the Integration Orchestrator Component, isolating core circulation and account logic from third-party API changes.",
+    "elements": [
+     "Integration Orchestrator Component",
+     "Digital Content Providers",
+     "Core Services API"
+    ],
+    "sensitivity_points": [
+     "Standardized adapter abstraction within the Integration Orchestrator Component"
+    ],
+    "tradeoffs": [
+     "Brokered integration simplifies core services but creates a runtime coupling on external vendor latency"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "Circulation Management Component encapsulates loan orchestration, but no externalized rule engine, policy service, or dynamic configuration mechanism is modeled to support zero-deployment rule changes.",
+    "elements": [
+     "Core Services API",
+     "Circulation Management Component"
+    ],
+    "sensitivity_points": [
+     "Coupling of circulation business rules directly into compiled Java application code"
+    ],
+    "tradeoffs": [
+     "Hardcoded rule logic offers compile-time type safety at the expense of runtime configurability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Database and Nginx containers explicitly specify EU hosting and residency compliance, but cloud region constraints and data flow boundaries for external gateways remain undefined.",
+    "elements": [
+     "Database",
+     "Relational Data Store",
+     "Web Portal",
+     "Nginx Web Server",
+     "Notification Gateway"
+    ],
+    "sensitivity_points": [
+     "Residency of external third-party SaaS services like SMS and email gateways",
+     "Infrastructure region enforcement across all intermediate service containers"
+    ],
+    "tradeoffs": [
+     "Strict EU residency reduces choice of third-party SaaS providers and cloud availability zones"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "The API Gateway validates tokens via OIDC, and Core Services components enforce patron context before querying the database, while audit traces are emitted to Observability.",
+    "elements": [
+     "API Gateway",
+     "Authentication & OIDC Validator",
+     "Patron Account Component",
+     "Circulation Management Component",
+     "Observability & Logging Platform"
+    ],
+    "sensitivity_points": [
+     "Fine-grained object-level authorization enforcement in Patron and Circulation components",
+     "Comprehensive audit log capture without leaking patron PII"
+    ],
+    "tradeoffs": [
+     "Rigorous contextual authorization checks slightly increase service latency during patron record retrieval"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Database",
+     "Relational Data Store",
+     "Connection Pool & Session Manager",
+     "Nginx Web Server"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Search & Catalogue Service",
+     "Relational Data Store",
+     "Digital Content Providers",
+     "Integration Orchestrator Component",
+     "Staff Dashboard SPA"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search & Catalogue Service",
+     "Search Engine Index",
+     "Query Builder & Faceting Engine",
+     "Search API Handler"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

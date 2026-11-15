@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(fraud_analyst_risk_manager, "Fraud Analyst & Risk Manager", "Internal users managing reviews, case workflows, and fraud rules with strict RBAC.")
+
+System_Ext(payment_gateway_acquirer_merchant_platforms, "Payment Gateway / Acquirer & Merchant Platforms", "External systems sending card-not-present payment authorization requests.")
+System_Ext(identity_provider_idp, "Identity Provider (IdP)", "External identity provider for OAuth2/OIDC authentication.")
+System_Ext(regulatory_notification_sink, "Regulatory & Notification Sink", "External sink for exporting tamper-evident audit logs and notifications.")
+
+System_Boundary(real_time_payment_fraud_screening_system, "Real-Time Payment Fraud Screening System") {
+    Container(api_gateway, "API Gateway", "AWS API Gateway / ALB", "Handles ingress routing, tokenization enforcement, and circuit breaking.")
+    Container(scoring_engine_container, "Scoring Engine Container", "Go/Rust on Amazon ECS", "Stateless service evaluating card-not-present transactions for fraud with sub-50ms latency.")
+    Container(case_management_container, "Case Management Container", "Node.js/Python Monolith on Amazon ECS", "Provides analyst review workflows and data-masked UI.")
+    ContainerDb(data_layer, "Data Layer", "Amazon DynamoDB & Amazon ElastiCache (Redis)", "Feature stores, tamper-evident audit logs, read replicas, and in-memory model/rule caching.")
+    Container(event_compliance_infrastructure, "Event & Compliance Infrastructure", "AWS SQS/SNS, AWS CloudTrail, and AWS Backup", "Handles asynchronous events, audit trails, and locked vaults for 7-year retention.")
+}
+
+Rel(payment_gateway_acquirer_merchant_platforms, api_gateway, "Forwards payment authorization requests", "HTTPS/REST at 3,000 TPS")
+Rel(api_gateway, scoring_engine_container, "Invokes real-time fraud scoring", "gRPC/REST")
+Rel(fraud_analyst_risk_manager, case_management_container, "Reviews suspicious payments via data-masked UI", "HTTPS with RBAC via IdP")
+Rel(scoring_engine_container, data_layer, "Fetches cached fraud rules and scoring models, and reads/writes transaction data", "Redis in-memory / DynamoDB")
+Rel(case_management_container, data_layer, "Reads/writes case data and immutable audit logs", "Amazon DynamoDB")
+Rel(data_layer, event_compliance_infrastructure, "Exports tamper-evident audit logs and tracks events", "AWS SQS/SNS / AWS CloudTrail")
+Rel(event_compliance_infrastructure, regulatory_notification_sink, "Exports audit logs asynchronously", "AWS SQS/SNS events")
+
+@enduml

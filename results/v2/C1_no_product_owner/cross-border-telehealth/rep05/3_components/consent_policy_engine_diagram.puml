@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Consent & Policy Engine container
+
+Container_Ext(api_gateway, "API Gateway", "API Gateway", "External entry point that evaluates access tokens and scopes.")
+Container_Ext(audit_logging, "Immutable Audit Logging Service", "gRPC over mTLS", "Receives cryptographically signed audit logs.")
+Container_Ext(message_broker, "Regional Message Broker", "GCP Pub/Sub", "Receives policy violation alerts from the Regional Residency Enforcer.")
+
+Container_Boundary(consent_and_policy_engine, "Consent & Policy Engine") {
+    Component(pdp, "Policy Decision Point (PDP)", "Go, Open Policy Agent / OPA", "Evaluates access tokens and scopes, queries patient consents, and requests capability tokens.")
+    Component(consent_manager, "Consent Manager", "Go, BigCache", "Manages granular patient consents and persists consent state in-memory and via PostgreSQL.")
+    Component(residency_enforcer, "Regional Residency Enforcer", "Go", "Enforces data residency constraints and publishes policy violation alerts.")
+    Component(token_issuer, "Residency Token Issuer", "Go", "Issues cryptographically signed capability tokens for validated requests.")
+    Component(cloud_sql, "GCP Cloud SQL (PostgreSQL)", "PostgreSQL / Cloud SQL with GCP KMS", "Secures persistent storage of regional consent records.")
+    Component(pub_sub, "GCP Pub/Sub", "GCP Pub/Sub", "Regional message broker used for publishing policy violation alerts.")
+}
+
+Rel(api_gateway, pdp, "Evaluates access tokens and scopes", "gRPC over mTLS")
+Rel(pdp, consent_manager, "Queries active patient consents", "In-process Go function call")
+Rel(consent_manager, cloud_sql, "Persists consent state", "PostgreSQL Protocol / TLS with GCP KMS")
+Rel(pdp, token_issuer, "Requests scoped capability token", "In-process Go function call")
+Rel(consent_and_policy_engine, audit_logging, "Publishes cryptographically signed logs", "gRPC over mTLS")
+Rel(residency_enforcer, message_broker, "Publishes policy violation alerts", "GCP Pub/Sub")
+
+@enduml

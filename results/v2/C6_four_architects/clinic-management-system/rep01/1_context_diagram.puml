@@ -1,0 +1,45 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System (CMS)
+
+Person(Patient, "Patient", "Interacts with the CMS for admissions, scheduling, and portal access.")
+Person(Clinician_Staff, "Clinician / Staff", "Uses the CMS to manage patient records, electronic medical records (EMR), and schedules.")
+Person(Hospital_Administrator, "Hospital Administrator", "Manages administrative tasks, billing, and system oversight.")
+
+System_Ext(Identity_Provider_IdP, "Identity Provider (IdP)", "Handles authentication and multi-factor authentication (MFA) via OIDC/SAML 2.0.")
+System_Ext(Insurance_Gateway, "Insurance Gateway", "Processes insurance claims and billing verification via REST/SOAP.")
+System_Ext(External_Lab__Imaging_Systems, "External Lab & Imaging Systems", "Integrates with CMS to exchange clinical lab and imaging data via HL7 FHIR.")
+System_Ext(Notification_Gateway, "Notification Gateway", "Sends automated notifications and alerts to patients and staff.")
+System_Ext(Cloud_Backup_AWS_S3_Glacier, "Cloud Backup (AWS S3 Glacier)", "Secure cloud cold storage for long-term data retention.")
+
+System_Boundary(CMS, "Clinic Management System (CMS)") {
+    Container(Envoy_API_Gateway, "Envoy API Gateway", "Envoy / Istio", "Edge routing, TLS 1.3 termination, and automated service mesh mTLS.")
+    Container(EMR_Service, "EMR Service", "Java / Spring Boot", "Manages electronic medical records ensuring compliance and performance.")
+    Container(Patient__Scheduling_Service, "Patient & Scheduling Service", "Go", "Handles patient admissions, details, and appointment scheduling.")
+    Container(Billing__Claims_Service, "Billing & Claims Service", ".NET Core", "Processes claims and financial billing.")
+    Container(Apache_Kafka, "Apache Kafka", "Apache Kafka", "Asynchronous event streaming for decoupled domain integration.")
+    ContainerDb(PostgreSQL_Operational_Databases, "PostgreSQL Operational Databases", "PostgreSQL", "Multi-master operational databases enforcing the database-per-service pattern.")
+}
+
+Rel(Patient, Envoy_API_Gateway, "Accesses patient portal, admissions, and scheduling", "HTTPS (TLS 1.3) with OIDC/SAML 2.0 MFA")
+Rel(Clinician_Staff, Envoy_API_Gateway, "Accesses EMR, scheduling, and clinical workflows", "HTTPS (TLS 1.3) with OIDC/SAML 2.0 MFA")
+Rel(Hospital_Administrator, Envoy_API_Gateway, "Manages administrative and billing operations", "HTTPS (TLS 1.3) with OIDC/SAML 2.0 MFA")
+
+Rel(Envoy_API_Gateway, EMR_Service, "Routes requests", "gRPC / mTLS")
+Rel(Envoy_API_Gateway, Patient__Scheduling_Service, "Routes requests", "gRPC / mTLS")
+Rel(Envoy_API_Gateway, Billing__Claims_Service, "Routes requests", "gRPC / mTLS")
+
+Rel(EMR_Service, PostgreSQL_Operational_Databases, "Reads/Writes data", "SQL")
+Rel(Patient__Scheduling_Service, PostgreSQL_Operational_Databases, "Reads/Writes data", "SQL")
+Rel(Billing__Claims_Service, PostgreSQL_Operational_Databases, "Reads/Writes data", "SQL")
+
+Rel(EMR_Service, Apache_Kafka, "Publishes events", "Kafka Protocol")
+Rel(Patient__Scheduling_Service, Apache_Kafka, "Publishes events", "Kafka Protocol")
+Rel(Billing__Claims_Service, Apache_Kafka, "Publishes events", "Kafka Protocol")
+
+Rel(EMR_Service, External_Lab__Imaging_Systems, "Exchanges clinical data", "HL7 FHIR over HTTPS (RESTful)")
+Rel(Billing__Claims_Service, Insurance_Gateway, "Submits claims and verifies insurance", "REST/SOAP over TLS 1.3")
+Rel(EMR_Service, Cloud_Backup_AWS_S3_Glacier, "Archives data for long-term retention", "Encrypted TLS links")
+@enduml

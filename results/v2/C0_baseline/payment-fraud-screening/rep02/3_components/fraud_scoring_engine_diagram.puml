@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(AmazonSQS, "Amazon SQS", "Asynchronous message queue for audit payloads.")
+System_Ext(AmazonS3, "Amazon S3", "Object storage for secure model and rule artifact synchronization.")
+
+Container_Boundary(FraudScoringEngine, "Fraud Scoring Engine") {
+    Component(DecisionOrchestratorComponent, "Decision Orchestrator Component", "Spring Bean", "Coordinating the request lifecycle.")
+    Component(FeatureAggregatorComponent, "Feature Aggregator Component", "Java with Caffeine Cache", "High-performance in-memory caching for low-latency feature aggregation.")
+    Component(RuleEvaluationComponent, "Rule Evaluation Component", "Drools / Java with DRL", "Rule engine for executing compiled decision tables in memory with rule hot-reloading from local disk.")
+    Component(ModelScoringComponent, "Model Scoring Component", "ONNX Runtime for Java", "Lightweight machine learning model execution directly in native memory with local ONNX model hot-reloading.")
+    Component(DecisionExplanationAssemblerComponent, "Decision Explanation Assembler Component", "Java", "Merges rule triggers and feature importance vectors.")
+    Component(AuditPayloadAssemblerComponent, "Audit Payload Assembler Component", "Java with AWS SDK & AWS KMS", "Appends cryptographic HMAC via AWS KMS and emits audit payloads.")
+}
+
+Rel(DecisionOrchestratorComponent, FeatureAggregatorComponent, "In-process concurrent method calls", "")
+Rel(DecisionOrchestratorComponent, RuleEvaluationComponent, "In-process concurrent method calls", "")
+Rel(DecisionOrchestratorComponent, ModelScoringComponent, "In-process concurrent method calls", "")
+Rel(DecisionOrchestratorComponent, DecisionExplanationAssemblerComponent, "In-process method calls", "")
+Rel(DecisionExplanationAssemblerComponent, AuditPayloadAssemblerComponent, "In-process method calls", "")
+Rel(AuditPayloadAssemblerComponent, AmazonSQS, "Asynchronous audit payload emission using AWS SDK", "")
+Rel(FraudScoringEngine, AmazonS3, "Secure model and rule artifact synchronization via HTTPS with cryptographic SHA-256 signature verification", "")
+@enduml

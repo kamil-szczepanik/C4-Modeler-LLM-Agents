@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(Network Load Balancer, "Network Load Balancer", "Network Load Balancer")
+System_Ext(Audit Log Store, "Audit Log Store", "Amazon Aurora PostgreSQL")
+System_Ext(Observability Service, "Observability Service", "AWS X-Ray / Container Insights")
+
+Container_Boundary("Fraud Scoring Engine", "Fraud Scoring Engine") {
+    Component(API Handler Component, "API Handler Component", "Go (net/http)", "Receives incoming requests, manages timeouts, and strips raw card data (PANs).")
+    Component(Feature Fetcher & Cache Component, "Feature Fetcher & Cache Component", "In-memory LRU cache / DynamoDB", "In-memory LRU cache wrapping DynamoDB lookups with a localized circuit breaker.")
+    Component(Rule Engine Component, "Rule Engine Component", "Go structs and ASTs", "In-memory deterministic rule evaluator using Go structs and ASTs.")
+    Component(Model Scorer Component, "Model Scorer Component", "ONNX Runtime Go bindings", "Executes pre-loaded machine learning models.")
+    Component(Explanation Builder Component, "Explanation Builder Component", "In-memory assembler", "Synchronous assembler capturing rule matches, feature weights, and version tags.")
+    Component(Audit & Telemetry Dispatcher Component, "Audit & Telemetry Dispatcher Component", "Go channels and worker pool", "Go channels and worker pool flushing logs asynchronously.")
+}
+
+Rel(Network Load Balancer, API Handler Component, "Routes incoming payment authorization requests", "mTLS")
+Rel(API Handler Component, Feature Fetcher & Cache Component, "Queries hot features", "In-memory lookup [Sync]")
+Rel(API Handler Component, Rule Engine Component, "Evaluates transaction risk", "Direct Go Interface [Sync]")
+Rel(API Handler Component, Model Scorer Component, "Evaluates transaction risk", "Direct Go Interface [Sync]")
+Rel(Rule Engine Component, Explanation Builder Component, "Compiles match traces and importances", "In-memory assembly [Sync]")
+Rel(Model Scorer Component, Explanation Builder Component, "Compiles match traces and importances", "In-memory assembly [Sync]")
+Rel(Explanation Builder Component, Audit & Telemetry Dispatcher Component, "Passes compiled audit payload", "Go Channels [Async]")
+Rel(Audit & Telemetry Dispatcher Component, Audit Log Store, "Writes ledger data", "AWS SDK using IAM Roles / KMS Envelope Encryption")
+Rel(Audit & Telemetry Dispatcher Component, Observability Service, "Emits metrics and traces", "AWS SDK")
+
+@enduml

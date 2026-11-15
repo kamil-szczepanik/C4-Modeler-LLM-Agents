@@ -1,0 +1,345 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "R-01, R-02, and R-03 are thoroughly addressed by Customer Portal UI, Broker Portal UI, and Claims Adjuster Dashboard. Gradual migration is handled by Feature Routing Dispatcher and Configuration & Feature Store to route specific claim types dynamically.",
+   "performance_efficiency": "Meets the under 2 s target despite 5 s mainframe latency via Claim Query Handler reading locally from Claims Database and Distributed Cache / State Store. Mainframe sync is decoupled asynchronously using Integration Event Broker and Integration & Sync Worker.",
+   "compatibility": "Directly addresses legacy coexistence constraints. The Integration & Sync Worker uses Mainframe Adapter via SFTP/MQ and an Anti-Corruption Layer (ACL) to integrate with Legacy Mainframe, avoiding frequent changes and accommodating nightly batch limits.",
+   "usability": "Dedicated interfaces serve each user group: Customer Portal UI, Broker Portal UI, and Claims Adjuster Dashboard. The Adjuster BFF features a WebSocket Gateway Module for real-time push updates to adjusters.",
+   "reliability": "Enforces zero lost claims and no duplicate processing (R-04) using Idempotency Validator, Idempotency State Manager, Mainframe Outbox Queue sessions, Resiliency & Retry Policy with Polly, and Reconciliation & Audit Logger.",
+   "security": "Directly satisfies R-07 via Azure AD / Entra ID using OIDC for SSO. Communication is encrypted over TLS (HTTPS, TDS, AMQP), secrets are managed via Secret Manager Client, and queues are protected via Access Control & Namespace Authorization.",
+   "maintainability": "R-06 one-day rollback is enabled via Feature Routing Dispatcher, Configuration & Feature Store, and Migration Routing & Fallback Cache. The system maintains clean modularity via MediatR CQRS handlers and an Anti-Corruption Layer.",
+   "portability": "Accurately supports the hybrid environment between on-premises mainframe and Azure. However, deep dependency on proprietary services like Azure App Configuration, Azure SQL Managed Instance, and Azure Service Bus creates lock-in and complicates cloud-agnostic deployment."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Adjuster screens query local Azure SQL data and Redis cache via Claim Query Handler rather than blocking on the 5 s mainframe response. However, if un-migrated claim data must be retrieved live, fallback latency via Mainframe Adapter Component could threaten the 2 s threshold.",
+    "elements": [
+     "Web Frontend",
+     "API Gateway / BFF",
+     "Adjuster BFF",
+     "Claims Core Service",
+     "Claim Query Handler",
+     "Claims Database",
+     "Distributed Cache / State Store"
+    ],
+    "sensitivity_points": [
+     "Data synchronization freshness between mainframe and local cloud data stores",
+     "Absence of synchronous blocking calls to the mainframe in query paths"
+    ],
+    "tradeoffs": [
+     "Serving stale claim data from cache versus waiting for authoritative mainframe responses"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Customer submissions are accepted into Azure SQL and buffered asynchronously via Azure Service Bus topics and queues. The Integration & Sync Worker decouples ingest spikes and batches updates, preventing any load surge from spilling into the mainframe nightly batch window.",
+    "elements": [
+     "Customer Portal",
+     "API Gateway / BFF",
+     "Claims Core Service",
+     "Integration Event Broker",
+     "Mainframe Outbox Queue",
+     "Integration & Sync Worker"
+    ],
+    "sensitivity_points": [
+     "Capacity and throughput limits of Azure Service Bus session queues",
+     "Throttling logic in Sync Orchestrator during peak intake periods"
+    ],
+    "tradeoffs": [
+     "Immediate customer submission confirmation versus delayed mainframe synchronization"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Online claims are persisted in Azure SQL and held safely in Azure Service Bus queues while the mainframe is locked for batch processing. The Integration & Sync Worker uses Polly retry policies to pause delivery and seamlessly resume ingestion once the batch window concludes.",
+    "elements": [
+     "Customer Portal",
+     "Claims Core Service",
+     "Claims Database",
+     "Integration Event Broker",
+     "Integration & Sync Worker",
+     "Resiliency & Retry Policy"
+    ],
+    "sensitivity_points": [
+     "Queue retention time and message limits in Azure Service Bus during batch downtime",
+     "Backoff and scheduling logic in Resiliency & Retry Policy"
+    ],
+    "tradeoffs": [
+     "Extended local queue buffering during batch windows versus immediate legacy ledger reconciliation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The architecture incorporates Azure Durable Functions for stateful sync orchestration, Service Bus Sessions for ordering, Redis-backed Idempotency Validators to avoid duplicate processing, and Change Tracking plus Temporal Tables with Dead-Letter Queues for error recovery and audit reconciliation.",
+    "elements": [
+     "Integration & Sync Worker",
+     "Sync Orchestrator",
+     "Idempotency State Manager",
+     "Distributed Lock Manager",
+     "Claims Database",
+     "Audit & Temporal History",
+     "Dead-Letter Handler"
+    ],
+    "sensitivity_points": [
+     "Accurate tracking of distributed transaction boundaries across Durable Functions",
+     "Redis idempotency key TTL configuration and lock reliability"
+    ],
+    "tradeoffs": [
+     "Processing latency and storage overhead of dual-write staging and idempotency checks"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Claim routing uses dynamic toggles via Azure App Configuration and Feature Routing Dispatcher. Rolling back or migrating a claim type is executed dynamically via configuration changes within seconds, while Anti-Corruption Layers and generic SFTP/MQ adapters avoid custom mainframe interface rework.",
+    "elements": [
+     "Configuration & Feature Store",
+     "Feature Flag Evaluator",
+     "Feature Routing Dispatcher",
+     "Anti-Corruption Layer (ACL)",
+     "Mainframe Adapter Component",
+     "Reconciliation & Rollback Views"
+    ],
+    "sensitivity_points": [
+     "Granularity of feature flag keys per claim category",
+     "Bi-directional data compatibility maintained by the Anti-Corruption Layer"
+    ],
+    "tradeoffs": [
+     "Dynamic routing dispatcher complexity versus static service-level separation"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Customer Portal and Adjuster Web Frontend interact exclusively with API Gateways and Claims Core Services via stable gRPC/REST APIs. Decommissioning the mainframe only requires retiring integration workers and legacy adapters, leaving user interfaces completely untouched.",
+    "elements": [
+     "Customer Portal",
+     "Web Frontend",
+     "API Gateway / BFF",
+     "Claims Core Service",
+     "Feature Routing Dispatcher",
+     "Integration & Sync Worker"
+    ],
+    "sensitivity_points": [
+     "Strict decoupling of client BFF layers from legacy data contracts",
+     "Encapsulation of migration status inside backend domain models"
+    ],
+    "tradeoffs": [
+     "Maintaining dual routing and ACL abstractions during migration versus direct point-to-point calls"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Azure AD / Entra ID handles authentication and token validation at the API Gateway. However, tenant/broker isolation, fine-grained object authorization rules, and broker-to-claim ownership validation are not explicitly modeled in the BFF or domain components, creating authorization enforcement ambiguity.",
+    "elements": [
+     "Customer Portal",
+     "API Gateway / BFF",
+     "Customer BFF",
+     "Claims Core Service",
+     "Azure AD / Entra ID",
+     "Reconciliation & Audit Logger"
+    ],
+    "sensitivity_points": [
+     "Rigorous claim ownership claim/attribute checks at the BFF or Domain layer",
+     "Security audit logging coverage across unauthorized access attempts"
+    ],
+    "tradeoffs": [
+     "Centralized gateway policy enforcement versus domain-level tenant authorization logic"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Because adjusters interact exclusively through the Web Frontend authenticated via Azure AD / Entra ID, revoking an account in AD terminates cloud access, supported by Redis Distributed Session invalidation. However, direct synchronization or propagation to native mainframe accounts is not explicitly specified.",
+    "elements": [
+     "Azure AD / Entra ID",
+     "Web Frontend",
+     "API Gateway / BFF",
+     "Adjuster BFF",
+     "Distributed Cache / State Store",
+     "Distributed Session Provider"
+    ],
+    "sensitivity_points": [
+     "Token lifetime and session cache invalidation latency across Redis and BFF",
+     "Propagation delays from on-prem Active Directory to Entra ID"
+    ],
+    "tradeoffs": [
+     "Short token lifetimes and frequent re-validation overhead versus rapid access revocation"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Integration & Sync Worker",
+     "Sync Orchestrator",
+     "Mainframe Outbox Queue",
+     "Reconciliation & Audit Logger"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Integration Event Broker",
+     "Integration & Sync Worker"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Anti-Corruption Layer (ACL)",
+     "Transformation & Mapping Engine",
+     "Mainframe Adapter"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer Portal",
+     "Customer Portal UI",
+     "Broker Portal UI",
+     "Customer BFF",
+     "API Gateway / BFF"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Web Frontend",
+     "Claims Adjuster Dashboard",
+     "Adjuster BFF",
+     "Claims Core Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Feature Routing Dispatcher",
+     "Configuration & Feature Store",
+     "Feature Flag Evaluator",
+     "Migration Routing & Fallback Cache"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Idempotency Validator",
+     "Idempotency State Manager",
+     "Reconciliation & Audit Logger",
+     "Dead-Letter Handler",
+     "Distributed Lock Manager",
+     "Audit & Temporal History"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Claim Query Handler",
+     "Claims Database",
+     "Distributed Cache / State Store",
+     "Adjuster BFF"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Configuration & Feature Store",
+     "Feature Flag Evaluator",
+     "Feature Routing Dispatcher",
+     "Migration Routing & Fallback Cache",
+     "Reconciliation & Rollback Views"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Azure AD / Entra ID",
+     "Customer Portal",
+     "Web Frontend",
+     "API Gateway / BFF"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

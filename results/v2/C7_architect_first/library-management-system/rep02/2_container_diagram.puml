@@ -1,0 +1,40 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Library Management Systems
+
+Person(LibraryPatron, "Library Patron", "A library user who accesses self-service portals to search and borrow items.")
+Person(LibrarianStaff, "Librarian / Staff", "Staff members who manage the catalogue and circulation.")
+Person(LibraryAdministrator, "Library Administrator", "Administrators who access reporting dashboards and manage system access.")
+
+System_Ext(PaymentGateway, "Payment Gateway", "External system used to process fines and fees.")
+System_Ext(DRMProvider, "DRM Provider", "External provider used to fetch digital assets.")
+System_Ext(NotificationService, "Notification Service", "External service used to send automated alerts.")
+
+System_Boundary(LibraryManagementSystem, "Library Management System") {
+    Container(WebAppSPA, "Web Application (SPA)", "React/TypeScript served via CDN", "Client-side UI and administrative reporting.")
+    Container(APIGateway, "API Gateway", "Nginx / Kong", "Reverse proxy, TLS termination, OAuth 2.0 / OIDC JWT validation.")
+    Container(CoreServicesAPI, "Core Services API", "Node.js/NestJS", "Business logic and role-based access control (RBAC).")
+    Container(SearchEngine, "Search Engine", "Elasticsearch / OpenSearch", "Dedicated search container for <800ms NFR.")
+    ContainerDb(RelationalDatabase, "Relational Database", "PostgreSQL", "Primary EU-hosted datastore with CMK encryption at rest.")
+    Container(AsyncWorker, "Async Worker", "Python/Celery & Redis", "Asynchronous background jobs.")
+    ContainerDb(AnalyticsEventCollectorDatastore, "Analytics Event Collector & Datastore", "Kafka/Fluentd and ClickHouse/TimescaleDB", "EU-hosted telemetry and usage analytics datastore.")
+}
+
+Rel(LibraryPatron, WebAppSPA, "Uses self-service portals", "HTTPS")
+Rel(LibrarianStaff, WebAppSPA, "Manages catalogue and circulation", "HTTPS")
+Rel(LibraryAdministrator, WebAppSPA, "Accesses reporting dashboards", "HTTPS")
+
+Rel(WebAppSPA, APIGateway, "Sends requests", "HTTPS / JSON")
+Rel(APIGateway, CoreServicesAPI, "Routes API requests", "gRPC / mTLS")
+Rel(CoreServicesAPI, RelationalDatabase, "Reads and writes core transactional data", "TCP / PostgreSQL protocol")
+Rel(CoreServicesAPI, SearchEngine, "Performs catalog searches", "HTTP / REST")
+Rel(CoreServicesAPI, AsyncWorker, "Queues background tasks", "Redis / Message Broker")
+Rel(APIGateway, AnalyticsEventCollectorDatastore, "Sends telemetry events", "HTTP / TLS 1.3")
+
+Rel(CoreServicesAPI, PaymentGateway, "Processes fines and fees", "HTTPS / REST")
+Rel(CoreServicesAPI, DRMProvider, "Fetches digital assets", "HTTPS / REST")
+Rel(CoreServicesAPI, NotificationService, "Sends automated alerts", "HTTPS / REST")
+
+@enduml

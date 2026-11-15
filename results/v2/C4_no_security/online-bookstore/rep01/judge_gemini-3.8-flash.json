@@ -1,0 +1,360 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "Most functional requirements and constraints are addressed via Catalog & Search, Checkout & Order, Recommendation, and Consent Auditor. However, mechanisms for submitting and persisting customer reviews and 5-star ratings (R-03) are omitted from the backend service components.",
+   "performance_efficiency": "Performance and 1M MAU scalability targets are supported by Amazon CloudFront for SPA delivery, Amazon OpenSearch, DynamoDB session caching, PgBouncer connection pooling, Amazon ElastiCache Redis model caching, and Amazon Kinesis streaming.",
+   "compatibility": "Compatibility is thoroughly addressed with external systems: Payment Gateway connects via mTLS REST adapter with circuit breakers, while Shipping Provider API and Tax/Compliance Service integrate via EventBridge API Destinations and SQS.",
+   "usability": "Guest Shoppers and Registered Customers are well supported by the Frontend Container modules. However, specialized workflows for Store Administrators and Customer Support Agents lack dedicated internal UI components despite being declared at Context and Container levels.",
+   "reliability": "The 99.95% uptime target is backed by Multi-AZ RDS replication, Route 53 health checking, Circuit Breaker & Fallback Manager (Resilience4j), mTLS circuit breakers, Buffer & Retry Manager, and Amazon SQS Dead-Letter Queues.",
+   "security": "Addresses OWASP Top-10 and compliance via Authentication & Authorization Component (AWS Lambda Authorizer), Rate Limiting, Sanitization & Validation Middleware, Consent Auditor, TLS 1.3/mTLS for payment processing, and TLS-encrypted database connections.",
+   "maintainability": "System exhibits modular decomposition across polyglot microservices (Node.js, Go, Python, Java) decoupled by EventBridge and SQS. However, Catalog & Search and Checkout & Order share the same Amazon RDS (PostgreSQL) container, introducing database coupling.",
+   "portability": "Architecture targets the specified AWS regions using Route 53 and ElastiCache Global Datastore. However, high reliance on AWS-proprietary services (EventBridge, SQS, Kinesis, DynamoDB, Lambda Authorizers) creates substantial vendor lock-in that impedes infrastructure replaceability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 4.0,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Frontend assets are served via Amazon CloudFront/S3 edge caching, while search queries leverage OpenSearch with connection pooling via PgBouncer. However, lack of explicit edge HTML caching or dynamic response caching mechanisms under 10x traffic creates potential downstream latency risks on 3G connections.",
+    "elements": [
+     "Frontend Container",
+     "API Management",
+     "Catalog & Search",
+     "Amazon OpenSearch",
+     "PgBouncer Connection Pooler"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio on CloudFront and OpenSearch",
+     "OpenSearch query concurrency under 10x load"
+    ],
+    "tradeoffs": [
+     "Aggressive caching improves throughput but risks serving stale catalog metadata"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Recommendation recomputation is decoupled via SQS consumers and cached in Redis (ElastiCache) and DynamoDB, isolating compute load from the Catalog service. Browsing endpoints interact with OpenSearch independently, keeping user-facing latencies isolated from background model score refreshes.",
+    "elements": [
+     "Recommendation",
+     "Algorithm Engine",
+     "Model Cache",
+     "Event Consumer",
+     "AWS SQS",
+     "Catalog & Search"
+    ],
+    "sensitivity_points": [
+     "Redis cache read latency during high-frequency writes",
+     "SQS batch consumption concurrency"
+    ],
+    "tradeoffs": [
+     "Asynchronous score updates trade immediate recommendation freshness for isolated operational browsing performance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Checkout & Order uses an asynchronous event-driven design: fulfillment events are dispatched via SQS/EventBridge with DLQ support and EventBridge API Destinations throttling. The shipping API failure does not block synchronous order placement and payment execution.",
+    "elements": [
+     "Checkout & Order",
+     "Fulfillment Publisher",
+     "AWS EventBridge",
+     "AWS SQS",
+     "Amazon SQS Dead-Letter Queues (DLQs)",
+     "API Destinations"
+    ],
+    "sensitivity_points": [
+     "DLQ retention limits and retry policies",
+     "Idempotency handling upon re-dispatching fulfillment events"
+    ],
+    "tradeoffs": [
+     "Asynchronous dispatch protects checkout uptime but delays immediate customer shipment tracking confirmation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Route 53 provides latency routing across regions, and RDS includes Multi-AZ replication, but cross-region database replication, session replication for DynamoDB (Global Tables), and failover orchestration for stateful transactional data (PostgreSQL) are not explicitly defined in the architecture.",
+    "elements": [
+     "AWS Route 53",
+     "Amazon RDS (PostgreSQL)",
+     "Amazon DynamoDB",
+     "Checkout & Order",
+     "PostgreSQL Database Engine"
+    ],
+    "sensitivity_points": [
+     "Cross-region replication lag and recovery point objective (RPO)",
+     "Automated Route 53 health check failover latency"
+    ],
+    "tradeoffs": [
+     "Multi-region synchronous persistence guarantees zero data loss but introduces substantial write latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Multi-currency is decoupled in the Checkout & Cart UI Module, Order Orchestrator, and external Tax/Compliance integrations. Adding JPY requires minimal localized configuration changes within Checkout & Order and UI pricing components, leaving Catalog and Search largely untouched.",
+    "elements": [
+     "Checkout & Cart UI Module",
+     "Checkout & Order",
+     "Order Orchestrator",
+     "Payment Gateway Client",
+     "Tax/Compliance Service"
+    ],
+    "sensitivity_points": [
+     "Currency conversion precision handling in Order Orchestrator",
+     "Payment gateway API multi-currency configuration"
+    ],
+    "tradeoffs": [
+     "Externalizing currency compliance simplifies core services but introduces external runtime API dependencies"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Recommendation container is completely isolated behind REST endpoints and internal interfaces. Algorithm Engine encapsulates logic, backed by Redis and SQS listeners, allowing algorithm replacement without impacting upstream API Gateway, Catalog, or Frontend components.",
+    "elements": [
+     "Recommendation",
+     "Algorithm Engine",
+     "Model Cache",
+     "Recommendation API Controller",
+     "API Management"
+    ],
+    "sensitivity_points": [
+     "Compatibility of score payload schema with Model Cache",
+     "Algorithm compute latency within Algorithm Engine"
+    ],
+    "tradeoffs": [
+     "Encapsulating algorithms in a standalone container adds network overhead but ensures modularity"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "API Management provides token authentication and rate limiting, Spring MVC/OpenSearch abstraction mitigates direct SQL injection, and TypeORM parameterizes order database queries. However, explicit WAF rules and dedicated XSS sanitization layers in the frontend are partially unelaborated.",
+    "elements": [
+     "API Management",
+     "Authentication & Authorization Component",
+     "Rate Limiting & Usage Metering Component",
+     "Catalog & Search",
+     "Order Repository",
+     "Sanitization & Validation Middleware"
+    ],
+    "sensitivity_points": [
+     "Input sanitization coverage across REST and GraphQL endpoints",
+     "Vulnerability signature rules at API Gateway/WAF"
+    ],
+    "tradeoffs": [
+     "Strict payload validation inspects all inputs but slightly increases request processing latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Consent Auditor, Sanitization & Validation Middleware (Analytics), and Preference & Audit Repository track compliance data. EventBridge and SQS can distribute deletion domain events across services, though a centralized deletion orchestration coordinator is not explicitly detailed.",
+    "elements": [
+     "Consent Auditor",
+     "Sanitization & Validation Middleware",
+     "Preference & Audit Repository Component",
+     "AWS EventBridge",
+     "Amazon RDS (PostgreSQL)"
+    ],
+    "sensitivity_points": [
+     "Comprehensive propagation of deletion events across all datastores",
+     "Audit trail immutability versus complete erasure"
+    ],
+    "tradeoffs": [
+     "Eventual consistency in asynchronous multi-store data deletion simplifies workflows but requires reconciliation auditing"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "partial"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Tax/Compliance Service",
+     "Auth & Compliance Module",
+     "Authentication & Authorization Component",
+     "Consent Auditor",
+     "Sanitization & Validation Middleware",
+     "Preference & Audit Repository Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Checkout & Cart UI Module",
+     "Tax/Compliance Service"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Provider API",
+     "Checkout & Order",
+     "Fulfillment Publisher",
+     "AWS EventBridge",
+     "API Destinations"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search UI Module",
+     "Catalog & Search",
+     "Search Controller & Facade",
+     "Catalog Management Service",
+     "Amazon OpenSearch",
+     "Index Synchronization Worker",
+     "OpenSearch Client Repository"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Checkout & Cart UI Module",
+     "Checkout & Order",
+     "Checkout Controller",
+     "Order Orchestrator",
+     "Cart Manager",
+     "Payment Gateway Client",
+     "Payment Gateway",
+     "Amazon DynamoDB",
+     "Amazon RDS (PostgreSQL)"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Catalog & Search UI Module",
+     "Store Administrator"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Module",
+     "Recommendation",
+     "Recommendation API Controller",
+     "Algorithm Engine",
+     "Model Cache",
+     "Analytics Ingestion",
+     "Amazon Kinesis"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "AWS Route 53",
+     "Frontend Container",
+     "API Management",
+     "Rate Limiting & Usage Metering Component",
+     "AWS SQS",
+     "AWS EventBridge",
+     "Amazon DynamoDB",
+     "Amazon OpenSearch",
+     "Model Cache",
+     "PgBouncer Connection Pooler",
+     "Amazon Kinesis"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Frontend Container",
+     "Model Cache",
+     "Amazon OpenSearch"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "AWS Route 53",
+     "Circuit Breaker & Fallback Manager",
+     "Payment Gateway Client",
+     "PostgreSQL Database Engine",
+     "Amazon SQS Dead-Letter Queues (DLQs)",
+     "AWS SQS",
+     "AWS EventBridge"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "partial",
+    "elements": [
+     "Authentication & Authorization Component",
+     "Rate Limiting & Usage Metering Component",
+     "Sanitization & Validation Middleware",
+     "Payment Gateway Client"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

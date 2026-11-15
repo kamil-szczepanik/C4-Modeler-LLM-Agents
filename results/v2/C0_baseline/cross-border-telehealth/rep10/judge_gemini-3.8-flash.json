@@ -1,0 +1,339 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "All requirements are met: R-01 via 'Video Session Service', R-02 via 'FHIR & Prescription Integration Service', R-03 via 'AI Orchestration Service', and R-04 via 'Consent & Policy Engine' with dedicated purpose-based consent and token verification.",
+   "performance_efficiency": "Supports low-bandwidth scenarios using 'GraphQL Resolvers' for selective fetching, Redis caching in 'Consent & Policy Engine', and asynchronous processing via 'MassTransit & Notification Event Consumer'. However, concrete adaptive bitrate / video degradation mechanisms for <300 kbit/s are vague in 'SFU Media Proxy Component'.",
+   "compatibility": "Directly implements R-08 via 'FHIR Adapter' for US HL7 FHIR compliance and 'EU Gateway Adapter' for National e-Prescription Gateways in the EU. External video and identity systems are also well integrated.",
+   "usability": "Serves Patients and Clinicians via 'Regional API Gateway / BFF' and Auditors via 'Audit Query API'. However, no dedicated UI/channel components are specified for patient consent management dashboards or clinicians beyond raw API entry points.",
+   "reliability": "Includes 'Resilience Handler' with circuit breaking and fallback urgency recommendations, and asynchronous messaging via MassTransit. While degradation under 300 kbit/s is cited via GraphQL optimizations, explicit WebRTC audio-only fallback or simulcast handling is not fully detailed.",
+   "security": "Strongly addresses HIPAA/GDPR: regional segregation via 'Routing & Geo-Enforcement Middleware', KMS-encrypted 'Regional WORM Storage' for EU MDR audit logs (R-07), PII stripping in 'Prompt & Context Assembler', and mutual TLS via Istio Service Mesh.",
+   "maintainability": "Excellent modular decomposition following C4 principles. Responsibilities are clearly separated into independent domain containers (Video, AI, Prescription, Consent) with distinct component adapters ('FHIR Adapter', 'EU Gateway Adapter') that isolate region-specific logic.",
+   "portability": "Explicitly targets GCP dual-region deployments (europe-west3, us-central1) with 'GCP Cloud Storage', 'Cloud KMS', and 'Vertex AI'. Good containerized technologies (.NET, Go, Python), though coupled somewhat closely to proprietary GCP services like Vertex AI."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.0,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The architecture delegates media traffic to an external SFU/Third-Party Video Infrastructure combined with a Go-based SFU Media Proxy and Session Coordinator, offloading high-bandwidth streaming from the core API gateway. However, auto-scaling and elasticity bounds during peak 5,000 EU streams are not explicitly documented.",
+    "elements": [
+     "Regional API Gateway / BFF",
+     "Video Session Service",
+     "Session Coordinator Component",
+     "SFU Media Proxy Component",
+     "Third-Party Video Infrastructure"
+    ],
+    "sensitivity_points": [
+     "Capacity and connection pooling of third-party SFU infrastructure",
+     "Signaling throughput of Session Coordinator under peak load"
+    ],
+    "tradeoffs": [
+     "Offloading to third-party SFU lowers infrastructure load but increases external service dependency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "The AI Orchestration Service uses FastAPI, asynchronous WORM audit logging, and direct gRPC connectivity to Vertex AI. Reaching sub-3s latency across ~14 req/sec is readily achievable, though Vertex AI quota limits and model inference cold starts represent an external dependency.",
+    "elements": [
+     "Regional API Gateway / BFF",
+     "AI Orchestration Service",
+     "API Router & Validator",
+     "Prompt & Context Assembler",
+     "Inference Client",
+     "Audit Logger",
+     "Vertex AI"
+    ],
+    "sensitivity_points": [
+     "Latency of external Vertex AI inference calls",
+     "Asynchronous flushing overhead of audit logs"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging improves response times but risks audit record loss if node crashes"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The architecture features GraphQL resolvers optimized for low-bandwidth rural clients alongside WebRTC/SFU streaming that dynamically adapts bitrates. Clinical notes and session orchestration are decoupled from the media stream. Explicit dynamic fallback to audio-only mode is implied rather than specifically specified.",
+    "elements": [
+     "Regional API Gateway / BFF",
+     "GraphQL Resolvers",
+     "Video Session Service",
+     "SFU Media Proxy Component",
+     "Session Coordinator Component"
+    ],
+    "sensitivity_points": [
+     "WebRTC adaptive bitrate adaptation down to 200 kbit/s",
+     "Separation of control plane signaling from media plane"
+    ],
+    "tradeoffs": [
+     "Degrading video stream quality maintains session connectivity at the expense of clinical fidelity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "While regional segregation prevents EU spillover, the architecture specifies only single regions (us-central1, europe-west3) and lacks secondary US backup regions, automated failover, or disaster recovery orchestration that ensures US patient service restoration within 1 hour without cross-border transfer.",
+    "elements": [
+     "Regional API Gateway / BFF",
+     "Consent & Policy Engine",
+     "Regional WORM Storage",
+     "Routing & Geo-Enforcement Middleware"
+    ],
+    "sensitivity_points": [
+     "Multi-zone or multi-region redundancy strictly within US borders",
+     "Absence of secondary regional cold/warm standby configuration"
+    ],
+    "tradeoffs": [
+     "Strict regional residency prevents EU failover, necessitating dedicated US intra-border failover topology"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The FHIR & Prescription Integration Service isolates regional differences using distinct adapter components: 'FHIR Adapter' for US/standard FHIR, 'EU Gateway Adapter' for national EU gateways, and a central 'Validation & Mapping Validator', cleanly localizing changes to a new or extended EU adapter.",
+    "elements": [
+     "FHIR & Prescription Integration Service",
+     "Prescription Orchestrator",
+     "EU Gateway Adapter",
+     "FHIR Adapter",
+     "Validation & Mapping Validator"
+    ],
+    "sensitivity_points": [
+     "Interface decoupling in Prescription Orchestrator",
+     "Extensibility of adapter abstraction layer"
+    ],
+    "tradeoffs": [
+     "Dedicated adapter components increase initial codebase complexity but isolate regional standard changes"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The AI Orchestration Service explicitly decouples the 'Inference Client' targeting Vertex AI from the 'Audit Logger', which records inputs, outputs, and the specific model version directly into Regional WORM Storage, fully satisfying EU MDR traceability and rollback requirements.",
+    "elements": [
+     "AI Orchestration Service",
+     "Inference Client",
+     "Audit Logger",
+     "Vertex AI",
+     "Regional WORM Storage"
+    ],
+    "sensitivity_points": [
+     "Immutable capture of model version metadata in audit payloads",
+     "Vertex AI deployment configuration decoupling"
+    ],
+    "tradeoffs": [
+     "Enforcing strict immutable version tracking adds payload metadata overhead to every inference call"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The architecture incorporates Routing & Geo-Enforcement Middleware, Client Context & Policy Injector, and the Consent & Policy Engine to evaluate cross-region access policies against cached and stored consent. Every attempt is cryptographically logged into Regional WORM Storage.",
+    "elements": [
+     "Regional API Gateway / BFF",
+     "Routing & Geo-Enforcement Middleware",
+     "Client Context & Policy Injector",
+     "Consent & Policy Engine",
+     "Regional WORM Storage"
+    ],
+    "sensitivity_points": [
+     "Zero-trust policy enforcement before cross-region dispatch",
+     "Tamper-proof WORM logging of unauthorized access attempts"
+    ],
+    "tradeoffs": [
+     "Synchronous consent verification prior to data access adds latency to cross-region clinician requests"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The Consent & Policy Engine utilizes real-time Pub/Sub revocations and cache invalidation via Regional Memorystore (Redis), instantly revoking permissions. Compliance records and audit trails are persisted in Regional WORM Storage, allowing immediate compliance verification well within the 24-hour limit.",
+    "elements": [
+     "Consent & Policy Engine",
+     "Regional WORM Storage",
+     "Audit Query API"
+    ],
+    "sensitivity_points": [
+     "Real-time Pub/Sub propagation latency to local policy caches",
+     "Immutability of consent revocation logs in WORM storage"
+    ],
+    "tradeoffs": [
+     "Distributed cache invalidation via Redis adds architectural complexity but guarantees near-instant revocation"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9166666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent & Policy Engine",
+     "Regional WORM Storage",
+     "Routing & Geo-Enforcement Middleware"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Routing & Geo-Enforcement Middleware",
+     "Regional WORM Storage",
+     "Encryption & Key Manager",
+     "Consent & Policy Engine"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Orchestration Service",
+     "Audit Logger",
+     "Regional WORM Storage"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "GraphQL Resolvers",
+     "Regional API Gateway / BFF"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Video Session Service",
+     "Session Coordinator Component",
+     "SFU Media Proxy Component",
+     "Third-Party Video Infrastructure"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "FHIR & Prescription Integration Service",
+     "Prescription Orchestrator",
+     "EU Gateway Adapter",
+     "National e-Prescription Gateways and Pharmacy Networks"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Orchestration Service",
+     "Resilience Handler",
+     "Inference Client",
+     "Vertex AI"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Federated Identity Provider and Patient Consent Dashboard",
+     "Consent & Policy Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Routing & Geo-Enforcement Middleware",
+     "Consent & Policy Engine",
+     "Encryption & Key Manager",
+     "Regional WORM Storage"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Video Session Service",
+     "SFU Media Proxy Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "AI Orchestration Service",
+     "Audit Logger",
+     "Regional WORM Storage"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR & Prescription Integration Service",
+     "FHIR Adapter",
+     "EU Gateway Adapter",
+     "National e-Prescription Gateways (EU) and US Pharmacy Networks"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

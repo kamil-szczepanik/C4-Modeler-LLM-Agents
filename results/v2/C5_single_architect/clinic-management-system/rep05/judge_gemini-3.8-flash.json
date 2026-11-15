@@ -1,0 +1,336 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 5.0,
+  "justifications": {
+   "functional_suitability": "All requirements are addressed: 'Patient Management Component' handles registration (R-01), 'Scheduling Engine Component' manages scheduling (R-02), 'EMR Management Controller / Service' and 'Audit Trail Interceptor' cover EMR auditing (R-03), and 'Billing & Insurance Integration Worker' submits claims via 'Clearinghouse Adapter Component' (R-04).",
+   "performance_efficiency": "Target < 1 s P95 EMR load is supported by 'EMR Cache Layer' (Redis), CDN caching, 'PgBouncer' connection pooling, Citus horizontal scaling in 'PostgreSQL Primary DB', and asynchronous processing via 'Async Message Broker'.",
+   "compatibility": "Interoperability is thoroughly supported through the 'HL7 FHIR Interoperability Adapter' (using HAPI FHIR) and 'FHIR Protocol & Audit Translation Filter' interfacing with 'External Lab & Imaging Systems', as well as standard REST integrations with 'Payment Gateway / Insurance Clearinghouse'.",
+   "usability": "User groups (Doctors, Nurses, Receptionists, Billing Specialists) are served by tailored frontend components in 'Web Application Frontend', including 'EMR View Controller', 'Scheduling Calendar Module', and 'Billing & Claims Dashboard', with MFA managed by 'Authentication & Session Manager'.",
+   "reliability": "99.99% availability and active-active constraints are addressed via multi-region setup in 'PostgreSQL Primary DB', Kafka 'Replication & Mirroring Agent (MirrorMaker 2)', circuit breakers in 'Clearinghouse Adapter Component', and continuous WAL recovery using 'Backup & Archival Daemon'.",
+   "security": "MFA and SSO are enforced by 'Enterprise Identity Provider' and 'Authentication & Authorization Filter'. AES-256 encryption at rest is managed by 'Encryption & Key Service', while 'Audit Trail Interceptor' and 'pgAudit' enforce HIPAA/GDPR accountability.",
+   "maintainability": "High maintainability is achieved with decoupled containers ('Core Services Container', 'EMR & Audit Service', 'Billing & Insurance Integration Worker'), message-driven decoupling via 'Async Message Broker', contract governance through 'Schema Registry', and modular Spring/React architectures.",
+   "portability": "Hybrid target regions (on-prem-k8s, eu-central-1) are explicitly addressed using S3-compliant storage across 'MinIO (On-Prem)' and 'AWS S3 (Cloud)', alongside containerized services and cross-environment replication through 'Replication & Mirroring Agent (MirrorMaker 2)'."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "EMR Cache Layer (Redis) combined with PgBouncer connection pooling and CDN/Nginx frontend ensures sub-second P95 loads under concurrent read traffic.",
+    "elements": [
+     "Web Application Frontend",
+     "API Gateway",
+     "EMR & Audit Service",
+     "EMR Cache Layer",
+     "PostgreSQL Primary DB"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio and eviction policy on Redis EMR Cache Layer",
+     "Connection pool sizing in PgBouncer under concurrent load spikes"
+    ],
+    "tradeoffs": [
+     "Aggressive caching improves latency but introduces cache-invalidation complexity"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "HL7 FHIR Interoperability Adapter and Async Message Broker buffer high-throughput lab results. However, direct synchronous REST calls between API Gateway and EMR may compete during peak ingest.",
+    "elements": [
+     "External Lab & Imaging Systems",
+     "API Gateway",
+     "EMR & Audit Service",
+     "HL7 FHIR Interoperability Adapter",
+     "Async Message Broker",
+     "PostgreSQL Primary DB"
+    ],
+    "sensitivity_points": [
+     "Broker ingestion throughput and partition count for lab messages",
+     "Database write IOPS during simultaneous mass ingestion and read operations"
+    ],
+    "tradeoffs": [
+     "Asynchronous event ingestion protects query latency but introduces eventual consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Multi-region active-active PostgreSQL and MirrorMaker 2 exist, but cross-region failover routing, active-active conflict resolution, and sub-minute hybrid DNS failover are not detailed.",
+    "elements": [
+     "PostgreSQL Primary DB",
+     "Async Message Broker",
+     "Replication & Mirroring Agent (MirrorMaker 2)",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Multi-region database write conflict handling across hybrid cloud",
+     "DNS failover convergence latency between on-prem and eu-central-1"
+    ],
+    "tradeoffs": [
+     "Active-active cross-site replication guarantees availability but risks write latency and conflicts"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Billing & Insurance Integration Worker uses Kafka consumers with circuit breakers, allowing safe retries. Citus/PgBouncer handles failovers, but idempotent claim deduplication is not explicitly documented.",
+    "elements": [
+     "Billing & Insurance Integration Worker",
+     "Claim Consumer Component",
+     "Clearinghouse Adapter Component",
+     "Async Message Broker",
+     "PostgreSQL Primary DB"
+    ],
+    "sensitivity_points": [
+     "Database failover detection time within PgBouncer and PostgreSQL cluster",
+     "Consumer offset commit semantics and idempotent claim transaction management"
+    ],
+    "tradeoffs": [
+     "Strict transactional idempotency adds persistence overhead to claim processing"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Billing integrations are decoupled via Kafka and isolated inside the Billing & Insurance Integration Worker. Clearinghouse Adapter changes do not affect EMR or core services.",
+    "elements": [
+     "Billing & Insurance Integration Worker",
+     "Clearinghouse Adapter Component",
+     "Claim Transformation Component",
+     "Async Message Broker"
+    ],
+    "sensitivity_points": [
+     "Encapsulation of clearinghouse communication within the adapter component",
+     "Format stability of internal claim events on Kafka"
+    ],
+    "tradeoffs": [
+     "Adapter encapsulation simplifies external changes but requires internal domain mapping"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are confined to Web Application Frontend, Patient Management Component, and PostgreSQL schema, with pgAudit automatically capturing schema updates. Schema Registry manages message changes.",
+    "elements": [
+     "Web Application Frontend",
+     "Patient Management Component",
+     "PostgreSQL Primary DB",
+     "Audit & Compliance Logger"
+    ],
+    "sensitivity_points": [
+     "Schema evolution support across relational tables and Kafka Schema Registry",
+     "Tight coupling between UI forms and demographic data contracts"
+    ],
+    "tradeoffs": [
+     "Generic auditing automates compliance logging but increases storage volume"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "MFA is strictly enforced via Enterprise Identity Provider and API Gateway auth filters, but automated security alerting mechanisms are not explicitly modelled.",
+    "elements": [
+     "Enterprise Identity Provider",
+     "Authentication & Session Manager",
+     "API Gateway",
+     "Authentication & Authorization Filter",
+     "Rate Limiting & Threat Protection Module"
+    ],
+    "sensitivity_points": [
+     "Enforcement of second-factor step-up at API Gateway and IdP boundary",
+     "Audit pipeline latency for triggering security alerts upon failed logins"
+    ],
+    "tradeoffs": [
+     "Strict externalized MFA adds redirect latency but enforces strong authentication"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Audit Trail Interceptor captures all EMR reads via Spring AOP and routes them to WORM-compliant storage via S3/MinIO Object Lock, ensuring 10-year immutable retention.",
+    "elements": [
+     "EMR Management Controller / Service",
+     "Audit Trail Interceptor",
+     "WORM Storage Exporter",
+     "WORM-compliant storage",
+     "Object Lock Manager"
+    ],
+    "sensitivity_points": [
+     "Object Lock retention enforcement policies in MinIO and S3",
+     "Coverage completeness of Spring AOP audit interceptors across read operations"
+    ],
+    "tradeoffs": [
+     "Synchronous audit interception ensures total capture but adds latency to record reads"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "EMR & Audit Service",
+     "Audit Trail Interceptor",
+     "Audit & Compliance Logger",
+     "WORM-compliant storage",
+     "Security & Audit Interceptor Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "PostgreSQL Primary DB",
+     "Replication & Mirroring Agent (MirrorMaker 2)",
+     "Backup & Archival Daemon"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "WORM-compliant storage",
+     "Object Lock Manager",
+     "WORM Storage Exporter"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Patient Management Component",
+     "Receptionists",
+     "Web Application Frontend"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Scheduling Calendar Module",
+     "Scheduling Engine Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR & Audit Service",
+     "EMR View Controller",
+     "EMR Management Controller / Service",
+     "Audit Trail Interceptor",
+     "Audit Logging Middleware",
+     "WORM Storage Exporter"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Specialists",
+     "Billing & Claims Dashboard",
+     "Billing & Insurance Integration Worker",
+     "Claim Consumer Component",
+     "Claim Transformation Component",
+     "Clearinghouse Adapter Component",
+     "Payment Gateway / Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Enterprise Identity Provider",
+     "API Gateway",
+     "Authentication & Session Manager",
+     "Authentication & Authorization Filter",
+     "PostgreSQL Primary DB",
+     "Encryption & Key Service"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "PostgreSQL Primary DB",
+     "Replication & Mirroring Agent (MirrorMaker 2)"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Web Application Frontend",
+     "EMR Cache Layer",
+     "Connection Pooler"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "External Lab & Imaging Systems",
+     "HL7 FHIR Interoperability Adapter",
+     "FHIR Protocol & Audit Translation Filter",
+     "FHIR Interoperability Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Audit & Compliance Service container
+
+System_Ext(emr_billing, "EMR Core Service & Billing Service", "External services sending audit events.")
+System_Ext(kafka, "Apache Kafka", "Streaming platform consumed by the ingestion engine.")
+System_Ext(spa_frontend, "SPA Frontend", "Frontend interface displaying compliance dashboards and reports.")
+System_Ext(object_storage, "Object Storage", "WORM-compliant cloud object storage for aged logs.")
+
+Container_Boundary(audit_compliance_service, "Audit & Compliance Service") {
+    Component(IngestionEngine, "Audit Event Ingestion Engine", "Spring Integration Kafka", "Handles real-time audit streams with a Dead-Letter Queue.")
+    Component(RulesEngine, "Compliance Rules Engine", "Drools / Java", "Policy evaluator for detecting EMR access anomalies and tenant-specific threshold alerts.")
+    Component(QueryApi, "Audit Query & Reporting API", "Spring MVC REST", "Serves compliance dashboards to the React SPA Frontend.")
+    Component(RetentionManager, "Retention & Archival Manager", "Batch scheduler", "Enforces the >= 10-year data retention and WORM offloading policy.")
+    Component(ReportService, "Report Generation Service", "Apache PDFBox / Thymeleaf", "Service for asynchronous generation of PDF/CSV compliance exports.")
+    Component(StorageGateway, "Object Storage Gateway", "AWS S3 API", "Interface managing AWS S3 storage with Object Lock configuration.")
+    Component(Database, "PostgreSQL Database", "Patroni-managed PostgreSQL", "Relational database with AES-256 encryption at rest.")
+}
+
+Rel(emr_billing, IngestionEngine, "Sends audit events", "gRPC over mTLS with eBPF routing")
+Rel(IngestionEngine, kafka, "Consumes streaming audit events", "TCP")
+Rel(IngestionEngine, Database, "Writes immutable logs", "JDBC over TLS with AES-256")
+Rel(RulesEngine, Database, "Queries access patterns", "JDBC over TLS with AES-256")
+Rel(QueryApi, spa_frontend, "Serves dashboard data", "HTTPS")
+Rel(RetentionManager, StorageGateway, "Offloads aged logs to WORM storage", "HTTPS / S3 API with SigV4")
+Rel(StorageGateway, object_storage, "Manages WORM storage")
+Rel(ReportService, spa_frontend, "Delivers generated reports via download links", "HTTPS")
+
+@enduml

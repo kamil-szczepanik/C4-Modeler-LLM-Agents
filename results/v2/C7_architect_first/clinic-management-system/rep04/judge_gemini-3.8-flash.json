@@ -1,0 +1,326 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively met: Patient Record Manager handles registrations (R-01) and EMR (R-03); Appointment Scheduler Component with Redis Redlock prevents booking clashes (R-02); and Billing & Claims Processor Component manages claims and payments (R-04).",
+   "performance_efficiency": "Sub-second P95 loads (R-07) are supported through TanStack Query, Redis caching, IndexedDB local caching, and gRPC over Istio Service Mesh, along with traffic shaping and rate limiting in the API Gateway / Edge Proxy.",
+   "compatibility": "Interoperability (R-08) is directly addressed by the FHIR Interoperability Adapter using HAPI FHIR over REST/TLS 1.3 for External Lab & Imaging Systems, alongside standard OIDC/SAML integrations with the Identity Provider and payment gateway protocols.",
+   "usability": "All persona needs are satisfied: Patients use a WCAG 2.1 AA compliant Patient Self-Service Portal, while Clinicians, Receptionists, and Billing Staff utilize the Web Application Frontend equipped with Tailwind CSS, Radix UI, and offline sync resilience.",
+   "reliability": "High reliability is supported by Redis Sentinel failover, Redlock, and the Local Storage/Sync Daemon for offline operation. However, explicit active-active cross-region data replication mechanisms for PostgreSQL across on-prem-k8s and eu-central-1 are not detailed to guarantee 99.99% uptime.",
+   "security": "Security thoroughly fulfills HIPAA/GDPR: MFA via IdP, AES-256 at rest, envelope encryption via On-Premises HSM and AWS CloudHSM, PostgreSQL RLS, Egress DLP filtering, and an Immutable Audit Log with S3 Object Lock for 10-year retention.",
+   "maintainability": "The architecture exhibits modular decomposition between clinical, scheduling, and audit concerns. Responsibilities are well-isolated using decoupled containers, the Outbox pattern, and modular components like the FHIR Interoperability Adapter and OpenTelemetry sidecars.",
+   "portability": "Most components are containerized on Kubernetes across hybrid environments. However, hard dependencies on AWS QLDB, AWS CloudHSM, and S3 Object Lock create slight coupling to AWS, limiting symmetric execution on the on-prem-k8s region."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Client-side TanStack query caching, IndexedDB local persistence, and gRPC over Istio service mesh enable fast data loading. However, the absence of a dedicated backend read cache for Core Clinical EMR queries may increase PostgreSQL load under peak morning rounds.",
+    "elements": [
+     "Web Application Frontend",
+     "Data Fetching & Cache Component",
+     "Local Storage Sync Service",
+     "API Gateway / Edge Proxy",
+     "Core Clinical & EMR Service",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Client and edge caching efficiency determines EMR rendering latency",
+     "PostgreSQL connection pool sizing under simultaneous clinician logins"
+    ],
+    "tradeoffs": [
+     "Client-side caching improves render speed but risks transient data staleness"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "The HAPI FHIR adapter and Envoy traffic shaping accommodate ingestion, and ~33 writes/sec easily finishes within 10 minutes. However, the lack of an asynchronous message queue in front of PostgreSQL risks competing with transactional read latency during peak bursts.",
+    "elements": [
+     "FHIR Interoperability Adapter",
+     "Priority & Traffic Shaping Filter",
+     "Core Clinical & EMR Service",
+     "PostgreSQL",
+     "Immutable Audit Log"
+    ],
+    "sensitivity_points": [
+     "PostgreSQL write contention between bulk FHIR ingestion and active EMR reads",
+     "Ingestion rate limiting configured within Envoy Priority & Traffic Shaping"
+    ],
+    "tradeoffs": [
+     "Direct synchronous database ingestion simplifies pipeline design but increases latency during bursts"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "While Envoy xDS and hybrid routing allow multi-site traffic balancing, the architecture lacks explicit details on active-active cross-region PostgreSQL data replication and consistency across on-prem and eu-central-1, making sub-minute zero-data-loss failover high-risk.",
+    "elements": [
+     "Routing & Load Balancing Core",
+     "API Gateway / Edge Proxy",
+     "PostgreSQL",
+     "Redis"
+    ],
+    "sensitivity_points": [
+     "Cross-site database replication lag between on-prem-k8s and eu-central-1",
+     "Automated DNS and ingress traffic shifting latency during regional failure"
+    ],
+    "tradeoffs": [
+     "Active-active multi-region deployments ensure high availability but introduce cross-WAN data consistency complexity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Transactional Outbox in PostgreSQL combined with Redis durable retry queues and Redlock prevents duplicate or dropped claim submissions. Fast database failover recovery mechanisms (e.g., Patroni) are implied rather than fully specified, though claim idempotency is well-preserved.",
+    "elements": [
+     "Billing & Claims Processor Component",
+     "PostgreSQL",
+     "Redis Cluster",
+     "Payment Gateway / Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Transactional outbox polling intervals and claim deduplication keys",
+     "Database node failover and reconnect recovery timing"
+    ],
+    "tradeoffs": [
+     "Transactional outbox guarantees exactly-once dispatch at the expense of slight dispatch latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Billing and claim integrations are fully decoupled from clinical services into the Scheduling & Billing Service. Changes to insurance clearinghouses are strictly localized to the Billing & Claims Processor Component without affecting EMR or scheduling models.",
+    "elements": [
+     "Billing & Claims Processor Component",
+     "Scheduling & Billing Service",
+     "Payment Gateway / Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Standardization of internal claim representations before mapping to external clearinghouses"
+    ],
+    "tradeoffs": [
+     "Domain service separation introduces inter-service network boundaries but preserves strong modifiability"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Modifications are cleanly confined to three core layers: UI view (Web Application Frontend), domain model (Patient Record Manager), and data persistence (PostgreSQL with pgaudit). The audit log automatically ingests new attributes without architectural alterations.",
+    "elements": [
+     "UI Component & Design System Library",
+     "Patient Record Manager",
+     "PostgreSQL",
+     "pgaudit Compliance Module"
+    ],
+    "sensitivity_points": [
+     "Database schema migration agility and entity-model coupling"
+    ],
+    "tradeoffs": [
+     "Automatic schema auditing avoids custom audit logic but generates larger audit record payloads"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The IdP mandates OIDC/SAML authentication with MFA, while the API Gateway Authentication Filter validates incoming tokens. Unauthenticated requests are immediately blocked, and Telemetry Sidecars export security events to Prometheus and Grafana for rapid alerting.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Authentication & Authorization Filter",
+     "API Gateway / Edge Proxy",
+     "Telemetry & Distributed Tracing Sidecar"
+    ],
+    "sensitivity_points": [
+     "Strict MFA enforcement policies on external Identity Providers",
+     "Alert evaluation and dispatch latency within OpenTelemetry monitoring collectors"
+    ],
+    "tradeoffs": [
+     "Mandatory MFA adds login friction for clinicians while decisively blocking credential theft"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The Authorization & Policy Engine enforces ABAC/RBAC, while the Audit Logging Interceptor captures read events. Records are cryptographically signed using CloudHSM/Bouncy Castle and archived in S3 Object Lock Compliance Mode for over 10 years.",
+    "elements": [
+     "Authorization & Policy Engine",
+     "Audit Logging Interceptor",
+     "Cryptographic Signer Component",
+     "Ledger Storage Engine",
+     "AWS CloudHSM",
+     "S3 Object Lock"
+    ],
+    "sensitivity_points": [
+     "Comprehensive coverage of read operations in the Audit Logging Interceptor",
+     "Cryptographic key lifecycle management using CloudHSM"
+    ],
+    "tradeoffs": [
+     "Auditing every record read increases log storage volume but guarantees regulatory compliance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Egress DLP & Sanitization Filter",
+     "Audit Logging Interceptor",
+     "Immutable Audit Log",
+     "pgaudit Compliance Module",
+     "Encrypted Local Dead-Letter Queue (DLQ)"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Routing & Load Balancing Core",
+     "Redis Cluster",
+     "Replication & Persistence Controller"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "S3 Object Lock",
+     "Compliance Export Service"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Receptionist",
+     "Patient Record Manager",
+     "Dashboard & Record Viewer"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Appointment Scheduler Component",
+     "Appointment Booking Widget",
+     "Lock Coordination Engine",
+     "Redis Cluster"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Core Clinical & EMR Service",
+     "Patient Record Manager",
+     "Audit Logging Interceptor",
+     "Immutable Audit Log"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scheduling & Billing Service",
+     "Billing & Claims Processor Component",
+     "Payment Gateway / Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Authentication & Authorization Filter",
+     "Identity Provider (IdP)",
+     "Data Access & Encryption Component",
+     "Local Storage Manager",
+     "Row-Level Security & Encryption Manager",
+     "On-Premises Hardware Security Module (HSM)"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Routing & Load Balancing Core",
+     "Redis Cluster",
+     "Replication & Persistence Controller"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Data Fetching & Cache Component",
+     "Local State Cache",
+     "Core In-Memory Data Store"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Interoperability Adapter",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

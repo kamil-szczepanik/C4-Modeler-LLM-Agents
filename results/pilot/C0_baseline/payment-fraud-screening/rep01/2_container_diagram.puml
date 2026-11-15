@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening
+
+Person(FraudAnalysts, "Fraud Analysts", "Internal users reviewing flagged transactions and managing suspicious cases.")
+
+System_Ext(MerchantIntegrationSystems, "Merchant Integration Systems", "External clients submitting card-not-present payment authorizations.")
+System_Ext(IdentityProvider, "Identity Provider", "External OIDC/IAM service for analyst Single Sign-On.")
+System_Ext(APIGatewayNetworkLoadBalancerNLB, "API Gateway / Network Load Balancer (NLB)", "AWS managed ingress terminating TLS and routing incoming traffic.")
+
+System_Boundary(RealTimePaymentFraudScreening, "Real-Time Payment Fraud Screening") {
+    Container(ScoringEngine, "Scoring Engine", "Go, AWS ECS Fargate", "Containerized microservice processing real-time payment fraud scoring at 3,000 TPS.")
+    Container(CaseManagementPortal, "Case Management Portal", "Node.js, TypeScript, PostgreSQL", "Secure web application and database providing a portal for fraud analysts.")
+    ContainerDb(FeatureStore, "Feature Store", "Redis Cluster", "In-memory cache providing low-latency feature lookups for the scoring engine.")
+    Container(AuditQueue, "Audit Queue", "Amazon SQS", "Message queueing service for asynchronous audit event decoupling.")
+    Container(AuditStreamProcessor, "Audit Stream Processor", "Amazon Kinesis Firehose", "Ingestion and streaming service for audit logs.")
+    ContainerDb(AuditStorage, "Audit Storage", "Amazon S3, S3 Object Lock", "WORM-compliant storage providing 7-year tamper-evident audit retention.")
+}
+
+Rel(MerchantIntegrationSystems, APIGatewayNetworkLoadBalancerNLB, "Submit payment authorizations", "HTTPS (REST/JSON)")
+Rel(APIGatewayNetworkLoadBalancerNLB, ScoringEngine, "Route payment evaluation requests", "gRPC over HTTP/2")
+Rel(FraudAnalysts, CaseManagementPortal, "Investigate flagged transactions and manage cases", "TLS")
+Rel(FraudAnalysts, IdentityProvider, "Authenticate via Single Sign-On", "OAuth2/OIDC")
+Rel(ScoringEngine, FeatureStore, "Perform in-memory feature lookups", "TCP")
+Rel(ScoringEngine, AuditQueue, "Emit asynchronous audit events", "AWS SDK")
+Rel(CaseManagementPortal, CaseManagementPortal, "Persist relational case data", "TLS")
+Rel(AuditStreamProcessor, AuditStorage, "Write immutable audit records for WORM storage", "HTTPS")
+@enduml

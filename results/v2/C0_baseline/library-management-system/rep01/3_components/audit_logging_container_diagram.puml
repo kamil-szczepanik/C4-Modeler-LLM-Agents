@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(ComplianceOfficers, "Compliance Officers", "Primary human actors accessing logs and compliance reports.")
+System_Ext(APIGateway, "API Gateway", "Upstream router submitting logs.")
+System_Ext(ObservabilityPlatform, "Observability Platform", "External sink for metrics and traces.")
+System_Ext(PostgreSQLTimescaleDB, "PostgreSQL/TimescaleDB", "Append-only storage utilizing Transparent Data Encryption (TDE) for EU data residency compliance.")
+
+Container_Boundary(AuditLoggingContainer, "Audit Logging Container") {
+    Component(AuditIngestionAPI, "Audit Ingestion API", "Express/gRPC", "Express/gRPC handler with mTLS authentication.")
+    Component(EventNormalizer, "Event Normalizer", "TypeScript", "TypeScript component enforcing cryptographic hash-chaining.")
+    Component(LocalBufferManager, "Local Buffer Manager", "SQLite with WAL", "SQLite with Write-Ahead Logging (WAL) on encrypted storage.")
+    Component(ComplianceStorageWriter, "Compliance Storage Writer", "PostgreSQL/TimescaleDB", "PostgreSQL/TimescaleDB with write-only roles and TDE.")
+    Component(ComplianceQueryService, "Compliance Query Service", "REST/GraphQL API", "REST/GraphQL API protected by JWT/OAuth2 RBAC.")
+    Component(TelemetryExporter, "Telemetry Exporter", "OpenTelemetry SDK", "OpenTelemetry SDK.")
+}
+
+Rel(APIGateway, AuditIngestionAPI, "Ingests audit logs", "gRPC over mTLS")
+Rel(AuditIngestionAPI, EventNormalizer, "Passes raw events", "In-memory")
+Rel(EventNormalizer, LocalBufferManager, "Buffers hash-chained events", "Local Disk / SQLite WAL over dm-crypt")
+Rel(LocalBufferManager, ComplianceStorageWriter, "Flushes batched records", "SQL over TLS")
+Rel(ComplianceStorageWriter, PostgreSQLTimescaleDB, "Persists immutable records", "SQL over TLS with TDE")
+Rel(ComplianceOfficers, ComplianceQueryService, "Exports audit trails", "HTTPS")
+Rel(ComplianceQueryService, ComplianceStorageWriter, "Reads immutable logs", "SQL over TLS")
+Rel(TelemetryExporter, ObservabilityPlatform, "Streams traces and metrics", "OTLP over TLS")
+@enduml

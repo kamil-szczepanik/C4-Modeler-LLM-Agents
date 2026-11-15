@@ -1,0 +1,325 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 via 'Rules Engine Core', R-02 through 'Case Management System Frontend' and 'Case Service', and R-03 using 'Model Registry Loader' and WebAssembly hot-reloading for zero-downtime updates.",
+   "performance_efficiency": "The architecture achieves 3,000 TPS under 50 ms via Go microservices, asynchronous audit emission to 'Amazon SQS / Kinesis', and low-latency 'Hot Feature Table'. However, routing real-time gRPC authorizations through 'Amazon API Gateway' introduces unnecessary proxy latency.",
+   "compatibility": "The design interfaces cleanly with 'Payment Processor Systems / Acquirer' over gRPC with mTLS, supports standard HTTPS/TLS 1.3 for analyst web traffic, and integrates standard AWS services.",
+   "usability": "The 'Case Management System Frontend' explicitly serves analysts with dedicated components ('Case Queue Component', 'Transaction Details Component', 'Rule Management Component', and 'Audit Log Viewer Component') aligned with their daily operational workflows.",
+   "reliability": "'Amazon CloudWatch Synthetics', DLQs, and FIFO queues provide observability and message durability. However, the system lacks an explicit fallback or fail-open bypass mechanism at the ingress layer to satisfy R-07 when scoring becomes unavailable.",
+   "security": "Strict security mechanisms are present: 'Masking & Security Interceptor' strips PANs, 'AWS KMS' handles envelope encryption, mTLS is enforced, and 'Amazon S3 with Object Lock' combined with KMS digital signatures ensures 7-year tamper-evident auditability.",
+   "maintainability": "Well-modularized into decoupled services. The 'Rules Engine Core' leverages WebAssembly to isolate rule evaluation, and serverless managed components ('Compliance Reporting Worker', DynamoDB) keep operational burden low for a small three-engineer team.",
+   "portability": "The architecture targets AWS eu-west-1 effectively, but relies heavily on proprietary managed services ('Amazon DynamoDB', 'Amazon API Gateway', 'S3 Object Lock', 'AWS KMS'), creating high cloud lock-in and limiting portability to other environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Go on ECS with goroutines and DynamoDB single-digit millisecond latency easily supports <50ms P99 at 3,000 rps. API Gateway HTTP APIs may introduce minor latency jitter, but the synchronous path is lean and offloads audit logging asynchronously to SQS/Kinesis.",
+    "elements": [
+     "Amazon API Gateway",
+     "HTTP API Router",
+     "VPC Link Integration",
+     "Real-Time Scoring Engine",
+     "API Handler Component",
+     "Rules Engine Core",
+     "Feature Evaluator Component",
+     "Amazon DynamoDB",
+     "Hot Feature Table"
+    ],
+    "sensitivity_points": [
+     "DynamoDB read latency under high read concurrency",
+     "API Gateway VPC link networking overhead"
+    ],
+    "tradeoffs": [
+     "Using DynamoDB over in-memory cache saves cost but risks tail latency spikes"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Workloads are isolated: scoring runs on Go/ECS with separate DynamoDB tables (Hot Feature Table vs Case Management Table), while analysts query Case Management System API on Node.js. Resource contention between analyst operations and real-time scoring is effectively eliminated.",
+    "elements": [
+     "Case Management System Frontend",
+     "Case Management System API",
+     "Real-Time Scoring Engine",
+     "Amazon DynamoDB",
+     "Hot Feature Table",
+     "Case Management Table"
+    ],
+    "sensitivity_points": [
+     "Table partitioning and provisioned throughput separation in DynamoDB"
+    ],
+    "tradeoffs": [
+     "Maintaining separate API services increases operational footprint for a 3-engineer team"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture lacks an explicit fallback mechanism or circuit breaker at API Gateway or the client boundary to fail open/closed when the scoring engine crashes, creating a risk that payments remain blocked longer than 1 minute.",
+    "elements": [
+     "Amazon API Gateway",
+     "Real-Time Scoring Engine",
+     "Amazon CloudWatch",
+     "Alarms"
+    ],
+    "sensitivity_points": [
+     "Absence of edge-level fallback routing during scoring engine downtime"
+    ],
+    "tradeoffs": [
+     "Failing open avoids payment blockage but exposes the acquirer to fraud risk"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Audit logging is fully decoupled from the real-time scoring path. The engine dispatches audit events asynchronously via the Audit Logger Component to SQS/Kinesis with DLQs, guaranteeing that slow or failing downstream audit stores do not degrade latency or lose records.",
+    "elements": [
+     "Audit Logger Component",
+     "Amazon SQS / Kinesis",
+     "Standard Queues",
+     "Dead-Letter Queues",
+     "Compliance Reporting Worker",
+     "Amazon S3 with Object Lock"
+    ],
+    "sensitivity_points": [
+     "Queue buffer retention limits during extended audit store outages"
+    ],
+    "tradeoffs": [
+     "Asynchronous buffering guarantees latency but introduces eventual consistency for audit log persistence"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Rules Engine Core supports Wasm sandboxing and hot-reloading via Model Registry Loader polling S3, alongside a Shadow Evaluator for testing. Fast rollback is supported by pointing back to previous Wasm models without redeploying containers.",
+    "elements": [
+     "Rules Engine Core",
+     "Model Registry Loader",
+     "Shadow Evaluator Component",
+     "Amazon S3"
+    ],
+    "sensitivity_points": [
+     "Model polling frequency and dynamic memory overhead in Wasm runtime"
+    ],
+    "tradeoffs": [
+     "Wasm execution provides sandboxed hot updates but may incur slight CPU overhead versus native Go"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Analysts can update rules via the Rule Management Component in the frontend through Case Management API. Wasm hot-reloading enables zero-downtime activation well within 1 hour, and decision payloads store rule evaluation outputs for auditability.",
+    "elements": [
+     "Rule Management Component",
+     "Case Management System API",
+     "Rules Engine Core",
+     "Model Registry Loader",
+     "Audit Logger Component"
+    ],
+    "sensitivity_points": [
+     "Rule validation pipeline prior to distribution to prevent runtime panic"
+    ],
+    "tradeoffs": [
+     "Hot-reloading rules at runtime without restarts increases the risk of undetected logical regressions"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The Case Management System API features a dedicated Masking & Security Interceptor stripping PANs and validating RBAC. CloudWatch Alarms, Metric Filters, and KMS protect data; however, explicit automated anomaly detection mechanisms within 15 minutes are only minimally detailed.",
+    "elements": [
+     "Masking & Security Interceptor",
+     "Case Controller / Router",
+     "Transaction Details Component",
+     "Amazon CloudWatch",
+     "Alarms",
+     "Metric Filters",
+     "AWS KMS"
+    ],
+    "sensitivity_points": [
+     "Completeness of PAN masking logic across all analyst API endpoints"
+    ],
+    "tradeoffs": [
+     "Strict masking protects cardholder data but limits manual context during deep fraud investigations"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Decisions, inputs, and models are signed using AWS KMS ECC_NIST_P256 by the Compliance Reporting Worker and stored in Amazon S3 with Object Lock configured for 7-year tamper-evident retention. Querying daily Parquet digests guarantees retrieval within one working day.",
+    "elements": [
+     "Compliance Reporting Worker",
+     "Amazon S3 with Object Lock",
+     "AWS KMS",
+     "Audit Log Viewer Component",
+     "Case Management System API"
+    ],
+    "sensitivity_points": [
+     "Immutability policies on S3 Object Lock and KMS key rotation lifecycle"
+    ],
+    "tradeoffs": [
+     "Parquet cold storage on S3 reduces 7-year storage costs but requires batch scanning to reproduce single decisions"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "none"
+  },
+  "coverage": 0.5454545454545454,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Masking & Security Interceptor",
+     "Transaction Details Component",
+     "AWS KMS",
+     "AWS Secrets Manager",
+     "VPC Link Integration"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Amazon S3 with Object Lock",
+     "Compliance Reporting Worker",
+     "Audit Logger Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "API Handler Component",
+     "Rules Engine Core",
+     "Feature Evaluator Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management System Frontend",
+     "Case Queue Component",
+     "Transaction Details Component",
+     "Case Management System API",
+     "Case Service",
+     "Case Management Table"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Rules Engine Core",
+     "Model Registry Loader",
+     "Shadow Evaluator Component",
+     "Rule Management Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Feature Evaluator Component",
+     "Hot Feature Table",
+     "HTTP API Router",
+     "VPC Link Integration"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Masking & Security Interceptor",
+     "Transaction Details Component",
+     "AWS KMS"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Amazon S3 with Object Lock",
+     "Compliance Reporting Worker",
+     "Audit Logger Component",
+     "Standard Queues",
+     "FIFO Queues"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

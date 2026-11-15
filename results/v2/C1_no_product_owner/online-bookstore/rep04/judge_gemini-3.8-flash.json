@@ -1,0 +1,338 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "Search (Search Engine Component), checkout (Checkout Orchestrator Component), recommendations (Recommendation Engine Component), and shipping are covered. However, customer reviews/5-star ratings (R-03) and multi-currency handling lack concrete components or mechanisms.",
+   "performance_efficiency": "Amazon CloudFront, ElastiCache Redis, Amazon OpenSearch, and Aurora Global Database with regional read clusters in eu-west-1 and ap-southeast-1 provide strong caching, asynchronous decoupling, and low-latency reads to support 1M MAU and fast loads.",
+   "compatibility": "Interoperability is well-defined: Shipping Integrator Component connects to external Shipping Provider APIs, Checkout Orchestrator Component integrates with Payment Gateway, and identity is federated via Identity Provider using OAuth2/OIDC standards.",
+   "usability": "Customer interacts with React SPA via Amazon CloudFront & AWS S3 and API Gateway. However, mechanisms addressing multi-currency presentation, localized experience, or 3G asset minimization are not detailed.",
+   "reliability": "High availability (99.95%) is achieved through Aurora Secondary DB Clusters cross-region replication, SQS DLQs for poisoned messages, and Outbox Dispatcher Component ensuring resilient asynchronous event publishing.",
+   "security": "OWASP Top-10 threats are mitigated by AWS WAF and Request Validator. AWS Lambda Authorizer verifies JWTs, while AWS KMS encrypts customer PII for GDPR/CCPA compliance over mTLS and PrivateLink.",
+   "maintainability": "The design exhibits high modularity with clean container separation (Core E-Commerce Service, Recommendation & Search Service, Background Worker Service) and decoupled messaging via Amazon SNS and Amazon SQS.",
+   "portability": "Multi-region deployment across the requested AWS regions (us-east-1, eu-west-1, ap-southeast-1) is thoroughly addressed. However, tight coupling to proprietary AWS primitives (CloudFront Functions, KMS, SNS) restricts cloud replaceability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront edge caching, Redis cache-aside, and autoscaled ECS containers effectively offload catalog reads during traffic spikes. However, maintaining sub-2s loads on 3G requires tight client-side bundle budgets and edge asset optimization that are only partially specified.",
+    "elements": [
+     "Amazon CloudFront & AWS S3",
+     "AWS API Gateway",
+     "Recommendation & Search Service",
+     "Amazon ElastiCache Redis",
+     "Amazon OpenSearch"
+    ],
+    "sensitivity_points": [
+     "CloudFront cache hit ratio for catalog assets",
+     "Payload sizes transmitted over 3G networks"
+    ],
+    "tradeoffs": [
+     "Aggressive edge caching improves response time but increases risk of stale pricing or inventory"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendation computation is fully decoupled from browsing. The Recommendation Engine computes heuristics asynchronously, stores precomputed recommendation vectors in Redis, and runs in an isolated ECS service, ensuring no compute contention affects catalog browsing or checkout paths.",
+    "elements": [
+     "Recommendation & Search Service",
+     "Recommendation Engine Component",
+     "Amazon ElastiCache Redis",
+     "Catalog Sync Consumer Component",
+     "Amazon SQS / SNS"
+    ],
+    "sensitivity_points": [
+     "Asynchronous vector refresh frequency in Redis",
+     "Resource isolation between OpenSearch indexing and querying"
+    ],
+    "tradeoffs": [
+     "Precomputing recommendation vectors conserves browsing bandwidth but sacrifices immediate personalization freshness"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The checkout flow completely isolates third-party shipping dependencies. Orders are accepted and persisted before fulfillment events are published to SQS FIFO queues. The Background Worker retries external shipping APIs asynchronously, utilizing dead-letter queues to prevent checkout failures.",
+    "elements": [
+     "Core E-Commerce Service",
+     "Checkout Orchestrator Component",
+     "Fulfillment Coordinator Component",
+     "Amazon SQS / SNS",
+     "Background Worker Service",
+     "Shipping Integrator Component"
+    ],
+    "sensitivity_points": [
+     "Durability of SQS FIFO buffers under third-party API outage",
+     "DLQ retry and alerting configurations"
+    ],
+    "tradeoffs": [
+     "Asynchronous shipping confirmation improves checkout availability but introduces eventual consistency for tracking numbers"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Aurora Global Database and Route 53 enable multi-region failover. However, Aurora utilizes single-region primary writes with read-only secondaries, meaning regional write failover requires automated promotion orchestration, and Redis session states lack cross-region multi-primary replication.",
+    "elements": [
+     "Amazon CloudFront & AWS S3",
+     "Amazon Aurora PostgreSQL Global Database",
+     "Primary DB Cluster",
+     "Secondary DB Clusters",
+     "Amazon ElastiCache Redis"
+    ],
+    "sensitivity_points": [
+     "Aurora cross-region promotion RTO and RPO",
+     "Cross-region session state synchronization in ElastiCache"
+    ],
+    "tradeoffs": [
+     "Multi-region read replicas reduce global read latency but complicate write failover consistency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Adding JPY is supported by the multi-currency constraint and external services like Stripe and Avalara. Modifications are contained within the Core E-Commerce Service and database schemas, though the architecture lacks an explicit dedicated currency conversion module.",
+    "elements": [
+     "Core E-Commerce Service",
+     "Checkout Orchestrator Component",
+     "Payment Gateway",
+     "Tax & Compliance Service"
+    ],
+    "sensitivity_points": [
+     "Data schema adaptability to zero-decimal currencies",
+     "Payment gateway API multi-currency configuration"
+    ],
+    "tradeoffs": [
+     "Relying on external gateways for currency conversion simplifies code but introduces third-party dependency"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The recommendation capability is encapsulated within the Recommendation Engine Component in the Recommendation & Search Service. Replacing the collaborative filtering algorithm with another approach requires changes only within this component, preserving gRPC and Redis consumer contracts.",
+    "elements": [
+     "Recommendation & Search Service",
+     "Recommendation Engine Component",
+     "API Controller Component",
+     "Amazon ElastiCache Redis"
+    ],
+    "sensitivity_points": [
+     "Preservation of gRPC contracts between API Controller and Engine",
+     "Vector dimension compatibility in Redis caching"
+    ],
+    "tradeoffs": [
+     "Encapsulated engine simplifies algorithmic replacement but restricts custom query access across domain boundaries"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The architecture features layered defense-in-depth against injection and XSS. AWS WAF inspects traffic at CloudFront and API Gateway, Request Validators enforce JSON schemas, and backend data layers utilize OpenSearch DSL and parameterized database abstractions.",
+    "elements": [
+     "AWS WAF",
+     "Amazon CloudFront & AWS S3",
+     "AWS API Gateway",
+     "Request Validator",
+     "Search Engine Component",
+     "Data Access Repository Component"
+    ],
+    "sensitivity_points": [
+     "Comprehensive coverage of AWS WAF managed rule groups",
+     "Input sanitization rigor in Search Engine and Data Access components"
+    ],
+    "tradeoffs": [
+     "Strict schema and WAF payload inspection improves security but adds small request latency overhead"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "KMS Customer Managed Keys enable crypto-shredding of encrypted PII. However, customer data is scattered across PostgreSQL, OpenSearch, Redis, and event queues without an explicit deletion orchestrator or saga mechanism to verify complete CCPA/GDPR erasure across all data stores.",
+    "elements": [
+     "AWS Secrets Manager & KMS",
+     "Key Management Component",
+     "Amazon Aurora PostgreSQL Global Database",
+     "Amazon OpenSearch",
+     "Amazon ElastiCache Redis",
+     "Background Worker Service"
+    ],
+    "sensitivity_points": [
+     "Completeness of crypto-shredding keys across all regional data stores",
+     "Propagation of deletion events to asynchronous queues and search indices"
+    ],
+    "tradeoffs": [
+     "Crypto-shredding simplifies cryptographic deletion but leaves orphaned anonymized records in operational storage"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "none",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Tax & Compliance Service",
+     "Key Management Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Provider APIs",
+     "Background Worker Service",
+     "Shipping Integrator Component",
+     "Shipping SQS FIFO Queue",
+     "Fulfillment Coordinator Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Recommendation & Search Service",
+     "Search Engine Component",
+     "Amazon OpenSearch",
+     "Amazon CloudFront & AWS S3"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Core E-Commerce Service",
+     "Checkout Orchestrator Component",
+     "Payment Gateway",
+     "Distributed Shopping Cart Module",
+     "Amazon ElastiCache Redis",
+     "Checkout SQS Queue"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Amazon CloudFront & AWS S3",
+     "Customer"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation & Search Service",
+     "Recommendation Engine Component",
+     "Amazon ElastiCache Redis"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Amazon Aurora PostgreSQL Global Database",
+     "Core E-Commerce Service",
+     "Recommendation & Search Service",
+     "Amazon ElastiCache Redis",
+     "Amazon SQS / SNS",
+     "AWS API Gateway"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Amazon CloudFront & AWS S3",
+     "Amazon CloudFront",
+     "CloudFront Functions",
+     "Amazon ElastiCache Redis",
+     "Secondary DB Clusters"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Amazon Aurora PostgreSQL Global Database",
+     "Primary DB Cluster",
+     "Secondary DB Clusters",
+     "CDN / Global Traffic Manager",
+     "Processing DLQs"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "AWS WAF",
+     "AWS API Gateway",
+     "AWS Lambda Authorizer",
+     "Request Validator",
+     "Rate Limiting Module",
+     "AWS Secrets Manager & KMS"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

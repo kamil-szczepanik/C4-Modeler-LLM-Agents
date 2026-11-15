@@ -1,0 +1,314 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "Requirements R-01 to R-03 are fully addressed: 'Customer/Broker Portal' provides online submission, 'Adjuster Web App' supports adjuster workflows, and incremental migration is enabled via the 'Feature-Flag Evaluation Engine' in the BFF alongside the 'Data Synchronization Worker'.",
+   "performance_efficiency": "R-05 is directly addressed by decoupling adjuster requests from the 5-second mainframe response through 'Caching & Resilience Layer' (Azure Cache for Redis) in the BFF, asynchronous ingestion via 'Azure Service Bus', and caching in the 'Backend-for-Frontend (BFF)'.",
+   "compatibility": "The design facilitates coexistence with 'Legacy Mainframe System (COBOL/DB2)' via APIM's 'Payload Transformation Module', 'Data Synchronization Worker', and batch integration. However, assuming native gRPC endpoints directly on a 30-year-old COBOL mainframe without clear middleware is an architectural stretch.",
+   "usability": "All target user roles are provided tailored interfaces: Policyholders and Brokers access the responsive 'SPA Frontend' in the 'Customer/Broker Portal', while Claims Adjusters are served by the dedicated 'Adjuster Web App' optimized for low latency.",
+   "reliability": "R-04 consistency is maintained by 'Workflow Orchestrator' (Azure Durable Functions) ensuring idempotent processing, 'Integration Adapter' with Polly retries/circuit breakers, 'Audit & Event Store' (Cosmos DB and SQL Ledger), and asynchronous messaging buffers protecting batch windows.",
+   "security": "Meets R-07 via 'Active Directory / Entra ID' SSO with OAuth 2.0/OIDC. It also incorporates mTLS across hybrid boundaries, 'Azure Key Vault' with Managed Identities, RBAC via 'API Router & Auth Middleware', and tamper-evident audit storage in 'Azure SQL Ledger'.",
+   "maintainability": "R-06 (one-day switchback) is explicitly solved by the 'Configuration Manager' and 'Feature-Flag Evaluation Engine' (Azure App Configuration). The system is cleanly decomposed into microservices and BFF patterns, minimizing changes needed on the mainframe side.",
+   "portability": "The architecture satisfies the target hybrid environments across Azure West Europe and on-premise mainframe using containerized workloads (Azure Container Apps). However, heavy coupling to proprietary PaaS (Cosmos DB, Durable Functions, Azure SQL Ledger) limits cloud portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 4.5,
+   "Modifiability": 4.5,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "BFF uses Azure Cache for Redis with cache-aside to deliver sub-2-second responses, but cold reads or cache misses requiring synchronous mainframe roundtrips taking up to 5 seconds will violate the SLA because no background prefetching mechanism is specified.",
+    "elements": [
+     "Backend-for-Frontend (BFF)",
+     "Caching & Resilience Layer",
+     "Aggregation & Orchestration Service",
+     "Adjuster Web App"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in Redis under typical adjuster browsing patterns",
+     "Timeout and fallback behaviors when mainframe latency exceeds 2 seconds"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of cached legacy data versus strict real-time freshness"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Online submissions are ingested via Azure API Management and immediately buffered into Azure Service Bus by the Claim Intake Router, completely decoupling peak intake traffic from the legacy mainframe and protecting the fixed nightly batch window.",
+    "elements": [
+     "Azure API Management (API Gateway)",
+     "Claim Intake Router",
+     "Azure Service Bus",
+     "Data Synchronization Worker"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue capacity and consumer throttling configuration",
+     "Rate limiting policies enforced at Azure API Management"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission confirmation versus immediate end-to-end processing confirmation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Azure Service Bus queues submission events while the Claim Processing Core and Data Synchronization Worker pause downstream legacy pushes during the batch window, ensuring zero lost claims and resuming forward synchronization when the mainframe resumes availability.",
+    "elements": [
+     "Azure Service Bus",
+     "Claim Processing Core",
+     "Data Synchronization Worker",
+     "Claim Intake Router"
+    ],
+    "sensitivity_points": [
+     "Queue retention limits during extended batch windows or delays",
+     "Schedule awareness or heartbeat detection for mainframe batch windows"
+    ],
+    "tradeoffs": [
+     "Extended message buffering latency versus mainframe batch processing exclusivity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Azure Durable Functions handles state orchestration with idempotent processing, while Azure SQL Ledger and Cosmos DB record state transitions. However, automated conflict reconciliation mechanisms for partial two-way sync failures with the legacy DB2 are not fully detailed.",
+    "elements": [
+     "Workflow Orchestrator",
+     "Data Synchronization Worker",
+     "Integration Adapter",
+     "Operational Event Store",
+     "Audit & Compliance Archive"
+    ],
+    "sensitivity_points": [
+     "Idempotency key enforcement across hybrid distributed transactions",
+     "Reconciliation logic when DB2 batch updates fail midway"
+    ],
+    "tradeoffs": [
+     "Complexity of compensating transactions versus risk of manual reconciliation"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Azure App Configuration and the BFF Feature-Flag Evaluation Engine enable instant traffic switching per claim type. APIM payload transformations minimize mainframe interface changes, though bidirectional data sync rules for rollback state recovery remain an architectural sensitivity.",
+    "elements": [
+     "Feature-Flag Evaluation Engine",
+     "Configuration Manager",
+     "Payload Transformation Module",
+     "Azure API Management (API Gateway)"
+    ],
+    "sensitivity_points": [
+     "Granularity of feature flags across presentation and domain services",
+     "Data synchronization parity before initiating a switch-back"
+    ],
+    "tradeoffs": [
+     "Runtime overhead of policy-based payload transformation versus specialized mainframe adaptors"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The BFF and API Gateway isolate frontends from backends, while Claim Processing Core and Cosmos DB already maintain core domain models and data stores. Mainframe decommissioning simply turns off synchronization workers without altering adjuster or customer web applications.",
+    "elements": [
+     "Backend-for-Frontend (BFF)",
+     "Claim Processing Core",
+     "Data Synchronization Worker",
+     "Customer/Broker Portal",
+     "Adjuster Web App"
+    ],
+    "sensitivity_points": [
+     "Complete migration of legacy system of record data into Azure Cosmos DB",
+     "Strict adherence to decoupled API contracts by frontends"
+    ],
+    "tradeoffs": [
+     "Maintaining abstraction layers in BFF versus direct domain entity binding"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "API Router & Auth Middleware and APIM enforce RBAC and validate JWT tokens, rejecting unauthorized cross-tenant requests. Tamper-evident logging is guaranteed via Azure SQL Ledger, but fine-grained object-level authorization (broker-to-customer ownership) is not explicitly detailed.",
+    "elements": [
+     "API Router & Auth Middleware",
+     "Security and Authentication Validator",
+     "Audit & Compliance Archive",
+     "Azure API Management (API Gateway)"
+    ],
+    "sensitivity_points": [
+     "Enforcement of resource-based access control rules at the BFF layer",
+     "Comprehensive tamper-evident logging of denied authorization attempts"
+    ],
+    "tradeoffs": [
+     "Centralized token inspection at APIM versus contextual claims verification in BFF"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Revocation in Entra ID instantly invalidates modern SSO sessions and OAuth tokens. However, the architecture does not specify how legacy mainframe credentials or RACF user permissions are synchronized or invalidated simultaneously within the 15-minute window.",
+    "elements": [
+     "Active Directory / Entra ID",
+     "Authentication Client",
+     "Security and Authentication Validator",
+     "Legacy Mainframe System"
+    ],
+    "sensitivity_points": [
+     "Token lifetime and revocation propagation speed in Entra ID",
+     "Coupling between Entra ID identity lifecycle and legacy mainframe security"
+    ],
+    "tradeoffs": [
+     "Short-lived access tokens requiring frequent refresh versus prompt revocation enforcement"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe System (COBOL/DB2)",
+     "Data Synchronization Worker"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Azure Service Bus",
+     "Data Synchronization Worker"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Payload Transformation Module",
+     "Integration Route Processor"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Azure Container Apps"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer/Broker Portal",
+     "SPA Frontend",
+     "Document Uploader"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Web App",
+     "React SPA Presentation Layer"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Feature-Flag Evaluation Engine",
+     "API Proxy and Routing Manager",
+     "Configuration Manager"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Workflow Orchestrator",
+     "Azure Service Bus",
+     "Audit & Event Store"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Backend-for-Frontend (BFF)",
+     "Caching & Resilience Layer",
+     "React SPA Presentation Layer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Feature-Flag Evaluation Engine",
+     "Configuration Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Active Directory / Entra ID",
+     "Authentication Client",
+     "Security and Authentication Validator"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

@@ -1,0 +1,242 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "Catalog Management Component, Circulation Component, and Web App modules cover cataloguing, circulation, and self-service portals. While physical cataloguing is clearly detailed, specific mechanisms differentiating digital items (e.g., license or digital asset delivery) are not explicitly elaborated.",
+   "performance_efficiency": "The dedicated Search Service using Elasticsearch, decoupled via Async Event Broker (Kafka) for async indexing, directly targets the sub-800ms 99th-percentile search SLA. PgBouncer and Read Replica Instances offload database queries efficiently.",
+   "compatibility": "External interfaces are clearly defined with National Library Registry, Authentication Provider (OIDC), and External Payment Gateway using standard protocols (REST, HTTPS, mTLS). Confluent Schema Registry guarantees schema compatibility across event-driven integrations.",
+   "usability": "Both Patron and Librarian/Staff user groups are accommodated via the Web App using role-based routing in UI Router & State Management and dedicated Catalogue & Circulation Modules, providing appropriate portal and administrative interfaces.",
+   "reliability": "High reliability is ensured via CloudNativePG for automated failover, PostgreSQL read replicas, Kafka replication factor 3, Dead Letter Queues (DLQ), and Resilience4j circuit breakers wrapping the Elasticsearch client.",
+   "security": "Strict EU data residency is explicitly enforced across components, telemetry, and storage. Perimeter security includes WAF (OWASP CRS), OAuth2/JWT validation, mTLS/TLS 1.3 encryption in transit, and HashiCorp Vault for dynamic credentials and encryption keys.",
+   "maintainability": "The architecture exhibits modular decomposition across containers and components (Core Domain Service, Search Service, Background Worker). Event contracts are enforced with Confluent Schema Registry, isolating domain logic from search and background workflows.",
+   "portability": "The architecture leverages portable standard technologies (Spring Boot, React/Nginx, PostgreSQL, Celery) and Kubernetes primitives (CloudNativePG Operator) capable of deploying across any cloud or on-premise infrastructure satisfying EU data residency constraints."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 2.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "API Gateway routes search requests directly to the dedicated Search Service backed by an Elasticsearch cluster, completely bypassing relational storage to sustain high concurrency and sub-800ms latency.",
+    "elements": [
+     "API Gateway",
+     "Search Service",
+     "Elasticsearch Cluster",
+     "Query Builder Component"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster sizing and index shard distribution under high concurrent read load",
+     "API Gateway routing overhead and connection pool capacity"
+    ],
+    "tradeoffs": [
+     "Maintaining dedicated Elasticsearch cluster increases operational complexity and infrastructure costs for read performance"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalogue modifications are decoupled using asynchronous Kafka event publishing from Core Domain Service to the Search Service Index Synchronizer, isolating write indexing from read performance and ensuring fast convergence well under 5 minutes.",
+    "elements": [
+     "Catalog Management Component",
+     "Async Event Broker",
+     "Index Synchronizer Component",
+     "Elasticsearch Cluster"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer lag and bulk indexing throughput in Elasticsearch",
+     "Search index refresh intervals"
+    ],
+    "tradeoffs": [
+     "Eventual consistency between relational PostgreSQL catalog records and Elasticsearch search results"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Elasticsearch cluster handles single-node failure transparently with replicas, while loan operations are processed entirely in Core Domain Service and PostgreSQL with CloudNativePG multi-AZ failover, preventing loan transaction losses.",
+    "elements": [
+     "Elasticsearch Cluster",
+     "Elasticsearch Client Wrapper",
+     "Core Domain Service",
+     "Database"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster replica configuration and election time",
+     "Circuit breaking configuration in Resilience4j wrapper"
+    ],
+    "tradeoffs": [
+     "Maintaining multi-node cluster replicas increases infrastructure resource consumption"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Web App instances are stateless Nginx/React frontends, allowing seamless failover across remaining instances. Core domain operations and loan transactions are safely preserved by PostgreSQL ACID transactions.",
+    "elements": [
+     "Web App",
+     "API Gateway",
+     "Core Domain Service",
+     "Primary Database Instance"
+    ],
+    "sensitivity_points": [
+     "Session stickiness and ingress load balancer health-check responsiveness",
+     "Client-side retry handling in Axios API Client"
+    ],
+    "tradeoffs": [
+     "Client-side state reconstruction relying on browser storage or re-authentication"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "While external integrations exist, cataloguing lacks a dedicated extensible adapter plugin interface for external e-book providers, requiring modifications to the monolithic Catalog Management Component and background ingestion workers.",
+    "elements": [
+     "Catalog Management Component",
+     "Background Worker",
+     "External Integration Client"
+    ],
+    "sensitivity_points": [
+     "Coupling between catalog schema definitions and external e-book metadata formats"
+    ],
+    "tradeoffs": [
+     "Generic catalog schema flexibility versus domain validation strictness"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The Circulation Component encapsulates borrowing logic in Java/Spring Boot code without an explicit dynamic rule engine, configuration repository, or policy engine to alter loan rules without code redeployment.",
+    "elements": [
+     "Circulation Component",
+     "Core Domain Service"
+    ],
+    "sensitivity_points": [
+     "Hard-coded business logic in circulation services",
+     "Absence of externalized runtime rule configuration store"
+    ],
+    "tradeoffs": [
+     "Hardcoded rule simplicity versus runtime policy configurability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "EU data residency is systematically enforced across components: CloudNativePG multi-AZ EU deployments, EU-hosted Elasticsearch with CMK, EU-scoped Sentry telemetry, and strict EU boundaries defined on workers and caches.",
+    "elements": [
+     "Kubernetes Operator",
+     "Elasticsearch Cluster",
+     "Rate Limiting & Throttling Module",
+     "Data Access Layer",
+     "Telemetry & Error Boundary Module"
+    ],
+    "sensitivity_points": [
+     "Cloud deployment provider configuration and regional boundary enforcement",
+     "External SaaS provider hosting locations"
+    ],
+    "tradeoffs": [
+     "Restricting cloud regions limits provider choices and cross-region disaster recovery options"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Authentication Filter validates JWT tokens at API Gateway, while Core Domain Service enforces patron identity. However, explicit fine-grained ABAC authorization logic and dedicated security audit logging are not fully detailed.",
+    "elements": [
+     "Authentication Filter / Interceptor",
+     "Patron Management Component",
+     "Circulation Component",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Enforcement of resource-level authorization checks inside domain components",
+     "Security audit logging mechanisms for access violations"
+    ],
+    "tradeoffs": [
+     "Granular per-request domain authorization checks introduce minor processing overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Elasticsearch Cluster",
+     "Kubernetes Operator",
+     "Data Access Layer",
+     "Rate Limiting & Throttling Module",
+     "Telemetry & Error Boundary Module"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Web App",
+     "Catalogue & Circulation Modules",
+     "Core Domain Service",
+     "Catalog Management Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Service",
+     "Search API Controller",
+     "Query Builder Component",
+     "Index Synchronizer Component",
+     "Elasticsearch Client Wrapper",
+     "Elasticsearch Cluster"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

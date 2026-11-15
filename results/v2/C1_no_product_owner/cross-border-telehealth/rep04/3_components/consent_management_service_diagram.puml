@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Consent Management Service container
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway")
+System_Ext(cloud_sql, "Cloud SQL PostgreSQL", "Regional Cloud SQL PostgreSQL instances")
+
+Container_Boundary(consent_management_service, "Consent Management Service") {
+    Component(consent_api_handler, "Consent API Handler", "Go / gRPC server", "Managing ingress and validation requests")
+    Component(consent_policy_engine, "Consent Policy Engine", "Go", "Evaluates RBAC, ABAC, and GDPR/HIPAA compliance rules")
+    Component(audit_logger_component, "Audit Logger Component", "Go / gRPC", "Emits cryptographically verifiable immutable access logs")
+    Component(consent_repository_adapter, "Consent Repository Adapter", "Go / pgx / SQL", "Interfaces with regional Cloud SQL PostgreSQL instances")
+    Component(cache_invalidation_subsystem, "Cache Invalidation Subsystem", "Ristretto / Go", "Manages eventual consistency for the local Ristretto cache")
+    Component(gcp_pub_sub, "GCP Pub/Sub", "GCP Pub/Sub", "Relays regional cache invalidation events securely")
+}
+
+Rel(api_gateway, consent_api_handler, "Validates inline consent", "gRPC over mTLS")
+Rel(consent_api_handler, consent_policy_engine, "Evaluates rules", "In-memory Go function calls")
+Rel(consent_policy_engine, consent_repository_adapter, "Reads and writes policies", "gRPC/SQL")
+Rel(consent_repository_adapter, cloud_sql, "Executes region-isolated queries", "pgx / TLS-secured SQL")
+Rel(consent_api_handler, audit_logger_component, "Emits security audit logs", "gRPC")
+Rel(cache_invalidation_subsystem, gcp_pub_sub, "Publishes and consumes hashed revocation events", "Pub/Sub protocol")
+
+@enduml

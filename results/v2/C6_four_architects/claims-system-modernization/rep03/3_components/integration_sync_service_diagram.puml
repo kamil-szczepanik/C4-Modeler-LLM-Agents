@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Integration & Sync Service container
+
+System_Ext(External_Azure_Service_Bus, "External Azure Service Bus", "External Azure Service Bus")
+System_Ext(Observability_Audit_Container, "Observability & Audit Container", "Observability & Audit Container")
+
+Container_Boundary(Integration_Sync_Service, "Integration & Sync Service") {
+    Component(Message_Consumer, "Message Consumer", "Spring Cloud Stream", "Consumes asynchronous domain events.")
+    Component(Idempotency_Deduplication_Filter, "Idempotency & Deduplication Filter", "Spring Boot Filter", "Filters and ensures idempotency of raw deserialized events.")
+    Component(Sync_Orchestrator, "Sync Orchestrator", "Spring Boot / Saga Pattern", "Orchestrates synchronization workflows.")
+    Component(Mainframe_Adapter, "Mainframe Adapter", "Camel / Spring Boot", "Adapts and dispatches outbound requests to the mainframe.")
+    Component(Feature_Flag_Routing_Switcher, "Feature Flag & Routing Switcher", "Spring Cloud Config", "Routes fallback payloads during rollbacks.")
+    Component(Batch_Rate_Limiter, "Batch Rate Limiter", "Resilience4j", "Throttles outbound traffic to protect the mainframe batch window.")
+    Component(Audit_Reconciliation_Ledger, "Audit & Reconciliation Ledger", "Spring Batch / JPA", "Enables automated state reconciliation and fetches legacy state snapshots.")
+    Component(Event_Relay, "Event Relay", "Azure Service Bus SDK", "Relays events using Azure Service Bus.")
+}
+
+Rel(External_Azure_Service_Bus, Message_Consumer, "Delivers asynchronous domain events", "AMQP")
+Rel(Message_Consumer, Idempotency_Deduplication_Filter, "Passes raw deserialized events", "In-memory")
+Rel(Idempotency_Deduplication_Filter, Sync_Orchestrator, "Forwards verified messages", "In-memory")
+Rel(Sync_Orchestrator, Mainframe_Adapter, "Dispatches outbound requests via Batch Rate Limiter", "In-memory")
+Rel(Feature_Flag_Routing_Switcher, Mainframe_Adapter, "Routes fallback payloads during rollback", "gRPC/Direct")
+Rel(Audit_Reconciliation_Ledger, Mainframe_Adapter, "Fetches legacy state snapshots", "AMQP/MQ")
+Rel(Audit_Reconciliation_Ledger, Observability_Audit_Container, "Exports audit logs", "OpenTelemetry/HTTPS")
+
+@enduml

@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the API Gateway container
+
+Person(Library Patrons / Staff / Administrators, "Library Patrons / Staff / Administrators", "Users accessing the library portals.")
+System_Ext(External Identity Provider (IdP), "External Identity Provider (IdP)", "Provides external authentication and token validation.")
+System_Ext(Patron Web App & API, "Patron Web App & API", "Internal container for patron services.")
+System_Ext(Staff Management API, "Staff Management API", "Internal container for staff management services.")
+System_Ext(Observability Platform & SIEM, "Observability Platform & SIEM", "Collects telemetry and logs.")
+
+Container_Boundary(api_gateway, "API Gateway") {
+    Component(TLS Termination & Routing Plugin Component, "TLS Termination & Routing Plugin Component", "Kong/Envoy", "Handles ingress routing and TLS termination for incoming requests.")
+    Component(Authentication & Authorization Filter Component, "Authentication & Authorization Filter Component", "Kong/Envoy with Redis-backed token cache", "Validates tokens via external IdP and uses Redis for local token-caching to reduce dependency and maintain sub-second latency.")
+    Component(Rate Limiting & Throttling Module Component, "Rate Limiting & Throttling Module Component", "Kong/Envoy", "Enforces rate limiting and throttling on incoming traffic.")
+    Component(Analytics & Telemetry Emitter Component, "Analytics & Telemetry Emitter Component", "OpenTelemetry (OTel) / Prometheus over TLS", "Streams telemetry asynchronously to maintain performance SLAs.")
+}
+
+Rel(Library Patrons / Staff / Administrators, TLS Termination & Routing Plugin Component, "Access via [HTTPS/REST]")
+Rel(TLS Termination & Routing Plugin Component, Authentication & Authorization Filter Component, "Authenticates requests")
+Rel(Authentication & Authorization Filter Component, External Identity Provider (IdP), "Validates tokens via [HTTPS]")
+Rel(Authentication & Authorization Filter Component, Rate Limiting & Throttling Module Component, "Passes authorized traffic")
+Rel(Rate Limiting & Throttling Module Component, Patron Web App & API, "Routes traffic via [gRPC over mTLS]")
+Rel(Rate Limiting & Throttling Module Component, Staff Management API, "Routes traffic via [gRPC over mTLS]")
+Rel(Analytics & Telemetry Emitter Component, Observability Platform & SIEM, "Streams telemetry via [OpenTelemetry (OTel) / Prometheus over TLS]")
+
+@enduml

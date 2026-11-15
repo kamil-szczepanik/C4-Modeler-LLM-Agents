@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Document & Evidence Management Service container
+
+System_Ext(Customer_Portal_Adjuster_Workspace, "Customer Portal & Adjuster Workspace", "React Web Apps", "Client applications used by customers and adjusters to interact with evidence management.")
+System_Ext(Claims_Processing_Service, "Claims Processing Service", "External System", "External claims processing service requesting evidence linking.")
+
+Container_Boundary(Document_Evidence_Management_Service, "Document & Evidence Management Service") {
+    Component(Document_API_Controller, "Document API Controller", "Spring Boot / Java Component", "Handles REST requests from the Claims Processing Service for evidence linking.")
+    Component(SAS_Token_Issuer_Component, "SAS Token Issuer Component", "Java Component", "Issues short-lived SAS tokens to clients for secure, direct-to-cloud upload permissions.")
+    Component(Metadata_Registrar_Component, "Metadata Registrar Component", "Java Component", "Finalizes upload registration after files are transferred to storage.")
+    Component(Virus_Scanning_Processor, "Virus Scanning Processor", "Azure Function / ClamAV Container", "Asynchronously scans uploaded files for malware and moves clean files to the trusted container.")
+    Component(Storage_Gateway, "Storage Gateway", "Azure Blob SDK", "Manages interactions with Azure Blob Storage including WORM-compliant policies.")
+    Component(Azure_Blob_Storage, "Azure Blob Storage", "Cloud Object Storage (Quarantine Container and Trusted Evidence WORM Container)", "Stores uploaded documents securely with strict WORM immutability policies.")
+    Component(Azure_Event_Grid, "Azure Event Grid", "Event Routing Backbone (with Dead Letter Queue)", "Routes storage events to trigger asynchronous virus scanning.")
+}
+
+Rel(Customer_Portal_Adjuster_Workspace, SAS_Token_Issuer_Component, "Requests upload permissions", "HTTPS/REST")
+Rel(Customer_Portal_Adjuster_Workspace, Azure_Blob_Storage, "Performs direct-to-blob upload using SAS tokens", "HTTPS")
+Rel(Customer_Portal_Adjuster_Workspace, Metadata_Registrar_Component, "Finalizes upload registration", "HTTPS/REST")
+Rel(Claims_Processing_Service, Document_API_Controller, "Requests evidence linking", "HTTPS/REST")
+Rel(Azure_Blob_Storage, Azure_Event_Grid, "Triggers event on new blob creation", "Event")
+Rel(Azure_Event_Grid, Virus_Scanning_Processor, "Dispatches file scan event", "Event")
+Rel(Virus_Scanning_Processor, Azure_Blob_Storage, "Moves clean files to Trusted Container", "HTTPS/Azure SDK")
+
+@enduml

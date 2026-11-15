@@ -1,0 +1,338 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 5
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All functional requirements are thoroughly addressed: 'Patient Management Component' handles registration (R-01), 'Scheduling Engine' coordinates bookings (R-02), 'Clinical Record Manager' with 'Audit Interceptor' satisfies EMR needs (R-03), and 'Billing & Claims Service' with 'Claims Engine' manages billing and clearinghouse claims (R-04).",
+   "performance_efficiency": "The under-one-second EMR P95 target is supported by 'Local EMR Cache Manager' using 'Redis Enterprise' with Active-Flash, read-behind sync, 'PgBouncer' connection pooling with read replicas, and asynchronous decoupling via 'Apache Kafka' and the SPA 'Offline Sync Engine'.",
+   "compatibility": "Interoperability requirements are directly realized by the 'FHIR Adapter Component' and 'FHIR Request Validator' communicating with 'External Lab & Imaging Systems' over HL7 FHIR REST, alongside dedicated connectors for 'Insurance Clearinghouse APIs' and 'Identity Provider (IdP)' via OIDC/SAML.",
+   "usability": "All target personas are mapped to interfaces, including 'EMR Workspace' for clinicians, 'Notification & Alert UI' for patients and staff, and 'Integration Operations Widget'. However, dedicated receptionist and patient workflow interfaces are only generically handled inside the unified SPA client.",
+   "reliability": "High availability (99.99%) is addressed via 'Active-Active CRDT Sync Engine' in Redis, Istio circuit breaking, and 'Distributed Consensus / Fencing Manager'. However, PostgreSQL relies on traditional primary-replica replication rather than multi-master active-active writes across hybrid regions.",
+   "security": "Meets HIPAA/GDPR constraints thoroughly: MFA enforcement via 'Identity Provider (IdP)', 'JWT Validation Plugin', mTLS zero-trust via 'Sidecar Proxy', AES-256 at rest across PostgreSQL and Redis, and tamper-proof 10-year audit logging using 'Object Storage (S3 / WORM)'.",
+   "maintainability": "Microservices exhibit high cohesion and loose coupling through 'Apache Kafka' and 'Outbox Dispatcher'. However, several Level 3 component diagrams incorrectly treat peer containers (e.g., 'API Gateway', 'Service Mesh', 'External Lab & Imaging Systems') as internal components of other services.",
+   "portability": "Target environments (on-prem-k8s and AWS eu-central-1) are explicitly enabled by containerized microservices, 'Kubernetes Operator' (CloudNativePG), Envoy-based 'Hybrid Network Gateway', and mesh peering spanning both on-premises infrastructure and AWS cloud services."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.9375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 4.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Redis Enterprise distributed caching and the Local EMR Cache Manager handle peak read concurrency directly in-memory, while PgBouncer manages database connection pooling to guarantee sub-second screen rendering.",
+    "elements": [
+     "Single-Page Application (SPA) / Mobile Client",
+     "API Gateway",
+     "EMR Service",
+     "Local EMR Cache Manager",
+     "Redis Enterprise",
+     "PgBouncer"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios in Redis Enterprise under simultaneous clinician queries"
+    ],
+    "tradeoffs": [
+     "Memory consumption in Redis versus database read replication latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Integration Service leverages Apache Camel, message routing, and Kafka buffering to asynchronously absorb lab spikes without congesting the EMR Service or impacting user-facing cache reads.",
+    "elements": [
+     "FHIR Adapter Component",
+     "Message Routing & Transformation Engine",
+     "Integration Service",
+     "Dead Letter Queue (DLQ) Manager",
+     "Apache Kafka",
+     "EMR Service"
+    ],
+    "sensitivity_points": [
+     "Throughput capacity of the Kafka message buffer during burst ingestion"
+    ],
+    "tradeoffs": [
+     "Asynchronous ingestion latency versus real-time availability of new lab records"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "On-premises Kubernetes and CRDT-synchronized Redis ensure local survivability, but asynchronous cross-region PostgreSQL replication introduces a potential risk of minimal data loss unless on-premises is the designated primary.",
+    "elements": [
+     "On-Premises Kubernetes Cluster",
+     "AWS EU-Central-1 Cloud Services",
+     "PostgreSQL Clusters",
+     "Distributed Consensus / Fencing Manager",
+     "Active-Active CRDT Sync Engine"
+    ],
+    "sensitivity_points": [
+     "Replication lag between on-premises and eu-central-1 database instances"
+    ],
+    "tradeoffs": [
+     "Asynchronous cross-region replication performance versus strict zero-data-loss consistency guarantees"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Outbox Dispatcher in the Billing & Claims Service guarantees transactional message persistence, while CloudNativePG and etcd-based consensus provide sub-30s failover without duplicated or lost claims.",
+    "elements": [
+     "Billing & Claims Service",
+     "Claims Engine",
+     "Outbox Dispatcher",
+     "PostgreSQL Clusters",
+     "Distributed Consensus / Fencing Manager",
+     "Kubernetes Operator"
+    ],
+    "sensitivity_points": [
+     "Consensus election speed of etcd and CloudNativePG failover duration"
+    ],
+    "tradeoffs": [
+     "Outbox polling overhead versus guaranteed claim dispatch idempotency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Modifications are confined to the Billing & Claims Service without touching the EMR Service. However, a dedicated pluggable adapter pattern is not explicitly modularized within the container.",
+    "elements": [
+     "Billing & Claims Service",
+     "Claims Engine",
+     "Insurance Clearinghouse APIs"
+    ],
+    "sensitivity_points": [
+     "Coupling between the Claims Engine and clearinghouse-specific payload formats"
+    ],
+    "tradeoffs": [
+     "Direct API integration simplicity versus configurable integration adapter modularity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Adding an audited demographic field only modifies the client UI, the Patient Management Component, and the underlying database schema, while audit capture is handled generically.",
+    "elements": [
+     "Single-Page Application (SPA) / Mobile Client",
+     "Patient Management Component",
+     "Patient & Scheduling Service",
+     "PostgreSQL Clusters",
+     "Audit & Compliance Service"
+    ],
+    "sensitivity_points": [
+     "Schema migration overhead on patient demographic database tables"
+    ],
+    "tradeoffs": [
+     "Strong relational schema validation versus frictionless dynamic schema extensibility"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The external Identity Provider enforces multi-factor authentication, rejecting single-factor attempts, while the API Gateway and Compliance Policy Evaluator trigger automated real-time alerts via the notification gateway.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "API Gateway",
+     "JWT Validation Plugin",
+     "Audit & Compliance Service",
+     "Compliance Policy Evaluator",
+     "SMS/Email Notification Gateway"
+    ],
+    "sensitivity_points": [
+     "IdP token validation and security policy evaluation latency"
+    ],
+    "tradeoffs": [
+     "Strict MFA gating security versus login friction for clinical staff"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The Audit Interceptor traps EMR read events and routes them via Kafka to the Audit & Compliance Service, which offloads to S3 Object Lock (WORM) storage for immutable 10-year retention.",
+    "elements": [
+     "EMR Service",
+     "Audit Interceptor",
+     "Apache Kafka",
+     "Audit & Compliance Service",
+     "Object Storage (S3 / WORM)",
+     "Retention Management Worker"
+    ],
+    "sensitivity_points": [
+     "Reliability of asynchronous event offloading from Audit Interceptors to Kafka"
+    ],
+    "tradeoffs": [
+     "WORM storage retention cost versus HIPAA regulatory compliance assurance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Service",
+     "Audit Event Ingestion Engine",
+     "Compliance Policy Evaluator",
+     "Report Generator & Redactor",
+     "Audit Interceptor",
+     "Encryption & Security Module"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "On-Premises Kubernetes Cluster",
+     "AWS EU-Central-1 Cloud Services",
+     "PostgreSQL Clusters",
+     "Distributed Consensus / Fencing Manager",
+     "Active-Active CRDT Sync Engine",
+     "Resilience & Policy Engine"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Retention Management Worker",
+     "Object Storage (S3 / WORM)",
+     "WAL Archiver"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Registration Engine",
+     "Patient & Scheduling Service",
+     "Patient Management Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Appointment Scheduling Service",
+     "Patient & Scheduling Service",
+     "Scheduling Engine"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Module with Audit Trail",
+     "EMR Service",
+     "Clinical Record Manager",
+     "Audit Interceptor",
+     "Audit & Compliance Service"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Processor",
+     "Billing & Claims Service",
+     "Invoice Management",
+     "Claims Engine",
+     "Insurance Clearinghouse APIs"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "PostgreSQL Clusters",
+     "Encryption & Security Module",
+     "Dead Letter Queue (DLQ) Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "PostgreSQL Clusters",
+     "Active-Active CRDT Sync Engine",
+     "Redis Enterprise",
+     "Resilience & Policy Engine",
+     "Distributed Consensus / Fencing Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Local EMR Cache Manager",
+     "Redis Enterprise",
+     "PgBouncer",
+     "EMR Workspace"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "HL7 FHIR API Gateway",
+     "FHIR Request Validator",
+     "Integration Service",
+     "FHIR Adapter Component",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

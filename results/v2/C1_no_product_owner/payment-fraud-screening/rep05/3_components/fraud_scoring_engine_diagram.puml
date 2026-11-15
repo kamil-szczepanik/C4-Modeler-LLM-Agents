@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container_Boundary(fraud_scoring_engine, "Fraud Scoring Engine") {
+    Component(API_Handler, "API Handler", "Go", "Manages ingress validation, sanitization, and mTLS termination.")
+    Component(Feature_Assembler, "Feature Assembler", "Go", "Fetches real-time behavioral features concurrently with built-in circuit breakers.")
+    Component(Rule_Engine, "Rule Engine", "Go", "Evaluates deterministic business rules in-memory to bypass ML inference.")
+    Component(Inference_Client, "Inference Client", "Go", "Interfaces with the ONNX Model Sidecar via localhost gRPC.")
+    Component(Audit_Logger, "Audit Logger", "Go", "Asynchronously signs and records decision payloads via AWS KMS.")
+    Component(ONNX_Model_Sidecar, "ONNX Model Sidecar", "ONNX Runtime", "Executes machine learning model scoring.")
+}
+
+System_Ext(AWS_API_Gateway___ALB, "AWS API Gateway / ALB", "Routes incoming payment requests.")
+System_Ext(Amazon_DynamoDB, "Amazon DynamoDB", "Queries behavioral features and audit logs.")
+System_Ext(Amazon_S3_with_Object_Lock, "Amazon S3 with Object Lock", "Persists signed audit trails.")
+System_Ext(Amazon_EventBridge, "Amazon EventBridge", "Emits decision events.")
+
+Rel(AWS_API_Gateway___ALB, API_Handler, "Routes incoming payment requests", "HTTPS/mTLS")
+Rel(API_Handler, Rule_Engine, "Passes sanitized transaction data", "In-memory function calls")
+Rel(API_Handler, Feature_Assembler, "Passes sanitized transaction data", "In-memory function calls")
+Rel(Feature_Assembler, Amazon_DynamoDB, "Queries behavioral features and audit logs", "AWS SDK / TLS")
+Rel(Inference_Client, ONNX_Model_Sidecar, "Executes model inference queries", "localhost gRPC")
+Rel(Audit_Logger, Amazon_S3_with_Object_Lock, "Persists signed audit trails", "AWS SDK / TLS")
+Rel(fraud_scoring_engine, Amazon_EventBridge, "Emits decision events", "API / Event Bus")
+
+@enduml

@@ -1,0 +1,315 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 5
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "Covers R-01 and R-02 via Fraud Scoring Engine and Case Management Service. Rule feedback is sent via Rule Feedback Publisher, but zero-downtime model updates within the Inference Execution Engine lack an explicit hot-reloading mechanism.",
+   "performance_efficiency": "Sub-50ms P99 at 3,000 RPS is achieved through in-process ONNX Runtime execution, ElastiCache Redis feature store caching, and asynchronous dispatching via Audit Dispatcher and Event Publisher without blocking the scoring pipeline.",
+   "compatibility": "Integrates cleanly with external systems via standard interfaces: gRPC and REST for Payment Gateway, OIDC/OAuth2 for Identity Provider, tokenization APIs for Card Network Vault, and S3 APIs for Secure Audit Archive.",
+   "usability": "Fraud Analysts are well-served by Case Management Service, which exposes a dedicated HTTPS Web UI via Case API Controller for investigating suspicious payments, masking card numbers, and submitting rule adjustments.",
+   "reliability": "While Aurora Multi-AZ ensures database durability, the architecture lacks a concrete fallback or circuit-breaking mechanism in API Gateway or Envoy Proxy Sidecar to fulfill R-07 (preventing blocked payments after one minute of scoring unavailability).",
+   "security": "Addresses PCI-DSS and audit requirements thoroughly using Card Masking / Tokenizer Integration Client, AWS WAF, mTLS, AWS KMS-backed Merkle sealing in Cryptographic Sealer Component, and S3 Glacier Object Lock for immutability.",
+   "maintainability": "Clear component boundaries and separation of concerns exist across services. However, introducing multiple distinct runtime stacks (Rust, Java/Quarkus, Node.js, Go) creates substantial cognitive and maintenance overhead for a team of only three engineers.",
+   "portability": "Tailored effectively to AWS eu-west-1 using containerized workloads alongside AWS-native services like AWS Regional ALB, Amazon ElastiCache, AWS Aurora PostgreSQL, and S3 Glacier Vault."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 3,
+   "MOD-02": 3,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.65625,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 2.5,
+   "Modifiability": 3.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture directly optimizes scoring latency using sub-millisecond ElastiCache Redis feature lookups and local in-process ONNX Runtime inference without remote network hops.",
+    "elements": [
+     "API Gateway",
+     "Fraud Scoring Engine",
+     "Feature Lookup Module",
+     "Inference Execution Engine",
+     "Feature Store"
+    ],
+    "sensitivity_points": [
+     "Redis feature read latency under 3,000 rps",
+     "ONNX in-process inference execution time"
+    ],
+    "tradeoffs": [
+     "Local in-process inference limits model size but eliminates network latency overhead"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Analyst workloads on Aurora PostgreSQL Multi-AZ and Case Management are completely isolated from the real-time scoring path which relies exclusively on Redis and in-process execution.",
+    "elements": [
+     "Case Management Service",
+     "Operational & Audit Database",
+     "Fraud Scoring Engine",
+     "Feature Store"
+    ],
+    "sensitivity_points": [
+     "Physical workload isolation between operational database and real-time feature store"
+    ],
+    "tradeoffs": [
+     "Dual data store maintenance overhead in exchange for zero interference on scoring"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture lacks a documented fallback decision engine, circuit breaker, or fail-open mechanism in the API Gateway or Scoring Engine to unblock payments during scoring failure.",
+    "elements": [
+     "API Gateway",
+     "Envoy Proxy Sidecar",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker trip thresholds and fail-open routing logic in API Gateway"
+    ],
+    "tradeoffs": [
+     "Fail-open policy maintains payment availability but introduces risk of approving fraudulent transactions"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Audit Dispatcher uses direct gRPC calls to the ledger. Without a durable message buffer or local spooling, audit store outages risk either slowing scoring or dropping records.",
+    "elements": [
+     "Audit Dispatcher",
+     "Audit & Compliance Ledger",
+     "Ledger Ingestion Component",
+     "Operational & Audit Database"
+    ],
+    "sensitivity_points": [
+     "Asynchronous buffering and backpressure handling between scoring engine and audit ledger"
+    ],
+    "tradeoffs": [
+     "In-memory asynchronous dispatch protects latency but risks log loss during instance crashes"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "While model versions are tracked in audit logs, the architecture does not specify dynamic ONNX model hot-reloading or automated canary deployment strategies to ensure zero-downtime swaps.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Inference Execution Engine",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Container rolling deployment duration and memory consumption during model reloading"
+    ],
+    "tradeoffs": [
+     "Embedded models simplify runtime topology but require full container rollouts to update"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "Case Management includes a Rule Feedback Publisher, but Fraud Scoring Engine lacks a dynamic rule-engine component to apply and explain rule changes without code deployment.",
+    "elements": [
+     "Case Management Service",
+     "Rule Feedback Publisher",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Dynamic rule distribution and state evaluation latency within scoring nodes"
+    ],
+    "tradeoffs": [
+     "Real-time dynamic rule evaluation adds runtime complexity compared to static compiled models"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "PAN exposure is strictly prevented via Card Masking and Tokenizer Integration. However, the model lacks security monitoring, SIEM integration, or anomalous access detection within 15 minutes.",
+    "elements": [
+     "Case Management Service",
+     "Card Masking / Tokenizer Integration Client",
+     "Identity Provider",
+     "Security Controls"
+    ],
+    "sensitivity_points": [
+     "Strict tokenization enforcement preventing clear-text PAN access by analysts"
+    ],
+    "tradeoffs": [
+     "Complete tokenization reduces PCI scope but limits analyst ability to inspect card anomalies"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Audit & Compliance Ledger combines KMS-signed Merkle trees, S3 Glacier Object Lock for 7-year immutability, and a Compliance Query component to reproduce historical decisions reliably.",
+    "elements": [
+     "Audit & Compliance Ledger",
+     "Cryptographic Sealer Component",
+     "Compliance Query & Export Component",
+     "Storage & Export Component",
+     "External Storage"
+    ],
+    "sensitivity_points": [
+     "Cryptographic Merkle tree verification and S3 Glacier Object Lock compliance mode"
+    ],
+    "tradeoffs": [
+     "Cold archival storage drastically reduces 7-year storage costs while preserving regulatory retrieval"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "none"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Payment Card Network / Tokenization Vault",
+     "Card Masking / Tokenizer Integration Client",
+     "Security Controls",
+     "Local Anonymizer Sidecar"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Ledger",
+     "Cryptographic Sealer Component",
+     "Storage & Export Component",
+     "Audit Archive Exporter",
+     "External Storage",
+     "Secure Audit Archive"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "External Storage",
+     "Data Store"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Data Store",
+     "API Gateway"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Scoring API Controller",
+     "Inference Execution Engine",
+     "Event Publisher"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Service",
+     "Case API Controller",
+     "Case Business Logic & Orchestration Service",
+     "Fraud Analyst / Risk Manager"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Rule Feedback Publisher",
+     "Case Business Logic & Orchestration Service",
+     "Inference Execution Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Feature Lookup Module",
+     "Inference Execution Engine",
+     "Feature Store"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Payment Card Network / Tokenization Vault",
+     "Card Masking / Tokenizer Integration Client",
+     "Security Controls"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Dispatcher",
+     "Audit & Compliance Ledger",
+     "Ledger Ingestion Component",
+     "Cryptographic Sealer Component",
+     "Storage & Export Component",
+     "External Storage"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

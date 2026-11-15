@@ -1,0 +1,246 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "Requirements are thoroughly addressed: 'CatalogueComponent', 'DigitalAssetComponent', and 'Digital Asset Storage Container' satisfy R-01 for physical and digital cataloguing. Circulation workflows and self-service portals are supported via 'CirculationComponent' and 'Web Application Container'.",
+   "performance_efficiency": "Target R-05 (<800 ms P99 search) is directly supported by 'Search Service Container' (OpenSearch/Elasticsearch), 'Redis Cache Container' for fast lookups, 'PgBouncer' connection pooling, and asynchronous streaming via 'Event Broker Container' and 'Index Synchronization Consumer'.",
+   "compatibility": "Explicit compatibility mechanisms are established with external standards and systems: OAI-PMH via 'National Library Registry', ISO 18626 via 'Interlibrary Loan (ILL) Network', Stripe EU payments via 'PaymentAdapter', and OIDC authentication with 'EU Identity Provider'.",
+   "usability": "Both 'Library Patron' and 'Librarian / Staff' interact through dedicated interfaces in 'Web Application Container', featuring 'UI Component Library' (Tailwind/Radix UI) and 'Localization (i18n) Component', though specific self-service kiosk workflows are not separately delineated.",
+   "reliability": "Reliability is handled by 'DLQ Manager' and 'Task Telemetry & DLQ Handler' for message faults, 'Replication & High Availability Manager' in Redis, and 'Backup & PITR Agent' with WAL streaming in 'Database Container'.",
+   "security": "EU data residency constraints are enforced by 'IP Geolocation & Geo-Fencing Plugin' and PostgreSQL 'Data Residency Enforcer (RLS)'. Security is reinforced by 'Auth Plugin', 'IdentityAdapter', 'Access Control & mTLS Gateway', and AES-256 via 'Encryption Service'.",
+   "maintainability": "Highly modular design with clean separation across containers and components. Domain concerns ('CatalogueComponent', 'CirculationComponent', 'DigitalAssetComponent') are decoupled from search, storage, and asynchronous processing using Kafka domain events and well-defined interfaces.",
+   "portability": "Uses standard containerized, cloud-native technologies (Docker-friendly Spring Boot, FastAPI, Nginx, PostgreSQL, MinIO S3 API). Deployments are restricted to EU regions, though cloud-agnostic infrastructure definitions (e.g., Helm/Terraform) are not detailed."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 2.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The dedicated Search Service combines an asynchronous OpenSearch index with a Redis cache and lightweight FastAPI routing, offloading search from transactional databases to comfortably satisfy the sub-800 ms P99 target at 2,000 concurrent requests.",
+    "elements": [
+     "API Gateway Container",
+     "Search Service Container",
+     "Search API Router",
+     "Redis Cache Container",
+     "Search Index Engine"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio and OpenSearch query execution latency under high concurrency"
+    ],
+    "tradeoffs": [
+     "In-memory cache resource consumption versus rapid query response latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalogue mutations are committed to PostgreSQL and published asynchronously through Kafka to OpenSearch via an idempotent consumer. Decoupling search updates via event streaming guarantees sub-800 ms search latency while ensuring updates synchronize within seconds, well under 5 minutes.",
+    "elements": [
+     "CatalogueComponent",
+     "Event Broker Container",
+     "Index Synchronization Consumer",
+     "Search Index Engine",
+     "Search API Router"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer lag and bulk indexing throughput under concurrent updates"
+    ],
+    "tradeoffs": [
+     "Eventual consistency in search index versus update throughput and query performance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "OpenSearch manages EU-only primary and replica shards for automatic failover without service interruption. Circulation workflows are fully decoupled in Core Services and PostgreSQL, preventing any search failure from impacting loan operations or losing transactions.",
+    "elements": [
+     "Search Index Engine",
+     "Search Service Container",
+     "Core Services Container",
+     "CirculationComponent",
+     "Database Container"
+    ],
+    "sensitivity_points": [
+     "OpenSearch replica shard allocation and master election timeout duration"
+    ],
+    "tradeoffs": [
+     "Storage and infrastructure cost of replica shards versus automated high availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The web portal is a stateless Single Page Application using JWT tokens and API Gateway routing, ensuring no loan transaction data is lost. However, multiple redundant portal instances and edge health-check routing are not explicitly defined.",
+    "elements": [
+     "Web Application Container",
+     "API Gateway Container",
+     "Core Services Container",
+     "CirculationComponent"
+    ],
+    "sensitivity_points": [
+     "Stateless token management and upstream health check detection time"
+    ],
+    "tradeoffs": [
+     "Redundant frontend deployment overhead versus user-facing fault tolerance"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "While external adapters exist for payments, notifications, and interlibrary loans, there is no specialized provider adapter for e-books. Introducing an e-book provider requires modifying both CatalogueComponent and DigitalAssetComponent instead of isolating the change to a single integration component.",
+    "elements": [
+     "CatalogueComponent",
+     "DigitalAssetComponent",
+     "Digital Asset Storage Container",
+     "Background Worker Container"
+    ],
+    "sensitivity_points": [
+     "Tight coupling between core catalog models and external digital content ingestion"
+    ],
+    "tradeoffs": [
+     "Simpler initial service boundaries versus modular isolation for third-party integrations"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "Circulation rules are embedded within the Spring Boot CirculationComponent. The architecture lacks an externalized business rules engine, policy management service, or dynamic configuration store, making it impossible to adjust academic lending rules without modifying code and redeploying.",
+    "elements": [
+     "CirculationComponent",
+     "Core Services Container"
+    ],
+    "sensitivity_points": [
+     "Hardcoded domain business logic versus runtime-evaluated configuration rules"
+    ],
+    "tradeoffs": [
+     "Development simplicity of compiled code versus operational flexibility of dynamic rule engines"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The architecture enforces EU data residency across every tier: Geo-fencing at the API Gateway, dedicated EU external integrations (Stripe EU, SendGrid EU), PostgreSQL row-level residency enforcers, EU KMS encryption, and EU-hosted Kafka and MinIO storage.",
+    "elements": [
+     "IP Geolocation & Geo-Fencing Plugin",
+     "Database Container",
+     "Data Residency Enforcer (RLS)",
+     "Event Broker Container",
+     "Digital Asset Storage Container"
+    ],
+    "sensitivity_points": [
+     "Comprehensive configuration of geo-fencing policies and EU-bound storage endpoints"
+    ],
+    "tradeoffs": [
+     "Network latency and restricted provider choice versus strict regulatory data residency compliance"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "OAuth2/JWT authentication at the API Gateway and IdentityAdapter verifies caller identity, while PostgreSQL Audit Logging records database interactions. However, explicit object-level authorization (ownership validation of patron loan records) and security violation alerting are not formally defined.",
+    "elements": [
+     "Auth Plugin",
+     "IdentityAdapter",
+     "CirculationComponent",
+     "Audit Logging & Encryption Manager",
+     "Database Container"
+    ],
+    "sensitivity_points": [
+     "Granular enforcement of patron ownership checks on loan query endpoints"
+    ],
+    "tradeoffs": [
+     "Overhead of per-request authorization checks and audit logging versus data privacy"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "IP Geolocation & Geo-Fencing Plugin",
+     "Database Container",
+     "Data Residency Enforcer (RLS)",
+     "Digital Asset Storage Container",
+     "Encryption Service",
+     "Event Broker Container",
+     "Event Ingestion Engine",
+     "Search Index Engine"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "CatalogueComponent",
+     "DigitalAssetComponent",
+     "Digital Asset Storage Container",
+     "Object Storage Engine",
+     "Database Container"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Service Container",
+     "Search API Router",
+     "Query Translator",
+     "Search Index Engine",
+     "Redis Cache Container",
+     "Telemetry & Tracing Component",
+     "PgBouncer"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ },
+ "tag": "retest"
+}

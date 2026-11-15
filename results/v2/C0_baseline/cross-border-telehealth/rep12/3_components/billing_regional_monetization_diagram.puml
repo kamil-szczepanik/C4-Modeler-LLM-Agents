@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Billing & Regional Monetization container
+
+System_Ext(CloudLoadBalancingAPIGateway, "Cloud Load Balancing / API Gateway", "External gateway routing traffic")
+System_Ext(RegionalPaymentGateways, "Regional Payment Gateways", "Stripe, SEPA, regional credit cards")
+System_Ext(CloudPubSub, "Cloud Pub/Sub", "Asynchronous event messaging")
+System_Ext(CloudLoggingBigQuery, "Cloud Logging & BigQuery", "Logging and analytics storage")
+
+Container_Boundary(BillingRegionalMonetization, "Billing & Regional Monetization") {
+    Component(TransactionRouterComponent, "Transaction Router Component", "Spring Boot on GKE", "Routes payment and billing requests, executes charges and reversals.")
+    Component(TaxInvoicingEngineComponent, "Tax & Invoicing Engine Component", "Spring Boot on GKE", "Requests regional tax calculations and publishes invoice events.")
+    Component(RefundDisputeHandlerComponent, "Refund & Dispute Handler Component", "Spring Boot on GKE", "Handles refunds and payment disputes.")
+    Component(BillingAuditLoggerComponent, "Billing Audit Logger Component", "Spring Boot on GKE", "Writes tamper-proof audit trails for financial transactions.")
+    ContainerDb(LedgerPersistenceLayer, "Ledger & Persistence Layer", "PostgreSQL on GKE", "Regionally isolated relational data storage.")
+}
+
+Rel(CloudLoadBalancingAPIGateway, TransactionRouterComponent, "Routes payment and billing requests", "gRPC over mTLS")
+Rel(TransactionRouterComponent, RegionalPaymentGateways, "Executes charges and reversals", "HTTPS")
+Rel(TransactionRouterComponent, TaxInvoicingEngineComponent, "Requests regional tax calculations", "In-process / gRPC")
+Rel(TransactionRouterComponent, CloudPubSub, "Publishes payment and refund events", "gRPC")
+Rel(TaxInvoicingEngineComponent, CloudPubSub, "Consumes billing events and publishes invoice events", "gRPC")
+Rel(BillingAuditLoggerComponent, CloudLoggingBigQuery, "Writes tamper-proof audit trails", "HTTPS")
+
+@enduml

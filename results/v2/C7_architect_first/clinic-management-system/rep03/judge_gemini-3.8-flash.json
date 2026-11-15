@@ -1,0 +1,332 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements (R-01 to R-04) are covered: Patient & Scheduling Component, Kafka Stream Processors (resource clash checks), EMR Component with pgaudit/AWS S3 Object Lock, and Billing Component integrating with Payment Gateway / Insurance Clearinghouse.",
+   "performance_efficiency": "The sub-second P95 EMR load is supported by Redis edge caching, PgBouncer connection pooling, Kafka asynchronous processing, and tenant-aware priority routing in API Gateway.",
+   "compatibility": "Interoperability requirement R-08 is directly addressed by the FHIR Interoperability Component implementing HL7 FHIR APIs and SMART-on-FHIR scopes to exchange data with External Labs & Imaging Systems.",
+   "usability": "Web Application (SPA) serves all defined user personas (Doctors, Nurses, Receptionists, Billing Staff, Admins, Patients) via the Clinical Workspace Component, though patients and staff share a single SPA without explicit distinct UI separation.",
+   "reliability": "Patroni + etcd automated failover and Kafka KRaft provide strong fault tolerance. However, PostgreSQL is configured as Active-Passive, which partially conflicts with the strict active-active requirement for 99.99% across hybrid regions.",
+   "security": "MFA, IdP integration, RBAC/ABAC Policy Enforcement Filter, AES-256 at rest, TDE, TLS 1.3, Vault secrets management, and WORM-compliant AWS S3 Object Lock with KMS envelope encryption comprehensively enforce HIPAA and GDPR compliance.",
+   "maintainability": "Components have distinct responsibilities and communicate via Kafka, gRPC, and REST. However, Core Services are grouped into a single container before component-level decomposition, slightly reducing deployment independence.",
+   "portability": "The architecture supports hybrid deployment (on-prem-k8s and cloud) using containerized components (NestJS, Kong, Redis, Kafka), though storage tightly relies on AWS S3 Object Lock and AWS KMS."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 3.0,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Redis caching and PgBouncer connection pooling minimize database contention, enabling sub-second P95 load times for 500 concurrent clinicians accessing EMR screens.",
+    "elements": [
+     "Web Application (SPA)",
+     "API Gateway",
+     "EMR Component",
+     "Redis",
+     "PostgreSQL",
+     "PgBouncer"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in Redis for active patient records",
+     "PgBouncer pool sizing under concurrent round peaks"
+    ],
+    "tradeoffs": [
+     "Aggressive caching reduces database load but risks serving slightly stale non-critical records"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Apache Kafka buffers the 10,000 FHIR results asynchronously, allowing background ingestion without contending with Redis-backed read traffic on the EMR screen.",
+    "elements": [
+     "FHIR Interoperability Component",
+     "Apache Kafka",
+     "EMR Component",
+     "PostgreSQL",
+     "Redis"
+    ],
+    "sensitivity_points": [
+     "Kafka partition count and consumer group ingestion throughput",
+     "Decoupled asynchronous processing between ingestion and EMR querying"
+    ],
+    "tradeoffs": [
+     "Asynchronous ingestion guarantees query performance at the cost of slight eventual consistency delays"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The model specifies active-passive PostgreSQL and Patroni failover but lacks multi-region hybrid replication mechanisms or WAN-resilient consensus between on-premises and eu-central-1.",
+    "elements": [
+     "PostgreSQL",
+     "Replication Agent",
+     "API Gateway",
+     "AWS S3 Object Lock"
+    ],
+    "sensitivity_points": [
+     "Cross-site replication latency between on-premises and AWS eu-central-1",
+     "Split-brain avoidance in Patroni cluster across hybrid boundary"
+    ],
+    "tradeoffs": [
+     "Active-passive hybrid failover avoids multi-primary conflicts but risks high RTO and data loss"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Patroni with etcd orchestrates database node failover under 30 seconds, while Kafka with transactional outbox and acks=all prevents claim loss or duplication.",
+    "elements": [
+     "PostgreSQL",
+     "Replication Agent",
+     "Billing Component",
+     "Apache Kafka",
+     "Kafka Connect"
+    ],
+    "sensitivity_points": [
+     "Patroni leader election timeout and heartbeat frequency",
+     "Transactional outbox deduplication keys on insurance claim retries"
+    ],
+    "tradeoffs": [
+     "Strict acks=all and transactional outbox guarantee zero loss but increase claim submission latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Claim processing is isolated inside the Billing Component and external clearinghouse interface, ensuring changes are fully contained without impacting the EMR Component.",
+    "elements": [
+     "Billing Component",
+     "Payment Gateway / Insurance Clearinghouse",
+     "Apache Kafka"
+    ],
+    "sensitivity_points": [
+     "Decoupled event interface between EMR and Billing components",
+     "Abstraction level of external insurance clearinghouse adapter"
+    ],
+    "tradeoffs": [
+     "Isolating billing via asynchronous messaging adds schema maintenance overhead across services"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Modifications are strictly limited to the Clinical Workspace component, Patient & Scheduling component, and PostgreSQL engine; pgaudit automatically captures the new field.",
+    "elements": [
+     "Clinical Workspace Component",
+     "Patient & Scheduling Component",
+     "Database Engine"
+    ],
+    "sensitivity_points": [
+     "PostgreSQL schema migration procedures for audited demographics",
+     "Automatic schema-level audit tracking via pgaudit extension"
+    ],
+    "tradeoffs": [
+     "Automated database-level auditing simplifies code changes but increases WAL storage volume"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Mandatory MFA is enforced via external IdP and authentication plugins, while Fluentbit streams audit logs; however, real-time alert dispatch relies on external SIEM systems.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Authentication Interceptor Component",
+     "Authentication & JWT Validation Plugin",
+     "Audit Logging & Redaction Filter"
+    ],
+    "sensitivity_points": [
+     "MFA enforcement policies configured at the Identity Provider",
+     "Latency of Fluentbit audit log shipping to security tooling"
+    ],
+    "tradeoffs": [
+     "Delegating MFA and alerting to external IdP/SIEM enhances security but reduces local observability"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Kong ABAC filters and PostgreSQL Row-Level Security enforce access rules, pgaudit logs 100% of read actions, and AWS S3 Object Lock enforces 10-year WORM immutability.",
+    "elements": [
+     "RBAC/ABAC Policy Enforcement Filter",
+     "Database Engine",
+     "Audit Logging & Redaction Filter",
+     "AWS S3 Object Lock",
+     "Retention Enforcement Engine"
+    ],
+    "sensitivity_points": [
+     "Coverage of read-access capture in pgaudit and API filters",
+     "WORM compliance mode configuration on S3 Object Lock"
+    ],
+    "tradeoffs": [
+     "Logging 100% of EMR read operations provides strict compliance but incurs high storage overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "RBAC/ABAC Policy Enforcement Filter",
+     "Audit Logging & Redaction Filter",
+     "Database Engine",
+     "KMS Envelope Encryption Wrapper",
+     "AWS S3 Object Lock"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Replication Agent",
+     "Connection Pooler",
+     "Redis Cluster Coordinator / Proxy",
+     "KRaft Controller Quorum",
+     "TLS Termination & Ingress Controller"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AWS S3 Object Lock",
+     "Retention Enforcement Engine",
+     "Storage and Backup"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Component",
+     "Core Services (Patient & Scheduling, EMR, Billing, FHIR Interoperability)",
+     "Clinical Workspace Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Component",
+     "Kafka Stream Processors"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Component",
+     "Database Engine",
+     "Audit Logging & Redaction Filter",
+     "Audit Logger"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Component",
+     "Payment Gateway / Insurance Clearinghouse",
+     "Core Services (Patient & Scheduling, EMR, Billing, FHIR Interoperability)"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Authentication Interceptor Component",
+     "Authentication & JWT Validation Plugin",
+     "Identity Provider (IdP)",
+     "PostgreSQL",
+     "Database Engine",
+     "Persistence Engine",
+     "KMS Envelope Encryption Wrapper"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "PostgreSQL",
+     "Replication Agent",
+     "KRaft Controller Quorum",
+     "Redis Cluster Coordinator / Proxy"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "EMR Component",
+     "Redis",
+     "In-Memory Data Store",
+     "Connection Pooler",
+     "TLS Termination & Ingress Controller"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Interoperability Component",
+     "External Labs & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

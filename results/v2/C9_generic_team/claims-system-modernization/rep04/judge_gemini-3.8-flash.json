@@ -1,0 +1,305 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "BFF and Claims Processing Module handle adjuster and customer workflows (R-01, R-02), while Claim Routing Engine and ACL support phased migration (R-03). However, dedicated client web application containers are missing from the container diagram, showing users connecting directly to the Backend-for-Frontend (BFF).",
+   "performance_efficiency": "The sub-2s response requirement (R-05) is met despite 5s mainframe delays via Session and Cache Manager, Azure Redis Cache Layer with cache-aside caching, and decoupling slow mainframe synchronization through Integration Outbox Service and Azure Service Bus.",
+   "compatibility": "The Anti-Corruption Layer (ACL) and Data Transformation & Mapping Layer reliably translate COBOL copybooks to domain events, and Active Directory handles SSO. However, the architecture does not specify explicit mechanisms to honor the rigid 23:00-05:00 mainframe batch window constraint.",
+   "usability": "Both Customers and Brokers and Claims Adjusters are captured as distinct actors. However, dedicated UI presentation containers (e.g., adjuster web portal) are absent; users are shown connecting directly to the Backend-for-Frontend (BFF) container via REST.",
+   "reliability": "Requirement R-04 is thoroughly addressed using Integration Outbox Service, Transactional Outbox & De-duplication Engine, and Azure Service Bus at-least-once delivery. Fault tolerance is bolstered by Polly circuit breakers in Resilience & Routing Manager and DLQ tracking in Monitoring & Diagnostics.",
+   "security": "Requirement R-07 is fulfilled via Security and Secret Retriever integrating with Active Directory over OIDC/OAuth. Azure Key Vault, Secrets Management Engine, and Access Control and Identity Validator enforce Managed Identities across the BFF, Modular Monolith, and ACL.",
+   "maintainability": "The Modular Monolith aligns with the team's low cloud experience. One-day claim rollback (R-06) is achieved via Feature Flags in Resilience & Routing Manager and Service Bus topic routing, while Anti-Corruption Layer isolates expensive mainframe schema modifications.",
+   "portability": "The hybrid topology accommodates the on-premise mainframe and Azure Container Apps. However, high coupling to proprietary Azure PaaS offerings (Azure Cosmos DB, Azure Service Bus, Azure Key Vault) limits ease of portability or migration across alternative environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 4.5,
+   "Modifiability": 4.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Aggressive caching via Azure Redis Cache Layer and read models in Cosmos DB isolate adjuster query performance from 5-second mainframe response latencies.",
+    "elements": [
+     "Backend-for-Frontend (BFF)",
+     "Session and Cache Manager",
+     "Azure Redis Cache Layer",
+     "Modular Monolith",
+     "Azure Cosmos DB NoSQL Store"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios and cache invalidation consistency during mainframe data updates."
+    ],
+    "tradeoffs": [
+     "Fast screen loads trade off immediate real-time consistency with mainframe updates."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Service Bus queues and transactional outbox buffer incoming submission spikes, decoupling front-end ingestion from mainframe throughput without impacting nightly batch processing windows.",
+    "elements": [
+     "Backend-for-Frontend (BFF)",
+     "Modular Monolith",
+     "Integration Outbox Service",
+     "Azure Service Bus",
+     "Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Message queue buffering depth and rate-limiting throttling into the mainframe."
+    ],
+    "tradeoffs": [
+     "Asynchronous submission ingestion increases eventual consistency lag for submitted claims."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Azure Service Bus and Transactional Outbox durably hold claims during mainframe nightly downtime, dispatching them automatically once the legacy system is back online.",
+    "elements": [
+     "Azure Service Bus",
+     "Message Delivery Worker",
+     "Integration Outbox Service",
+     "Transactional Outbox & De-duplication Engine",
+     "Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Queue retention limits and connection failure detection during batch window transitions."
+    ],
+    "tradeoffs": [
+     "Durable asynchronous queuing trades immediate mainframe confirmation for uninterrupted availability."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Transactional Outbox pattern, idempotent message processing in Redis, and Dead Letter Queues prevent double processing and detect incomplete synchronizations.",
+    "elements": [
+     "Integration Outbox Service",
+     "Transactional Outbox & De-duplication Engine",
+     "Azure Service Bus",
+     "Monitoring & Diagnostics"
+    ],
+    "sensitivity_points": [
+     "Accurate deduplication key generation and distributed transaction failure handling."
+    ],
+    "tradeoffs": [
+     "Enforcing idempotency via Redis lookups introduces slight overhead on message dispatching."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The ACL's Resilience & Routing Manager (using feature flags) and topic-per-claim-type Service Bus routing allow toggling claim types back within a day.",
+    "elements": [
+     "Resilience & Routing Manager",
+     "Claim Routing Engine",
+     "Anti-Corruption Layer (ACL)",
+     "Data Transformation & Mapping Layer"
+    ],
+    "sensitivity_points": [
+     "Granularity and synchronization of feature flags controlling claim-type routing."
+    ],
+    "tradeoffs": [
+     "Dynamic routing flexibility increases configuration complexity within the ACL."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Adopting the Strangler Fig pattern with BFF and ACL shields user interfaces from backend decommissioning, allowing the Modular Monolith to become system of record.",
+    "elements": [
+     "Backend-for-Frontend (BFF)",
+     "Modular Monolith",
+     "Azure Cosmos DB NoSQL Store",
+     "Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Clean separation between BFF API contracts and underlying mainframe legacy data schemas."
+    ],
+    "tradeoffs": [
+     "Maintaining architectural layers during migration adds operational overhead until decommissioning."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Active Directory and API Gateway manage authentication, but broker-level tenancy boundaries and domain authorization rules are not explicitly defined in the components.",
+    "elements": [
+     "API Gateway Controller",
+     "Security and Secret Retriever",
+     "Modular Monolith",
+     "Audit and Diagnostics Logger"
+    ],
+    "sensitivity_points": [
+     "Enforcement of object-level authorization and tenant segregation in business modules."
+    ],
+    "tradeoffs": [
+     "Fine-grained multi-tenant authorization checks add latency to API gateway and controller processing."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Active Directory SSO revokes cloud access quickly, but propagation of revocation to the on-premises mainframe (e.g., RACF) is not modeled or automated.",
+    "elements": [
+     "Active Directory",
+     "Security and Secret Retriever",
+     "Backend-for-Frontend (BFF)",
+     "On-Premises COBOL/DB2 Mainframe"
+    ],
+    "sensitivity_points": [
+     "Synchronization latency between Azure Active Directory and on-premises mainframe identity stores."
+    ],
+    "tradeoffs": [
+     "Short token lifecycles enforce prompt revocation but increase token validation frequency."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "partial",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7272727272727273,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "On-Premises COBOL/DB2 Mainframe",
+     "Anti-Corruption Layer (ACL)",
+     "Integration Outbox Service"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Anti-Corruption Layer (ACL)",
+     "Data Transformation & Mapping Layer"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Modular Monolith"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Backend-for-Frontend (BFF)",
+     "API Gateway Controller",
+     "Claims Processing Module"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Backend-for-Frontend (BFF)",
+     "API Gateway Controller",
+     "Claims Processing Module"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Anti-Corruption Layer (ACL)",
+     "Claim Routing Engine",
+     "Resilience & Routing Manager"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Transactional Outbox & De-duplication Engine",
+     "Integration Outbox Service",
+     "Message Delivery Worker",
+     "Azure Cosmos DB NoSQL Store"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Session and Cache Manager",
+     "Azure Redis Cache Layer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Resilience & Routing Manager",
+     "Claim Routing Engine"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Active Directory",
+     "Security and Secret Retriever"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

@@ -1,0 +1,240 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "The architecture directly supports cataloguing physical and digital items via the 'Catalog Module' and 'Digital Content Delivery Network / S3-compatible EU Object Storage', while 'Circulation Module' and 'Catalog Discovery Component' address circulation workflows and patron self-service portals.",
+   "performance_efficiency": "To meet R-05 (<800 ms p99 search), the architecture decouples search through the 'Search Orchestrator Module' and a dedicated 'Search Engine' (OpenSearch/Elasticsearch). Additionally, 'PgBouncer' connection pooling and asynchronous indexing via 'Async Message Broker' ensure low-latency query handling.",
+   "compatibility": "The architecture defines standardized integrations, including ISO ILL protocol for 'Third-Party Vendors / Interlibrary Loan Partners', OpenID Connect with 'EU Identity Provider', REST/HTTPS for 'SEPA / Stripe EU API Payment Gateway', and AMQP/Kafka protocols for messaging.",
+   "usability": "All target personas are mapped to tailored interfaces within the 'Web Application (SPA)': 'Catalog Discovery Component' for patrons, 'Circulation Desk Component' for library staff, and 'Admin Dashboard Component' for administrators, with offline capabilities in 'Local Persistence Layer'.",
+   "reliability": "Fault tolerance is reinforced through 'Kafka Broker Node' multi-AZ replication, connection resilience via 'PgBouncer', and offline circulation operations supported by the client-side 'Local Persistence Layer' (IndexedDB/Dexie.js) during network disconnections.",
+   "security": "EU data residency and security are rigorously enforced by the 'Data Governance Interceptor', isolated 'secure_pii Schema', 'Authentication/OAuth2 Proxy', client-side encryption in 'Local Persistence Layer', TLS 1.3 termination, and audit logging via 'pgaudit' to 'Centralized SIEM Platform'.",
+   "maintainability": "The 'Core Services API' employs a clean modular monolith pattern with isolated domains ('Catalog Module', 'Circulation Module', 'Fines & Fees Module'). Search indexing and asynchronous messaging are separated cleanly into distinct containers.",
+   "portability": "The design utilizes standard portable technologies such as Kubernetes ('Strimzi'), PostgreSQL 16, Envoy/Nginx, and S3-compatible storage interfaces, allowing the system to run on any EU-based cloud provider or sovereign on-premises infrastructure."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 5,
+   "MOD-01": 3,
+   "MOD-02": 3,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 3.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "A dedicated OpenSearch/Elasticsearch cluster decouples read queries from PostgreSQL, while API Gateway rate limiting and in-memory index ranking comfortably maintain sub-800ms P99 latency.",
+    "elements": [
+     "Web Application (SPA)",
+     "API Gateway",
+     "Search Orchestrator Module",
+     "Search Engine",
+     "Index & Ranking Component"
+    ],
+    "sensitivity_points": [
+     "Search cluster node sizing and replica allocation under concurrent query load",
+     "OpenSearch query cache hit ratio"
+    ],
+    "tradeoffs": [
+     "Dedicated search infrastructure operational overhead versus database query simplicity"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalogue modifications are published asynchronously via Kafka to OpenSearch's ingestion pipeline, isolating write latency from patron search queries and ensuring updates reflect within minutes.",
+    "elements": [
+     "Catalog Module",
+     "Async Message Broker",
+     "Kafka Broker Node",
+     "Ingestion & Synchronization Component",
+     "Index & Ranking Component"
+    ],
+    "sensitivity_points": [
+     "Kafka indexing consumer throughput and OpenSearch index refresh interval"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of search results versus immediate transactional read consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The distributed search engine tolerates node loss with replica failover. Furthermore, circulation transactions depend strictly on PostgreSQL and PgBouncer, preventing search failures from blocking loans.",
+    "elements": [
+     "Search Engine",
+     "Query Parser & Router Component",
+     "Circulation Module",
+     "PgBouncer",
+     "PostgreSQL 16"
+    ],
+    "sensitivity_points": [
+     "Replica index configuration preventing query timeouts during node rebalancing"
+    ],
+    "tradeoffs": [
+     "Cost and resource overhead of running multi-node redundant search clusters"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The client-side SPA with IndexedDB offline resilience tolerates client disruptions, while the API Gateway routes patron traffic across redundant instances without interrupting loan operations.",
+    "elements": [
+     "Web Application (SPA)",
+     "Local Persistence Layer",
+     "API Gateway",
+     "Routing & Tenant Resolver",
+     "Core Services API"
+    ],
+    "sensitivity_points": [
+     "Health check interval and gateway upstream failover convergence speed"
+    ],
+    "tradeoffs": [
+     "Client-side caching complexity to achieve seamless offline resilience and failover"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Digital and physical cataloging are bundled into a single monolithic Catalog Module without explicit provider adapter abstractions, requiring core module changes to integrate new e-book providers.",
+    "elements": [
+     "Catalog Module",
+     "Core Services API",
+     "Digital Content Delivery Network / S3-compatible EU Object Storage"
+    ],
+    "sensitivity_points": [
+     "Coupling between external provider APIs and the internal catalog data schema"
+    ],
+    "tradeoffs": [
+     "Lower initial architectural complexity versus modular extensibility for third-party integrations"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "While multi-tenancy is resolved at the perimeter, the architecture does not specify a dynamic rules engine or configuration store within the Circulation Module to alter policies without redeployment.",
+    "elements": [
+     "Circulation Module",
+     "Admin Dashboard Component",
+     "Routing & Tenant Resolver",
+     "Database"
+    ],
+    "sensitivity_points": [
+     "Storage and evaluation mechanism for dynamically configured circulation policies"
+    ],
+    "tradeoffs": [
+     "Complexity of a dynamic policy evaluation engine versus hardcoded circulation logic"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "EU data residency is enforced structurally across all tiers via EU Identity Providers, dedicated Data Governance Interceptors, isolated secure_pii schemas, and EU-only monitoring endpoints.",
+    "elements": [
+     "Data Governance Interceptor",
+     "Routing & Tenant Resolver",
+     "secure_pii Schema",
+     "EU Identity Provider",
+     "Centralized SIEM / Monitoring Platform"
+    ],
+    "sensitivity_points": [
+     "Completeness of Data Governance Interceptor egress filtering and residency checks"
+    ],
+    "tradeoffs": [
+     "Constraint to EU-specific cloud regions and third-party SaaS provider endpoints"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Incoming tokens are verified by OAuth2 proxies, the Data Governance Interceptor validates access context against patron identities, and pgaudit logs unauthorized attempts to the SIEM.",
+    "elements": [
+     "Authentication/OAuth2 Proxy",
+     "Data Governance Interceptor",
+     "Circulation Module",
+     "PostgreSQL 16",
+     "Centralized SIEM Platform"
+    ],
+    "sensitivity_points": [
+     "Propagation and validation of caller identity across service and interceptor boundaries"
+    ],
+    "tradeoffs": [
+     "Processing latency added by interceptor checks and full audit log streaming"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Data Governance Interceptor",
+     "Database",
+     "EU Identity Provider",
+     "Digital Content Delivery Network / S3-compatible EU Object Storage",
+     "Routing & Tenant Resolver"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog Module",
+     "Catalog Discovery Component",
+     "Digital Content Delivery Network / S3-compatible EU Object Storage"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Engine",
+     "Search Orchestrator Module",
+     "Index & Ranking Component",
+     "Query Parser & Router Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

@@ -1,0 +1,329 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: 'Catalog & Search Service' with OpenSearch handles browsing/search, 'Order & Checkout Service' handles shopping carts and checkout, 'Recommendation & Review Service' satisfies reviews and recommendations, and 'Pricing & Localization Resolver' handles multi-currency.",
+   "performance_efficiency": "Performance and 1M MAU scalability are well-supported via 'AWS CloudFront', multi-layer 'Amazon ElastiCache (Redis)', 'Index Synchronization Worker' with CDC to OpenSearch, 'Async Notification Service' using AWS SQS, and 'Amazon RDS Proxy' with Aurora read replicas.",
+   "compatibility": "Well-defined integrations with 'Payment Gateway', 'Third-Party Shipping APIs', and 'Identity Provider' using HTTPS, mTLS, HMAC, and OAuth2/OIDC. However, Level 2 incorrectly shows the 'Storefront SPA' communicating directly with backend shipping, tax, and notification external APIs.",
+   "usability": "While 'Book Buyer' and 'Registered Reviewer' are served by 'Catalog View', 'Checkout View', and 'Review & Recommendation View' in the SPA, the brief's 'Store Administrator' has no corresponding administration views or back-office interfaces modeled.",
+   "reliability": "High availability (99.95%) is achieved through multi-AZ 'Amazon Aurora PostgreSQL' with Aurora Global Databases, RDS connection pooling via 'Amazon RDS Proxy', and fault-tolerant asynchronous event processing with AWS SQS Dead-Letter Queues.",
+   "security": "Security is thoroughly addressed via 'Auth Validation Middleware' using AWS WAF and Lambda for OWASP Top-10 mitigations, mTLS/HMAC external calls, and 'Audit & Compliance Component' using Row-Level Security and automated anonymization for GDPR and CCPA.",
+   "maintainability": "Strong modular decomposition across domain-focused microservices ('Catalog & Search', 'Order & Checkout', 'Recommendation & Review'). Loose coupling is maintained using 'API Gateway' routing, event-driven messaging with SQS, and transactional outbox CDC patterns.",
+   "portability": "Multi-region AWS targeting (us-east-1, eu-west-1, ap-southeast-1) is supported by Aurora Global Databases and CloudFront. However, the exact multi-region compute execution layer (e.g., ECS, EKS, or Lambda) for microservice containers is unspecified."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 2.5,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront edge caching, ElastiCache Redis, and OpenSearch absorb high traffic and isolate the catalog. However, dynamic catalog queries may still put load on the database without documented auto-scaling policies for compute containers.",
+    "elements": [
+     "AWS CloudFront",
+     "API Gateway",
+     "Catalog & Search Service",
+     "Amazon ElastiCache (Redis)",
+     "Elasticsearch / Amazon OpenSearch Service",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in CloudFront and Redis for catalog browsing"
+    ],
+    "tradeoffs": [
+     "High cache TTL improves performance but increases risk of serving stale product data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Recommendation computation is isolated in a separate Python microservice and cached in Redis, preventing compute starvation on the Go catalog service. Moderate risk remains if mass recomputation creates read contention on shared Aurora storage.",
+    "elements": [
+     "Recommendation & Review Service",
+     "Recommendation Engine",
+     "Recommendation Cache Component",
+     "Catalog & Search Service",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Resource isolation between recommendation batch jobs and transaction processing"
+    ],
+    "tradeoffs": [
+     "Decoupled asynchronous recommendation processing sacrifices real-time accuracy for catalog responsiveness"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The Checkout Processing Engine synchronously calls the Shipping Integration Client during checkout. There is no store-and-forward queue, outbox pattern, or fallback mechanism specified to defer shipping requests when third-party APIs fail.",
+    "elements": [
+     "Order & Checkout Service",
+     "Checkout Processing Engine",
+     "Shipping Integration Client",
+     "Third-Party Shipping APIs"
+    ],
+    "sensitivity_points": [
+     "Synchronous integration dependencies in critical transactional checkout paths"
+    ],
+    "tradeoffs": [
+     "Immediate external shipping validation trades checkout availability for upfront delivery guarantees"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Aurora Global Database and multi-AZ deployments support cross-region data replication. However, the model lacks global DNS routing and automated regional compute failover definitions to ensure seamless switchover during an entire region outage.",
+    "elements": [
+     "AWS CloudFront",
+     "API Gateway",
+     "Database Container",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Database replication lag and lack of automated DNS/traffic failover routing"
+    ],
+    "tradeoffs": [
+     "Multi-region data consistency mechanisms increase architectural complexity and infrastructure costs"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The design encapsulates currency logic inside the dedicated Pricing & Localization Resolver component, and delegates transactions to multi-currency gateways. Changes are well-localized to pricing configuration and payment client mappings.",
+    "elements": [
+     "Pricing & Localization Resolver",
+     "Catalog & Search Service",
+     "Payment Integration Client",
+     "Order & Transactions Schema Component"
+    ],
+    "sensitivity_points": [
+     "Encapsulation of exchange rates and localized pricing rules"
+    ],
+    "tradeoffs": [
+     "Centralized pricing resolver simplifies changes but introduces a shared runtime dependency"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The recommendation algorithm is completely encapsulated within the Recommendation Engine component of the Recommendation & Review Service. Replacing the machine learning algorithm requires no changes to external contracts or other services.",
+    "elements": [
+     "Recommendation & Review Service",
+     "Recommendation Controller",
+     "Recommendation Engine"
+    ],
+    "sensitivity_points": [
+     "Strict interface boundary between Recommendation Controller and Recommendation Engine"
+    ],
+    "tradeoffs": [
+     "Encapsulating ML models in Python service optimizes flexibility over shared in-memory data structures"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "AWS WAF and Lambda within Auth Validation Middleware filter OWASP Top-10 payloads at the edge. Backend database operations use structured SQL drivers and repositories, ensuring SQL injection and XSS attempts are blocked.",
+    "elements": [
+     "API Gateway",
+     "Auth Validation Middleware",
+     "Catalog Repository",
+     "Data Access Repository",
+     "Review Manager"
+    ],
+    "sensitivity_points": [
+     "Comprehensive WAF rule coverage and parameterized query enforcement"
+    ],
+    "tradeoffs": [
+     "Extensive edge deep-packet inspection adds minor request latency to all traffic"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "The database includes an Audit & Compliance Component with automated anonymization and RLS. However, there is no orchestrator, deletion saga, or propagation pipeline to delete distributed customer traces across Redis caches, reviews, and logs.",
+    "elements": [
+     "Database",
+     "Audit & Compliance Component",
+     "Reviews & Recommendations Schema Component",
+     "Caching Layer"
+    ],
+    "sensitivity_points": [
+     "Distributed data lifecycle management and cross-service privacy orchestration"
+    ],
+    "tradeoffs": [
+     "Cascading data deletion and log scrubbing degrades background processing performance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Component",
+     "Database Container"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Pricing & Localization Resolver",
+     "Order & Checkout Service",
+     "Checkout View",
+     "Order & Transactions Schema Component",
+     "Payment Gateway"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Third-Party Shipping APIs",
+     "Shipping Integration Client",
+     "Order & Checkout Service"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Service",
+     "Catalog View",
+     "Search Engine Client",
+     "Elasticsearch / Amazon OpenSearch Service",
+     "Catalog Schema Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Checkout View",
+     "Order & Checkout Service",
+     "Checkout Processing Engine",
+     "Payment Integration Client",
+     "Payment Gateway",
+     "Session Store Component",
+     "Order & Transactions Schema Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Review & Recommendation View",
+     "Recommendation & Review Service",
+     "Review Manager",
+     "Reviews & Recommendations Schema Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation & Review Service",
+     "Recommendation Controller",
+     "Recommendation Engine",
+     "Recommendation Cache Component",
+     "Review & Recommendation View"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Database",
+     "Caching Layer",
+     "API Gateway",
+     "Throttling & Rate Limiting",
+     "Supporting Infrastructure",
+     "Async Notification Service"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "AWS CloudFront",
+     "Caching Layer",
+     "Cache Management Middleware",
+     "Amazon ElastiCache (Redis)",
+     "Catalog Cache Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Database Container",
+     "Database",
+     "Supporting Infrastructure",
+     "Messaging Publisher"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Auth Validation Middleware",
+     "API Gateway"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

@@ -1,0 +1,329 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01, R-02, and R-03 through the Fraud Scoring Service (Inference Engine and Rules Evaluator), the Case Management API with React SPA, and the Amazon S3 Model Registry with Model & Rule Manager for zero-downtime hot reloading.",
+   "performance_efficiency": "Achieves <50ms P99 latency at 3,000 rps using C-based ONNX Runtime bindings, ElastiCache Redis for sub-millisecond feature retrieval, and non-blocking asynchronous audit dispatching via Amazon SQS and AWS Lambda.",
+   "compatibility": "Provides gRPC with mTLS for the Payment Gateway and standard REST/HTTPS APIs. However, explicit container-level integration flows to the external Card Schemes and Tokenization Provider identified in the context diagram are omitted.",
+   "usability": "Fraud Analysts are thoroughly supported by the CloudFront / React SPA, providing an intuitive case review workflow routed through the API Gateway to the Case Management API.",
+   "reliability": "Includes Multi-AZ ElastiCache and SQS DLQs, but lacks an explicit fail-open, bypass, or circuit breaker mechanism in AWS ALB or the gateway integration to ensure payments are not blocked if scoring becomes unavailable (R-07).",
+   "security": "Adheres to PCI-DSS Level 1 through gRPC mTLS, KMS encryption, Masking & Tokenization Interceptor preventing PAN visibility, and immutable WORM storage via Amazon S3 Object Lock in Compliance Mode for tamper-evident audit logging.",
+   "maintainability": "Serverless and managed services (ECS Fargate, Aurora, SQS, ElastiCache) minimize toil for a 3-person team. The Model & Rule Manager enables seamless model updates via thread-safe reference swaps.",
+   "portability": "Targets AWS eu-west-1 effectively using containerized FastAPI services on ECS Fargate. While highly portable at the application layer, there is deep architectural coupling to proprietary services like AWS Cloud Map and S3 Object Lock."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 1,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.0,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "In-memory ONNX Runtime C-bindings, async Redis feature lookups, and non-blocking asynchronous audit dispatching satisfy sub-50ms latency. However, running Python FastAPI under 3,000 RPS peak requires extensive horizontal scaling on ECS Fargate, putting pressure on ALB connection pooling.",
+    "elements": [
+     "AWS ALB",
+     "Fraud Scoring Service",
+     "API Handler Component",
+     "Feature Aggregator Component",
+     "Inference Engine Component",
+     "Amazon ElastiCache (Redis)"
+    ],
+    "sensitivity_points": [
+     "Inference and feature aggregation latency overhead",
+     "ECS Fargate horizontal concurrency limits"
+    ],
+    "tradeoffs": [
+     "Choosing Python FastAPI over compiled languages balances rapid rule development against raw execution performance"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Scoring and case review workloads are completely isolated across compute and data tiers. Case management operates through API Gateway, dedicated ECS Fargate instances, and Aurora PostgreSQL, leaving the ALB, Fraud Scoring Service, and Redis feature store completely unaffected during heavy analyst usage.",
+    "elements": [
+     "CloudFront / React SPA",
+     "API Gateway",
+     "Case Management API",
+     "Amazon Aurora PostgreSQL",
+     "Fraud Scoring Service"
+    ],
+    "sensitivity_points": [
+     "Architectural workload isolation between OLTP scoring and relational review queries"
+    ],
+    "tradeoffs": [
+     "Independent databases avoid noisy neighbor contention at the cost of additional operational overhead"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 1,
+    "justification": "The architecture lacks an explicit fallback mechanism or circuit breaker. If the Fraud Scoring Service crashes, the ALB simply errors out without an alternative path, static fallback responder, or automated bypass rule to unblock payments within 1 minute or audit fallback decisions.",
+    "elements": [
+     "AWS ALB",
+     "gRPC Routing Listener",
+     "Fraud Scoring Service"
+    ],
+    "sensitivity_points": [
+     "Absence of fallback routing or circuit breakers in ingress tier"
+    ],
+    "tradeoffs": [
+     "Strict real-time screening without a fail-open path prevents fraud but breaches availability constraints"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Audit Dispatcher publishes audit events to Amazon SQS via a non-blocking queue. SQS buffers messages with 14-day retention and a DLQ, completely isolating real-time scoring latency from slow downstream Lambda execution or S3 Object Lock operations.",
+    "elements": [
+     "Audit Dispatcher Component",
+     "Amazon SQS",
+     "AWS Lambda",
+     "Amazon SQS Dead-Letter Queue (DLQ)",
+     "Amazon S3 Object Lock"
+    ],
+    "sensitivity_points": [
+     "SQS queue ingestion rate and retention capacity during downstream outages"
+    ],
+    "tradeoffs": [
+     "Asynchronous buffering guarantees low scoring latency but trades off immediate read consistency of audit trails"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Model & Rule Manager polls or receives notifications from the S3 Model Registry and performs a thread-safe reference swap in the Inference Engine with zero downtime. Rollback is instantly achieved by updating the pinned manifest.json, and model versions are preserved.",
+    "elements": [
+     "Amazon S3 Model Registry",
+     "Model Metadata Manifest",
+     "Model & Rule Manager Component",
+     "Inference Engine Component"
+    ],
+    "sensitivity_points": [
+     "Atomic pointer swapping mechanism inside the ONNX inference container"
+    ],
+    "tradeoffs": [
+     "In-process reference swapping avoids ECS deployment delays but requires local memory headroom for parallel models"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Dynamic rules stored in JSON format within S3 are hot-reloaded into the Rules Evaluator via the Model & Rule Manager's reference swapping without service restarts. Feature Aggregator and Redis provide dynamic velocity metrics, and rule execution details are included in audit payloads.",
+    "elements": [
+     "Amazon S3 Model Registry",
+     "Model & Rule Manager Component",
+     "Rules Evaluator Component",
+     "Amazon ElastiCache (Redis)",
+     "Audit Dispatcher Component"
+    ],
+    "sensitivity_points": [
+     "Rule syntax parsing overhead and atomic reload frequency"
+    ],
+    "tradeoffs": [
+     "Interpreted dynamic rules allow rapid runtime deployment but incur slightly higher evaluation overhead than compiled code"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "A dedicated Masking & Tokenization Interceptor ensures analysts and compromised sessions never receive unmasked PANs, complying with PCI-DSS. However, the architecture omits anomaly detection, SIEM integration, or behavioral alerting to detect and alert on compromised analyst accounts within 15 minutes.",
+    "elements": [
+     "API Gateway",
+     "Lambda Authorizer",
+     "Case Management API",
+     "Masking & Tokenization Interceptor Component"
+    ],
+    "sensitivity_points": [
+     "Strict middleware-level masking enforcement",
+     "Missing automated security telemetry and anomaly detection"
+    ],
+    "tradeoffs": [
+     "In-memory token masking ensures PCI-DSS compliance easily without incurring tokenization vault lookups for analysts"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "AWS Lambda cryptographically signs audit payloads using AWS KMS and stores them in Amazon S3 Object Lock configured in Compliance Mode for 7 years. All decision inputs and model versions are immutable. However, no query engine (e.g., Athena) is documented for rapid retrieval.",
+    "elements": [
+     "AWS Lambda",
+     "Cryptographic Signer",
+     "KMS Signer Client",
+     "Amazon S3 Object Lock",
+     "Object Lock Enforcement Engine"
+    ],
+    "sensitivity_points": [
+     "WORM compliance retention policies",
+     "Query efficiency over raw immutable S3 objects"
+    ],
+    "tradeoffs": [
+     "Direct S3 WORM storage satisfies strict legal compliance at low cost but complicates ad-hoc querying"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "none"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Card Schemes / Tokenization Provider",
+     "Masking & Tokenization Interceptor Component",
+     "Access Control & Encryption",
+     "Encryption & Access Controller"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Audit Dispatcher Component",
+     "AWS Lambda",
+     "Amazon S3 Object Lock",
+     "Object Lock Enforcement Engine",
+     "Cryptographic Signer"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Regional API Endpoint",
+     "Fraud Scoring Service",
+     "AWS Lambda"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Amazon SQS Standard Queue",
+     "AWS Lambda",
+     "Fraud Scoring Service"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Service",
+     "API Handler Component",
+     "Inference Engine Component",
+     "Rules Evaluator Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management API",
+     "CloudFront / React SPA",
+     "React Single Page Application",
+     "Case Service Component",
+     "Amazon Aurora PostgreSQL",
+     "Case Data Repository"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Amazon S3 Model Registry",
+     "Model & Rule Manager Component",
+     "Model Metadata Manifest",
+     "S3 Event Notification to SQS Queue"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "AWS ALB",
+     "Fraud Scoring Service",
+     "Inference Engine Component",
+     "Feature Aggregator Component",
+     "Amazon ElastiCache (Redis)",
+     "Audit Dispatcher Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Card Schemes / Tokenization Provider",
+     "Masking & Tokenization Interceptor Component",
+     "Encryption & Access Controller"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit Dispatcher Component",
+     "AWS Lambda",
+     "Cryptographic Signer",
+     "KMS Signer Client",
+     "Amazon S3 Object Lock",
+     "Object Lock Enforcement Engine"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

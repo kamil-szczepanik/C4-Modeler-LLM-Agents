@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway")
+System_Ext(kafka, "Apache Kafka", "Asynchronous, decoupled compliance audit logging.")
+
+Container_Boundary(emr_core_service, "EMR Core Service") {
+    Component(emr_facade, "EMR Facade / Controller", "Spring gRPC / Protobuf", "Handles incoming gRPC requests and schema validation.")
+    Component(policy_enforcement, "Policy Enforcement Component", "Spring Security filter/aspect", "Evaluates Attribute-Based Access Control (ABAC) rules.")
+    Component(clinical_record_manager, "Clinical Record Manager", "Java Spring Boot", "Manages core business logic and ACID transactions.")
+    Component(audit_trail_interceptor, "Audit Trail Interceptor", "In-process eventing and Kafka producer", "Signs and logs PHI access for compliance.")
+    Component(kms_client_adapter, "KMS Client Adapter", "HashiCorp Vault & AWS KMS with Resilience4j", "Handles envelope encryption and key management with resilience fallbacks.")
+    ComponentDb(postgresql_database, "PostgreSQL Database", "PostgreSQL with PgBouncer", "Persistent storage utilizing PgBouncer connection pooling and column-level encryption.")
+}
+
+Rel(api_gateway, emr_facade, "Routes electronic medical records requests", "gRPC with Istio mTLS and propagated JWTs")
+Rel(emr_facade, policy_enforcement, "Processes and authorizes requests", "In-process Spring Security filter/aspect and method calls")
+Rel(policy_enforcement, clinical_record_manager, "Authorizes and passes requests to business logic")
+Rel(clinical_record_manager, kms_client_adapter, "Encrypts sensitive PHI fields", "gRPC/HTTPS")
+Rel(clinical_record_manager, postgresql_database, "Persists clinical records", "JDBC over TLS with AES-256")
+Rel(clinical_record_manager, audit_trail_interceptor, "Triggers compliance audit logging")
+Rel(audit_trail_interceptor, kafka, "Publishes cryptographically signed compliance audit events", "In-process eventing and Kafka producer")
+@enduml

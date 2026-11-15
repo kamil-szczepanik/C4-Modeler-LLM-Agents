@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Notification Service container
+
+System_Ext(External_Providers_Twilio_SendGrid, "External Providers (Twilio/SendGrid)", "External providers for SMS, Email, and Push delivery")
+System_Ext(WORM_Storage, "WORM Storage", "Audit Logging Storage")
+
+Container_Boundary(notification_service, "Notification Service") {
+    Component(API_Router_Component, "API Router Component", "FastAPI", "Routes notification requests via REST / JSON over HTTPS via mTLS.")
+    Component(Event_Consumer_Component, "Event Consumer Component", "Python background worker", "Consumes asynchronous tasks from RabbitMQ.")
+    Component(Notification_Orchestrator_Component, "Notification Orchestrator Component", "Python core logic", "Orchestrates notification dispatch, preference checks, state management, and audit logging.")
+    Component(Preference_Manager_Component, "Preference Manager Component", "Python module", "Queries communication flags via in-process calls.")
+    Component(Retry_State_Store_Component, "Retry & State Store Component", "Redis / PostgreSQL", "Manages persistent retries and DLQ with TCP / Redis Protocol with TLS and AES-256.")
+    Component(Channel_Adapters_Component, "Channel Adapters Component", "Twilio SDK / SendGrid SDK / Firebase Admin", "Abstracts dispatch and delivers SMS, Email, and Push via external providers.")
+}
+
+Rel(API_Router_Component, Notification_Orchestrator_Component, "Triggers notification workflows", "In-process call")
+Rel(Event_Consumer_Component, Notification_Orchestrator_Component, "Dispatches consumed asynchronous tasks", "In-process call")
+Rel(Notification_Orchestrator_Component, Preference_Manager_Component, "Queries communication flags", "In-process call")
+Rel(Notification_Orchestrator_Component, Retry_State_Store_Component, "Manages persistent retries and DLQ", "TCP / Redis Protocol with TLS and AES-256")
+Rel(Notification_Orchestrator_Component, Channel_Adapters_Component, "Abstracts dispatch", "In-process call")
+Rel(Channel_Adapters_Component, External_Providers_Twilio_SendGrid, "Delivers SMS, Email, and Push", "HTTPS / TLS 1.3")
+Rel(Notification_Orchestrator_Component, WORM_Storage, "Ships audit logs", "HTTPS")
+
+@enduml

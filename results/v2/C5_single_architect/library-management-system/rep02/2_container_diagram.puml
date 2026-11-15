@@ -1,0 +1,36 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Library Management System
+
+Person(Users, "Library Patrons and Library Staff", "Users who interact with the system for cataloguing, circulation, and self-service portal access.")
+
+System_Ext(PaymentGateway, "Payment Gateway", "Third-party financial service (Stripe/Adyen) pinned to EU-region endpoints for fine processing.")
+System_Ext(NotificationService, "Notification Service", "Third-party messaging service (SendGrid/Twilio) pinned to EU-region endpoints for alerts.")
+System_Ext(NationalLibraryRegistry, "National Library Registry", "EU-hosted REST API used for metadata synchronization.")
+System_Ext(IdentityProvider, "Identity Provider", "OAuth2/OIDC service for standardized single sign-on authentication.")
+
+System_Boundary(LibraryManagementSystem, "Library Management System") {
+    Container(WebApp, "Web Application", "React/TypeScript SPA", "Powers the user-facing Single Page Application via CDN.")
+    Container(ApiGateway, "API Gateway", "Nginx / Spring Cloud Gateway", "Manages edge routing, TLS termination, and rate limiting.")
+    Container(CoreDomainService, "Core Domain Service", "Java/Spring Boot", "Implements reliable business logic for the Core Domain Service.")
+    Container(SearchService, "Search Service", "Java with Elasticsearch", "Powers high-performance catalog searches.")
+    Container(NotificationWorker, "Notification Worker", "Node.js", "Consumes events from Message Broker and calls external Notification Service.")
+    ContainerDb(Database, "Database", "PostgreSQL", "Stores relational data, pinned strictly to an EU region for compliance.")
+    Container(MessageBroker, "Message Broker", "RabbitMQ / Apache Kafka", "Handles asynchronous event-driven messaging via AMQP.")
+}
+
+Rel(Users, WebApp, "Interacts with the user interface", "HTTPS")
+Rel(WebApp, ApiGateway, "Calls API Gateway", "HTTPS/REST")
+Rel(ApiGateway, CoreDomainService, "Routes requests", "gRPC/REST")
+Rel(ApiGateway, SearchService, "Routes search requests", "gRPC/REST")
+Rel(CoreDomainService, Database, "Reads/writes relational data", "JDBC over TLS")
+Rel(CoreDomainService, MessageBroker, "Publishes domain events", "AMQP")
+Rel(NotificationWorker, MessageBroker, "Consumes events", "AMQP")
+Rel(NotificationWorker, NotificationService, "Sends notifications", "HTTPS")
+Rel(CoreDomainService, PaymentGateway, "Processes fines", "HTTPS")
+Rel(CoreDomainService, NationalLibraryRegistry, "Synchronizes metadata", "HTTPS/REST")
+Rel(CoreDomainService, IdentityProvider, "Authenticates users", "OIDC")
+
+@enduml

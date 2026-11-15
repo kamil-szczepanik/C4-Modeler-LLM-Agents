@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Database container
+
+Component(CoreDomainService, "Core Domain Service", "Microservice", "Client application interacting with the database components.")
+Component_Ext(SearchServiceOpenSearch, "Search Service (OpenSearch)", "OpenSearch", "Handles text search offloaded from the core database.")
+Component(DatabaseMigrationComponent, "Database Migration Component", "Flyway", "Integrated into the Core Domain Service build pipeline for automated migrations.")
+
+Container_Boundary(Database, "Database") {
+    Component(PgBouncer, "PgBouncer", "PgBouncer (Transaction Pooling Mode)", "Connection pooler and proxy component.")
+    Component(CatalogSchema, "Catalog Schema", "PostgreSQL Schema (Relational Tables and JSONB)", "Manages physical and digital item metadata.")
+    Component(CirculationSchema, "Circulation Schema", "PostgreSQL Schema", "Manages patron loans, holds, and ACID transactions.")
+    Component(AuditSchema, "Audit Schema", "PostgreSQL Schema (Partitioned Tables)", "Utilizes partitioned tables for GDPR compliance.")
+    Component(UserManagementSchema, "User Management Schema", "PostgreSQL Schema (Row-Level Security)", "Manages patron profiles and staff roles with Row-Level Security (RLS).")
+    Component(PrimaryNode, "Primary Node", "PostgreSQL", "Primary database node streaming WAL data.")
+    Component(StandbyNode, "Standby Node", "PostgreSQL", "Standby database node for high availability and continuous archiving.")
+    Component(PostgreSQLDatabaseContainer, "PostgreSQL Database Container", "PostgreSQL", "Core relational database management system.")
+    Component(BackupReplicationManager, "Backup & Replication Manager", "Barman and PostgreSQL Streaming Replication", "Ensures high availability and point-in-time recovery.")
+    Component(DatabaseAuditEncryptionManager, "Database Audit & Encryption Manager", "pgcrypto, pgaudit, TLS 1.3", "Enforces at-rest encryption and access logging.")
+}
+
+Rel(CoreDomainService, PgBouncer, "Client queries", "TCP/PostgreSQL Wire Protocol over TLS 1.3")
+Rel(PgBouncer, CatalogSchema, "Routed transactions", "TCP")
+Rel(PgBouncer, CirculationSchema, "Routed transactions", "TCP")
+Rel(PgBouncer, AuditSchema, "Routed transactions", "TCP")
+Rel(PgBouncer, UserManagementSchema, "Routed transactions", "TCP")
+Rel(CoreDomainService, SearchServiceOpenSearch, "Asynchronous index updates", "Apache Kafka")
+Rel(PrimaryNode, StandbyNode, "Continuous WAL archiving", "TCP/PostgreSQL Streaming Replication")
+Rel(DatabaseMigrationComponent, CatalogSchema, "Automated schema migrations", "JDBC")
+
+@enduml

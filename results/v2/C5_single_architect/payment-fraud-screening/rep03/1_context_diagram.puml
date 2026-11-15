@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title System Context diagram for Real-Time Payment Fraud Screening
+
+Person(FraudAnalysts, "Fraud Analysts", "Internal users accessing the system via Web UI for case management and reviewing suspicious transactions.")
+
+System_Ext(PaymentSwitch, "Payment Switch / Core Processing", "External system sending transaction streams and receiving decisions (approve, decline, review).")
+System_Ext(MerchantGateway, "Merchant / Payment Gateway", "External users initiating payment authorizations via API.")
+System_Ext(IdP, "Identity Provider (IdP)", "External system providing OAuth2/OIDC authentication for analysts.")
+System_Ext(MLPipeline, "Model Training Environment (ML Pipeline)", "Decoupled environment pushing updated scoring models via S3.")
+
+System_Boundary(RealTimePaymentFraudScreening, "Real-Time Payment Fraud Screening") {
+    Container(FraudScreeningCore, "Fraud Screening Core", "Container, gRPC, HTTPS", "Container handling real-time authorization scoring.")
+    Container(CaseManagementService, "Case Management Service", "Container, HTTPS", "Container managing analyst reviews.")
+    ContainerDb(AuditArchive, "Audit & Compliance Archive", "AWS S3", "AWS S3 with Object Lock for 7-year tamper-evident storage.")
+}
+
+Rel(MerchantGateway, FraudScreeningCore, "Initiates payment authorizations", "REST/gRPC over TLS")
+Rel(PaymentSwitch, FraudScreeningCore, "Sends transaction streams and receives decisions", "gRPC/HTTP over TLS")
+Rel(FraudAnalysts, CaseManagementService, "Accesses system for case management and review", "HTTPS/TLS")
+Rel(CaseManagementService, IdP, "Authenticates analysts", "OAuth2/OIDC over HTTPS")
+Rel(FraudScreeningCore, AuditArchive, "Writes tamper-evident decision logs", "AWS SDK/IAM")
+Rel(MLPipeline, FraudScreeningCore, "Pushes updated scoring models", "S3 bucket synchronization")
+
+@enduml

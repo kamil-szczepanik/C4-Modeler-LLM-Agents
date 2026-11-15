@@ -1,0 +1,39 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(Payers, "Payers", "End users initiating card-not-present payments.")
+Person(FraudAnalysts, "Fraud Analysts", "Professionals managing and reviewing flagged fraud cases.")
+Person(RiskManagersQuants, "Risk Managers/Quants", "Personnel overseeing risk strategies and fraud rules.")
+
+System_Ext(PaymentGatewayAcquirer, "Payment Gateway/Acquirer", "External system submitting payment authorizations for screening.")
+System_Ext(CoreBankingCardNetworkSystems, "Core Banking/Card Network Systems", "External financial systems interacting with transaction data.")
+System_Ext(IdentityProviderIdP, "Identity Provider (IdP)", "External system providing authentication and RBAC.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(AWSAPIGatewayALB, "AWS API Gateway / ALB", "AWS API Gateway / ALB", "Ingress layer handling incoming payment and API traffic.")
+    Container(RealTimeScoringEngine, "Real-Time Scoring Engine", "Go or Rust, Amazon EC2", "Containerized microservice performing sub-50ms fraud scoring and feature lookups.")
+    Container(CaseManagementBackend, "Case Management Backend", "Node.js, TypeScript, AWS ECS Fargate", "Manages transactional case data and analyst workflows.")
+    Container(CaseManagementUI, "Case Management UI", "React, Amazon S3, Amazon CloudFront", "Single-Page Application providing the user interface for fraud analysts.")
+    ContainerDb(RedisCache, "Redis Cache", "Amazon ElastiCache (Redis)", "Provides sub-millisecond feature lookups for the scoring engine.")
+    ContainerDb(PostgreSQLDatabase, "PostgreSQL Database", "Amazon RDS (PostgreSQL)", "Stores transactional case data and analyst overrides with row-level encryption.")
+    ContainerDb(AuditStorage, "Audit Storage", "Amazon S3 with KMS and Object Lock", "Stores scoring decisions, model versions, explanations, and logs for 7-year audit retention.")
+    Container(MessagingBus, "Messaging Bus", "Amazon SQS / EventBridge", "Streams scoring decisions and audit events asynchronously.")
+}
+
+Rel(Payers, PaymentGatewayAcquirer, "Initiates transactions evaluated for fraud", "HTTPS")
+Rel(PaymentGatewayAcquirer, AWSAPIGatewayALB, "Forwards authorization requests", "HTTPS/gRPC")
+Rel(AWSAPIGatewayALB, RealTimeScoringEngine, "Communicates scoring requests using mTLS with local circuit breaker", "mTLS")
+Rel(RealTimeScoringEngine, RedisCache, "Performs sub-millisecond feature lookups", "Redis Protocol")
+Rel(FraudAnalysts, CaseManagementUI, "Accesses case management interface", "HTTPS")
+Rel(RiskManagersQuants, CaseManagementUI, "Monitors risk rules and metrics", "HTTPS")
+Rel(CaseManagementUI, CaseManagementBackend, "Communicates API requests", "HTTPS/OAuth2/OIDC")
+Rel(CaseManagementBackend, PostgreSQLDatabase, "Reads and writes transactional case data", "PostgreSQL Protocol")
+Rel(RealTimeScoringEngine, MessagingBus, "Streams scoring decisions, model versions, and explanations", "Amazon SQS / EventBridge")
+Rel(CaseManagementBackend, MessagingBus, "Streams analyst overrides and case updates", "Amazon SQS / EventBridge")
+Rel(MessagingBus, AuditStorage, "Persists immutable audit logs and decisions", "AWS KMS / Amazon S3 Object Lock")
+Rel(FraudAnalysts, IdentityProviderIdP, "Authenticates users", "OAuth2/OIDC")
+
+@enduml

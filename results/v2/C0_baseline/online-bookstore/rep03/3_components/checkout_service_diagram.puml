@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(AmazonAPI_Gateway, "Amazon API Gateway", "AWS Service", "Routes checkout requests [mTLS via AWS App Mesh and internal VPC endpoints].")
+System_Ext(Stripe_PayPal, "Stripe/PayPal", "External API", "Processes tokenized payments and webhooks.")
+System_Ext(FedEx_DHL, "FedEx/DHL", "External API", "Coordinates physical book fulfillment.")
+System_Ext(AmazonEventBridge_SQS, "Amazon EventBridge / SQS", "AWS Service", "Publishes domain events (OrderCreated, OrderCompleted, CartAbandoned).")
+
+Container_Boundary(checkout_service, "Checkout Service") {
+    Component(Cart_Pricing_Engine_Component, "Cart & Pricing Engine Component", "Spring Service", "Managing localized tax calculations and pricing.")
+    Component(Payment_Orchestrator_Component, "Payment Orchestrator Component", "Spring Integration", "Managing Stripe/PayPal, Apple Pay, and SEPA.")
+    Component(Fulfillment_Coordinator_Component, "Fulfillment Coordinator Component", "Spring Cloud OpenFeign", "Handling FedEx/DHL shipping integrations.")
+    Component(Order_Event_Publisher_Component, "Order Event Publisher Component", "Spring Cloud Stream", "Emitting domain events to Amazon EventBridge.")
+    Component(Amazon_Aurora_PostgreSQL, "Amazon Aurora (PostgreSQL)", "PostgreSQL", "Transactional data store with regional read replicas.")
+    Component(AWS_Secrets_Manager, "AWS Secrets Manager", "AWS Service", "Secure injection of API keys and webhook secrets.")
+}
+
+Rel(AmazonAPI_Gateway, checkout_service, "Routes checkout requests", "mTLS via AWS App Mesh and internal VPC endpoints")
+Rel(Payment_Orchestrator_Component, Stripe_PayPal, "Processes tokenized payments and webhooks", "Synchronous HTTPS with HMAC verification")
+Rel(Fulfillment_Coordinator_Component, FedEx_DHL, "Coordinates physical book fulfillment", "REST / HTTPS")
+Rel(Order_Event_Publisher_Component, AmazonEventBridge_SQS, "Publishes domain events (OrderCreated, OrderCompleted, CartAbandoned)", "AMQP / Event Stream")
+Rel(Cart_Pricing_Engine_Component, Amazon_Aurora_PostgreSQL, "Reads and writes transactional data", "TLS-encrypted connection over JDBC")
+
+@enduml

@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(api_gateway, "API Gateway", "AWS API Gateway", "Routes payment authorization requests.")
+System_Ext(redis, "Redis / Amazon ElastiCache", "Amazon ElastiCache (Redis)", "Stores feature data for lookups.")
+System_Ext(model_registry, "Model Registry", "Amazon S3", "Stores Wasm scoring model bytecode.")
+System_Ext(aurora, "Aurora PostgreSQL", "Amazon Aurora Serverless v2", "Persists hash-chained, KMS-signed audit logs.")
+
+Container_Boundary(scoring_engine, "Scoring Engine") {
+    Component(api_ingress_controller, "API Ingress Controller", "Go", "Handles incoming gRPC requests and schema validation.")
+    Component(feature_fetcher, "Feature Fetcher", "Go", "Queries Redis with strict timeouts.")
+    Component(circuit_breaker, "Circuit Breaker & Fallback Manager", "Go", "Enforces 15ms timeouts and provides local default feature profiles.")
+    Component(inference_executor, "Inference Executor", "Go, WebAssembly (Wasm)", "Executes Wasm-compiled scoring models with cryptographic signature verification.")
+    Component(audit_logger, "Audit Logger", "Go", "Batches decisions using ring-buffers, hash-chaining, and AWS KMS envelope signing.")
+}
+
+Rel(api_gateway, api_ingress_controller, "Routes payment authorization requests", "gRPC over HTTP/2 with mTLS, TLS 1.3")
+Rel(api_ingress_controller, feature_fetcher, "Requests account velocity features", "In-memory Go channels")
+Rel(feature_fetcher, circuit_breaker, "Delegates feature resolution", "In-memory Go interface")
+Rel(circuit_breaker, redis, "Performs feature lookups", "TCP with aggressive timeouts")
+Rel(model_registry, inference_executor, "Feeds Wasm bytecode and hydrated context", "In-memory")
+Rel(feature_fetcher, inference_executor, "Feeds Wasm bytecode and hydrated context", "In-memory")
+Rel(inference_executor, audit_logger, "Dispatches decision payload", "In-memory Go channels")
+Rel(audit_logger, aurora, "Persists hash-chained, KMS-signed audit logs", "Encrypted TCP")
+
+@enduml

@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Notification Worker container
+
+System_Ext(AsyncEventBus, "Async Event Bus", "RabbitMQ / Apache Kafka")
+System_Ext(ExternalNotificationService, "External Notification Service", "External provider")
+System_Ext(PostgreSQL, "PostgreSQL", "Relational Database with read-replica")
+System_Ext(StaffAdministrationPortal, "Staff Administration Portal", "Staff administration interface")
+
+Container_Boundary(NotificationWorker, "Notification Worker") {
+    Component(EventConsumerComponent, "Event Consumer Component", "AMQP", "Consumes notification triggers via AMQP with TLS and HMAC signature validation.")
+    Component(TemplateEngineComponent, "Template Engine Component", "ICU message syntax", "Handles multi-language message formatting and templating.")
+    Component(DispatchRouterAdapterComponents, "Dispatch Router & Adapter Components", "Circuit breaker, mTLS", "Dispatches alerts externally with resilience patterns and secure transport.")
+    Component(DeliveryStatusTrackerComponent, "Delivery Status Tracker Component", "Node.js / NestJS", "Tracks and updates the delivery status of dispatched notifications.")
+    Component(NotificationQueryServiceComponent, "Notification Query Service Component", "RBAC, tenant isolation", "Queries aggregated notification histories for staff administration with tenant isolation.")
+}
+
+Rel(AsyncEventBus, EventConsumerComponent, "Consumes notification triggers via AMQP with TLS and HMAC signature validation", "AMQP")
+Rel(EventConsumerComponent, TemplateEngineComponent, "Passes raw events for message formatting", "Internal")
+Rel(TemplateEngineComponent, DispatchRouterAdapterComponents, "Sends formatted messages for routing and delivery", "Internal")
+Rel(DispatchRouterAdapterComponents, ExternalNotificationService, "Dispatches alerts via HTTPS using mTLS and short-lived vault credentials", "HTTPS/mTLS")
+Rel(DispatchRouterAdapterComponents, DeliveryStatusTrackerComponent, "Reports delivery outcomes", "Internal")
+Rel(DeliveryStatusTrackerComponent, PostgreSQL, "Records delivery outcomes and metrics", "TCP")
+Rel(StaffAdministrationPortal, NotificationQueryServiceComponent, "Queries aggregated notification histories via API Gateway using read-replicas", "HTTPS/API")
+
+@enduml

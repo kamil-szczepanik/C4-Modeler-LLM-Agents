@@ -1,0 +1,236 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 5.0,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 and the brief via the 'Catalogue & Search Service' (with 'Catalogue Manager' for physical/digital items), 'Circulation & Member Service' for circulation, and the 'Frontend Container' providing self-service portals.",
+   "performance_efficiency": "Target R-05 (<800ms search) is achieved through the dedicated 'Elasticsearch Cluster', 'Redis Cache Component' at the 'API Gateway', async indexing via 'Apache Kafka Message Broker', and read-optimized PostgreSQL replicas.",
+   "compatibility": "Interoperability is well supported with external systems via standard protocols: 'EU Identity Provider (IdP)' using OAuth2/OIDC, 'EU-compliant Payment Gateway' over HTTPS/TLS 1.3, and external SMS/email gateways using REST.",
+   "usability": "All brief user personas (Patrons, Circulation Staff, Administrators) are served via the 'Frontend Container', which includes the 'Design System & i18n Component' enforcing WCAG 2.1 AA accessibility and localization.",
+   "reliability": "High availability and recovery are established using 'PostgreSQL Read Replica', 'Backup & PITR Agent', 'Dispatch Router & Circuit Breaker', and 'Retry & Dead-Letter Queue (DLQ) Manager' across services.",
+   "security": "The EU residency constraint and security needs are thoroughly addressed by Frankfurt VPC hosting, 'Member Profile & PII Manager' with AES-256 encryption, 'JWT Validation Component', mTLS, and 'Audit & Compliance Logger' (pgAudit).",
+   "maintainability": "Decomposition into distinct containers ('Catalogue & Search Service', 'Circulation & Member Service', 'Notification Worker Container') and asynchronous messaging via 'Kafka Broker Cluster' ensures loose coupling and high modularity.",
+   "portability": "The containerized design (Spring Boot, NestJS, Go, FastAPI) facilitates deployment across target environments, explicitly mapped to AWS or Azure Frankfurt Region to uphold EU residency."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 5.0,
+   "Modifiability": 2.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The dedicated Elasticsearch Cluster decoupled from relational storage, fronted by Kong/Nginx API Gateway and gRPC over mTLS, is purpose-built to deliver sub-800ms P99 responses under high concurrency.",
+    "elements": [
+     "API Gateway",
+     "Catalogue & Search Service",
+     "Search Controller",
+     "Elasticsearch Cluster"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster sizing and index replica count under high concurrency"
+    ],
+    "tradeoffs": [
+     "Maintaining dedicated Elasticsearch infrastructure increases operational complexity for low latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalogue mutations write to PostgreSQL and asynchronously emit events via Kafka to the Index Synchronizer, isolating the Elasticsearch query path from write locks and comfortably meeting the 5-minute synchronization window.",
+    "elements": [
+     "Catalogue Manager",
+     "PostgreSQL Database",
+     "Apache Kafka Message Broker",
+     "Index Synchronizer",
+     "Elasticsearch Cluster",
+     "Search Controller"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer lag and bulk indexing throughput in the Index Synchronizer"
+    ],
+    "tradeoffs": [
+     "Eventual consistency between relational catalogue metadata and search index"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Elasticsearch clustering handles individual node failures transparently via replica shards. Additionally, circulation workflows run in an independent service with its own PostgreSQL primary database, completely insulating loan transactions from search disruptions.",
+    "elements": [
+     "Elasticsearch Cluster",
+     "Catalogue & Search Service",
+     "Circulation & Member Service",
+     "PostgreSQL Primary Node"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch shard replication factor and master node election speed"
+    ],
+    "tradeoffs": [
+     "Overprovisioning cluster replica shards increases compute and memory footprint"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The frontend is a static SPA served via CDN, backed by an API Gateway routing to stateless backend microservices. An instance failure is seamlessly masked by upstream routing, keeping loan processing completely intact.",
+    "elements": [
+     "Frontend Container",
+     "API Gateway",
+     "Circulation & Member Service",
+     "PostgreSQL Primary Node"
+    ],
+    "sensitivity_points": [
+     "Upstream health check intervals and failover latency on the API Gateway"
+    ],
+    "tradeoffs": [
+     "Stateless service architecture requires externalizing token validation and session checks"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "The architecture separates catalogue persistence and indexing, but lacks a dedicated ingestion adapter or provider plugin abstraction. Integrating a new e-book provider requires modifying the core Catalogue Manager or Index Synchronizer.",
+    "elements": [
+     "Catalogue & Search Service",
+     "Catalogue Manager",
+     "Index Synchronizer"
+    ],
+    "sensitivity_points": [
+     "Lack of pluggable ingestion interfaces for third-party digital catalogue providers"
+    ],
+    "tradeoffs": [
+     "Coupling provider ingestion inside core catalogue services reduces initial architectural layers"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The Loan Management Controller & Service holds circulation logic, but the design lacks an externalized rule engine, policy service, or dynamic configuration store. Modifying loan rules between academic and public modes requires code changes and redeployment.",
+    "elements": [
+     "Circulation & Member Service",
+     "Loan Management Controller & Service"
+    ],
+    "sensitivity_points": [
+     "Absence of a configuration-driven loan policy management mechanism"
+    ],
+    "tradeoffs": [
+     "Hardcoded domain rules simplify implementation but restrict runtime operational flexibility"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The architecture enforces EU data residency by pinning all containers to the Frankfurt cloud region, utilizing EU-only external identity, payment, and messaging gateways, and enforcing AES-256 encryption-at-rest across all EU database nodes.",
+    "elements": [
+     "EU Cloud Hosting Provider (Frankfurt)",
+     "EU Identity Provider (IdP)",
+     "EU-compliant Payment Gateway",
+     "Databases",
+     "Circulation & Member Service",
+     "External EU Email/SMS Gateways"
+    ],
+    "sensitivity_points": [
+     "Strict routing configurations ensuring external service endpoints reside in the EU"
+    ],
+    "tradeoffs": [
+     "Restricting third-party integrations to EU-only providers limits vendor selection"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "The API Gateway validates JWT tokens while the Member Profile & PII Manager enforces fine-grained authorization to prevent cross-patron access. Unauthorized attempts can be logged via pgAudit, though explicit security-audit alerting on authorization rejections is minimally elaborated.",
+    "elements": [
+     "API Gateway",
+     "JWT Validation Component",
+     "Circulation & Member Service",
+     "Member Profile & PII Manager",
+     "Audit & Compliance Logger"
+    ],
+    "sensitivity_points": [
+     "Object-level authorization logic inside the member and loan management services"
+    ],
+    "tradeoffs": [
+     "Granular authorization and audit logging add latency to individual patron requests"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "EU Cloud Hosting Provider (Frankfurt)",
+     "Databases",
+     "Circulation & Member Service",
+     "Member Profile & PII Manager",
+     "EU-hosted PostgreSQL & Redis Cache"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Catalogue & Search Service",
+     "Catalogue Manager",
+     "State & Offline Manager"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Catalogue & Search Service",
+     "Search Controller",
+     "Elasticsearch Cluster",
+     "PostgreSQL Read Replica"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

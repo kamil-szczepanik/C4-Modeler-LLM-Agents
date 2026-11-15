@@ -1,0 +1,56 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(Patients, "Patients", "Patients interacting with the clinic for scheduling and accessing their records.")
+Person(Doctors, "Doctors", "Medical professionals managing patient EMR and diagnoses.")
+Person(Administrators, "Administrators", "Clinic staff managing admissions, scheduling, and overall system administration.")
+
+System_Ext(Identity_Provider, "Identity Provider", "Handles authentication via OIDC/SAML.")
+System_Ext(Third_Party_Billing_Gateway, "Third-Party Billing Gateway", "Processes clinic billing transactions.")
+System_Ext(External_Lab_Imaging_Systems, "External Lab/Imaging Systems", "External systems communicating via HL7 FHIR.")
+System_Ext(Notification_Gateway, "Notification Gateway", "Sends notifications to users.")
+System_Ext(Cloud_Backup_Archive, "Cloud Backup Archive", "Stores long-term data retention and backups using S3/HTTPS with AES-256.")
+
+System_Boundary(Clinic_Management_System, "Clinic Management System") {
+    Container(Web_Frontend, "Web Frontend", "React / TypeScript / NGINX", "User interface for patients, doctors, and administrators.")
+    Container(API_Gateway, "API Gateway", "Kong / NGINX", "Handles TLS termination and OAuth2/OIDC token validation.")
+    Container(Core_Microservices, "Core Microservices", "Go / Spring Boot", "Handles domain business logic for patient admissions, EMR, scheduling, and billing.")
+    Container(Background_Worker, "Background Worker", "Go / Celery", "Executes asynchronous background tasks.")
+    Container(Integration_Service, "Integration Service", "Apache Camel / Node.js", "Integrates with external lab and imaging systems using HL7 FHIR.")
+    Container(Message_Broker, "Message Broker", "Apache Kafka / RabbitMQ", "Active-active cluster for asynchronous events.")
+    ContainerDb(PostgreSQL, "PostgreSQL", "PostgreSQL with AES-256", "Relational database for EMR and scheduling data.")
+    ContainerDb(Object_Storage, "Object Storage", "MinIO / S3", "Stores medical imaging data.")
+    Container(Caching_Session_Container, "Caching & Session Container", "Redis Enterprise", "Provides sub-second EMR performance and session management in active-active mode.")
+    Container(Audit_Compliance_Logging, "Audit & Compliance Logging", "FluentBit / OpenSearch", "Collects audit logs to ensure compliance mandates.")
+    Container(Backup_Archive_Manager, "Backup & Archive Manager", "Velero / AWS Backup", "Manages backups and 10-year data retention.")
+}
+
+Rel(Patients, Web_Frontend, "Accesses portal via HTTPS", "HTTPS")
+Rel(Doctors, Web_Frontend, "Accesses portal via HTTPS", "HTTPS")
+Rel(Administrators, Web_Frontend, "Accesses portal via HTTPS", "HTTPS")
+Rel(Web_Frontend, API_Gateway, "Sends requests to the backend", "HTTPS / JSON")
+Rel(API_Gateway, Core_Microservices, "Routes validated requests to core services", "gRPC / Internal mTLS")
+Rel(Core_Microservices, PostgreSQL, "Reads and writes relational data", "TLS")
+Rel(Core_Microservices, Caching_Session_Container, "Caches session and EMR data", "Redis Protocol / TLS")
+Rel(Core_Microservices, Message_Broker, "Publishes asynchronous events", "AMQP / TLS")
+Rel(Message_Broker, Background_Worker, "Consumes asynchronous events for background processing", "AMQP / TLS")
+Rel(Integration_Service, External_Lab_Imaging_Systems, "Exchanges lab and imaging data", "HL7 FHIR over HTTPS")
+
+Rel(Web_Frontend, Audit_Compliance_Logging, "Sends audit logs", "Syslog / gRPC")
+Rel(API_Gateway, Audit_Compliance_Logging, "Sends audit logs", "Syslog / gRPC")
+Rel(Core_Microservices, Audit_Compliance_Logging, "Sends audit logs", "Syslog / gRPC")
+Rel(Background_Worker, Audit_Compliance_Logging, "Sends audit logs", "Syslog / gRPC")
+Rel(Integration_Service, Audit_Compliance_Logging, "Sends audit logs", "Syslog / gRPC")
+Rel(Message_Broker, Audit_Compliance_Logging, "Sends audit logs", "Syslog / gRPC")
+Rel(PostgreSQL, Audit_Compliance_Logging, "Sends audit logs", "Syslog / gRPC")
+Rel(Object_Storage, Audit_Compliance_Logging, "Sends audit logs", "Syslog / gRPC")
+Rel(Caching_Session_Container, Audit_Compliance_Logging, "Sends audit logs", "Syslog / gRPC")
+Rel(Backup_Archive_Manager, Audit_Compliance_Logging, "Sends audit logs", "Syslog / gRPC")
+
+Rel(Backup_Archive_Manager, Cloud_Backup_Archive, "Performs long-term data archiving and backups", "HTTPS / TLS 1.3")
+Rel(Core_Microservices, Identity_Provider, "Authenticates users", "OIDC / SAML")
+Rel(Core_Microservices, Third_Party_Billing_Gateway, "Processes billing transactions", "HTTPS / REST")
+Rel(Core_Microservices, Notification_Gateway, "Triggers notifications", "HTTPS / REST")
+
+@enduml

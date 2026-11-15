@@ -1,0 +1,309 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "The Real-Time Scoring Engine and Case Management Dashboard address R-01 and R-02. However, the path transferring 'review' decisions from the scoring engine to the Case Service via SQS is disconnected, and mechanisms for zero-downtime model/rule reloading (R-03) within the Scoring Evaluator are missing.",
+   "performance_efficiency": "Go on ECS Fargate, HTTP/2 ingress, and ElastiCache Redis for O(1) feature retrieval support the 3,000 TPS sub-50ms target. However, having the Scoring Engine's Audit Logger synchronously call Amazon S3 via HTTPS risks violating the tight P99 latency budget if executed inline.",
+   "compatibility": "Standard protocols (HTTPS, HTTP/2, REST, RESP) are used to integrate with external merchants and internal components. There is a slight inconsistency where Level 1 specifies gRPC/TLS for the Merchant Gateway while Level 2 and Level 3 define HTTPS via ALB.",
+   "usability": "The Frontend Web App provides dedicated interfaces including Case Management Dashboard and Rule & Model Configurator for Fraud Analysts and Risk Managers, secured via AWS Cognito authentication and session management.",
+   "reliability": "Reliability is well addressed through ElastiCache Multi-AZ replication and an in-memory Fallback Circuit Breaker Component in the Scoring Engine to avoid blocking authorizations over 1 minute. However, health check and automated failover orchestration details remain high-level.",
+   "security": "PCI-DSS compliance is supported by Data Masking Middleware, AWS WAF, AWS KMS encryption, and S3 Object Lock for tamper-evident audit logs. However, an explicit tokenization service or card data vault required by R-05 is not modeled.",
+   "maintainability": "Clean modularity separates scoring, case management, and storage. Leveraging managed AWS services aligns with the 3-engineer constraint. Modularity is slightly blurred by modeling external services (Cognito, CloudFront) as internal components within the Frontend container.",
+   "portability": "The system maps well to the target environment (AWS eu-west-1) using Fargate and RDS. Deep coupling to proprietary AWS primitives (Kinesis, Cognito, S3 Object Lock) reduces infrastructure replaceability, though it satisfies the brief's AWS constraint."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 2,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.65625,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 3.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "While Go on ECS and Redis caching support high throughput, the Scoring Engine's Audit Logger synchronously writes to S3 via HTTPS on the critical path, which threatens the 50 ms P99 requirement at 3,000 rps.",
+    "elements": [
+     "AWS ALB / API Gateway",
+     "Real-Time Scoring Engine",
+     "Amazon ElastiCache (Redis)",
+     "Audit Logger Component",
+     "Amazon S3 with Object Lock and AWS KMS"
+    ],
+    "sensitivity_points": [
+     "Synchronous HTTPS I/O latency to S3 during request scoring"
+    ],
+    "tradeoffs": [
+     "Immediate tamper-evident persistence traded against tight sub-50ms P99 latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management workloads are cleanly isolated from the real-time scoring path. The API queries dedicated PostgreSQL read replicas, preventing analyst queries from impacting ElastiCache or the Real-Time Scoring Engine.",
+    "elements": [
+     "Frontend Web App",
+     "Case Management & Analytics API",
+     "Analytics Query Engine",
+     "Amazon RDS PostgreSQL",
+     "Real-Time Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Physical workload isolation between operational scoring and case management databases"
+    ],
+    "tradeoffs": [
+     "Replica replication lag accepted for complete compute and storage isolation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "The engine contains an in-memory Fallback Circuit Breaker for internal evaluation failures. However, if the scoring container itself crashes, the ALB lacks an explicit automated fallback target or static fail-open response handler.",
+    "elements": [
+     "ALB Ingress Router",
+     "Real-Time Scoring Engine",
+     "Fallback Circuit Breaker Component",
+     "Scoring Evaluator Component"
+    ],
+    "sensitivity_points": [
+     "ALB health-check eviction time and fallback routing when containers crash"
+    ],
+    "tradeoffs": [
+     "Fail-open payment approvals protect availability at the cost of potential fraud exposure"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Audit Logger streams decision payloads into AWS Kinesis and Amazon SQS, buffering records asynchronously. This decouples scoring from S3 slowness, though the direct S3 relationship in the engine diagram creates ambiguity.",
+    "elements": [
+     "Audit Logger Component",
+     "AWS Kinesis Data Streams / Amazon SQS",
+     "Amazon S3 with Object Lock and AWS KMS"
+    ],
+    "sensitivity_points": [
+     "Buffer queue capacity and backpressure handling under sustained S3 degradation"
+    ],
+    "tradeoffs": [
+     "Asynchronous buffering guarantees decision latency over instantaneous S3 write confirmation"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "ECS Fargate supports zero-downtime rolling deployments and rapid rollbacks within 5 minutes. The Audit & Explainability schema tracks model versions, but dynamic model swapping without container redeployment is omitted.",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Scoring Evaluator Component",
+     "Audit & Explainability Log"
+    ],
+    "sensitivity_points": [
+     "ECS container startup and health check registration duration during rolling updates"
+    ],
+    "tradeoffs": [
+     "Container-level deployments increase rollback determinism but require full task redeployment"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The Frontend contains a Rule & Model Configurator, but there is no communication mechanism, event pipeline, or API route linking rule updates to the Scoring Engine or Redis feature store at runtime.",
+    "elements": [
+     "Rule & Model Configurator",
+     "Case Management & Analytics API",
+     "Real-Time Scoring Engine",
+     "Amazon ElastiCache (Redis)"
+    ],
+    "sensitivity_points": [
+     "Absence of dynamic configuration distribution channel to scoring runtime nodes"
+    ],
+    "tradeoffs": [
+     "Separation of back-office and scoring tiers limits real-time configuration propagation"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Data Masking Middleware in the Case Management API prevents clear-text PAN exposure to compromised analyst sessions. However, the architecture defines no automated anomaly detection or alerting pipeline to notify teams within 15 minutes.",
+    "elements": [
+     "Frontend Web App",
+     "REST/GraphQL Handler",
+     "Case Management & Analytics API",
+     "AWS Cognito"
+    ],
+    "sensitivity_points": [
+     "Enforcement of strict tokenization and field-level masking before response serialization"
+    ],
+    "tradeoffs": [
+     "Data masking protects cardholder confidentiality but restricts analyst triage context"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "S3 Object Lock provides WORM compliance, pg_partman offloads expired data partitions to S3, and KMS guarantees encrypted retention for 7 years. Tamper-evident records remain fully queryable within one working day.",
+    "elements": [
+     "Amazon S3 with Object Lock and AWS KMS",
+     "WORM Storage Engine",
+     "Partition Manager",
+     "Audit & Explainability Log",
+     "Case Management & Analytics API"
+    ],
+    "sensitivity_points": [
+     "Correct configuration of S3 Object Lock retention periods and KMS key policies"
+    ],
+    "tradeoffs": [
+     "Cold archival storage optimizes 7-year storage costs while slightly increasing historical retrieval latency"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "none",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7272727272727273,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "AWS WAF Layer",
+     "ALB Ingress Router",
+     "REST/GraphQL Handler",
+     "Encryption Service",
+     "Amazon S3 with Object Lock and AWS KMS"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Audit Logger Component",
+     "Audit & Explainability Log",
+     "Amazon S3 with Object Lock and AWS KMS",
+     "WORM Storage Engine"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Frontend Web App"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "API Handler Component",
+     "Scoring Evaluator Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Frontend Web App",
+     "Case Management Dashboard",
+     "Case Management & Analytics API",
+     "Case Service",
+     "Amazon RDS PostgreSQL",
+     "Case Management Schema"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Rule & Model Configurator"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Feature Aggregator Component",
+     "Amazon ElastiCache (Redis)",
+     "Feature Store Module"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "REST/GraphQL Handler",
+     "Encryption Service"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Logger Component",
+     "Audit & Explainability Log",
+     "Amazon S3 with Object Lock and AWS KMS",
+     "WORM Storage Engine"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Fallback Circuit Breaker Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

@@ -1,0 +1,17 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container_Boundary(audit_logger_sidecar_container, "Audit Logger Sidecar Container") {
+    Component(grpc_receiver, "gRPC Receiver", "Rust (Tokio, Tonic)", "Receives audit payloads securely from the Scoring Engine Container via UNIX domain sockets.")
+    Component(in_memory_ring_buffer, "In-Memory Ring Buffer", "Rust", "Temporarily holds audit logs in memory for high-throughput buffering.")
+    Component(spill_to_disk_buffer, "Spill-to-Disk Buffer", "Encrypted emptyDir (LUKS)", "Provides overflow storage for audit logs using encrypted local host disk storage.")
+    Component(signer_uploader, "Signer & Uploader", "Rust (aws-sdk-s3)", "Cryptographically signs audit logs and streams them to Amazon S3 with Object Lock.")
+}
+
+Rel(grpc_receiver, in_memory_ring_buffer, "Forwards received audit payloads")
+Rel(in_memory_ring_buffer, spill_to_disk_buffer, "Spills overflow logs to disk when memory buffer is full")
+Rel(in_memory_ring_buffer, signer_uploader, "Streams logs for signing and uploading")
+Rel(spill_to_disk_buffer, signer_uploader, "Reads back buffered logs for processing")
+
+@enduml

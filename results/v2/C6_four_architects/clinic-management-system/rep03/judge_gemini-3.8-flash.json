@@ -1,0 +1,335 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 5
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements (R-01 to R-04) are directly addressed via dedicated components: Patient Admissions Component, Scheduling Component (with distributed locking for clash checks), EMR Component (with audit dispatching), and Billing Component integrated with Third-Party Billing Gateway.",
+   "performance_efficiency": "Sub-second P95 loads are supported by Redis Enterprise (EMR Cache-Aside), PgBouncer connection pooling, edge caching in API Gateway, asynchronous task processing via Kafka Broker Nodes, and Background Worker.",
+   "compatibility": "FHIR interoperability (R-08) is thoroughly realized through FHIR Interoperability Component, Camel Route Orchestrator, and FHIR Validator with external labs/imaging, alongside external IdP (OIDC/SAML) and Third-Party Billing Gateway integration.",
+   "usability": "All user personas (Patients, Doctors, Administrators) interact via Web Frontend (React SPA) and receive updates via Notification Gateway. However, specialized interfaces or workflows suited to distinct clinical vs. patient needs are not detailed.",
+   "reliability": "High availability (99.99%) is achieved using Redis Enterprise CRDTs, Kafka MirrorMaker 2, Reed-Solomon Erasure Coding, and PostgreSQL standby replication across hybrid regions, alongside Backup & Archive Manager and Velero for long-term recovery.",
+   "security": "Mandates are met via AES-256 at rest across PostgreSQL, Kafka, and Object Storage; mTLS and TLS 1.3 in transit; OIDC/SAML MFA integration; Vault key management; and tamper-evident Audit & Compliance Logging with SHA-256 proofs.",
+   "maintainability": "Architecture shows clear separation of concerns across microservices, brokers, and storage tiers. Core Microservices mixes Go and Spring Boot within a single container without detailing internal process isolation boundaries.",
+   "portability": "Deployment across on-prem-k8s and eu-central-1 is explicitly supported using containerized workloads (Kubernetes, MinIO, Kong, Velero), cross-region Kafka MirrorMaker 2, and cloud-agnostic S3-compatible APIs."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Sub-second response is guaranteed by Redis Enterprise EMR Cache-Aside (ReJSON) and PgBouncer connection pooling. Edge caching and internal gRPC transport minimize latency for 500 concurrent clinician requests.",
+    "elements": [
+     "Web Frontend",
+     "API Gateway",
+     "Core Microservices",
+     "Caching & Session Container",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio of EMR Cache-Aside Redis modules"
+    ],
+    "tradeoffs": [
+     "Aggressive in-memory caching reduces DB load but requires strict cache invalidation mechanisms"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Integration Service offloads incoming FHIR payloads to Kafka REST Proxy and Kafka Broker nodes immediately. Background workers process batches asynchronously, protecting PostgreSQL and preserving sub-second Redis EMR read latency.",
+    "elements": [
+     "Integration Service",
+     "Message Broker",
+     "Background Worker",
+     "PostgreSQL",
+     "Caching & Session Container"
+    ],
+    "sensitivity_points": [
+     "Kafka ingestion throughput and Background Worker concurrency throttling"
+    ],
+    "tradeoffs": [
+     "Decoupled asynchronous ingestion delays immediate persistence in exchange for sustained read responsiveness"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "While Redis CRDTs and MirrorMaker 2 handle hybrid replication, PostgreSQL relies on standard streaming replication across WAN. The architecture lacks an automated cross-region global traffic manager and risks RPO > 0 or failover delays beyond 1 minute.",
+    "elements": [
+     "API Gateway",
+     "PostgreSQL",
+     "Object Storage",
+     "Caching & Session Container",
+     "Message Broker"
+    ],
+    "sensitivity_points": [
+     "Database replication synchronization across hybrid WAN boundaries during cloud regional outage"
+    ],
+    "tradeoffs": [
+     "Synchronous replication guarantees zero data loss but increases cross-region write latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "PgBouncer and standby replica provide database redundancy within 30 seconds. The Background Worker retries failed tasks using dead-letter queues to prevent duplicate claims, though transactional deduplication against the external gateway requires careful idempotency handling.",
+    "elements": [
+     "Core Microservices",
+     "PostgreSQL",
+     "Message Broker",
+     "Background Worker"
+    ],
+    "sensitivity_points": [
+     "PgBouncer failover detection time and Kafka consumer idempotency"
+    ],
+    "tradeoffs": [
+     "Asynchronous retry through dead-letter queues improves fault tolerance but introduces eventual consistency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Modifications are restricted to the Billing Component in Core Microservices. The EMR Component and scheduling modules remain untouched, though directly integrating the third-party gateway inside core services rather than via Integration Service slightly limits isolation.",
+    "elements": [
+     "Core Microservices",
+     "Third-Party Billing Gateway"
+    ],
+    "sensitivity_points": [
+     "Coupling between Billing Component and clearinghouse API specifications"
+    ],
+    "tradeoffs": [
+     "Embedding billing logic in core services reduces indirection but limits isolated redeployment"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Only three components require modification: Web Frontend UI, Patient Admissions Component, and PostgreSQL schema. Audit logging uses FluentBit and OpenSearch, capturing demographic field additions dynamically without code modifications.",
+    "elements": [
+     "Web Frontend",
+     "Core Microservices",
+     "PostgreSQL",
+     "Audit & Compliance Logging"
+    ],
+    "sensitivity_points": [
+     "Schema evolution flexibility in PostgreSQL and dynamic log ingestion"
+    ],
+    "tradeoffs": [
+     "Relational schema alterations ensure data integrity but require planned database migrations"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The Identity Provider enforces MFA before issuing tokens. The API Gateway Auth Plugin validates tokens, rejects unauthorized attempts, and immediately forwards security violation alerts to the Audit & Compliance Logging container.",
+    "elements": [
+     "Identity Provider",
+     "API Gateway",
+     "Audit & Compliance Logging"
+    ],
+    "sensitivity_points": [
+     "OIDC/SAML token introspection enforcement at API Gateway"
+    ],
+    "tradeoffs": [
+     "Enforcing external IdP validation adds network hops but guarantees centralized MFA"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Access Control and PostgreSQL Row-Level Security enforce authorization boundaries. Every read operation emits audit events directly to FluentBit and OpenSearch, where WORM retention and S3 Object Lock guarantee tamper-evident storage for over 10 years.",
+    "elements": [
+     "Core Microservices",
+     "PostgreSQL",
+     "Audit & Compliance Logging",
+     "Object Storage",
+     "Backup & Archive Manager"
+    ],
+    "sensitivity_points": [
+     "Row-Level Security evaluation and OpenSearch WORM retention enforcement"
+    ],
+    "tradeoffs": [
+     "Mandatory audit streaming on every read introduces minor overhead for guaranteed compliance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Logging",
+     "Log Collector Component",
+     "Log Forwarder / Buffer Component",
+     "Log Indexer & Search Engine",
+     "Compliance Reporter Component",
+     "Audit Integrity Verifier",
+     "Data Encryption & Anonymization Component",
+     "Data Masking & Encryption",
+     "Row-Level Security (RLS) Policy Engine",
+     "Encryption & Compliance Engine"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Message Broker",
+     "Topic Mirroring Agent",
+     "Kafka Broker Nodes",
+     "Caching & Session Container",
+     "Cluster Coordination",
+     "PostgreSQL Standby Replica",
+     "Replication & Erasure Coding Manager",
+     "Rate Limiting & Threat Protection Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Backup & Archive Manager",
+     "Scheduler Engine",
+     "Retention Policy Enforcer",
+     "Lifecycle & Retention Manager",
+     "Cloud Backup Archive",
+     "Kafka Broker Nodes"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Patient Admissions Component",
+     "Core Microservices"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Component",
+     "Caching & Session Container"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Component",
+     "Audit & Compliance Logging",
+     "Audit & Request Correlation Interceptor"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Billing Component",
+     "Third-Party Billing Gateway"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Identity Provider",
+     "Auth & Token Introspection Plugin",
+     "PostgreSQL Primary Instance",
+     "Encryption Manager",
+     "Encryption & Compliance Engine",
+     "Encryption & Compliance Pipeline",
+     "Data Masking & Encryption"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Message Broker",
+     "Topic Mirroring Agent",
+     "Caching & Session Container",
+     "Cluster Coordination",
+     "Replication & Erasure Coding Manager",
+     "PostgreSQL Standby Replica"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Caching & Session Container",
+     "EMR Cache-Aside",
+     "Redis Core Storage Engine",
+     "Edge Caching & Session Store Component"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Interoperability Component",
+     "Integration Service",
+     "Camel Route Orchestrator",
+     "FHIR Validator",
+     "mTLS Communication Handler",
+     "External Lab/Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

@@ -1,0 +1,39 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Library Management System
+
+Person(LibraryPatrons, "Library Patrons", "Patrons accessing self-service search and loan management.")
+Person(Librarians, "Librarians", "Staff managing cataloguing and circulation.")
+Person(LibraryAdministrators, "Library Administrators", "Oversight users tracking reporting and usage.")
+
+System_Ext(PaymentGateway, "Payment Gateway", "External system processing fines.")
+System_Ext(NotificationService, "Notification Service", "External provider for notifications.")
+System_Ext(DigitalContentProviders, "Digital Content Providers", "External sources for digital content.")
+System_Ext(IdentityPoviderIdP, "Identity Provider (IdP)", "External system handling authentication.")
+
+System_Boundary(LibraryManagementSystem, "Library Management System") {
+    Container(WebApplicationSPA, "Web Application (SPA)", "React and TypeScript, hosted on an EU-region CDN", "Frontend Single Page Application providing patron and staff portals.")
+    Container(APIGateway, "API Gateway", "Nginx/Kong", "Edge container handling TLS termination, JWT validation, and rate limiting.")
+    Container(CatalogueSearchContainer, "Catalogue & Search Container", "Elasticsearch backed by Java/Spring Boot", "Backend container providing high-performance search capabilities.")
+    Container(CirculationCoreContainer, "Circulation & Core Container", "Node.js/Express", "Backend container handling circulation business rules.")
+    Container(NotificationPaymentWorkers, "Notification & Payment Workers", "Python/Celery", "Background workers utilizing dead-letter queues and circuit breakers.")
+    ContainerDb(PostgreSQLDatabase, "PostgreSQL Database", "PostgreSQL", "Transactional persistence with strict EU region-pinned volumes.")
+    Container(Elasticsearch, "Elasticsearch", "Elasticsearch", "Search engine supporting sub-800ms search latency.")
+    Container(RabbitMQMessageBroker, "RabbitMQ Message Broker", "RabbitMQ", "High-availability cluster for asynchronous messaging.")
+}
+
+Rel(LibraryPatrons, WebApplicationSPA, "Interacts via HTTPS", "HTTPS")
+Rel(Librarians, WebApplicationSPA, "Interacts via HTTPS", "HTTPS")
+Rel(LibraryAdministrators, WebApplicationSPA, "Interacts via HTTPS", "HTTPS")
+Rel(WebApplicationSPA, APIGateway, "Communicates via REST/GraphQL over HTTPS", "REST/GraphQL over HTTPS")
+Rel(APIGateway, CatalogueSearchContainer, "Routes internal traffic", "gRPC")
+Rel(APIGateway, CirculationCoreContainer, "Routes internal traffic", "gRPC")
+Rel(CirculationCoreContainer, RabbitMQMessageBroker, "Communicates asynchronously", "AMQP")
+Rel(NotificationPaymentWorkers, PaymentGateway, "Integrates for payment processing", "HTTPS")
+Rel(NotificationPaymentWorkers, NotificationService, "Integrates for sending notifications", "HTTPS")
+Rel(CirculationCoreContainer, PostgreSQLDatabase, "Persists transactional data", "TCP")
+Rel(CatalogueSearchContainer, Elasticsearch, "Queries search index", "TCP")
+
+@enduml

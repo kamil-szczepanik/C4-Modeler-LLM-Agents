@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalyst, "Fraud Analyst", "Human persona managing suspicious payments and reviewing flagged cases.")
+Person(ComplianceRiskOfficer, "Compliance & Risk Officer", "Officer overseeing compliance, auditing, and risk management.")
+
+System_Ext(MerchantPaymentGateway, "Merchant / Payment Gateway", "External system submitting payment authorizations.")
+System_Ext(AWSKMS, "AWS KMS", "External AWS service for encryption keys and edge tokenization.")
+System_Ext(AWSS3ObjectLock, "AWS S3 Object Lock", "External AWS WORM storage providing 7-year tamper-evident audit logs.")
+System_Ext(IdentityProviderIdP, "Identity Provider (IdP)", "External system managing OAuth2/OIDC authentication and RBAC.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(APIGateway, "API Gateway", "AWS API Gateway", "Handles edge tokenization and routes incoming payment authorizations.")
+    Container(ScoringEngine, "Scoring Engine", "AWS Lambda with Provisioned Concurrency, Go runtime", "Evaluates card-not-present payment authorizations for fraud with sub-50ms P99 latency.")
+    Container(CaseManagement, "Case Management", "Node.js / React on ECS Fargate", "Provides case management and review interfaces for fraud analysts.")
+    ContainerDb(DataLayer, "Data Layer", "Amazon Aurora Serverless v2 PostgreSQL", "Stores transactional and audit data for cases and reviews.")
+    Container(AsyncMessaging, "Async Messaging", "AWS SQS", "Handles decoupled asynchronous audit event streaming.")
+    Container(Observability, "Observability", "AWS X-Ray", "Provides distributed tracing and latency monitoring.")
+}
+
+Rel(MerchantPaymentGateway, APIGateway, "Calls API Gateway for real-time payment authorization", "HTTPS/TLS")
+Rel(APIGateway, ScoringEngine, "Communicates scoring requests securely", "gRPC using mTLS")
+Rel(ScoringEngine, AsyncMessaging, "Asynchronously enqueues audit logs", "AWS SQS API")
+Rel(FraudAnalyst, CaseManagement, "Reviews suspicious transactions and managed cases", "HTTPS/TLS with OAuth2/OIDC")
+Rel(CaseManagement, DataLayer, "Reads and writes case review data", "PostgreSQL Wire Protocol")
+Rel(ScoringEngine, AWSKMS, "Retrieves secrets and handles cryptographic operations", "AWS SDK / IAM")
+Rel(CaseManagement, AWSKMS, "Retrieves secrets and cryptographic keys", "AWS SDK / IAM")
+Rel(ScoringEngine, Observability, "Sends trace and latency data", "AWS X-Ray SDK")
+Rel(CaseManagement, Observability, "Sends trace and latency data", "AWS X-Ray SDK")
+Rel(ComplianceRiskOfficer, AWSS3ObjectLock, "Accesses 7-year tamper-evident audit logs", "AWS SDK / HTTPS")
+
+@enduml

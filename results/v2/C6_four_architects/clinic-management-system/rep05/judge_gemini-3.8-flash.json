@@ -1,0 +1,387 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively addressed: Patient & Scheduling Service handles registration and clash checks, EMR Service provides medical records with audit logging, and Billing Service manages claims submission to the Insurance Gateway.",
+   "performance_efficiency": "The sub-second EMR target is directly supported by EMR Cache Manager and Distributed Cache (Redis Enterprise), PgBouncer connection pooling, and offloading heavy tasks like PDF generation to Background Worker via Message Broker.",
+   "compatibility": "The FHIR Interoperability Service with its Resource Transformer Engine and Terminology Mapper (supporting LOINC/SNOMED-CT) explicitly fulfills R-08. External integrations with Insurance Gateway and Identity Provider are clearly modeled.",
+   "usability": "The context defines Patient, Clinician/Staff, and Billing Administrator user personas connecting via HTTPS, but the architecture omits dedicated frontend presentation containers (such as web portals or mobile apps), routing users directly into the API Gateway.",
+   "reliability": "High availability (99.99%) is addressed via active-active PostgreSQL clustering, Kafka MirrorMaker 2 across hybrid regions, East-West Gateways in the Internal Service Mesh, and Circuit Breaker components across backend services.",
+   "security": "Robust security controls fulfill HIPAA/GDPR: federated MFA via Keycloak Container, AES-256 encryption at rest (Encryption Interceptor and Primary Database), Istio mTLS in transit, Row-Level Security, and an immutable Audit & Archival Store.",
+   "maintainability": "The system exhibits strong modular decomposition into focused microservices (EMR Service, Billing Service, FHIR Interoperability Service). Decoupling is reinforced using transactional outbox patterns, Kafka event streaming, and standard container sidecars.",
+   "portability": "The hybrid target (on-prem-k8s and eu-central-1) is well supported by containerized workloads, East-West Gateways for cross-cluster mesh networking, hybrid Kafka replication (MirrorMaker 2), and hybrid-compatible object storage abstractions."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.96875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture incorporates Redis Enterprise distributed caching with in-memory nodes and PgBouncer connection pooling to offload hot EMR reads from PostgreSQL, comfortably sustaining sub-second P95 rendering.",
+    "elements": [
+     "API Gateway",
+     "EMR Service",
+     "EMR Cache Manager",
+     "Distributed Cache",
+     "Database Access Proxy",
+     "Primary Database"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio for active clinician workflows",
+     "Encryption and decryption overhead on cached PHI"
+    ],
+    "tradeoffs": [
+     "Memory cost for caching PHI versus sub-second read performance",
+     "Cache invalidation complexity versus data consistency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The FHIR Interoperability Service buffers high-volume lab ingestions into Kafka topics and background workers, completely isolating the write ingestion path from the EMR screen read cache.",
+    "elements": [
+     "FHIR Interoperability Service",
+     "Resource Transformer Engine",
+     "Data Sync Outbox Client & Resilience Manager",
+     "Message Broker",
+     "Background Worker",
+     "Distributed Cache"
+    ],
+    "sensitivity_points": [
+     "Kafka partition throughput and consumer group scaling",
+     "Worker concurrency for batch FHIR transformation"
+    ],
+    "tradeoffs": [
+     "Eventual consistency in EMR display versus read path latency protection",
+     "Asynchronous queue buffering versus immediate transactional consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Cross-region Kafka MirrorMaker 2, service mesh East-West gateways, and multi-master PostgreSQL active-active clustering enable traffic failover, though cross-datacenter database write synchronization under WAN constraints carries latency and split-brain risks.",
+    "elements": [
+     "Internal Service Mesh",
+     "East-West Gateways",
+     "Primary Database",
+     "Streaming Replication & Consensus Manager",
+     "Message Broker",
+     "Event Mirroring & Replication Agent"
+    ],
+    "sensitivity_points": [
+     "Hybrid cloud WAN latency for cross-datacenter replication",
+     "Consensus and split-brain resolution speed during partition"
+    ],
+    "tradeoffs": [
+     "Active-active multi-master complexity versus zero-downtime failover speed",
+     "WAN bandwidth consumption versus real-time data replication"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Database connection pooling via PgBouncer combined with circuit breakers, transactional outbox patterns, and Kafka event streaming ensures database crash recovery within 30 seconds without dropping or duplicating claims.",
+    "elements": [
+     "Billing Service",
+     "Claims Processor",
+     "Circuit Breaker Middleware",
+     "Database Access Proxy",
+     "Primary Database",
+     "Streaming Replication & Consensus Manager"
+    ],
+    "sensitivity_points": [
+     "PgBouncer failover detection timeout",
+     "Idempotency token validation under database failover"
+    ],
+    "tradeoffs": [
+     "Strict idempotency enforcement versus claims submission throughput",
+     "Connection proxy failover latency versus database direct access"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "External clearinghouse interactions are strictly encapsulated within Billing Service's Insurance Gateway Client, completely decoupled from EMR and other core modules via event-driven messaging.",
+    "elements": [
+     "Billing Service",
+     "Insurance Gateway Client",
+     "Claims Processor",
+     "Insurance Gateway"
+    ],
+    "sensitivity_points": [
+     "Standardization of internal claims abstraction layer"
+    ],
+    "tradeoffs": [
+     "Standardized internal claim representation versus clearinghouse-specific feature support"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Spring AOP automatically intercepts demographic updates without invasive audit logic modifications, confining required changes to the Patient model, repository, and schema migration manager within a single sprint.",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Patient Controller",
+     "Data Access Repository",
+     "Audit Interceptor",
+     "Schema Migration & Versioning Manager"
+    ],
+    "sensitivity_points": [
+     "Reflection and AOP pointcut coverage on new model attributes"
+    ],
+    "tradeoffs": [
+     "Automated aspect-based auditing versus explicit entity audit definitions"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Keycloak federates MFA enforcement alongside API Gateway OIDC validation, while the Audit Event SPI immediately dispatches authentication failure events to the Observability Agent.",
+    "elements": [
+     "API Gateway",
+     "Authentication & Authorization Plugin",
+     "Keycloak Container",
+     "Authentication SPI",
+     "Audit Event SPI",
+     "Observability Agent"
+    ],
+    "sensitivity_points": [
+     "Latency of Prometheus and Promtail scraping pipelines for alerts"
+    ],
+    "tradeoffs": [
+     "User friction with strict MFA versus credential theft prevention"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "EMR Service captures 100% of read operations using AOP and PostgreSQL Row-Level Security, subsequently offloading encrypted, hashed logs to the Audit & Archival Store for 10-year immutable retention.",
+    "elements": [
+     "EMR Service",
+     "Audit Trail Logger",
+     "Primary Database",
+     "Row-Level Security (RLS) Policy Enforcer",
+     "Background Worker",
+     "Audit Offloader",
+     "Audit & Archival Store",
+     "Encryption & Hashing Engine"
+    ],
+    "sensitivity_points": [
+     "Audit log write throughput and archival storage ingestion capacity",
+     "Hashing verification overhead for high-frequency EMR reads"
+    ],
+    "tradeoffs": [
+     "Storage cost of auditing all read actions versus regulatory compliance",
+     "Asynchronous audit offloading latency versus synchronous read performance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Primary Database",
+     "Row-Level Security (RLS) Policy Enforcer",
+     "PostgreSQL Database Engine",
+     "EMR Service",
+     "Encryption Interceptor",
+     "Distributed Cache",
+     "Data Encryption & Tokenization Component",
+     "Audit & Archival Store",
+     "Internal Service Mesh",
+     "Authorization Policy Controller",
+     "FHIR Interoperability Service",
+     "Audit & Compliance Interceptor"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Primary Database",
+     "Streaming Replication & Consensus Manager",
+     "Message Broker",
+     "Event Mirroring & Replication Agent",
+     "Distributed Cache",
+     "Cluster Management & Replication Daemon",
+     "Internal Service Mesh",
+     "East-West Gateways",
+     "API Gateway",
+     "Health Check & Circuit Breaker Engine"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Audit & Archival Store",
+     "Tiering & Lifecycle Manager",
+     "Integrity Verifier",
+     "Background Worker",
+     "Audit Offloader",
+     "Data Purger / Retention Manager",
+     "Message Broker"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Patient Controller"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Scheduling Controller",
+     "Appointment Engine",
+     "Scheduling Cache Manager",
+     "Distributed Cache",
+     "Message Broker",
+     "Stream Processing & State Store"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "EMR API Controller",
+     "Clinical Record Manager",
+     "Audit Trail Logger",
+     "Background Worker",
+     "Audit Offloader",
+     "Audit & Archival Store"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service",
+     "Invoice Controller",
+     "Claims Processor",
+     "Insurance Gateway Client",
+     "Circuit Breaker Middleware",
+     "Insurance Gateway"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Keycloak Container",
+     "Authentication SPI",
+     "Primary Database",
+     "PostgreSQL Database Engine",
+     "Distributed Cache",
+     "Data Encryption & Tokenization Component",
+     "EMR Service",
+     "Encryption Interceptor"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Primary Database",
+     "Streaming Replication & Consensus Manager",
+     "Message Broker",
+     "Event Mirroring & Replication Agent",
+     "Internal Service Mesh",
+     "East-West Gateways",
+     "Distributed Cache",
+     "Cluster Management & Replication Daemon"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "EMR Cache Manager",
+     "Distributed Cache",
+     "In-Memory Data Nodes",
+     "Redis Proxy",
+     "Database Access Proxy",
+     "Connection Manager Component"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Interoperability Service",
+     "FHIR API Controller",
+     "Resource Transformer Engine",
+     "External System Connector",
+     "External Lab & Imaging Systems",
+     "EMR Service",
+     "FHIR Transformer Component",
+     "Patient & Scheduling Service",
+     "FHIR Translation Adapter"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

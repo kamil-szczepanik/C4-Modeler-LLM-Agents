@@ -1,0 +1,332 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.5,
+  "justifications": {
+   "functional_suitability": "Customer/Broker Portal (R-01), Adjuster Workstation and BFF (R-02), and Claim Migration Manager plus Claim Routing & Feature Flag Component (R-03) exist. Gaps: the Migration Manager's target 'Migration Controller API' is undefined, and portal-to-domain flows and per-claim-type migration are thin.",
+   "performance_efficiency": "Read Model & Cache Store replica, Read-Model Cache Manager, asynchronous Azure Service Bus via Integration Worker, SSE sync, PgBouncer, and Redis caching directly target the 2 s versus 5 s latency. No explicit load-test or autoscaling mechanism, and the cache invalidation strategy is unclear.",
+   "compatibility": "Integration Worker with Transformation Engine, ACL Gateway, MFT, and Entra ID via OIDC address interoperability. Gaps: the ACL Gateway is modelled inconsistently (external system versus component), the mainframe interface is vague, and the batch window and one-change-per-quarter constraint are unaddressed.",
+   "usability": "Distinct channels exist for Policyholders and Brokers (Customer/Broker Portal), Adjusters (Adjuster Workstation with Claims Dashboard and SSE updates), and admins (Admin Portal). Brokers share one portal with customers, and there is no UX or accessibility mechanism or status feedback detail.",
+   "reliability": "Outbox/Retry Dispatcher, Idempotency & Audit Manager, Polly Circuit Breaker Policy Manager, APIM Circuit Breaker & Retry Engine, Feature/Kill-Switch, and PostgreSQL high availability address R-04 and R-06. Gaps: no explicit reconciliation, DR or backup, and the Integration Worker and APIM contain inconsistent flows.",
+   "security": "Entra ID SSO via OIDC, APIM Token Validator, rate limiting, TLS everywhere, pgaudit Audit & Compliance Log Store, Integration Audit Logger, and Private Link/VPN ingress. Gaps: no secrets management, no explicit RBAC enforcement at services, and the customer authentication path is unclear.",
+   "maintainability": "Clear container split (BFF, Core Claims Domain, Integration Worker, Migration Manager), ACL isolation of legacy, DDD, MediatR, and Feature Flag routing. Gaps: the Operational Data Store is duplicated as a component, the Migration Manager has a single component, and relationships are inconsistent with the model.",
+   "portability": "Azure Container Apps, PostgreSQL, OpenTelemetry, and gRPC give some portability, and a hybrid on-prem/Azure link exists via ExpressRoute and MFT. Heavy use of Azure-managed services (APIM, Service Bus, Application Insights) causes lock-in, and no IaC or containerization strategy is explicit."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 2,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.59375,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 4.0,
+   "Modifiability": 4.0,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Adjuster BFF",
+     "Read-Model Cache Manager",
+     "Read Model & Cache Store",
+     "Integration Worker",
+     "Adjuster Workstation"
+    ],
+    "sensitivity_points": [
+     "Cache freshness for mainframe-resident data",
+     "Cache miss path still hits 5 s mainframe"
+    ],
+    "tradeoffs": [
+     "Read-model caching improves latency but risks stale claim data"
+    ],
+    "justification": "A BFF read-model cache and read replica plus async ACL can plausibly meet 2 s. But cache population, invalidation and cold-miss behaviour are unspecified, and the Legacy Integration Gateway is a possible synchronous path."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Azure Service Bus",
+     "Integration Worker",
+     "Outbox/Retry Dispatcher Component",
+     "Rate Limiting & Quota Enforcer",
+     "Azure API Management (API Gateway)"
+    ],
+    "sensitivity_points": [
+     "Batch window scheduling of dispatch to mainframe",
+     "Service Bus queue depth during spikes"
+    ],
+    "tradeoffs": [
+     "Queue buffering absorbs peaks but delays mainframe sync"
+    ],
+    "justification": "Async Service Bus decoupling and an outbox buffer the 5x peak. But no explicit mechanism keeps the Integration Worker from pushing load into the batch window, and autoscaling is not described."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "elements": [
+     "Integration Worker",
+     "Outbox/Retry Dispatcher Component",
+     "Circuit Breaker Policy Manager",
+     "Azure Service Bus",
+     "Operational Data Store (PostgreSQL)"
+    ],
+    "sensitivity_points": [
+     "Outbox durability and replay ordering after window",
+     "Circuit breaker thresholds during planned downtime"
+    ],
+    "tradeoffs": [
+     "Eventual consistency with mainframe in exchange for continued intake"
+    ],
+    "justification": "Submissions are persisted in the platform's own store, with outbox, retry and circuit breaker forwarding later through durable Service Bus. This fits the scenario well. A scheduled-window-aware release is not explicit."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "elements": [
+     "Idempotency & Audit Manager",
+     "Outbox/Retry Dispatcher Component",
+     "Integration Audit Logger Component",
+     "Migration Metadata Store",
+     "Core Claims Domain"
+    ],
+    "sensitivity_points": [
+     "Idempotency keys must be honoured by the mainframe side",
+     "Reconciliation process is not explicitly modelled"
+    ],
+    "tradeoffs": [
+     "At-least-once delivery requires idempotency overhead"
+    ],
+    "justification": "The idempotency manager, outbox with retry, audit logging and migration metadata prevent loss and duplicates. However, there is no explicit reconciliation component and mainframe-side dedup is not shown, so the half-way failure is only partly covered."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "elements": [
+     "Claim Routing & Feature Flag Component",
+     "Claim Migration Manager / Admin Portal",
+     "Feature/Kill-Switch Component",
+     "Transformation Engine Component",
+     "Migration Metadata Store"
+    ],
+    "sensitivity_points": [
+     "Per-claim-type routing flags",
+     "Mainframe interface change count per quarter"
+    ],
+    "tradeoffs": [
+     "Routing flexibility adds flag complexity and dual-path testing"
+    ],
+    "justification": "Feature-flag routing, a kill-switch, a migration manager and an ACL transformation engine support per-type migration and quick switch-back. The admin portal component is thin, with a dangling Migration Controller API, and data back-sync on rollback is unspecified."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "elements": [
+     "Core Claims Domain",
+     "Adjuster BFF",
+     "Integration Worker",
+     "Legacy Integration Gateway",
+     "Operational Data Store (PostgreSQL)"
+    ],
+    "sensitivity_points": [
+     "Data ownership switch from mainframe to PostgreSQL",
+     "ACL removal must not leak into UIs"
+    ],
+    "tradeoffs": [
+     "ACL indirection costs complexity but isolates UIs from the legacy"
+    ],
+    "justification": "UIs talk only to the BFF and the domain, which are isolated from the mainframe behind the ACL, so UIs stay unchanged. The PostgreSQL store can become the system of record. A final data migration and cutover plan is not shown."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "elements": [
+     "Token Validator Component",
+     "Azure API Management (API Gateway)",
+     "Customer/Broker Portal",
+     "Core Claims Domain",
+     "Idempotency & Audit Manager"
+    ],
+    "sensitivity_points": [
+     "No broker-to-customer ownership authorization model",
+     "Mainframe-side access enforcement not addressed"
+    ],
+    "tradeoffs": [
+     "Central gateway authorization simplifies checks but is coarse-grained"
+    ],
+    "justification": "Token validation and audit logging exist, but no component enforces per-broker data-level authorization on claims or records denied attempts. Nothing guards access in the mainframe. Role checks alone would not stop cross-broker access."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Microsoft Entra ID",
+     "Token Validator Component",
+     "Auth & Session Manager Component",
+     "Authentication Handler",
+     "Session Management Service"
+    ],
+    "sensitivity_points": [
+     "Token and session lifetime versus 15 minute revocation",
+     "Mainframe credential mapping to AD not shown"
+    ],
+    "tradeoffs": [
+     "Short token lifetimes improve revocation but increase re-authentication load"
+    ],
+    "justification": "Entra ID SSO centralizes revocation for the new platform. But token lifetime and session caching are unspecified, and nothing addresses how mainframe access is removed within 15 minutes, so the both-systems requirement is unmet."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Legacy COBOL/DB2 Mainframe",
+     "Integration Worker",
+     "Legacy Mainframe"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Anti-Corruption Layer (ACL) Gateway",
+     "Integration Worker"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Anti-Corruption Layer (ACL) Gateway",
+     "Integration Worker",
+     "Transformation Engine Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Azure API Management (API Gateway)",
+     "Azure Database for PostgreSQL",
+     "Observability Service"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer/Broker Portal",
+     "Azure API Management (API Gateway)",
+     "Core Claims Domain",
+     "Next.js Frontend UI"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Workstation",
+     "Adjuster BFF",
+     "Core Claims Domain",
+     "Claims Dashboard Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Claim Migration Manager / Admin Portal",
+     "Claim Routing & Feature Flag Component",
+     "Migration Metadata Store",
+     "API Router & Policy Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Idempotency & Audit Manager",
+     "Outbox/Retry Dispatcher Component",
+     "Integration Worker",
+     "Azure Service Bus"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Read-Model Cache Manager",
+     "Read Model & Cache Store",
+     "Operational Data Store (PostgreSQL)",
+     "Adjuster BFF"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Feature/Kill-Switch Component",
+     "Claim Routing & Feature Flag Component",
+     "Claim Migration Manager / Admin Portal"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Microsoft Entra ID",
+     "Auth & Session Manager Component",
+     "Authentication Handler",
+     "Token Validator Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

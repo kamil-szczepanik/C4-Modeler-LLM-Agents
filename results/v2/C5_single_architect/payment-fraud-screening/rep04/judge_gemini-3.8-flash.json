@@ -1,0 +1,323 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are fully supported: R-01 by 'Scoring Engine', R-02 via 'Case Management Backend' and 'Case API Handler', and R-03 through 'In-Memory Model Registry' enabling zero-downtime hot-swapping of WebAssembly models.",
+   "performance_efficiency": "The sub-50ms P99 target at 3,000 TPS is met using compiled Go services, zero-allocation in-memory WASM models, DynamoDB 'Feature Store' lookups, and asynchronous Kafka offloading via 'Audit Payload Builder' and 'Amazon MSK'.",
+   "compatibility": "Interoperability is thoroughly established using standard protocols: gRPC/REST over TLS 1.3 with 'Payment Gateway / Core Ledger', OIDC/OAuth2 with 'Identity Provider', and AWS S3 APIs with 'Audit Archival Storage'.",
+   "usability": "'Fraud Analyst' interactions are enabled through 'Case Management Backend' and 'Case API Handler'. However, a dedicated Single Page Application (SPA) or front-end presentation container is not explicitly modeled in the container diagram.",
+   "reliability": "While 'RDS Proxy' and managed multi-AZ services offer infrastructure resilience, the architecture lacks an explicit fallback or fail-open mechanism in 'API Gateway / Ingestion Service' to unblock payments within 1 minute if 'Scoring Engine' fails (R-07).",
+   "security": "PCI-DSS compliance is strictly enforced by 'Data Sanitization & Tokenization Masking Component', mTLS between internal components, OIDC authentication via 'Identity Provider', and tamper-evident WORM retention in 'Audit Archival Storage'.",
+   "maintainability": "Modular separation between ingestion, scoring, and review ensures low coupling. 'In-Memory Model Registry' with WASM allows independent rule evolution, while 'Database Migration Component' (Flyway) manages schema updates, fitting a three-engineer team.",
+   "portability": "Services run on containerized runtimes (ECS Fargate, Go), but there is heavy architectural coupling to proprietary AWS primitives ('Feature Store' DynamoDB, RDS Proxy, MSK, and S3 Object Lock), limiting portability outside AWS."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "In-memory WASM execution, Go microservices, and DynamoDB single-digit ms lookups easily fit under 50ms. However, running API Gateway and Ingestion along with network hops at 3,000 rps requires careful ECS task scaling and sizing.",
+    "elements": [
+     "API Gateway / Ingestion Service",
+     "Scoring Engine",
+     "Feature Store",
+     "Model Evaluator",
+     "In-Memory Model Registry"
+    ],
+    "sensitivity_points": [
+     "DynamoDB lookup latency under high partition concurrency",
+     "Zero-allocation in-memory WASM evaluation speed"
+    ],
+    "tradeoffs": [
+     "In-memory model caching trades local memory usage for sub-millisecond evaluation speed"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management is completely decoupled from the scoring path. Analysts query an independent Aurora database via RDS Proxy, while scoring relies exclusively on DynamoDB and local memory, preventing resource contention.",
+    "elements": [
+     "Case Management Backend",
+     "Transactional Data Store",
+     "RDS Proxy",
+     "Scoring Engine",
+     "Feature Store"
+    ],
+    "sensitivity_points": [
+     "Database connection exhaustion mitigated by RDS Proxy",
+     "Isolation of read path from transactional payment scoring"
+    ],
+    "tradeoffs": [
+     "Maintaining dual database engines (Aurora and DynamoDB) increases operational complexity for 3 engineers"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture lacks an explicit fallback mechanism or circuit breaker in the Ingestion Service to bypass scoring and issue default approve/decline fallback decisions when the Scoring Engine crashes or times out.",
+    "elements": [
+     "API Gateway / Ingestion Service",
+     "Routing & Rate Limiting Filter",
+     "Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Absence of circuit breaking and default fallback policy in API router",
+     "Payment blocking risk during ECS task failure recovery"
+    ],
+    "tradeoffs": [
+     "Failing open preserves availability but elevates fraud loss risk during outages"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Decisions publish audit events asynchronously to an Amazon MSK Kafka cluster. S3 WORM ingestion and Aurora append-only writing happen off the hot scoring path, buffering downstream backpressure and preventing latency spikes or data loss.",
+    "elements": [
+     "Scoring Engine",
+     "Audit Payload Builder",
+     "Audit & Event Bus",
+     "Kafka Cluster",
+     "Audit Archival Storage"
+    ],
+    "sensitivity_points": [
+     "Kafka broker disk retention and queue depth during S3 write outages",
+     "Producer buffer overflow behavior in Go client"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging decouples latency but introduces eventual persistence consistency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Scoring Engine includes an In-Memory Model Registry with hot-swapping of compiled WASM models, tracking model versions zero-allocation. However, specific rollback automation and model distribution pipelines are not fully elaborated.",
+    "elements": [
+     "Scoring Engine",
+     "In-Memory Model Registry",
+     "Model Evaluator",
+     "Audit Payload Builder"
+    ],
+    "sensitivity_points": [
+     "Thread-safe atomic pointer swaps for hot WASM reloading",
+     "Model version tagging in every audit payload"
+    ],
+    "tradeoffs": [
+     "WASM sandboxing minimizes deployment risk but limits heavy tensor operations"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Rules compile into WASM models managed via the In-Memory Model Registry, and the Audit Payload Builder captures rule executions. However, analyst-facing rule authoring UI and live propagation pipelines are omitted from the case management design.",
+    "elements": [
+     "Model Evaluator",
+     "In-Memory Model Registry",
+     "Audit Payload Builder",
+     "Case Management Backend"
+    ],
+    "sensitivity_points": [
+     "Validation and dynamic compilation of analyst-defined rules",
+     "Rule identifier propagation into tamper-evident payloads"
+    ],
+    "tradeoffs": [
+     "Zero-downtime hot reloading adds complexity to configuration synchronization across engine tasks"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Data sanitization and tokenization masking in the ingestion layer prevent PAN from reaching downstream analysts. However, SIEM/IDS mechanisms for detecting and alerting on anomalous analyst access within 15 minutes are not detailed.",
+    "elements": [
+     "Data Sanitization & Tokenization Masking Component",
+     "API Gateway / Ingestion Service",
+     "Case Management Backend",
+     "Identity Provider"
+    ],
+    "sensitivity_points": [
+     "Strict tokenization enforcement before persistence",
+     "Lack of behavioral anomaly detection and alerting integration"
+    ],
+    "tradeoffs": [
+     "Early payload tokenization reduces PCI scope but prevents analysts from performing PAN-level forensics"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The architecture satisfies this using AWS S3 with Object Lock (WORM storage) for 7-year retention and PostgreSQL append-only tables with pgcrypto, preserving decision inputs, explanations, and model identifiers in tamper-evident formats.",
+    "elements": [
+     "Audit Archival Storage",
+     "Transactional Data Store",
+     "Audit Ledger Component",
+     "Audit Payload Builder"
+    ],
+    "sensitivity_points": [
+     "Immutable retention configuration via S3 Object Lock Legal Hold/Compliance",
+     "Inclusion of full input vector and model version in archived payload"
+    ],
+    "tradeoffs": [
+     "WORM storage guarantees compliance integrity but incurs non-deletable long-term storage costs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "none",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "none"
+  },
+  "coverage": 0.6818181818181818,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Data Sanitization & Tokenization Masking Component",
+     "API Gateway / Ingestion Service",
+     "Scoring Engine",
+     "Transactional Data Store"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Audit Archival Storage",
+     "Audit Ledger Component",
+     "Audit Payload Builder",
+     "Audit & Event Bus"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none"
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "API Gateway / Ingestion Service",
+     "Scoring Engine",
+     "Audit & Event Bus",
+     "Feature Store",
+     "Transactional Data Store"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Payment Gateway / Core Ledger",
+     "API Gateway / Ingestion Service",
+     "Scoring Engine",
+     "Model Evaluator"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Fraud Analyst",
+     "Case Management Backend",
+     "Case API Handler",
+     "Workflow Service",
+     "Case Repository Component",
+     "Transactional Data Store"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "In-Memory Model Registry",
+     "Model Evaluator",
+     "Scoring Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "Feature Store",
+     "Feature Aggregator",
+     "In-Memory Model Registry",
+     "API Router"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Payment Gateway / Core Ledger",
+     "Data Sanitization & Tokenization Masking Component",
+     "Case Management Backend"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Payload Builder",
+     "Model Evaluator",
+     "Audit & Event Bus",
+     "Audit Archival Storage",
+     "Audit Ledger Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none"
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

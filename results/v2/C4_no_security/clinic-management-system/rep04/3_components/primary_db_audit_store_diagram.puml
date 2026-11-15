@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Primary DB & Audit Store
+
+System_Ext(clinical_emr_billing, "Clinical & EMR Core & Billing Containers", "External callers interacting with the database.")
+System_Ext(core_containers, "Core Containers", "Core application containers interacting with the database.")
+System_Ext(siem_object_storage, "SIEM / Object Storage", "External storage for tamper-proof audit logs.")
+
+Container_Boundary(primary_db_audit_store, "Primary DB & Audit Store") {
+    Component(transactional_data_store, "Transactional Data Store Component", "PostgreSQL", "Manages patient admissions, EMRs, scheduling, and billing data.")
+    Component(audit_logging_subsystem, "Audit Logging Subsystem", "pg_audit + WORM tables", "Maintains immutable audit trails for HIPAA/GDPR compliance.")
+    Component(high_availability_manager, "High Availability Manager", "Patroni + etcd", "Provides active-active/passive failover to meet 99.99% uptime.")
+    Component(partitioning_archival_worker, "Partitioning & Archival Worker", "PostgreSQL Worker", "Handles data partitioning and archival processes for long-term retention.")
+    Component(security_access_control, "Security & Access Control Component", "PostgreSQL Row-Level Security", "Enforces database-level security and access control.")
+    Component(gdpr_anonymization_worker, "GDPR Anonymization & Retention Worker", "PostgreSQL Worker", "Ensures compliance with GDPR anonymization and the 10-year data retention policy.")
+    Component(connection_pooler, "Connection Pooler", "PgBouncer", "Manages database connections to prevent CPU contention and protect the <1s P95 SLA.")
+    Component(log_shipper, "Log Shipper", "Fluentbit / Vector", "Forwards logs for tamper-proof 10-year audit retention to SIEM or Object Storage.")
+}
+
+Rel(clinical_emr_billing, transactional_data_store, "PostgreSQL Protocol")
+Rel(transactional_data_store, audit_logging_subsystem, "Asynchronous internal triggers")
+Rel(audit_logging_subsystem, siem_object_storage, "Fluentbit / Vector sidecars")
+Rel(core_containers, security_access_control, "Database-level RLS interception")
+
+@enduml

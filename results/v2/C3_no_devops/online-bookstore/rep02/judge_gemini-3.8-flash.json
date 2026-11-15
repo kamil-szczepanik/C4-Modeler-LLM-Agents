@@ -1,0 +1,333 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "All requirements are met: R-01 via 'Catalog & Search View' and 'Catalog Controller & Service'; R-02 via 'Cart & Checkout Engine' and 'Payment & Shipping Gateway Adapters'; R-03 via 'Review & Rating Component'; and R-04 via 'Recommendation Engine'. 'Currency Conversion Provider' covers multi-currency requirements.",
+   "performance_efficiency": "Target latencies and 1M MAU scalability are supported by CloudFront edge distribution, 'Amazon ElastiCache (Redis)' caching (catalog, sessions, recommendations), Aurora 'Read Replica Instances (Multi-AZ / Global)', and asynchronous processing via 'Amazon SQS' and 'Amazon EventBridge'.",
+   "compatibility": "External interoperability is explicitly modeled for 'External Payment Gateway' and 'Third-Party Shipping Provider API' through 'Payment & Shipping Gateway Adapters' using REST, webhooks with HMAC, and mTLS, alongside gRPC integration with the 'Recommendation Service'.",
+   "usability": "Target user groups are well served: buyers use the 'Single-Page Application (SPA)', while administrators and marketing specialists utilize dedicated UIs in the 'Admin / Back-Office App', including 'Catalog Management Component' and 'Order & Exception Operations Component'.",
+   "reliability": "The 99.95% uptime target is backed by 'Amazon Aurora PostgreSQL' Multi-AZ and Global Database replicas, 'Circuit Breaker' in 'Payment & Shipping Gateway Adapters', 'Idempotency Interceptor', and SQS 'DLQ (Dead Letter Queue)' for fault isolation.",
+   "security": "OWASP Top-10 mitigations and privacy constraints are thoroughly addressed via 'WAF Integration Component', 'Authorizer Component' (JWT), mTLS, DOMPurify in 'Review & Rating Component', KMS encryption, audit logging, and the 'User Data & Compliance Component' for GDPR/CCPA workflows.",
+   "maintainability": "The system exhibits high maintainability through clean container decoupling (Core E-Commerce API vs Recommendation Service), domain event choreography via 'Amazon EventBridge', standard architectural layers, and modular component breakdown within NestJS and FastAPI services.",
+   "portability": "The design satisfies multi-region AWS deployment across us-east-1, eu-west-1, and ap-southeast-1 using ECS Fargate and Aurora Global Database. However, high dependency on proprietary AWS services (EventBridge, SQS, AppConfig, WAF) limits multi-cloud replaceability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.90625,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.0,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "CloudFront CDN caching, Redis cache-aside for product catalogs, and Aurora read replicas with PgBouncer connection pooling effectively absorb 10x peak traffic spikes, preserving sub-2-second page loads over 3G networks.",
+    "elements": [
+     "Single-Page Application (SPA)",
+     "Amazon API Gateway",
+     "Core E-Commerce API",
+     "Amazon ElastiCache (Redis)",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Hit ratio of Redis catalog cache under burst traffic",
+     "PgBouncer connection pool sizing under concurrent user spikes"
+    ],
+    "tradeoffs": [
+     "Aggressive catalog caching boosts read throughput but risks momentary catalog data staleness"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Recommendation Service runs as an isolated containerized service that asynchronously computes models from S3 and caches outputs into Redis without consuming Core E-Commerce API or Aurora transactional compute resources.",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Engine",
+     "Amazon S3",
+     "Amazon ElastiCache (Redis)",
+     "Core E-Commerce API"
+    ],
+    "sensitivity_points": [
+     "Process isolation between recommendation background compute and catalog API services",
+     "Bandwidth and model load overhead from Amazon S3"
+    ],
+    "tradeoffs": [
+     "Serving pre-computed cached recommendations ensures high browsing speed at expense of instantaneous personalization"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Checkout decouples physical fulfillment using circuit breakers and asynchronous messaging via Amazon SQS with DLQ support. If shipping APIs fail, checkout succeeds immediately and shipping orders queue safely for retry.",
+    "elements": [
+     "Cart & Checkout Engine",
+     "Payment & Shipping Gateway Adapters",
+     "Order Event Publisher",
+     "Amazon SQS",
+     "Third-Party Shipping Provider API"
+    ],
+    "sensitivity_points": [
+     "Dead-letter queue retry policies for shipping dispatch",
+     "Circuit breaker trip threshold in payment and shipping adapters"
+    ],
+    "tradeoffs": [
+     "Asynchronous shipping dispatch ensures checkout availability but delays immediate tracking number generation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "While Aurora Global Database provides multi-region replication, the architecture lacks cross-region DNS routing mechanisms (e.g., Route 53) and cross-region message replication for SQS and EventBridge, risking stalled workflows during a region outage.",
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Global Replication Manager",
+     "Primary Write Instance (Writer Node)",
+     "Read Replica Instances (Multi-AZ / Global)"
+    ],
+    "sensitivity_points": [
+     "Replication lag across AWS dedicated backbone network",
+     "Absence of global multi-region traffic routing and DNS failover component"
+    ],
+    "tradeoffs": [
+     "Global Aurora replicas provide distributed read access but manual promotion introduces failover latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Adding JPY currency support is isolated to the Currency Conversion Provider and Payment Gateway Adapters. Exchange rates are independently cached in Redis without requiring schema changes or modifications to core checkout workflows.",
+    "elements": [
+     "Currency Conversion Provider",
+     "Cart & Checkout Engine",
+     "Payment & Shipping Gateway Adapters",
+     "External Payment Gateway",
+     "Amazon ElastiCache (Redis)"
+    ],
+    "sensitivity_points": [
+     "Decoupling of currency exchange provider from core checkout logic"
+    ],
+    "tradeoffs": [
+     "Caching exchange rates in Redis accelerates checkout but requires periodic rate synchronization"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Recommendation Engine and rules processors are fully encapsulated inside the Recommendation Service microservice behind stable gRPC and REST endpoints, allowing complete replacement of recommendation algorithms with zero impact on external consumers.",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Engine",
+     "API Controller",
+     "Model Store Client",
+     "Core E-Commerce API"
+    ],
+    "sensitivity_points": [
+     "Contract stability of gRPC and REST endpoints on the API Controller"
+    ],
+    "tradeoffs": [
+     "Strict API abstraction limits client exposure to algorithm-specific output metadata"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "AWS WAF inspects edge traffic for OWASP threats, the Review component sanitizes inputs via DOMPurify against XSS, and Aurora enforces parameterized queries with pgaudit logging, preventing and recording malicious injection attempts.",
+    "elements": [
+     "WAF Integration Component",
+     "Review & Rating Component",
+     "Amazon API Gateway",
+     "Core E-Commerce API",
+     "Database Encryption & Audit Engine"
+    ],
+    "sensitivity_points": [
+     "Maintenance and coverage of AWS WAF managed rule groups",
+     "Consistent DOMPurify sanitization coverage across all user input views"
+    ],
+    "tradeoffs": [
+     "Deep payload inspection across edge and client layers introduces minor latency overhead"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "The back-office application provides a dedicated User Data & Compliance Component for GDPR/CCPA deletions with audit logging. However, purging personal records across EventBridge archives and asynchronous queues requires extra administrative workflows.",
+    "elements": [
+     "Admin / Back-Office App",
+     "User Data & Compliance Component",
+     "Audit Logging Service",
+     "Amazon EventBridge",
+     "Amazon Aurora PostgreSQL",
+     "Amazon SQS"
+    ],
+    "sensitivity_points": [
+     "Orchestration coverage of user data removal across database tables and event archives"
+    ],
+    "tradeoffs": [
+     "Maintaining immutable event audit trails complicates full erasure required by strict privacy rules"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "User Data & Compliance Component",
+     "KMS Encryption Component",
+     "Database Encryption & Audit Engine",
+     "Async Telemetry Publisher"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Currency Conversion Provider",
+     "External Payment Gateway"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Third-Party Shipping Provider API",
+     "Payment & Shipping Gateway Adapters",
+     "Amazon SQS",
+     "Standard/FIFO Queue Engine"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search View",
+     "Catalog Controller & Service",
+     "Product & Catalog Cache Component",
+     "Amazon Aurora PostgreSQL"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Checkout & Cart Workflow",
+     "Cart & Checkout Engine",
+     "Idempotency Interceptor",
+     "Payment & Shipping Gateway Adapters",
+     "Session Store Component",
+     "External Payment Gateway"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Review & Rating Component",
+     "Custom Event Bus"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Engine",
+     "Recommendation Cache Component",
+     "External Recommendation Service"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Connection Pooler",
+     "Read Replica Instances (Multi-AZ / Global)",
+     "Amazon ElastiCache (Redis)",
+     "Amazon SQS",
+     "Throttling & Rate Limiter"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Single-Page Application (SPA)",
+     "Product & Catalog Cache Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Primary Write Instance (Writer Node)",
+     "Read Replica Instances (Multi-AZ / Global)",
+     "Payment & Shipping Gateway Adapters",
+     "DLQ (Dead Letter Queue)",
+     "Global Replication Manager"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "WAF Integration Component",
+     "Authorizer Component",
+     "Review & Rating Component",
+     "Database Encryption & Audit Engine"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

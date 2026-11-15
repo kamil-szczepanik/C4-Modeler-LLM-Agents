@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container_Ext(API_Gateway_Container, "API Gateway Container", "Gateway", "External container that forwards search queries via HTTP/JSON over TLS.")
+Container_Ext(Event_Broker_Container, "Event Broker Container", "Apache Kafka", "External container that streams catalog mutation events.")
+
+Container_Boundary(Search_Service_Container, "Search Service Container") {
+    Component(Search_API_Router, "Search API Router", "FastAPI / Python", "Handles search API routing with an integrated Query Sanitizer for lightweight, high-performance REST routing.")
+    Component(Query_Translator, "Query Translator", "Elasticsearch DSL / Python", "Passes validated query parameters and translates them into execution-ready search DSL.")
+    Component(Search_Index_Engine, "Search Index Engine", "OpenSearch", "Executes query DSL and performs bulk upserts, enforcing EU-only primary and replica shard placement.")
+    Component(Index_Synchronization_Consumer, "Index Synchronization Consumer", "Kafka Consumer / Python", "Streams catalog mutation events and performs idempotent bulk upserts to the search index.")
+    Component(Redis_Cache_Container, "Redis Cache Container", "Redis", "System-level Redis cache used to check and store frequent query results.")
+}
+
+Rel(API_Gateway_Container, Search_API_Router, "Forwards search queries", "HTTP/JSON over TLS")
+Rel(Search_API_Router, Redis_Cache_Container, "Checks and stores frequent query results", "Redis TCP over TLS")
+Rel(Search_API_Router, Query_Translator, "Passes validated query parameters", "In-process")
+Rel(Query_Translator, Search_Index_Engine, "Executes query DSL on cache miss", "REST/JSON over HTTP")
+Rel(Event_Broker_Container, Index_Synchronization_Consumer, "Streams catalog mutation events", "Apache Kafka TCP over TLS")
+Rel(Index_Synchronization_Consumer, Search_Index_Engine, "Performs idempotent bulk upserts", "REST/JSON over HTTP")
+
+@enduml

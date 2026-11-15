@@ -1,0 +1,309 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.75,
+  "justifications": {
+   "functional_suitability": "Fraud Scoring Engine handles R-01 decisions, and Case Management Backend with React UI covers R-02 case management. However, R-03 (updating rules and models without downtime) lacks an explicit hot-reloading or shadow-deployment mechanism, referencing only Database Migration Manager for schema updates.",
+   "performance_efficiency": "The Go-based Fraud Scoring Engine uses Feature Cache (AWS ElastiCache for Redis) for sub-millisecond lookups and offloads audit writes asynchronously via Message Queue (Amazon SQS), keeping the critical path well within 50 ms P99 at 3,000 TPS.",
+   "compatibility": "Standard protocols are defined cleanly: gRPC/mTLS with Payment Gateway, OIDC/OAuth2 via AWS Cognito for Identity Providers, Redis RESP, and standard AWS SDK integrations for SQS, KMS, and S3 Object Lock.",
+   "usability": "React UI connected to Case Query Controller provides fraud analysts with dedicated interfaces for reviewing flagged cases, authenticated via AWS Cognito. Operational dashboards are also provided for monitoring.",
+   "reliability": "API Router & Fallback Handler provides fail-open capabilities to avoid blocking payments beyond 1 minute. Amazon SQS and fraud-decisions-dlq protect against data loss in audit log ingestion, though multi-AZ deployment details remain implicit.",
+   "security": "Addresses PCI-DSS and audit constraints through AWS WAF, tokenization at AWS API Gateway/NLB, mTLS/TLS 1.3, SQS KMS encryption, and Storage Writer Component writing to Tamper-Evident Storage (S3 Object Lock Compliance Mode).",
+   "maintainability": "Well-decoupled microservices (Fraud Scoring Engine, Case Management Backend, Feature Store) using managed services align well with a small three-engineer team. However, model deployment lifecycle components are not explicitly separated from scoring logic.",
+   "portability": "While targeted specifically for AWS eu-west-1, the architecture heavily couples key behaviors to proprietary AWS services (S3 Object Lock, SQS, KMS, ElastiCache, Cognito), limiting adaptability or migration to other environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 3,
+   "MOD-02": 3,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.0,
+   "Modifiability": 3.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The Go scoring engine uses in-memory evaluation and low-latency Redis feature caching, decoupling audit emission via asynchronous SQS to achieve sub-50ms P99 latency at 3,000 rps.",
+    "elements": [
+     "AWS API Gateway / NLB",
+     "Fraud Scoring Engine",
+     "Feature Store",
+     "API Router & Fallback Handler",
+     "Feature Aggregator",
+     "Scoring Evaluator with Feature Contribution Formatter",
+     "Message Queue"
+    ],
+    "sensitivity_points": [
+     "ElastiCache Redis read latency under high connection concurrency",
+     "Asynchronous SQS publish latency overhead on scoring worker threads"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging sacrifices immediate read-after-write audit consistency for scoring throughput"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management workloads run on independent Spring Boot containers and Amazon RDS, completely isolating analyst query traffic from the Redis-backed Go scoring pipeline.",
+    "elements": [
+     "Case Management Backend",
+     "Relational Store",
+     "Fraud Scoring Engine",
+     "Feature Store"
+    ],
+    "sensitivity_points": [
+     "Physical separation of operational case databases and real-time feature caches"
+    ],
+    "tradeoffs": [
+     "Dual-store architecture increases operational complexity for a three-engineer team"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "An API Router & Fallback Handler exists inside the scoring container, but an entire process crash or instance failure lacks an upstream edge-level automated fallback decision mechanism.",
+    "elements": [
+     "AWS API Gateway / NLB",
+     "Fraud Scoring Engine",
+     "API Router & Fallback Handler",
+     "Message Queue"
+    ],
+    "sensitivity_points": [
+     "Edge gateway failover routing when backend scoring service fails health checks"
+    ],
+    "tradeoffs": [
+     "Approving payments on fallback reduces merchant decline rates but increases exposure to fraud"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Audit payloads are decoupled through buffered channels and Amazon SQS with DLQ support, preventing downstream S3/Lambda audit persistence slowdowns from impacting scoring latency.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Audit Publisher",
+     "Message Queue",
+     "Audit Logger",
+     "Tamper-Evident Storage"
+    ],
+    "sensitivity_points": [
+     "SQS queue depth retention settings during prolonged storage outages"
+    ],
+    "tradeoffs": [
+     "Asynchronous buffering trade-offs instant audit persistence against bounded scoring latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "The scoring evaluator formats feature contributions and records model versions, but no dynamic model hot-reloading, canary routing, or automated 5-minute rollback mechanism is specified.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Scoring Evaluator with Feature Contribution Formatter",
+     "AWS API Gateway / NLB"
+    ],
+    "sensitivity_points": [
+     "Model version tagging consistency across distributed Go scoring worker instances"
+    ],
+    "tradeoffs": [
+     "Static compilation in Go guarantees scoring performance but slows dynamic model deployment cycles"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "The architecture records explainable rule contributions, but lacks an explicit runtime rule management engine or dynamic configuration ingestion mechanism to update rules without redeployment.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Scoring Evaluator with Feature Contribution Formatter",
+     "Feature Store"
+    ],
+    "sensitivity_points": [
+     "Propagation delay of new velocity rules across feature store caches and scoring instances"
+    ],
+    "tradeoffs": [
+     "Embedding rule sets in compiled binaries increases execution speed but hinders sub-hour updates"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Ingress tokenization protects cardholder PANs from analyst view, and Cognito handles MFA/RBAC; however, automated behavioral anomaly detection alerting within 15 minutes is missing.",
+    "elements": [
+     "AWS API Gateway / NLB",
+     "Case Management Backend",
+     "React UI",
+     "Relational Store"
+    ],
+    "sensitivity_points": [
+     "Tokenization enforcement boundary preventing clear-text PAN persistence in relational case tables"
+    ],
+    "tradeoffs": [
+     "Tokenization reduces PCI-DSS scope but requires token resolution overhead when resolving external disputes"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Amazon S3 Object Lock in Compliance Mode enforces 7-year WORM storage, KMS provides cryptographic signing, and the Relational Store's Audit Ledger Index enables fast retrieval.",
+    "elements": [
+     "Tamper-Evident Storage",
+     "Relational Store",
+     "Audit Logger",
+     "Storage Writer Component"
+    ],
+    "sensitivity_points": [
+     "Integrity of relational audit indices referencing immutable S3 object keys over 7 years"
+    ],
+    "tradeoffs": [
+     "Maintaining relational audit indices improves query response times while adding auxiliary storage maintenance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "partial"
+  },
+  "coverage": 0.5454545454545454,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "AWS API Gateway / NLB",
+     "Fraud Scoring Engine",
+     "Tamper-Evident Storage"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Tamper-Evident Storage",
+     "Audit Logger",
+     "Storage Writer Component",
+     "Scoring Evaluator with Feature Contribution Formatter",
+     "Audit Ledger Index Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Scoring Evaluator with Feature Contribution Formatter",
+     "API Router & Fallback Handler"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Backend",
+     "React UI",
+     "Case Query Controller",
+     "Case Domain Service",
+     "Case Repository Component",
+     "Bulk Action Processor"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Database Migration Manager"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Feature Store",
+     "Feature Cache",
+     "Feature Aggregator",
+     "Message Queue"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "AWS API Gateway / NLB"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit Publisher",
+     "Scoring Evaluator with Feature Contribution Formatter",
+     "Audit Logger",
+     "Storage Writer Component",
+     "Tamper-Evident Storage"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "API Router & Fallback Handler"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

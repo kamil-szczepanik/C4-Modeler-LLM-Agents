@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening Platform
+
+Person(FraudAnalysts, "Fraud Analysts", "Review flagged transactions via the Case Management UI.")
+System_Ext(PaymentGateway, "Payment Gateway", "Integrates via REST APIs to submit payment authorizations for screening.")
+
+System_Boundary(FraudScreeningPlatform, "Real-Time Payment Fraud Screening Platform") {
+    Container(ApiGateway, "API Gateway / Ingress Container", "OpenAPI / JSON Schema", "Enforces strict ingress payload validation to maintain audit data integrity.")
+    Container(RealTimeScoring, "RealTime Scoring Container", "AWS (eu-west-1), gRPC/REST", "Provides sub-50ms fraud scoring and hot-reloads machine learning models.")
+    Container(AuditLogging, "Audit Logging Container", "AWS SQS / Kinesis, S3 Object Lock", "Dispatches and writes tamper-evident audit logs ensuring 7-year retention.")
+    Container(CaseManagement, "Case Management Container", "AWS", "Manages fraud analyst reviews and investigations.")
+    ContainerDb(AmazonS3, "Amazon S3", "AWS S3 Object Lock", "Model storage and Audit logs with Object Lock.")
+    Container(AwsSqsKinesis, "AWS SQS / Kinesis", "AWS", "Asynchronous event bus for decision events.")
+    Container(AwsSecretsManager, "AWS Secrets Manager / Parameter Store", "AWS", "Injects credentials securely at container startup.")
+}
+
+Rel(PaymentGateway, ApiGateway, "Interacts via REST APIs using OpenAPI contracts", "HTTPS / REST")
+Rel(ApiGateway, RealTimeScoring, "Interacts synchronously for scoring", "gRPC/REST")
+Rel(RealTimeScoring, AwsSqsKinesis, "Asynchronously dispatches decision events", "AWS SQS/Kinesis")
+Rel(AwsSqsKinesis, AuditLogging, "Delivers decision events for logging", "AWS Event Bus")
+Rel(RealTimeScoring, AmazonS3, "Hot-reloads machine learning models", "AWS S3")
+Rel(AuditLogging, AmazonS3, "Writes tamper-evident audit logs with Object Lock enabled in compliance mode", "AWS S3 API")
+Rel(FraudAnalysts, CaseManagement, "Reviews flagged transactions", "HTTPS")
+
+@enduml

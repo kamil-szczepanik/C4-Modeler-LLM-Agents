@@ -1,0 +1,22 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(api_gateway, "API Gateway", "External or upstream gateway routing traffic.")
+System_Ext(tax_currency_provider, "Tax & Currency Provider", "External API for real-time exchange rates and tax rates.")
+System_Ext(amazon_s3, "Amazon S3", "Cloud storage for immutable, PII-scrubbed audit logs.")
+
+Container_Boundary(localization_tax, "Localization & Tax") {
+    Component(LocalizationController, "LocalizationController", "Spring MVC RestController, gRPC", "Exposes gRPC endpoints for internal communication and routes requests.")
+    Component(TaxRuleResolver, "TaxRuleResolver", "Spring Component", "Encapsulates regional tax classifications and B2B exemptions.")
+    Component(TaxCalculationEngine, "TaxCalculationEngine", "Spring Component, Resilience4j", "Manages external tax queries and Resilience4j circuit breakers.")
+    Component(CurrencyConverter, "CurrencyConverter", "Spring Component", "Handles multi-currency conversion with hourly refresh.")
+    Component(Amazon_ElastiCache_Redis, "Amazon ElastiCache (Redis)", "Amazon ElastiCache (Redis)", "Regional distributed cache for exchange rates and tax jurisdictions.")
+}
+
+Rel(api_gateway, LocalizationController, "Routes internal traffic", "VPC links [gRPC]")
+Rel(LocalizationController, TaxRuleResolver, "Executes internal logic", "In-process Java method calls")
+Rel(TaxRuleResolver, TaxCalculationEngine, "Executes internal logic", "In-process Java method calls")
+Rel(TaxCalculationEngine, tax_currency_provider, "Queries exchange rates and tax info", "HTTPS")
+Rel(TaxCalculationEngine, amazon_s3, "Streams scrubbed audit logs", "AWS Kinesis Firehose")
+@enduml

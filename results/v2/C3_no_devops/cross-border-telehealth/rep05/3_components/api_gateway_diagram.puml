@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the API Gateway container
+
+Person(ClientApps, "Client Apps", "External client applications")
+
+System_Ext(CoreTelehealthService, "Core Telehealth Service", "Core telehealth backend service")
+System_Ext(AISymptomCheckerContainer, "AI Symptom Checker Container", "AI symptom checker container")
+System_Ext(PatientConsentService, "Patient Consent Service", "Patient consent and compliance service")
+System_Ext(PharmacyIntegrationGateway, "Pharmacy Integration Gateway", "Pharmacy integration gateway")
+
+Container_Boundary(ApiGateway, "API Gateway") {
+    Component(EdgeRouter, "Edge Router", "Envoy Proxy", "Terminates TLS and enforces claims-based geo-routing.")
+    Component(AuthPolicyEnforcementFilter, "Auth/Policy Enforcement Filter", "Envoy Wasm/Lua Plugin", "Validates JWTs, verifies consent scopes, and injects secure headers.")
+    Component(RateLimiterCircuitBreaker, "Rate Limiter & Circuit Breaker", "Envoy / Custom Filter", "Protects downstream services during unstable connection spikes.")
+    Component(TelemetryUsageAnalyticsHeaderInjector, "Telemetry & Usage Analytics Header Injector", "Envoy Plugin", "Appends anonymized usage metrics without exposing PHI.")
+    Component(WebApplicationFirewallWAF, "Web Application Firewall (WAF)", "Security Module", "Inspects inbound HTTPS payloads for OWASP Top 10 vulnerabilities.")
+    Component(SPIFFESPIRESidecarIntegration, "SPIFFE/SPIRE Sidecar Integration", "SPIFFE/SPIRE", "Manages automated short-lived mTLS certificate rotation.")
+}
+
+Rel(ClientApps, EdgeRouter, "Sends API requests and data", "HTTPS / WebSockets")
+Rel(EdgeRouter, AuthPolicyEnforcementFilter, "Passes requests for JWT validation and scope verification", "")
+Rel(AuthPolicyEnforcementFilter, CoreTelehealthService, "Routes validated requests", "gRPC with mTLS")
+Rel(AuthPolicyEnforcementFilter, AISymptomCheckerContainer, "Routes symptom check requests", "gRPC with mTLS")
+Rel(AuthPolicyEnforcementFilter, PatientConsentService, "Routes consent and compliance queries", "gRPC with mTLS")
+Rel(AuthPolicyEnforcementFilter, PharmacyIntegrationGateway, "Routes e-prescription requests", "gRPC with mTLS")
+
+@enduml

@@ -1,0 +1,335 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "While R-01, R-02, and R-04 are well-supported by Catalog & Search, Cart & Checkout, and Personalization Engine Containers, R-03 (reviews and 5-star ratings) lacks dedicated handling components or data models beyond an initial actor mention.",
+   "performance_efficiency": "Performance and 1M MAU scalability are thoroughly addressed through AWS ElastiCache cluster mode, multi-region AWS Aurora, asynchronous Amazon SQS pipelines, and CloudFront edge termination to optimize sub-2s page loads on 3G.",
+   "compatibility": "Integration is thoroughly detailed with Third-Party Shipping APIs using Resilience4j circuit breakers, Third-Party Payment Gateway tokenized APIs, and multi-currency handling within Localization Controller and Inventory and Catalog Service.",
+   "usability": "Actors (Buyer, Reviewer, Admin, Support) interact directly with API Gateway; the Web Frontend from Level 1 is omitted in Level 2 and Level 3, leaving client presentation and accessibility mechanisms unelaborated.",
+   "reliability": "High availability (99.95%) is achieved with multi-region Aurora, Route 53 multi-region routing, Dead-Letter Queue Handler in Amazon SQS, and Resilience4j circuit breaker fallbacks for external shipping integrations.",
+   "security": "Security is addressed thoroughly via AWS WAF (OWASP Top-10), OAuth2/JWT validation, mTLS within VPC, KMS-backed envelope encryption, AWS Secrets Manager credential rotation, and S3 Object Lock immutable audit logging.",
+   "maintainability": "Service boundaries are cleanly segregated across business domains. However, modeling AWS managed services (Aurora, ElastiCache, SQS) down to pseudo-components clutters modular clarity without defining internal software component boundaries for Cart & Checkout.",
+   "portability": "Architecture targets AWS regions effectively, but heavy coupling to proprietary services (Aurora Global, SQS, App Mesh, Secrets Manager) limits replaceability and adaptability outside the target AWS ecosystem."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.90625,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront CDN edge caching, ElastiCache Redis cluster, and ECS/EKS horizontal scalability effectively absorb traffic spikes. However, 3G performance constraints depend heavily on client bundle size and edge asset optimization, which are only lightly detailed.",
+    "elements": [
+     "Web Frontend",
+     "API Gateway",
+     "AWS ElastiCache",
+     "Catalog & Search Container",
+     "AWS Aurora Database"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios on ElastiCache and CloudFront during catalogue spikes",
+     "ECS/EKS autoscaling reaction times under sudden 10x traffic surges"
+    ],
+    "tradeoffs": [
+     "Aggressive catalog caching trades real-time stock consistency for low latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Personalization operates asynchronously via SQS telemetry ingestion and reads from an isolated Redis cache namespace with fallback bestsellers. Background model loading and recomputation do not touch synchronous browsing workflows.",
+    "elements": [
+     "Personalization Engine Container",
+     "Cache & Profile Manager",
+     "Telemetry Publisher",
+     "Amazon SQS",
+     "Catalog & Search Container"
+    ],
+    "sensitivity_points": [
+     "Isolation of ElastiCache namespaces between catalog and recommendation workloads",
+     "Asynchronous decoupling of telemetry publishing from core browsing requests"
+    ],
+    "tradeoffs": [
+     "Serving cached fallback recommendations during updates trades accuracy for browsing speed"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Checkout uses the Transactional Outbox pattern, Resilience4j circuit breakers, and asynchronous SQS queuing with dead-letter handling. When shipping APIs fail, checkout succeeds locally and downstream fulfillment retries asynchronously.",
+    "elements": [
+     "Cart & Checkout Container",
+     "Third-Party Shipping APIs",
+     "Amazon SQS",
+     "AWS Aurora Database"
+    ],
+    "sensitivity_points": [
+     "Resilience4j circuit breaker trip thresholds and fallback policies",
+     "SQS retention limits and Dead-Letter Queue redrive mechanisms"
+    ],
+    "tradeoffs": [
+     "Asynchronous fulfillment decoupled from checkout trades synchronous shipping confirmation for availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Route 53 latency/failover routing and multi-region Aurora Global Database support cross-region disaster recovery. However, automated Aurora primary failover and cross-region message replay for SQS queues are not fully elaborated.",
+    "elements": [
+     "Edge Termination Component",
+     "AWS Aurora Database",
+     "Amazon ECS/EKS",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Aurora Global Database replication lag and automated primary failover time",
+     "Cross-region state synchronization for active carts and queued messages"
+    ],
+    "tradeoffs": [
+     "Multi-region active-passive database configuration balances regional resilience against cross-region replication costs"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Currency and localized pricing changes are cleanly encapsulated in the Localization & Compliance Container and the Inventory and Catalog Service, while payments use tokenized gateway integrations without bleeding into core ordering.",
+    "elements": [
+     "Localization Controller",
+     "Inventory and Catalog Service",
+     "Cart & Checkout Container",
+     "Third-Party Payment Gateway"
+    ],
+    "sensitivity_points": [
+     "Encapsulation of multi-currency conversion logic inside localization and catalog services",
+     "Third-Party Payment Gateway tokenization contract supporting diverse currencies"
+    ],
+    "tradeoffs": [
+     "Centralizing currency logic in dedicated containers adds inter-service hops but isolates business rules"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The recommendation engine is an isolated microservice container communicating via mTLS APIs and decoupled queues. Algorithm changes and ML model refreshes via Model Loader and S3/KMS affect only this container.",
+    "elements": [
+     "Personalization Engine Container",
+     "Personalization Engine Service",
+     "Model Loader & Verifier",
+     "Cache & Profile Manager"
+    ],
+    "sensitivity_points": [
+     "Strict API contract stability between API Gateway and Personalization Engine",
+     "Independent cryptographic ML model loading decoupled from running service logic"
+    ],
+    "tradeoffs": [
+     "Decoupled machine learning container increases deployment complexity to preserve service modifiability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "AWS WAF filters OWASP Top-10 threats (SQLi, XSS) at the edge, supplemented by JWT validation and encrypted SQL access. However, specific logging/alerting mechanisms for blocked injection attempts are minimally specified.",
+    "elements": [
+     "Security & WAF Component",
+     "Edge Termination Component",
+     "Authentication & Authorization Component",
+     "AWS Aurora Database"
+    ],
+    "sensitivity_points": [
+     "Completeness of AWS WAF inspection rules for REST search and review endpoints",
+     "Use of parameterized SQL statements and ORM sanitation across microservices"
+    ],
+    "tradeoffs": [
+     "Deep WAF payload inspection adds marginal request latency to ensure security against injection"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Data deletion workflows are explicitly modeled via Compliance Manager, Compliance Processing Service, and Data Purge Publisher over SQS, backed by immutable audit logs in S3 Object Lock for legal verification.",
+    "elements": [
+     "Localization & Compliance Container",
+     "Compliance Manager",
+     "Data Purge Publisher",
+     "Admin & Support Container",
+     "Amazon S3 Object Lock",
+     "AWS Aurora Database"
+    ],
+    "sensitivity_points": [
+     "Reliability of SQS fanout for propagating purge requests across all data stores",
+     "Immutability and cryptographic validation of audit records in S3 Object Lock"
+    ],
+    "tradeoffs": [
+     "Asynchronous deletion offloading ensures responsiveness but requires background verification of completeness"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Localization & Compliance Container",
+     "Localization Controller",
+     "Compliance Manager",
+     "Data Purge Publisher",
+     "Compliance Processing Service",
+     "Compliance Data Access Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Inventory and Catalog Service",
+     "Localization Controller",
+     "Compliance Manager",
+     "Localization & Compliance Container"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Third-Party Shipping APIs",
+     "Cart & Checkout Container",
+     "Amazon SQS"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Container",
+     "Search and Browse Controller",
+     "Inventory and Catalog Service",
+     "Catalog and Book Data Component",
+     "Catalog Caching Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Cart & Checkout Container",
+     "Third-Party Payment Gateway",
+     "Transactional Order Data Component",
+     "Cart Namespace Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Book Reviewer"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Personalization Engine Container",
+     "Personalization Engine Service",
+     "Cache & Profile Manager",
+     "Recommendation Namespace Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "AWS Aurora Database",
+     "AWS ElastiCache",
+     "Amazon SQS",
+     "Cart & Checkout Container",
+     "Catalog & Search Container"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Web Frontend",
+     "Edge Termination Component",
+     "AWS ElastiCache",
+     "Catalog Caching Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Edge Termination Component",
+     "AWS Aurora Database",
+     "Dead-Letter Queue Handler",
+     "Cart & Checkout Container"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Security & WAF Component",
+     "Authentication & Authorization Component",
+     "Edge Termination Component",
+     "AWS Secrets Manager"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

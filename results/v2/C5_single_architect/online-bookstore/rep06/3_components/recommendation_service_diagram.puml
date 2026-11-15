@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Recommendation Service container
+
+System_Ext(API Gateway, "API Gateway", "External", "Routes requests to the Recommendation API Controller.")
+System_Ext(Amazon ElastiCache (Redis), "Amazon ElastiCache (Redis)", "External", "In-memory caching for sub-2-second page load performance.")
+System_Ext(Amazon SQS, "Amazon SQS", "External", "Asynchronous messaging queue for order completion events.")
+
+Container_Boundary(Recommendation Service, "Recommendation Service") {
+    Component(Recommendation API Controller, "Recommendation API Controller", "Python FastAPI", "Handles incoming API requests for book suggestions.")
+    Component(Recommendation Engine Core, "Recommendation Engine Core", "Python", "Provides high-performance book suggestions.")
+    Component(Cache Repository, "Cache Repository", "Python, redis-py", "Manages in-memory caching and data lookup.")
+    Component(Event Consumer, "Event Consumer", "Python, Celery / SQS Worker", "Pulls order completion events and invalidates or updates the cache.")
+    Component(Async Model Updater, "Async Model Updater", "Python, Celery Worker", "Performs bulk updates of pre-computed results.")
+}
+
+Rel(API Gateway, Recommendation API Controller, "Routes requests", "gRPC over HTTP/2")
+Rel(Recommendation API Controller, Recommendation Engine Core, "In-process function calls", "")
+Rel(Recommendation Engine Core, Cache Repository, "Data lookup", "TCP / Redis protocol")
+Rel(Amazon SQS, Event Consumer, "Pulls order completion events", "HTTPS / SQS SDK")
+Rel(Event Consumer, Cache Repository, "Invalidates and updates cache", "TCP / Redis protocol")
+Rel(Async Model Updater, Cache Repository, "Bulk updates pre-computed results", "TCP / Redis protocol")
+Rel(Cache Repository, Amazon ElastiCache (Redis), "Reads/Writes cache", "TCP / Redis protocol")
+
+@enduml

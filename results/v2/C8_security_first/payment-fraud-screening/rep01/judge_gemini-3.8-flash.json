@@ -1,0 +1,331 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively addressed: Scoring Engine Container evaluates transactions (R-01), Case Management Container manages reviews and workflows (R-02), and the Model Execution Engine supports zero-downtime model and rule updates via double-buffering from S3 Model Bucket (R-03).",
+   "performance_efficiency": "Sub-50ms latency at 3,000 TPS is supported by Go with ONNX runtime C-bindings, ElastiCache Redis feature enrichment, and asynchronous offloading via EventBridge and Kinesis Firehose. However, fronting 3,000 TPS through AWS HTTP API Gateway may introduce latency jitter and high invocation costs.",
+   "compatibility": "Interfaces with Payment Gateway via mTLS/gRPC, IdP via OIDC/SAML, and Notification Gateway via HTTPS. While Card Tokenization Provider is defined as an external system, explicit interaction arrows to it from the Scoring Engine or API Gateway are missing in container diagrams.",
+   "usability": "The Fraud Analyst & Risk Manager persona is directly supported through a dedicated Case Management Frontend SPA on S3/CloudFront and Case Management Backend, integrated with Corporate IdP for seamless single sign-on.",
+   "reliability": "R-07 is directly addressed by the Fallback & Circuit Breaker Component to prevent payment blockage. SQS DLQs and RDS Proxy protect against backend exhaustion. Multi-AZ deployment configurations and automated failover mechanics are not explicitly detailed.",
+   "security": "PCI-DSS requirements and R-05/R-06 are thoroughly satisfied through mTLS ingress, AWS Lake Formation column masking, S3 WORM Object Lock for 7-year tamper-evident records, and PostgreSQL pgaudit with trigger-based Row-Level Security.",
+   "maintainability": "The architecture exhibits clean separation of concerns across containers and components. Event-driven decoupling via Amazon SQS and EventBridge, combined with containerized workloads on ECS Fargate, provides high testability, low coupling, and low operational overhead for three engineers.",
+   "portability": "While application containers run standard Go and Node.js on ECS, the architecture relies deeply on proprietary AWS-native services (Lake Formation, Athena, EventBridge, S3 Object Lock, RDS Proxy, Kinesis Firehose), creating significant cloud-vendor lock-in and high migration friction."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 3,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 4.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "In-memory ONNX runtime with C-bindings and double buffering enables sub-50ms inference. However, using a single t4g.micro ElastiCache Redis instance risks severe network and CPU bottlenecks under 3,000 TPS.",
+    "elements": [
+     "API Gateway",
+     "Scoring Engine Container",
+     "Model Execution Engine",
+     "Feature Enrichment Component"
+    ],
+    "sensitivity_points": [
+     "Redis instance sizing directly limits throughput and P99 latency",
+     "API Gateway HTTP API overhead under 3,000 concurrent TPS"
+    ],
+    "tradeoffs": [
+     "Cost minimization via small Redis instance versus throughput capacity under peak load"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Workloads are completely segregated across distinct containers and data stores. API Gateway routes analyst traffic to Case Management and RDS Proxy, while scoring requests execute independently against Go/ONNX and Redis without shared contention.",
+    "elements": [
+     "API Gateway",
+     "Path Segregation Router",
+     "Case Management Container",
+     "Scoring Engine Container",
+     "Amazon RDS PostgreSQL",
+     "PgBouncer / RDS Proxy"
+    ],
+    "sensitivity_points": [
+     "API Gateway path routing prevents analyst requests from starving scoring worker threads"
+    ],
+    "tradeoffs": [
+     "Operating separate database infrastructure increases operational overhead for better workload isolation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "The Fallback and Circuit Breaker component is embedded inside the Scoring Engine Container. If the container or Fargate task crashes entirely, API Gateway has no specified upstream failover to independently approve payments within 1 minute.",
+    "elements": [
+     "API Gateway",
+     "Scoring Engine Container",
+     "Fallback & Circuit Breaker Component"
+    ],
+    "sensitivity_points": [
+     "Placement of circuit breaking within the crashing service rather than at API Gateway",
+     "Container restart time on AWS Fargate exceeding the 1-minute threshold"
+    ],
+    "tradeoffs": [
+     "Simplified container-level circuit breaker versus high-availability gateway-level fallback routing"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Audit emission is decoupled from the critical path using an asynchronous Go dispatcher that streams events to EventBridge and Kinesis Firehose. Decisions complete unaffected if downstream audit storage degrades, preserving logs in durable buffers.",
+    "elements": [
+     "Scoring Engine Container",
+     "Audit & Telemetry Dispatcher",
+     "Amazon SQS / EventBridge",
+     "Amazon Kinesis Data Firehose",
+     "Amazon S3 Data Lake Storage"
+    ],
+    "sensitivity_points": [
+     "Asynchronous buffer capacity in memory before backpressure impacts scoring latency",
+     "Durability of intermediate EventBridge/Firehose buffers during extended outages"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit dispatch trades strict immediate persistence consistency for low decision latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Scoring Engine uses concurrent double-buffered ONNX models loaded from S3 with digital signature verification. New model versions can be hot-swapped in memory without downtime, rolled back immediately by reloading prior versions, and tracked via decision metadata.",
+    "elements": [
+     "Scoring Engine Container",
+     "Model Execution Engine",
+     "Amazon S3 WORM Bucket & Model Bucket",
+     "Model Bucket Storage"
+    ],
+    "sensitivity_points": [
+     "Memory footprint during double-buffering when loading large ONNX models into RAM",
+     "Model validation latency before swapping traffic to the new model pointer"
+    ],
+    "tradeoffs": [
+     "Double memory consumption during model reload versus zero-downtime atomic model switching"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "While feature enrichment uses Redis, the architecture does not specify a dynamic rule management engine or runtime rule publication pipeline. Rules embedded in ONNX models or application code require container redeployments rather than configuration updates.",
+    "elements": [
+     "Case Management Container",
+     "Scoring Engine Container",
+     "Feature Enrichment Component",
+     "Model Execution Engine"
+    ],
+    "sensitivity_points": [
+     "Absence of a runtime rule configuration distribution mechanism to scoring nodes",
+     "Coupling rule logic updates to machine learning model deployment pipelines"
+    ],
+    "tradeoffs": [
+     "Using unified ONNX/code pipelines simplifies architecture but slows business rule deployment"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "PCI-DSS scope is minimized via external tokenization and Lake Formation masking, preventing analyst access to raw PANs. However, the architecture lacks automated behavioral anomaly detection to alert on compromised analyst accounts within 15 minutes.",
+    "elements": [
+     "Card Tokenization Provider",
+     "Corporate Identity Provider (IdP)",
+     "Case Management Container",
+     "AWS Lake Formation",
+     "Notification Gateway"
+    ],
+    "sensitivity_points": [
+     "Lack of real-time SIEM or UEBA to detect compromised analyst sessions",
+     "Reliance on external tokenization provider to shield PAN exposure"
+    ],
+    "tradeoffs": [
+     "Minimizing third-party security tooling to control budget compromises rapid automated breach detection"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Records are stored immutably in S3 with Object Lock (WORM) and Parquet format via Kinesis Firehose. Serverless Amazon Athena queries against the Glue Catalog enable analysts to retrieve inputs, model versions, and explanations within hours.",
+    "elements": [
+     "Amazon S3 WORM Bucket & Model Bucket",
+     "WORM Object Storage",
+     "Amazon Athena & S3 Data Lake",
+     "Amazon Athena Query Engine",
+     "AWS Glue Data Catalog",
+     "Amazon S3 Data Lake Storage"
+    ],
+    "sensitivity_points": [
+     "Schema evolution management in Glue Data Catalog across a 7-year retention span",
+     "Athena partition strategies on Parquet data to ensure responsive queries over years"
+    ],
+    "tradeoffs": [
+     "Serverless query cost per scan versus maintaining dedicated indexed audit search clusters"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Card Tokenization Provider",
+     "AWS Lake Formation",
+     "Audit Log Schema",
+     "Ingress and TLS Termination Controller"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "WORM Object Storage",
+     "EventBridge Audit Bus",
+     "Amazon S3 Data Lake Storage",
+     "Amazon Athena Query Engine",
+     "Audit & Telemetry Dispatcher"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Feature Enrichment Component",
+     "Amazon Athena Query Engine",
+     "Scoring Engine Container"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Scoring Engine Container",
+     "Case Management Container",
+     "Amazon RDS PostgreSQL"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "Scoring Engine Container",
+     "API Router Component",
+     "Model Execution Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Container",
+     "Case Management Frontend",
+     "Case Management Backend",
+     "Amazon SQS Case Queue",
+     "Cases DB Schema"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model Execution Engine",
+     "Model Bucket Storage",
+     "Scoring Engine Container"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "Scoring Engine Container",
+     "API Router Component",
+     "Feature Enrichment Component",
+     "Model Execution Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Card Tokenization Provider",
+     "AWS Lake Formation",
+     "Ingress and TLS Termination Controller"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit & Telemetry Dispatcher",
+     "EventBridge Audit Bus",
+     "WORM Object Storage",
+     "Amazon S3 Data Lake Storage"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Fallback & Circuit Breaker Component",
+     "Scoring Engine Container"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

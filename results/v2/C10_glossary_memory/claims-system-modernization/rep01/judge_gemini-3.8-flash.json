@@ -1,0 +1,312 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 3,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Customer Portal handles customer and broker submissions (R-01), Web Application provides adjuster interfaces (R-02), and the Feature Flag / Migration Router dynamically controls gradual claim-type migration (R-03).",
+   "performance_efficiency": "Asynchronous decoupling via Integration Gateway / ACL and ESB/MQ prevents direct mainframe blocking, but the architecture lacks an explicit read cache or CQRS query store to guarantee sub-2-second loads when viewing legacy claims.",
+   "compatibility": "Integration Gateway / ACL includes Message Translator for COBOL copybooks and Mainframe Adapter over ESB/MQ, perfectly accommodating mainframe interface stability constraints alongside Azure AD, Payment Gateway, and Notification Service integrations.",
+   "usability": "Distinct user interfaces are provided: Customer Portal with Broker Dashboard Service for external submitters, and Web Application with a dedicated Web UI Router & BFF Controller for internal claims adjusters.",
+   "reliability": "Reconciliation & Sync Service, Audit Ledger, ESB/MQ buffering, and idempotency tokens ensure no claim loss or duplicate processing (R-04). However, explicit handling of the strict 23:00-05:00 batch window constraints is omitted.",
+   "security": "Authentication Client integrates with Azure AD (Entra ID) via OIDC/OAuth 2.0 (R-07). Internal communications use mTLS, and the Document Repository enforces WORM storage with Azure Key Vault CMK encryption.",
+   "maintainability": "Feature Flag / Migration Router leveraging Azure App Configuration enables instant rollback per claim type within minutes, exceeding R-06. The system displays clean Anti-Corruption Layer separation from legacy logic.",
+   "portability": "The hybrid topology (on-premise Legacy Mainframe and azure-westeurope) is properly addressed via Azure Container Apps and ESB/MQ, though there is heavy vendor lock-in to proprietary Azure services like Cosmos DB."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 2,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "justification": "Adjuster screens query the Claim Processing API, but no read cache or CQRS projection for mainframe data is modeled. Without pre-synchronized local reads, mainframe latency of up to 5 s blocks screen rendering beyond the 2 s target.",
+    "elements": [
+     "Web Application",
+     "Web UI Router & BFF Controller",
+     "Claim Processing API",
+     "Integration Gateway / ACL",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Absence of a local read cache or CQRS projection for legacy mainframe claims"
+    ],
+    "tradeoffs": [
+     "Querying the mainframe on-demand saves storage but compromises user interface response times"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Online submissions are ingested via scalable Azure Container Apps and buffered asynchronously using the Enterprise Service Bus (ESB/MQ). This decouples intake bursts from the mainframe, preventing impact on the nightly batch window.",
+    "elements": [
+     "Customer Portal",
+     "Claim Processing API",
+     "Enterprise Service Bus (ESB/MQ)",
+     "Integration Gateway / ACL"
+    ],
+    "sensitivity_points": [
+     "Queue capacity and rate-limiting policies configured on the ESB/MQ"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission buffering increases eventual consistency delay to protect batch windows"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Online claim submissions are persisted in the Document & Audit Store and queued via the hybrid ESB/MQ. During the mainframe batch window, inbound submissions remain safely buffered without loss and forward once the mainframe resumes.",
+    "elements": [
+     "Customer Portal",
+     "Claim Processing API",
+     "Document & Audit Store",
+     "Enterprise Service Bus (ESB/MQ)",
+     "Integration Gateway / ACL"
+    ],
+    "sensitivity_points": [
+     "Message persistence and retention duration in the hybrid ESB/MQ message broker"
+    ],
+    "tradeoffs": [
+     "Mainframe batch decoupling requires maintaining dual state until synchronization completes"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The dedicated Reconciliation & Sync Service, Cosmos DB Audit Ledger with change feed, and idempotency mechanisms provide clear structures to detect and reconcile partial synchronization failures without data loss or duplication.",
+    "elements": [
+     "Claim Processing API",
+     "Reconciliation & Sync Service",
+     "Audit Ledger",
+     "Integration Gateway / ACL",
+     "Enterprise Service Bus (ESB/MQ)"
+    ],
+    "sensitivity_points": [
+     "Reliability of change feed processing and idempotent consumer execution"
+    ],
+    "tradeoffs": [
+     "Reconciliation logic adds operational complexity to avoid two-phase commits across hybrid boundaries"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Feature Flag / Migration Router utilizing Azure App Configuration enables dynamic claim-type routing and immediate rollbacks within minutes. The Integration Gateway / ACL isolates legacy formats, preserving quarterly mainframe change budgets.",
+    "elements": [
+     "Feature Flag / Migration Router",
+     "Feature Flag Evaluator",
+     "Integration Gateway / ACL",
+     "Message Translator"
+    ],
+    "sensitivity_points": [
+     "Granularity of routing rules defined in the Feature Flag Evaluator"
+    ],
+    "tradeoffs": [
+     "Routing abstractions introduce slight network hops in exchange for rapid rollback capability"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "UI components communicate exclusively with BFF controllers and the Claim Processing API. Once all claim types migrate, retiring the mainframe only requires switching off the Integration Gateway and ACL without any UI modifications.",
+    "elements": [
+     "Web Application",
+     "Customer Portal",
+     "Claim Processing API",
+     "Integration Gateway / ACL",
+     "Feature Flag / Migration Router"
+    ],
+    "sensitivity_points": [
+     "Strict adherence to API abstraction boundaries separating UI from backend storage"
+    ],
+    "tradeoffs": [
+     "Upfront ACL and strangler facade design pays off by enabling seamless final cutover"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Azure AD enforces identity and the Audit Ledger logs access. However, multi-tenant broker boundaries and resource-level authorization checks are not explicitly modeled in the Claim Processing API or controllers.",
+    "elements": [
+     "Customer Portal",
+     "Azure AD (Entra ID)",
+     "Claim Processing API",
+     "Audit Ledger"
+    ],
+    "sensitivity_points": [
+     "Implementation of claim-level and customer-level authorization policies in backend handlers"
+    ],
+    "tradeoffs": [
+     "Delegating authorization enforcement to application code increases risk without explicit authorization components"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Centralized revocation in Azure AD terminates sessions in the modern web application via OpenID Connect. However, the architecture does not specify how revocation propagates to legacy mainframe security domains within the 15-minute window.",
+    "elements": [
+     "Azure AD (Entra ID)",
+     "Authentication Client",
+     "Web Application",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Propagation latency between Azure AD and legacy mainframe security registries"
+    ],
+    "tradeoffs": [
+     "Using cloud-native identity simplifies modern access but leaves legacy identity synchronization unaddressed"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.6818181818181818,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Integration Gateway / ACL",
+     "Message Translator",
+     "Mainframe Adapter"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Integration Gateway / ACL",
+     "Message Translator",
+     "Mainframe Adapter"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers & Brokers",
+     "Customer Portal",
+     "Claim Submission Controller",
+     "Broker Dashboard Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Web Application",
+     "Web UI Router & BFF Controller",
+     "Claim Processing API"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Feature Flag / Migration Router",
+     "Router Controller",
+     "Feature Flag Evaluator",
+     "Migration & Routing Client Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Enterprise Service Bus (ESB/MQ)",
+     "Audit Ledger",
+     "Reconciliation & Sync Service"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Web Application",
+     "Claim Processing API",
+     "Data Persistence Component",
+     "Document & Audit Store",
+     "Integration Gateway / ACL"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Feature Flag / Migration Router",
+     "Router Controller",
+     "Feature Flag Evaluator"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Azure AD (Entra ID)",
+     "Authentication Client"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

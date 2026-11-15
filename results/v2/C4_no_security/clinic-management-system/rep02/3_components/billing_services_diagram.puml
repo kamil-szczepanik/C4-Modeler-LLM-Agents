@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Billing Services container
+
+Component(ApiGateway, "API Gateway", "Envoy / Istio", "Routes requests via gRPC over mTLS into Billing Services.")
+Component(Kafka, "Apache Kafka", "Event Streaming Broker", "Asynchronous event streaming broker for claim lifecycles and failures.")
+Component(Postgres, "PostgreSQL", "Relational Database", "Primary relational database with AES-256 encryption at rest.")
+Component_Ext(Clearinghouse, "Third-Party Payment Gateway & Insurance Clearinghouse", "External Financial System", "External financial system for payment and eligibility checks.")
+Component(NotificationWorker, "Notification Worker", "Worker Service", "Triggered by Dispute & Reconciliation for failed claims.")
+
+Container_Boundary(BillingServices, "Billing Services") {
+    Component(EligibilityEngineComponent, "Eligibility Engine Component", "Python / FastAPI", "Handles synchronous, real-time insurance checks with external clearinghouses.")
+    Component(ClaimProcessingComponent, "Claim Processing Component", "Python / FastAPI", "Manages claim assembly, submission (R-04), and tracking.")
+    Component(LedgerInvoicingComponent, "Ledger & Invoicing Component", "Python / FastAPI", "Manages transactions, itemized statements, and exports.")
+    Component(DisputeReconciliationComponent, "Dispute & Reconciliation Component", "Python / FastAPI", "Processes Kafka failure events, rejections, and audit states.")
+}
+
+Rel(ApiGateway, EligibilityEngineComponent, "Routes requests via gRPC over mTLS", "Istio")
+Rel(EligibilityEngineComponent, Kafka, "Publishes and consumes asynchronous events", "TCP")
+Rel(ClaimProcessingComponent, Postgres, "Reads and writes financial data", "JDBC / TLS")
+Rel(EligibilityEngineComponent, Clearinghouse, "Executes eligibility checks", "REST over HTTPS")
+Rel(DisputeReconciliationComponent, NotificationWorker, "Triggers alerts for failed claims", "Internal")
+
+@enduml

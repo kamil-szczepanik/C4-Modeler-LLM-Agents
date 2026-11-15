@@ -1,0 +1,331 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "All requirements are directly fulfilled: 'Patient Registry Controller' handles demographic capture, 'Scheduling Engine' resolves resource clashes, 'EMR Core Service' and 'Audit & Compliance Interceptor' satisfy clinical workflows with auditing, while 'Claim Processing Engine' and 'Payment & Reconciliation Worker' provide complete billing functionality.",
+   "performance_efficiency": "The sub-second P95 target is supported by multi-tiered caching ('Caching Proxy' with Redis, 'Cache Manager'), connection pooling via 'PgBouncer', and offloaded asynchronous processing with a non-blocking disruptor queue in 'Audit & Compliance Interceptor' alongside 'RabbitMQ'.",
+   "compatibility": "'FHIR Integration Adapter' explicitly implements HL7 FHIR APIs over mTLS for diagnostic exchange with 'External Lab & Imaging Systems'. Interoperability with 'Enterprise Identity Provider (IdP)' (OIDC/SAML) and 'Payment Gateway' is clearly established.",
+   "usability": "While patients and billing staff have dedicated UI solutions ('Patient Portal BFF', 'Billing Operations UI Container'), 'Physician / Clinician' and 'Clinic Receptionist' directly target 'API Gateway' without clinical front-end or EMR workstation containers.",
+   "reliability": "'RabbitMQ Quorum Queues' and 'Patroni Standby Nodes' provide failover and recovery. However, the requirement of active-active 99.99% uptime across hybrid cloud regions is undermined by a single 'Primary Engine' PostgreSQL transactional architecture.",
+   "security": "Security matches HIPAA/GDPR constraints thoroughly: MFA and RBAC at 'Enterprise IdP', WAF at 'Edge WAF & Sanitization Filter', mTLS internally, AES-256 database storage, pgAudit, and continuous logging to 'Audit Archival / SIEM System'.",
+   "maintainability": "The architecture exhibits high modularity with decoupled domain services ('Patient & Scheduling Service', 'EMR Core Service', 'Billing & Integration Service') communicating asynchronously via 'RabbitMQ' and cleanly abstracted repository layers.",
+   "portability": "Containerized workloads (Go, Spring Boot, FastAPI, Node.js) and standard open-source backing services (PostgreSQL, RabbitMQ) can deploy to on-prem Kubernetes and AWS, though explicit hybrid multi-cluster synchronization mechanisms are omitted."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "WebFlux reactive endpoints, a dedicated Redis caching proxy in the EMR Core Service, and PgBouncer connection pooling directly support handling concurrent reads with sub-second latency.",
+    "elements": [
+     "API Gateway",
+     "EMR API Controller",
+     "Clinical Record Manager",
+     "Caching Proxy",
+     "PgBouncer",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio and Redis invalidation latency for active clinical records"
+    ],
+    "tradeoffs": [
+     "Caching clinical data improves read latency but introduces cache coherence complexity"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "The FHIR Integration Adapter receives payloads asynchronously and can queue them via RabbitMQ without degrading EMR reads, though ingestion-to-EMR synchronization across separate microservices is slightly indirect.",
+    "elements": [
+     "External Lab & Imaging Systems",
+     "FHIR Integration Adapter",
+     "Billing & Integration Service",
+     "RabbitMQ",
+     "EMR Core Service"
+    ],
+    "sensitivity_points": [
+     "RabbitMQ consumer throughput and batch database persistence concurrency"
+    ],
+    "tradeoffs": [
+     "Asynchronous message queuing decouples ingestion load from EMR reads but introduces eventual consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Patroni provides local DB failover, but multi-region active-active synchronization and global failover orchestration between on-prem-k8s and eu-central-1 are not explicitly detailed, creating significant RTO/RPO risks.",
+    "elements": [
+     "API Gateway",
+     "Patroni Standby Nodes",
+     "PostgreSQL",
+     "RabbitMQ Quorum Queues"
+    ],
+    "sensitivity_points": [
+     "Cross-site replication latency and automated GSLB failover detection"
+    ],
+    "tradeoffs": [
+     "Hybrid multi-region deployment increases availability but introduces distributed state synchronization complexity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "RabbitMQ Quorum Queues with DLQ fallback prevent claim loss during node crashes, and Patroni enables automated database failover within the required 30-second window.",
+    "elements": [
+     "Payment & Reconciliation Worker",
+     "RabbitMQ Quorum Queues",
+     "Patroni Standby Nodes",
+     "PostgreSQL",
+     "Claim Processing Engine"
+    ],
+    "sensitivity_points": [
+     "Patroni failover timeout settings and idempotency key handling during claim retries"
+    ],
+    "tradeoffs": [
+     "At-least-once message delivery prevents data loss but requires strictly idempotent claim submission logic"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Strict container and component decoupling isolates clearinghouse protocols inside the Billing & Integration Service's payment workers, leaving the EMR Core and other domains completely untouched.",
+    "elements": [
+     "Payment & Reconciliation Worker",
+     "Claim Processing Engine",
+     "Billing & Integration Service",
+     "Payment Gateway"
+    ],
+    "sensitivity_points": [
+     "Abstraction level of payment interfaces against clearinghouse API changes"
+    ],
+    "tradeoffs": [
+     "Isolating clearinghouse integrations into separate components adds network hops but prevents domain contamination"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Demographic changes are localized to Patient Registry components, BFF schema, and PostgreSQL, with pgAudit automatically capturing DB modifications without requiring custom audit coding.",
+    "elements": [
+     "Patient Registry Controller",
+     "Data Access Repository",
+     "Patient Portal BFF",
+     "PostgreSQL",
+     "pgAudit"
+    ],
+    "sensitivity_points": [
+     "Schema migration orchestration and GraphQL schema versioning"
+    ],
+    "tradeoffs": [
+     "Strong typing across BFF, Go service, and database requires coordinated multi-component updates"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The Enterprise IdP strictly requires multi-factor authentication before issuing JWTs, and the API Gateway's Audit & Telemetry Interceptor immediately streams unauthorized login events to SIEM.",
+    "elements": [
+     "Enterprise IdP",
+     "API Gateway",
+     "Authentication & Authorization Filter",
+     "Audit & Telemetry Interceptor",
+     "SIEM System"
+    ],
+    "sensitivity_points": [
+     "Strictness of IdP MFA enforcement policies and real-time SIEM alert pipelines"
+    ],
+    "tradeoffs": [
+     "Delegating MFA to an external IdP centralizes security controls but introduces an external runtime dependency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The Spring AOP Audit Interceptor intercepts 100% of clinical reads via a non-blocking disruptor queue, dispatching HMAC-signed logs to a WORM-compliant SIEM for long-term retention.",
+    "elements": [
+     "EMR Core Service",
+     "Audit & Compliance Interceptor",
+     "Clinical Record Manager",
+     "Audit Archival / SIEM System",
+     "pgAudit"
+    ],
+    "sensitivity_points": [
+     "Disruptor ring-buffer sizing under unexpected EMR read bursts"
+    ],
+    "tradeoffs": [
+     "Asynchronous non-blocking audit logging preserves low read latencies but requires memory buffering"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit Archival / SIEM System",
+     "pgAudit",
+     "Audit & Compliance Interceptor",
+     "Audit & Telemetry Interceptor",
+     "Enterprise Identity Provider (IdP)",
+     "PostgreSQL"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Patroni Standby Nodes",
+     "RabbitMQ Quorum Queues",
+     "Routing & Load Balancing Proxy"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Audit Archival / SIEM System",
+     "Patroni Standby Nodes"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Patient Registry Controller",
+     "Patient Portal BFF"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Scheduling Engine",
+     "Policy Enforcer",
+     "PostgreSQL"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Core Service",
+     "Clinical Record Manager",
+     "Audit & Compliance Interceptor",
+     "Audit Archival / SIEM System",
+     "pgAudit"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Integration Service",
+     "Claim Processing Engine",
+     "Payment & Reconciliation Worker",
+     "Payment Gateway / Insurance Clearinghouse",
+     "Billing Operations UI Container"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Enterprise IdP",
+     "API Gateway",
+     "Authentication & Authorization Filter",
+     "PostgreSQL",
+     "Cache Manager",
+     "Data Access Repository",
+     "Billing Data Repository Layer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Patroni Standby Nodes",
+     "RabbitMQ Quorum Queues",
+     "Routing & Load Balancing Proxy"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Caching Proxy",
+     "PgBouncer",
+     "Cache Manager",
+     "GraphQL API Server",
+     "Audit & Compliance Interceptor"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Integration Adapter",
+     "Billing & Integration Service",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

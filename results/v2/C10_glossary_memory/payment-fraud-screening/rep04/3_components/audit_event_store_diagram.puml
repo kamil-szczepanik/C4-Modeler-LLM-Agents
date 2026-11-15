@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Audit & Event Store container
+
+System_Ext(FraudScoringAPI, "Fraud Scoring API", "External system sending audit events")
+System_Ext(CaseManagementBackend, "Case Management Backend", "External system sending audit events")
+
+Container_Boundary(AuditAndEventStore, "Audit & Event Store") {
+    Component(EventIngestionService, "Event Ingestion Service", "Go, AWS ECS Fargate, gRPC, mTLS", "Receives audit events via gRPC/mTLS and validates schemas.")
+    Component(RelationalLedgerStore, "Relational Ledger Store", "AWS Aurora PostgreSQL, pg_audit", "Stores hot audit data with pg_audit enabled for 90 days.")
+    Component(ArchivalWorker, "Archival Worker", "AWS Lambda, Python", "Periodically archives historical data to long-term storage.")
+    Component(S3GlacierObjectLockBucket, "S3 Glacier Object Lock Bucket", "AWS S3, Object Lock", "Provides WORM (Write-Once-Read-Many) storage for 7-year regulatory retention.")
+    Component(NetworkLoadBalancer, "Network Load Balancer", "AWS NLB", "Routes high-throughput internal traffic to ingestion tasks.")
+    Component(AWSSecretsManagerIAM, "AWS Secrets Manager / IAM", "AWS Secrets Manager, IAM", "Manages dynamic credentials and database authentication.")
+}
+
+Rel(FraudScoringAPI, EventIngestionService, "Sends audit events", "gRPC/mTLS")
+Rel(CaseManagementBackend, EventIngestionService, "Sends audit events", "gRPC/mTLS")
+Rel(EventIngestionService, RelationalLedgerStore, "Persists hot audit data", "SQL/TLS")
+Rel(ArchivalWorker, RelationalLedgerStore, "Queries historical data", "SQL/TLS")
+Rel(ArchivalWorker, S3GlacierObjectLockBucket, "Archives historical data", "HTTPS/TLS")
+
+@enduml

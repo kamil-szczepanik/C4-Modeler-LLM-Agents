@@ -1,0 +1,236 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "Requirements are comprehensively met: R-01 is satisfied by the Catalogue & Search Service and Digital Repository / DRM Provider, while the Circulation & User Service and Circulation & Self-Service Portal Module fully deliver circulation and self-service capabilities.",
+   "performance_efficiency": "R-05 (<800 ms P99 search) is directly addressed via the dedicated Search Query Component utilizing Elasticsearch, client-side caching in Catalogue & Search UI Module, edge acceleration via AWS CloudFront Frankfurt, and the PgBouncer Connection Pooler.",
+   "compatibility": "The design facilitates clean integration with external systems, employing standard protocols across the External Payment Gateway (REST/TLS), Digital Repository / DRM Provider, and External Notification Service via the Dispatch Adapter Component.",
+   "usability": "Library Patrons & Staff are supported by dedicated interfaces in the Web Application via Router & Layout Component and Circulation & Self-Service Portal Module, though separate interfaces tailored individually to academic versus public workflows are not distinguished.",
+   "reliability": "Reliability is well addressed through Kafka Broker Nodes distributed across three Availability Zones, connection resilience via PgBouncer, and fault tolerance mechanisms like the Retry & DLQ Manager Component, though Elasticsearch cluster resilience is unspecified.",
+   "security": "The EU-only residency constraint is strictly enforced across AWS CloudFront Frankfurt and AWS RDS (Frankfurt). Security is reinforced by the Authentication & Authorization Filter (JWT/JWKS), mTLS for internal gRPC, and PCI-DSS scoping for External Payment Gateway.",
+   "maintainability": "High maintainability is achieved through clear domain boundaries across the Catalogue & Search Service and Circulation & User Service, low coupling via Apache Kafka (AWS MSK), and strict contract enforcement using the Schema Registry.",
+   "portability": "Components use portable runtimes like Go, Spring Boot, and React. However, portability across different environments is moderately constrained by tight coupling to proprietary AWS services such as AWS MSK, AWS Glue, and AWS RDS."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.0,
+   "Modifiability": 2.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Search queries are decoupled from relational databases and served via dedicated Elasticsearch instances through gRPC routes, fronted by Kong and CloudFront edge caching, comfortably achieving sub-800ms P99 latency under 2,000 concurrent searches.",
+    "elements": [
+     "AWS CloudFront Frankfurt",
+     "API Gateway",
+     "Routing Engine",
+     "Search Query Component",
+     "Elasticsearch"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch indexing and query sizing under concurrent read load",
+     "gRPC connection pooling between Kong and search service"
+    ],
+    "tradeoffs": [
+     "Memory consumption for Elasticsearch caching versus fast query response times"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalogue modifications write to PostgreSQL and emit domain events over Kafka. The Search Indexer asynchronously indexes documents into Elasticsearch, fully isolating write loads from patron search latency and updating items well within 5 minutes.",
+    "elements": [
+     "Catalogue Management Component",
+     "Apache Kafka (AWS MSK)",
+     "Search Indexer Component",
+     "Elasticsearch",
+     "Database"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer lag on indexing topics during peak update spikes",
+     "Elasticsearch index refresh interval settings"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of search results versus real-time query latency isolation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Loan operations are fully isolated in the Circulation & User Service and PostgreSQL, preventing search index failures from blocking circulation. However, explicit multi-node Elasticsearch clustering and replica failover policies are not detailed.",
+    "elements": [
+     "Circulation & User Service",
+     "Loan Management Component",
+     "Database",
+     "Search Query Component",
+     "Elasticsearch"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster replica factor and automatic shard rebalancing speed"
+    ],
+    "tradeoffs": [
+     "Cost of replica shard overhead versus search index fault tolerance"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The portal is a React SPA distributed through AWS CloudFront edge points. While single client instance crashes do not impact other users, backend container auto-scaling and gateway health-checking failovers are only partially specified.",
+    "elements": [
+     "AWS CloudFront Frankfurt",
+     "Web Application",
+     "API Gateway",
+     "Circulation & User Service"
+    ],
+    "sensitivity_points": [
+     "Health check interval and upstream eviction speed in Kong API Gateway"
+    ],
+    "tradeoffs": [
+     "Aggressive health check polling versus network overhead on backend services"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Catalogue & Search Service communicates with external digital repositories over REST, but lacks an explicit adapter or plug-in abstraction to isolate new provider integration contracts without modifying core catalogue code.",
+    "elements": [
+     "Catalogue & Search Service",
+     "Catalogue Management Component",
+     "Digital Repository / DRM Provider"
+    ],
+    "sensitivity_points": [
+     "Coupling of external DRM APIs directly to catalogue domain logic"
+    ],
+    "tradeoffs": [
+     "Direct REST integration simplicity versus modular provider adapter extensibility"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "Loan rules reside within Go components in the Circulation & User Service. No dynamic rule engine, externalized configuration service, or policy store is provided to alter loan policies at runtime without code deployment.",
+    "elements": [
+     "Circulation & User Service",
+     "Loan Management Component"
+    ],
+    "sensitivity_points": [
+     "Hardcoded circulation business logic within compiled Go binaries"
+    ],
+    "tradeoffs": [
+     "Fast compiled code execution versus operational runtime policy flexibility"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Data residency is strictly enforced across all components, including CloudFront Frankfurt, AWS RDS Frankfurt, MSK across 3 Frankfurt availability zones, and multi-AZ Redis in Frankfurt, preventing patron data leakage outside the EU.",
+    "elements": [
+     "AWS CloudFront Frankfurt",
+     "API Gateway",
+     "Relational Data Store",
+     "Apache Kafka (AWS MSK)",
+     "Rate Limiting & Throttling Module"
+    ],
+    "sensitivity_points": [
+     "Strict regional binding of third-party egress proxies and SaaS integrations"
+    ],
+    "tradeoffs": [
+     "Regional hosting constraints versus multi-region geographic redundancy"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Kong validates JWTs and propagates claims, while audit logs are streamed to Kafka and CloudWatch. However, fine-grained object-level authorization logic within the Patron Profile Component is not explicitly elaborated.",
+    "elements": [
+     "API Gateway",
+     "Authentication & Authorization Filter",
+     "Circulation & User Service",
+     "Patron Profile Component",
+     "Apache Kafka (AWS MSK)"
+    ],
+    "sensitivity_points": [
+     "Enforcement of patron ID matching against authenticated JWT claims"
+    ],
+    "tradeoffs": [
+     "Centralized gateway token check versus fine-grained service-level authorization checks"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "AWS CloudFront Frankfurt",
+     "Web Application",
+     "Relational Data Store"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Digital Repository / DRM Provider",
+     "Catalogue & Search Service",
+     "Catalogue Management Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Catalogue & Search Service",
+     "Catalogue & Search UI Module",
+     "Search Query Component",
+     "Connection Pooler"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

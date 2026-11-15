@@ -1,0 +1,337 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "Requirements R-01 to R-03 are addressed by Media Gateway, E-Prescription Service, and AI Symptom Checker Container. However, patient-facing consent management (R-04) lacks an explicit management component, although enforcement is thoroughly handled by Consent Enforcement Proxy.",
+   "performance_efficiency": "Adaptive Bitrate & Congestion Controller manages dynamic bandwidth allocation. Outbox Worker & DLQ enables asynchronous processing, and Regional Caches ensure low-latency local evaluations. Specific audio-only degradation mechanisms under 300 kbit/s are not explicitly detailed.",
+   "compatibility": "The Interoperability Adapter uses an Adapter Plugins & Strategy Pattern to cleanly support US HL7 FHIR and diverse EU national standards, integrating effectively with Regional Pharmacies and National Standards APIs.",
+   "usability": "Patients and Licensed Clinicians are represented, but no client-side user interfaces (web or mobile applications) are modeled. While Media Gateway mitigates connection issues for rural users, direct interaction with backend gateways overlooks client UX needs.",
+   "reliability": "Unstable rural connections are mitigated by TURN/STUN Relay Handler and GCC adaptive bitrate control. E-prescription dispatch reliability is reinforced by Outbox Worker & DLQ, though automated cross-region database failover mechanisms are omitted.",
+   "security": "Data residency across europe-west3 and us-central1 is strictly maintained. Consent Enforcement Proxy uses OPA and token revocation checks for cross-region access, while Audit Logging and Compliance Validator ensure HIPAA, GDPR, and MDR traceability.",
+   "maintainability": "Clean separation of concerns with package-per-country strategy in Interoperability Adapter, sidecar-based OPA Policy Engine, decoupled configuration services, and comprehensive OpenTelemetry instrumentation promote exceptional maintainability and testability.",
+   "portability": "The architecture aligns with target GCP regions (europe-west3, us-central1). Standard technologies like OPA, OpenTelemetry, Coturn, and Janus offer high portability, though reliance on GCP-specific configurations slightly limits effortless provider migration."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 1,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 2.5,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "Media Gateway separates Janus signaling and Coturn relay, but lacks explicit horizontal auto-scaling and load-distribution mechanisms necessary for 5,000 concurrent media streams.",
+    "elements": [
+     "API Gateway",
+     "Media Gateway / Edge Proxy",
+     "WebRTC Signaling Router",
+     "TURN/STUN Relay Handler"
+    ],
+    "sensitivity_points": [
+     "Signaling throughput and concurrent relay capacity of Janus and Coturn nodes"
+    ],
+    "tradeoffs": [
+     "Relaying media through dedicated proxies enhances NAT traversal but increases bandwidth and CPU overhead"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Handling ~14 requests/second via gRPC dispatch and Redis-backed session caching comfortably meets the sub-3s latency threshold under peak conditions.",
+    "elements": [
+     "API Gateway",
+     "AI Dispatcher",
+     "AI Symptom Checker Container",
+     "Symptom Analysis Controller",
+     "Cache Manager"
+    ],
+    "sensitivity_points": [
+     "In-memory Redis lookup and gRPC processing efficiency"
+    ],
+    "tradeoffs": [
+     "Asynchronous logging reduces response latency but defers log persistence guarantees"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The Adaptive Bitrate and Congestion Controller using GCC paired with Coturn fallback ensures degraded streaming under 300 kbit/s, though note synchronization reliability is implicit.",
+    "elements": [
+     "Media Gateway / Edge Proxy",
+     "Adaptive Bitrate & Congestion Controller",
+     "TURN/STUN Relay Handler",
+     "WebRTC Signaling Router"
+    ],
+    "sensitivity_points": [
+     "Responsiveness of Google Congestion Control to rapid bandwidth drops"
+    ],
+    "tradeoffs": [
+     "Lowering video bitrate preserves connection stability at the cost of visual fidelity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 1,
+    "justification": "Only us-central1 is provisioned in the US; no secondary US region or automated multi-region DR exists to restore service while preserving US data residency.",
+    "elements": [
+     "Geographic Router",
+     "Data Access Router",
+     "Data Migration / Archival Worker"
+    ],
+    "sensitivity_points": [
+     "Lack of a redundant US cloud region to satisfy residency constraints"
+    ],
+    "tradeoffs": [
+     "Strict regional residency prevents active failover to EU infrastructure during regional outages"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Interoperability Adapter explicitly employs a package-per-country Strategy pattern with schema validation and dynamic feature flagging, confining changes entirely to one adapter.",
+    "elements": [
+     "Interoperability Adapter",
+     "Adapter Plugins & Strategy Pattern",
+     "Schema Validator",
+     "Configuration & Feature Flag Service"
+    ],
+    "sensitivity_points": [
+     "Strict decoupling of national adapter plugins from core prescription workflows"
+    ],
+    "tradeoffs": [
+     "Pluggable strategy pattern introduces abstraction layers but prevents country-specific core modifications"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Feature flags enable controlled rollout and instant rollback of model versions, while Audit Event Emitter logs inputs and versions, though model retraining pipelines are unstated.",
+    "elements": [
+     "Configuration & Feature Flag Service",
+     "AI Symptom Checker Container",
+     "Audit Event Emitter",
+     "Audit Logging"
+    ],
+    "sensitivity_points": [
+     "Dynamic runtime propagation of feature flag configurations to AI dispatchers"
+    ],
+    "tradeoffs": [
+     "Logging full input payloads ensures MDR traceability but increases storage consumption"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The Consent Enforcement Proxy intercepts cross-region traffic, validates tokens against Bloom filters and Redis, evaluates OPA Rego policies, and triggers immutable audit logging.",
+    "elements": [
+     "API Gateway",
+     "Auth & Validation Handler",
+     "Consent Enforcement Proxy Sidecar",
+     "Open Policy Agent (OPA) Policy Engine",
+     "Audit Emitter"
+    ],
+    "sensitivity_points": [
+     "Correctness and latency of real-time OPA evaluation on cross-region calls"
+    ],
+    "tradeoffs": [
+     "In-line cross-region policy checks ensure compliance but introduce round-trip evaluation latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Consent revocation is dynamically validated for API requests using Bloom filters and Redis, but downstream data deletion or research data segregation pipelines are missing.",
+    "elements": [
+     "Consent Enforcement Proxy",
+     "Token Validation and Revocation Check",
+     "Open Policy Agent (OPA) Policy Engine",
+     "Data Migration / Archival Worker"
+    ],
+    "sensitivity_points": [
+     "Propagation delay of token revocation state across regional Bloom filters"
+    ],
+    "tradeoffs": [
+     "Immediate access revocation via sidecar avoids batch delays but does not purge persisted data"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9166666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent Enforcement Proxy",
+     "Compliance Validator",
+     "Observability / Tracing",
+     "Audit Logging",
+     "Data Access Router"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Geographic Router",
+     "Data Access Router",
+     "Regional Database Access Layer",
+     "Consent Enforcement Proxy",
+     "Archival Processor"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker",
+     "AI Symptom Checker Container",
+     "Audit Event Emitter",
+     "Audit Logging"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Media Gateway / Edge Proxy",
+     "TURN/STUN Relay Handler",
+     "Adaptive Bitrate & Congestion Controller"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patients",
+     "Licensed Clinicians",
+     "Media Gateway / Edge Proxy",
+     "WebRTC Signaling Router"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "E-Prescription Service",
+     "Prescription Controller",
+     "Prescription Business Logic",
+     "Interoperability Adapter",
+     "Adapter Plugins & Strategy Pattern",
+     "Outbox Worker & DLQ",
+     "Regional Pharmacies"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Dispatcher",
+     "AI Symptom Checker Container",
+     "Symptom Analysis Controller",
+     "AI Symptom Checker"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Auth & Validation Handler",
+     "Consent Enforcement Proxy",
+     "Open Policy Agent (OPA) Policy Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Geographic Router",
+     "Consent Enforcement Proxy",
+     "Consent Enforcement Proxy Sidecar",
+     "Data Access Router",
+     "Regional Database Access Layer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Media Gateway / Edge Proxy",
+     "Adaptive Bitrate & Congestion Controller",
+     "TURN/STUN Relay Handler"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker",
+     "AI Symptom Checker Container",
+     "Audit Event Emitter",
+     "Audit Logging"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Interoperability Adapter",
+     "Adapter Plugins & Strategy Pattern",
+     "Regional Pharmacies",
+     "National Standards APIs"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

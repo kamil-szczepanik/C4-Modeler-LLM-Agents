@@ -1,0 +1,39 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Insurance Claims Modernization platform
+
+Person(CustomersAndBrokers, "Customers & Brokers", "External users performing online claim submissions.")
+Person(ClaimsAdjusters, "Claims Adjusters", "Internal users handling claims via the new web application.")
+
+System_Ext(LegacyMainframe, "Legacy Mainframe", "On-premise COBOL/DB2 system of record with a 3-year retention constraint.")
+System_Ext(AzureADEntraID, "Azure AD (Entra ID)", "Identity provider for Single Sign-On and RBAC.")
+System_Ext(PaymentGateway, "Payment Gateway", "External financial system for automated claim payouts.")
+System_Ext(CoreNotificationService, "Core Notification Service", "External system for automated SMS/email updates.")
+System_Ext(EnterpriseServiceBusESBMQ, "Enterprise Service Bus (ESB/MQ)", "Hybrid messaging intermediary for asynchronous decoupling.")
+
+System_Boundary(InsuranceClaimsModernizationplatform, "Insurance Claims Modernization platform") {
+    Container(WebApp, "Web Application", "React / TypeScript & Next.js", "Powers responsive adjuster and customer web interfaces.")
+    Container(CustomerPortal, "Customer Portal", "React / TypeScript & Next.js", "Provides customer-facing interactions and claim submissions.")
+    Container(ClaimProcessingAPI, "Claim Processing API", "Azure Container Apps", "Handles core business logic for processing claims and orchestrating workflows.")
+    Container(IntegrationGatewayACL, "Integration Gateway / ACL", "Azure Container Apps", "Translates modern messages into legacy formats and interfaces with the mainframe.")
+    Container(FeatureFlagMigrationRouter, "Feature Flag / Migration Router", "Azure Container Apps", "Routes requests dynamically to support the 3-year transition strategy.")
+    ContainerDb(DocumentAuditStore, "Document & Audit Store", "Azure Blob Storage & Azure Cosmos DB", "Provides secure, cloud-native document and audit data storage.")
+}
+
+Rel(CustomersAndBrokers, WebApp, "Submit online claims and interact with portals", "HTTPS (REST/GraphQL)")
+Rel(CustomersAndBrokers, CustomerPortal, "Manage claim submissions", "HTTPS (REST/GraphQL)")
+Rel(ClaimsAdjusters, WebApp, "Handle claims via web application UI", "HTTPS")
+Rel(WebApp, ClaimProcessingAPI, "Sends API requests for claim operations", "HTTPS (REST/GraphQL)")
+Rel(CustomerPortal, ClaimProcessingAPI, "Sends API requests for claim portal operations", "HTTPS (REST/GraphQL)")
+Rel(ClaimProcessingAPI, FeatureFlagMigrationRouter, "Evaluates migration routing rules", "Internal gRPC / HTTPS")
+Rel(ClaimProcessingAPI, IntegrationGatewayACL, "Sends asynchronous messaging via Enterprise Service Bus", "Asynchronous messaging via Enterprise Service Bus (ESB/MQ) over AMQP/MQTT with mTLS")
+Rel(ClaimProcessingAPI, DocumentAuditStore, "Persists documents and audit data", "HTTPS / TLS 1.3 (Azure SDK)")
+Rel(IntegrationGatewayACL, LegacyMainframe, "Asynchronous data synchronization and queue transfers", "Hybrid ESB/MQ connection")
+Rel(WebApp, AzureADEntraID, "Authenticate users and authorize access", "OpenID Connect / OAuth 2.0 via HTTPS")
+Rel(CustomerPortal, AzureADEntraID, "Authenticate users and authorize access", "OpenID Connect / OAuth 2.0 via HTTPS")
+Rel(ClaimProcessingAPI, PaymentGateway, "Process automated claim payouts with idempotency tokens", "HTTPS (REST with OAuth 2.0)")
+Rel(ClaimProcessingAPI, CoreNotificationService, "Send automated SMS and email updates", "Asynchronous Webhooks via Azure Event Grid (HTTPS)")
+
+@enduml

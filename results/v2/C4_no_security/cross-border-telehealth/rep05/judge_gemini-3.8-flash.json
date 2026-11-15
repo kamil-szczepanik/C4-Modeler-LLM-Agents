@@ -1,0 +1,341 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: Video Consultation Service for R-01, Integration & Interoperability Service for R-02, AI Symptom Checker Service with Inference Adapter for R-03, and Consent & Identity Service with Consent Enforcement Component for R-04 purpose-based consent.",
+   "performance_efficiency": "PgBouncer, Read Replicas, and SFU Media Router adaptive bitrates ensure high performance. Dataflow and BigQuery offload analytical workloads. However, specific edge-caching strategies for static assets or clinical read models are not detailed.",
+   "compatibility": "The Integration & Interoperability Service explicitly uses US FHIR Connector Component for US HL7 FHIR and EU National Standard Connector Component for EU standards, interfacing seamlessly with External Pharmacies via Camel transformers.",
+   "usability": "Patients, Clinicians, and Regulatory Authorities are clearly represented with tailored touchpoints like BFF Orchestration Layer and secure auditor portals. However, specific UI/client-tier adaptations for low-bandwidth rural patient devices are not explicitly detailed.",
+   "reliability": "SFU Media Router handles degraded video under unstable connections (R-06). Dead-Letter Queue (DLQ) Handler and Pub/Sub ensure reliable asynchronous retries. Concrete mechanisms for multi-region failover or automated recovery between GCP regions are omitted.",
+   "security": "Rigorous security implemented via Keycloak, mTLS, pgAudit, Ingestion & Anonymization Worker for PII stripping, and regional database isolation enforcing GDPR/HIPAA residency. Audit & Traceability Logger ensures MDR compliance.",
+   "maintainability": "High maintainability achieved through modular microservices with clear separation of concerns (e.g., Triage Orchestrator vs Inference Adapter, separate connector components for US/EU standards, and standardized OpenTelemetry logging).",
+   "portability": "The architecture deploys onto specified GCP regions using Cloud SQL and BigQuery. Most application components use portable container stacks (FastAPI, Spring Boot, Node.js), though there is slight lock-in with GCP-native services like Pub/Sub Lite and Dataflow."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "MediaSoup SFU handles WebRTC media streams and PgBouncer mitigates database connection pressure, but horizontal clustering and signaling coordination across SFU instances under 5,000 concurrent sessions lack explicit auto-scaling specifications.",
+    "elements": [
+     "API Gateway / BFF",
+     "Video Consultation Service",
+     "Signaling Component",
+     "SFU Media Router",
+     "Session Management Controller",
+     "PgBouncer",
+     "Regional Relational Database Read Replica"
+    ],
+    "sensitivity_points": [
+     "SFU bandwidth and media thread allocation during peak concurrent video sessions",
+     "WebRTC signaling connection limits under sudden spikes"
+    ],
+    "tradeoffs": [
+     "Selective Forwarding Unit (SFU) lowers client CPU load but demands high server networking capacity"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Handling ~14 requests/second is well within capacity. Fast inference orchestration combined with asynchronous offloading of audit snapshots via Cloud Pub/Sub Lite ensures response times remain comfortably under the 3-second threshold.",
+    "elements": [
+     "API Gateway / BFF",
+     "AI Symptom Checker Service",
+     "Triage Orchestrator",
+     "Inference Adapter",
+     "Audit & Traceability Logger"
+    ],
+    "sensitivity_points": [
+     "AI model inference latency within the Inference Adapter",
+     "Asynchronous decoupling of audit event logging from critical response path"
+    ],
+    "tradeoffs": [
+     "Asynchronous logging via Pub/Sub ensures low latency but introduces brief audit persistence lag"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The SFU Media Router explicitly supports adaptive bitrate streaming for unstable and low-bandwidth connections down to degraded audio/low-res modes, while consultation metadata and notes persist separately to the relational database.",
+    "elements": [
+     "Video Consultation Service",
+     "SFU Media Router",
+     "Session Management Controller",
+     "Regional Relational Database"
+    ],
+    "sensitivity_points": [
+     "Dynamic adaptation thresholding of WebRTC simulcast layers on constrained connections",
+     "Separation of session data persistence from volatile media streams"
+    ],
+    "tradeoffs": [
+     "Degrading to audio-only or reduced video resolution preserves call stability over visual fidelity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Target cloud configuration defines only us-central1 for the US. If the entire US region fails, no secondary US region exists to restore service within 1 hour while maintaining US data residency constraints.",
+    "elements": [
+     "API Gateway / BFF",
+     "Regional Relational Database",
+     "Regional Edge Router & Policy Enforcer"
+    ],
+    "sensitivity_points": [
+     "Absence of multi-region deployment or cold standby within US borders",
+     "Strict prohibition of cross-border data transfer to EU during US outages"
+    ],
+    "tradeoffs": [
+     "Single-region cost savings severely degrade disaster recovery and availability guarantees"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Integration & Interoperability Service utilizes an API Router & Transformer (Apache Camel) alongside pluggable regional connectors, allowing new national EU e-prescription standards to be integrated into isolated connector adapters.",
+    "elements": [
+     "Integration & Interoperability Service",
+     "API Router & Transformer Component",
+     "EU National Standard Connector Component"
+    ],
+    "sensitivity_points": [
+     "Connector modularity and format translation abstraction in Apache Camel routes",
+     "Uniform internal clinical data schema preventing upstream service modifications"
+    ],
+    "tradeoffs": [
+     "Dedicated connector components isolate country-specific changes but increase maintenance footprint"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Audit & Traceability Logger captures model versions and input snapshots per recommendation for EU MDR compliance. However, automated model version switching, canary deployment, and immediate runtime rollback mechanisms are not explicitly detailed.",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Triage Orchestrator",
+     "Inference Adapter",
+     "Audit & Traceability Logger",
+     "Compliance Exporter"
+    ],
+    "sensitivity_points": [
+     "Model version tagging consistency across inference payloads and immutable audit stores",
+     "Runtime model deployment lifecycle and fallback configuration"
+    ],
+    "tradeoffs": [
+     "Logging full input snapshots ensures MDR traceability but increases storage overhead"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The Regional Edge Router enforces geo-routing while the Consent Enforcement Component strictly checks purpose-based access policies before granting cross-region access. All attempts emit immutable audit trails via Keycloak and audit logging components.",
+    "elements": [
+     "API Gateway / BFF",
+     "Regional Edge Router & Policy Enforcer",
+     "Consent & Identity Service",
+     "Consent Enforcement Component",
+     "Audit & Transparency Component",
+     "Regional Relational Database"
+    ],
+    "sensitivity_points": [
+     "Strict verification of consent records prior to routing across geographic boundaries",
+     "Tamper-proof audit logging of unauthorized or authorized cross-border access requests"
+    ],
+    "tradeoffs": [
+     "Synchronous consent policy checks add slight latency to cross-regional clinical lookups"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "The Consent Enforcement Component updates transactional consent ledgers and streams events, but the architecture lacks an explicit mechanism or tombstoning pipeline to purge or retroactively invalidate previously exported data in BigQuery within 24 hours.",
+    "elements": [
+     "Consent & Identity Service",
+     "Consent Enforcement Component",
+     "Regional Relational Database",
+     "Regional Data Warehouse / ETL",
+     "Ingestion & Anonymization Worker",
+     "Regional Analytics Storage"
+    ],
+    "sensitivity_points": [
+     "Propagation speed of consent revocation from PostgreSQL through CDC to BigQuery",
+     "Auditability and verification of research data access suppression"
+    ],
+    "tradeoffs": [
+     "Asynchronous CDC data synchronization decouples transactional load but delays analytical data deletion"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9583333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent & Identity Service",
+     "Consent Enforcement Component",
+     "Audit & Logging Interceptor",
+     "Ingestion & Anonymization Worker",
+     "Regional Relational Database",
+     "Regulatory Authorities"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Regional Edge Router & Policy Enforcer",
+     "Regional Relational Database",
+     "Regional Data Warehouse / ETL"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Audit & Traceability Logger",
+     "Compliance Exporter",
+     "Regulatory Authorities"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Video Consultation Service",
+     "SFU Media Router"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Video Consultation Service",
+     "Signaling Component",
+     "SFU Media Router",
+     "Session Management Controller"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Integration & Interoperability Service",
+     "API Router & Transformer Component",
+     "US FHIR Connector Component",
+     "EU National Standard Connector Component",
+     "External Pharmacies"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Triage Orchestrator",
+     "Inference Adapter"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Consent & Identity Service",
+     "Consent Enforcement Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Regional Edge Router & Policy Enforcer",
+     "Consent Enforcement Component",
+     "Regional Relational Database",
+     "Regional Data Warehouse / ETL"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Video Consultation Service",
+     "SFU Media Router"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Audit & Traceability Logger"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration & Interoperability Service",
+     "US FHIR Connector Component",
+     "EU National Standard Connector Component",
+     "External Pharmacies"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

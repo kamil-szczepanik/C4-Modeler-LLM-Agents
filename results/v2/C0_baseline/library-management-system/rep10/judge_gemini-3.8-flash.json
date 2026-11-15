@@ -1,0 +1,238 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "Cataloging of physical and digital items (R-01) is explicitly supported by 'Catalog Management Service' alongside bulk imports. Circulation workflows and self-service portals are fully realized through 'Circulation Controller & Service' and 'Patron Web App & API'.",
+   "performance_efficiency": "The sub-800ms search target (R-05) is addressed via a dedicated 'Search Engine' (OpenSearch), Kafka event-driven index synchronization, PgBouncer connection pooling, and token caching via Redis in 'Authentication & Authorization Filter Component'.",
+   "compatibility": "Interoperability is thoroughly addressed with external systems: standard OIDC/OAuth 2.0 with 'External Identity Provider (IdP)', REST/TLS 1.3 for 'External Payment Gateway' and 'External Notification Service', and adapters for 'Interlibrary Loan (ILL) Network'.",
+   "usability": "Patrons are served by 'Patron UI Component' using SSR/React for self-service, while staff use dedicated endpoints. However, dedicated UI interfaces for 'Librarians and Circulation Staff' and 'Library Administrators' are not explicitly defined at the container level.",
+   "reliability": "Fault tolerance is reinforced via Resilience4j in 'Payment & ILL Client Adapters', asynchronous decoupling through Kafka, 'circulation.dlq' dead-letter queue handling, PgBouncer connection pooling, and automated OpenSearch snapshots.",
+   "security": "EU data residency constraints are enforced across EU-hosted PostgreSQL, OpenSearch, and Kafka. Security is fortified with AES-256 encryption, TLS 1.3/mTLS, rate limiting, pgcrypto audit logging, and 'Data Masking Component' for patron PII protection.",
+   "maintainability": "Decomposition follows clear domain boundaries across API Gateway, Staff Management API, Patron Web App & API, and Notification Dispatcher. Components exhibit high cohesion, decoupled asynchronous event publishing, and clean hexagonal-style client adapters.",
+   "portability": "Services leverage widely supported runtime stacks (Go, Node.js, Spring Boot) and standard protocols. Relying on managed cloud dependencies (Kafka, OpenSearch, PostgreSQL) introduces slight vendor-specific coupling, though mitigated by open protocols."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 2.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Managed OpenSearch cluster and Redis token caching at the API Gateway offload authentication overhead and provide sub-second search querying. However, explicit search result caching or autoscaling policies under peak load are not detailed.",
+    "elements": [
+     "API Gateway",
+     "Authentication & Authorization Filter Component",
+     "Search Engine",
+     "Query Parser & Router",
+     "Search Storage Node"
+    ],
+    "sensitivity_points": [
+     "OpenSearch cluster sizing and shard replication under high concurrent query loads",
+     "Redis token-cache hit ratio preventing latency degradation from the external IdP"
+    ],
+    "tradeoffs": [
+     "Memory footprint of Redis token caching versus latency reduction on request authorization"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalog updates are decoupled asynchronously via Kafka topics and processed by the Index Management Service using index aliasing, isolating write load from search queries and ensuring updates appear well within 5 minutes without query degradation.",
+    "elements": [
+     "Catalog Management Service",
+     "catalog.events",
+     "Index Management Service",
+     "Search Storage Node",
+     "Query Parser & Router"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer lag on catalog update events during sustained write throughput"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of catalog updates versus near-instant search indexing performance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The search engine utilizes an OpenSearch cluster with automated geo-redundant snapshots, allowing node failovers without complete outages. Circulation operations persist separately in PostgreSQL and remain fully operational even if search nodes fail.",
+    "elements": [
+     "Search Storage Node",
+     "Circulation Controller & Service",
+     "PostgreSQL Database Engine Component"
+    ],
+    "sensitivity_points": [
+     "Replica shard configuration in the OpenSearch cluster for transparent node failover"
+    ],
+    "tradeoffs": [
+     "Cost and storage overhead of maintaining replica shards versus failover recovery speed"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The API Gateway proxies stateless instances of the Patron Web App & API, routing traffic away from failed nodes. Transactional loan integrity is secured in PostgreSQL via connection pooling and ACID compliance.",
+    "elements": [
+     "API Gateway",
+     "TLS Termination & Routing Plugin Component",
+     "Patron Web App & API",
+     "Connection Pooler Component",
+     "PostgreSQL Database Engine Component"
+    ],
+    "sensitivity_points": [
+     "API Gateway upstream health-check frequency and rapid traffic re-routing"
+    ],
+    "tradeoffs": [
+     "Aggressive health-check intervals increase network overhead to detect failed container instances"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Catalog Management Service handles digital and physical cataloging, but there is no specialized external e-book adapter abstraction. Adding a new provider requires modifying internal catalog service ingestion logic.",
+    "elements": [
+     "Catalog Management Service",
+     "Bulk Processing & Asynchronous Worker Component"
+    ],
+    "sensitivity_points": [
+     "Coupling of external ingestion formats inside the monolithic Catalog Management Service"
+    ],
+    "tradeoffs": [
+     "Consolidated catalog service simplicity versus modular extensibility for varied external digital providers"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "Circulation policies and loan rules reside directly in the Circulation Controller & Service. There is no external rule engine, configurable rule registry, or dynamic policy component to adjust rules without modifying and deploying code.",
+    "elements": [
+     "Circulation Controller & Service",
+     "PostgreSQL Database Engine Component"
+    ],
+    "sensitivity_points": [
+     "Hard-coded business logic in the circulation service requiring code redeployments"
+    ],
+    "tradeoffs": [
+     "Direct code logic execution performance versus flexibility of runtime dynamic configuration"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "EU data residency is enforced by design across PostgreSQL, OpenSearch, Kafka, and external dispatch services. Outbound interlibrary cross-border flows pass through a dedicated Data Masking Component that strips or pseudonymizes patron PII.",
+    "elements": [
+     "PostgreSQL Database Engine Component",
+     "Search Storage Node",
+     "Data Masking Component",
+     "Payment & ILL Client Adapters"
+    ],
+    "sensitivity_points": [
+     "Completeness of PII pseudonymization prior to external ILL cross-border egress"
+    ],
+    "tradeoffs": [
+     "Data processing overhead of inline PII masking versus absolute data sovereignty compliance"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Authentication and authorization filters validate tokens via external IdP, while Query Parser & Router applies Document-Level Security and RBAC. Audit logging streams to SIEM, though explicit loan-record ownership authorization checks in Patron API remain implicit.",
+    "elements": [
+     "Authentication & Authorization Filter Component",
+     "Patron API Controller",
+     "Audit Logging & Security Component",
+     "Observability Platform & SIEM"
+    ],
+    "sensitivity_points": [
+     "Enforcement of user-resource ownership validation at the API controller layer"
+    ],
+    "tradeoffs": [
+     "Granular security audit logging on every read attempt versus SIEM ingestion overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Database",
+     "Search Engine",
+     "Integration/Messaging Container",
+     "Database Client",
+     "PostgreSQL Database Engine Component",
+     "Search Storage Node",
+     "Data Masking Component",
+     "External Notification Service",
+     "External Payment Gateway"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Staff Management API",
+     "Catalog Management Service",
+     "catalog.events",
+     "PostgreSQL Database Engine Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Engine",
+     "Query Parser & Router",
+     "Search Storage Node",
+     "Authentication & Authorization Filter Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

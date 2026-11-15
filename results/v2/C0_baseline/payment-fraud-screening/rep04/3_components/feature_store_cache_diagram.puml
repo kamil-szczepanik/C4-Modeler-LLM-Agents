@@ -1,0 +1,21 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Feature Store & Cache container
+
+System_Ext(Scoring_Engine, "Scoring Engine", "Payment fraud scoring engine")
+System_Ext(Audit_Streaming_Pipeline, "Audit & Streaming Pipeline", "Audit and streaming data source")
+
+Container_Boundary(Feature_Store_and_Cache, "Feature Store & Cache") {
+    Component(Feature_Retrieval_API_Router, "Feature Retrieval API / Router", "Rust / Node.js", "Provides real-time, low-latency feature lookups and profile storage for the payment fraud scoring engine, ensuring sub-50ms transaction evaluations.")
+    Component(Hot_Cache_Layer, "Hot Cache Layer", "Amazon ElastiCache Serverless Redis", "Provides sub-millisecond hot feature retrieval with zero operational scaling toil to meet the R-04 performance SLA within budget.")
+    Component(Historical_Feature_Store, "Historical Feature Store", "Amazon DynamoDB on-demand", "Stores historical entity profiles with automated point-in-time recovery (PITR) to satisfy reliability constraints without cluster sizing overhead.")
+    Component(Cache_Invalidation_Sync_Worker, "Cache Invalidation & Sync Worker", "Rust", "Ingests feature/rule state updates via Amazon Kinesis Consumer in under 1 second to keep the cache synchronized.")
+}
+
+Rel(Scoring_Engine, Hot_Cache_Layer, "Retrieves real-time aggregates and hot features", "TCP / RESP with TLS 1.3")
+Rel(Scoring_Engine, Historical_Feature_Store, "Queries wider entity profiles", "AWS SDK over HTTPS/2")
+Rel(Audit_Streaming_Pipeline, Cache_Invalidation_Sync_Worker, "Ingests feature/rule state updates", "Amazon Kinesis Consumer (TCP/HTTP)")
+
+@enduml

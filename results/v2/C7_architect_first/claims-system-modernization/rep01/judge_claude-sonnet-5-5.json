@@ -1,0 +1,343 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 3,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.625,
+  "justifications": {
+   "functional_suitability": "Claims Web Application (Claim Submission Feature, Adjuster Workspace) covers R-01/R-02; Feature Flag Manager, Claim Type Adapter and Dual-Write Router support per-type migration (R-03). Gaps: no distinct broker interface, payment gateway link unconnected to any container, Data Access Layer undefined.",
+   "performance_efficiency": "Adjuster Workspace uses TanStack Query caching, and Service Bus plus Batch Window Throttler decouple the 5 s mainframe. Container Apps scale. Gaps: no server-side cache or read model for mainframe data, no quantified load figures, cold-load first-view not addressed.",
+   "compatibility": "Anti-Corruption Layer with Mainframe Translation Adapter, mTLS over ExpressRoute and Service Bus fits the legacy interface. Entra ID via OIDC/MSAL, Payment Gateway via REST. Gaps: mainframe interface-change limit not explicitly handled, no concrete mainframe protocol detail (AMQP vs TCP inconsistent).",
+   "usability": "Routing & Shell Component with WCAG 2.1 AA, Claim Submission Feature with multi-step forms and local storage resilience, and an Adjuster Workspace. Gaps: brokers have no dedicated features, no UX feedback for async status, a single shared web app for all groups.",
+   "reliability": "Idempotency & Outbox Processor, Polly in Rate Limiting & Resilience Component, local fallback cache, Break-Glass Workflow, Claim Provenance & Audit Registry for fallback, Service Bus queuing. Gaps: no multi-region HA or backup/DR, dual-write consistency risk, unclear rollback data reconciliation.",
+   "security": "Entra ID SSO via MSAL and Authentication & Authorization Middleware, memory-only tokens, WAF, mTLS, Key Vault with Automated Rotation Service, TDE, Row-Level Security, Dynamic Data Masking, SQL Ledger audit. Gaps: no explicit role-based authorization model; duplicated audit components.",
+   "maintainability": "Clear container decomposition: BFF, Claims Processing Service, Anti-Corruption Layer, Claim Type Adapter strategy pattern, GitOps Deployment Pipeline, and feature flags support one-day rollback. Gaps: inconsistent component diagrams (Claims Database duplicated, undefined Data Access Layer), Security & Observability container is an overloaded catch-all.",
+   "portability": "Hybrid Azure plus on-prem is addressed via ExpressRoute, mTLS and Bicep/Terraform in GitOps Deployment Pipeline; containerised Claims Processing Service. Gaps: heavy Azure-specific services (Functions, Cosmos DB, App Configuration) with no abstraction, and the team's limited cloud experience is unaddressed."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 2,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.625,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 4.0,
+   "Modifiability": 4.0,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Adjuster Workspace Component",
+     "Claims Database",
+     "Integration & Anti-Corruption Layer",
+     "Claims Processing Service"
+    ],
+    "sensitivity_points": [
+     "Cache freshness for mainframe-resident data",
+     "No read model explicitly synced from mainframe"
+    ],
+    "tradeoffs": [
+     "Aggressive caching versus data staleness",
+     "Local SQL copy versus consistency with mainframe"
+    ],
+    "justification": "TanStack Query caching and a local Azure SQL store can plausibly keep loads under 2 s. But no mechanism is shown for fetching mainframe-only data, such as a read model or timeout fallback; Polly is only generic. Cold loads remain a risk."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "elements": [
+     "Batch Window Throttler",
+     "Azure Service Bus",
+     "Claims Processing Service",
+     "Integration & Anti-Corruption Layer"
+    ],
+    "sensitivity_points": [
+     "Throttler is only a Service Bus queue",
+     "Container Apps autoscaling configuration"
+    ],
+    "tradeoffs": [
+     "Asynchronous acceptance versus delayed mainframe visibility",
+     "Queue buffering versus backlog after the window"
+    ],
+    "justification": "Submissions are persisted in Azure SQL and queued through Service Bus, with a throttler honoring the batch window. Scalable Container Apps absorb 5x peaks. Throttling logic details and backlog drain are unspecified, but the mechanism clearly protects the mainframe."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "elements": [
+     "Batch Window Throttler",
+     "Azure Service Bus",
+     "Idempotency & Outbox Processor",
+     "Claims Database",
+     "Mainframe Translation Adapter"
+    ],
+    "sensitivity_points": [
+     "Queue and outbox retention capacity",
+     "Ordering and replay after the window"
+    ],
+    "tradeoffs": [
+     "Eventual consistency versus uninterrupted submission",
+     "Durable queuing versus operational backlog"
+    ],
+    "justification": "Submissions are stored locally, outbox messages are persisted transactionally, and Service Bus holds them until the window closes. Idempotency prevents duplicates on replay. The outbox-to-queue relay isn't explicitly drawn, but the pattern is clearly present."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "elements": [
+     "Idempotency & Outbox Processor",
+     "Dual-Write Router",
+     "Claim Provenance & Audit Registry",
+     "Claims Orchestrator",
+     "Azure Service Bus"
+    ],
+    "sensitivity_points": [
+     "Dual-write partial failure handling",
+     "Mainframe-side deduplication support"
+    ],
+    "tradeoffs": [
+     "Dual-write complexity versus single-writer simplicity",
+     "Exactly-once effort versus throughput"
+    ],
+    "justification": "Transactional outbox, deduplication keys, and a provenance registry track routing state, supporting reconciliation without loss or duplication. However, a dual-write router is risky, and no explicit reconciliation job or mainframe-side idempotency is described."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "elements": [
+     "Claim Type Adapter",
+     "Feature Flag Manager",
+     "Dynamic Routing Store",
+     "Routing & Proxy Component",
+     "Break-Glass Workflow"
+    ],
+    "sensitivity_points": [
+     "Mainframe interface change quota of one per quarter",
+     "Data back-sync required for switch-back"
+    ],
+    "tradeoffs": [
+     "Per-claim-type isolation versus more adapters to maintain",
+     "Feature flag flexibility versus configuration risk"
+    ],
+    "justification": "A strategy-pattern adapter, feature flags, canary routing, and a break-glass workflow support per-type migration and switch-back within a day. Data resynchronization on rollback to the mainframe isn't detailed, and the mainframe interface change is not explicitly addressed."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "elements": [
+     "Claims Web Application",
+     "API Gateway / BFF",
+     "Integration & Anti-Corruption Layer",
+     "Claims Database"
+    ],
+    "sensitivity_points": [
+     "Mainframe-specific logic leaking into the BFF or UI",
+     "Final data migration of history"
+    ],
+    "tradeoffs": [
+     "Anti-corruption layer overhead versus a clean cutover",
+     "Retaining sync components versus decommission effort"
+    ],
+    "justification": "UIs talk only to the BFF and the Claims Processing Service, with the mainframe isolated behind an anti-corruption layer. Removing it leaves the UIs untouched, and Azure SQL is ready as the system of record. Historical data migration is not described."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "elements": [
+     "Authentication & Authorization Middleware",
+     "Claim Core Store",
+     "Audit Logger Component",
+     "Claims Processing Service"
+    ],
+    "sensitivity_points": [
+     "No broker-to-customer ownership model",
+     "Row-Level Security predicate source unspecified",
+     "Mainframe authorization not covered"
+    ],
+    "tradeoffs": [
+     "Fine-grained authorization versus performance and complexity"
+    ],
+    "justification": "JWT validation, Row-Level Security, and audit logging exist, but no broker-customer relationship authorization is defined. Denial recording is only implied via the audit logger, and nothing ensures enforcement in the mainframe, so access in both systems is not guaranteed."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Corporate Active Directory",
+     "Authentication Client Component",
+     "Token Validator Component",
+     "Mainframe Translation Adapter"
+    ],
+    "sensitivity_points": [
+     "Token lifetime and revocation interval",
+     "Mainframe credentials not tied to AD",
+     "Service account usage"
+    ],
+    "tradeoffs": [
+     "Short token lifetimes versus more reauthentication"
+    ],
+    "justification": "OIDC with Active Directory and memory-only tokens revoke access to the new platform quickly if token lifetimes are short. But the mainframe access path uses mTLS service identities and no AD-linked mainframe user deprovisioning is shown, so removal from both systems within 15 minutes is unaddressed."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Mainframe Claims System",
+     "Integration & Anti-Corruption Layer",
+     "Mainframe Translation Adapter",
+     "Dual-Write Router"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Batch Window Throttler",
+     "Integration & Anti-Corruption Layer",
+     "Idempotency & Outbox Processor"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Integration & Anti-Corruption Layer",
+     "Mainframe Translation Adapter"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Azure Static Web Apps",
+     "Azure Container Apps",
+     "Azure App Configuration",
+     "Azure Functions"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Claims Web Application",
+     "Claim Submission Feature Component",
+     "API Gateway / BFF",
+     "Claims Processing Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Web Application",
+     "Adjuster Workspace Component",
+     "Routing & Shell Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Feature Routing & Orchestration Component",
+     "Configuration & Feature Store",
+     "Feature Flag Manager",
+     "Dynamic Routing Store",
+     "Claim Type Adapter",
+     "Routing & Proxy Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Idempotency & Outbox Processor",
+     "Claims Orchestrator",
+     "Claim Provenance & Audit Registry",
+     "Dual-Write Router",
+     "Audit Logging Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Adjuster Workspace Component",
+     "Claims Database",
+     "Integration & Anti-Corruption Layer",
+     "Rate Limiting & Resilience Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Break-Glass Workflow",
+     "Feature Flag Manager",
+     "Dynamic Routing Store",
+     "Claim Type Adapter",
+     "Claim Provenance & Audit Registry",
+     "GitOps Deployment Pipeline"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Authentication Client Component",
+     "Authentication & Authorization Middleware",
+     "Token Validator Component",
+     "Corporate Active Directory",
+     "Security & Observability"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

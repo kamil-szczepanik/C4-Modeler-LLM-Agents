@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the RabbitMQ container
+
+System_Ext(Core_Domain_Service, "Core Domain Service", "External service")
+System_Ext(Integration_Service, "Integration Service", "External service")
+System_Ext(Notification_Service, "Notification Service", "External service")
+System_Ext(Peer_RabbitMQ_Nodes, "Peer RabbitMQ Nodes", "External service")
+System_Ext(Prometheus_Monitoring, "Prometheus / Monitoring", "External service")
+
+Container_Boundary(RabbitMQ, "RabbitMQ") {
+    Component(Exchange_Router, "Exchange Router", "AMQP 0-9-1", "Direct & Topic Exchanges routing messages.")
+    Component(Message_Queues, "Message Queues", "RabbitMQ Quorum Queues", "Durable and Quorum Queues holding persistent messages on EU volumes.")
+    Component(Authentication_Authorization_Engine, "Authentication & Authorization Engine", "Erlang SSL and TLS", "Client certificate validation module.")
+    Component(Dead_Letter_Exchange, "Dead Letter Exchange & Retry Router", "RabbitMQ", "Handles failed or unacknowledged messages.")
+    Component(Node_Manager, "Cluster Coordination Manager", "Erlang Distributed Node Manager", "Handling Quorum Queue replication.")
+    Component(Management_Plugin, "Management Plugin", "HTTP/REST", "Exposes metrics and health checks.")
+}
+
+Rel(Core_Domain_Service, Exchange_Router, "Publishes domain events", "AMQP, JSON, TLS")
+Rel(Integration_Service, Exchange_Router, "Publishes legacy sync events", "AMQP, JSON")
+Rel(Exchange_Router, Message_Queues, "Routes messages", "AMQP")
+Rel(Message_Queues, Notification_Service, "Dispatches async alerts", "AMQP")
+Rel(Message_Queues, Integration_Service, "Syncs legacy ILS data", "AMQP")
+Rel(Message_Queues, Dead_Letter_Exchange, "Forwards poisoned or expired messages", "AMQP")
+Rel(Node_Manager, Peer_RabbitMQ_Nodes, "Replicates quorum states", "Erlang Distributed, TCP 25672")
+Rel(Prometheus_Monitoring, Management_Plugin, "Scrapes broker metrics", "HTTP")
+@enduml

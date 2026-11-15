@@ -1,0 +1,312 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "Claim Submission Module satisfies R-01 for customers and brokers. Adjuster Workbench Module fulfills R-02 for claims adjusters. Feature Flag & Migration Service alongside Feature Flag & Routing Engine enables incremental claim type migration per R-03.",
+   "performance_efficiency": "Caching / Read-Model Store isolates adjusters from 5-second mainframe latency to meet the 2-second target (R-05). TanStack Query aids client caching. However, explicit mechanisms to safeguard the strict nightly batch window (23:00-05:00) against integration workloads are omitted.",
+   "compatibility": "Mainframe Integration Adapter, Anti-Corruption Layer Component, and Integration Staging Store ensure seamless coexistence and protocol translation with the Legacy Mainframe over ExpressRoute. The Auth Client Module integrates cleanly with Active Directory / Entra ID.",
+   "usability": "Frontend SPA provides dedicated interfaces for all user personas: Claim Submission Module for policyholders and brokers, and Adjuster Workbench Module for claims adjusters and support agents.",
+   "reliability": "Transactional consistency and zero data loss (R-04) are guaranteed by Audit & Outbox Component using the transactional outbox pattern, Queue Publisher buffering, System-Versioned Temporal Tables, and Polly Resilience Pipeline for fault tolerance against mainframe hiccups.",
+   "security": "R-07 is achieved via Auth Client Module and API Management Gateway enforcing Active Directory OIDC/OAuth2 SSO. Mainframe Communication Client secures traffic with mTLS, and Secrets Management centralizes credentials via Azure Key Vault.",
+   "maintainability": "Feature Flag & Routing Engine supports rolling back claim types within one day (R-06). Modular Monolith architecture in Backend Service and Anti-Corruption Layer isolate legacy dependencies, keeping development manageable for a team with limited cloud experience.",
+   "portability": "The architecture adheres to the hybrid deployment model (azure-westeurope and on-premises mainframe) via ExpressRoute and App Service. However, extensive reliance on Azure-specific PaaS services (Azure SQL, Key Vault, Service Bus) creates cloud vendor lock-in."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The Caching and Read-Model Store in the Backend Service isolates legacy mainframe latency, while TanStack Query in the SPA provides client-side caching to maintain sub-2 second response times.",
+    "elements": [
+     "Frontend SPA",
+     "API Gateway",
+     "Backend Service",
+     "Caching / Read-Model Store"
+    ],
+    "sensitivity_points": [
+     "Cache invalidation frequency when legacy mainframe data changes",
+     "Read-model synchronization freshness"
+    ],
+    "tradeoffs": [
+     "Fast screen loads accepted at the cost of potential eventual consistency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Submissions are accepted by the Backend Service and buffered asynchronously via the Queue Publisher and Staging Store, shielding the mainframe. However, automated throttling specifically pegged to the batch window lacks explicit scheduling detail.",
+    "elements": [
+     "Frontend SPA",
+     "API Gateway",
+     "Backend Service",
+     "Queue Publisher",
+     "Integration Staging Store"
+    ],
+    "sensitivity_points": [
+     "Buffer capacity of the Azure Service Bus queue under extended peak load"
+    ],
+    "tradeoffs": [
+     "Buffering requests guarantees availability but delays final synchronization with the mainframe"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Transactional Outbox in the Backend Service combined with the Service Bus Queue Publisher buffers claims during mainframe downtime, and Polly resilience retries transmission after the window closes.",
+    "elements": [
+     "Audit & Outbox Component",
+     "Queue Publisher",
+     "Polly Resilience Pipeline",
+     "Integration Staging Store"
+    ],
+    "sensitivity_points": [
+     "Queue message time-to-live matching the 6-hour batch window duration"
+    ],
+    "tradeoffs": [
+     "Asynchronous message forwarding trades real-time legacy confirmation for uninterrupted ingestion"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The architecture incorporates a Transactional Outbox, Polly retries, and System-Versioned Temporal Tables for tracking state changes. However, automated bi-directional reconciliation and compensation logic for partial mainframe commits are not fully detailed.",
+    "elements": [
+     "Audit & Outbox Component",
+     "Audit & History Engine",
+     "Polly Resilience Pipeline",
+     "Claim Operational Store"
+    ],
+    "sensitivity_points": [
+     "Idempotency key enforcement across the Mainframe Integration Adapter"
+    ],
+    "tradeoffs": [
+     "Strict consistency via outbox and auditing introduces additional transactional write overhead"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Feature Flag & Routing Engine along with the Anti-Corruption Layer allows dynamic routing of claims by type and provides instant rollback capabilities via configuration without redeploying code.",
+    "elements": [
+     "Feature Flag & Migration Service",
+     "Feature Flag & Routing Engine",
+     "Anti-Corruption Layer (ACL) Component"
+    ],
+    "sensitivity_points": [
+     "Granularity of the routing rules inside the Feature Flag & Routing Engine"
+    ],
+    "tradeoffs": [
+     "Maintaining dual routing paths and ACL abstraction increases architectural complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The UI connects exclusively to the API Gateway and Backend Service. The Anti-Corruption Layer encapsulates mainframe interaction, enabling legacy decommissioning by retiring the adapter without altering client interfaces.",
+    "elements": [
+     "Frontend SPA",
+     "API Gateway",
+     "Backend Service",
+     "Anti-Corruption Layer (ACL) Component"
+    ],
+    "sensitivity_points": [
+     "Decoupling quality of the backend domain models from legacy data schemas"
+    ],
+    "tradeoffs": [
+     "Introducing an ACL incurs initial mapping effort but avoids future UI refactoring"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "API Gateway validates OAuth2 JWT tokens and logging records activity, but specific multi-tenant authorization logic, broker-customer ownership validation, and legacy system permission sync are not explicitly defined in backend components.",
+    "elements": [
+     "API Management Gateway",
+     "Auth Client Module",
+     "Claim Management Module",
+     "Audit & Outbox Component"
+    ],
+    "sensitivity_points": [
+     "Enforcement of tenant and broker ownership boundaries in backend business logic"
+    ],
+    "tradeoffs": [
+     "Fine-grained attribute-based authorization checks introduce minor processing latency per request"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Entra ID centralizes authentication, but standard JWT expiration can delay revocation beyond 15 minutes unless Continuous Access Evaluation is explicitly configured. Furthermore, revocation synchronization to the legacy mainframe remains unaddressed.",
+    "elements": [
+     "Identity Provider",
+     "Auth Client Module",
+     "API Management Gateway"
+    ],
+    "sensitivity_points": [
+     "OAuth token lifetime and support for Continuous Access Evaluation (CAE)",
+     "Propagation of identity status changes to on-premise mainframe accounts"
+    ],
+    "tradeoffs": [
+     "Short token lifetimes improve revocation speed but increase authentication token renewal traffic"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Mainframe Integration Adapter",
+     "Anti-Corruption Layer (ACL) Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Mainframe Integration Adapter",
+     "Anti-Corruption Layer (ACL) Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Backend Service",
+     "Frontend SPA"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers (Policyholders)",
+     "Brokers",
+     "Frontend SPA",
+     "Claim Submission Module",
+     "API Gateway"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Frontend SPA",
+     "Adjuster Workbench Module",
+     "API Gateway",
+     "Backend Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Feature Flag & Migration Service",
+     "Feature Flag & Routing Engine",
+     "Claim Management Module"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Claim Management Module",
+     "Audit & Outbox Component",
+     "Queue Publisher",
+     "Polly Resilience Pipeline",
+     "Claim Operational Store",
+     "Audit & History Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Caching / Read-Model Store",
+     "Adjuster Workbench Module"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Feature Flag & Migration Service",
+     "Feature Flag & Routing Engine",
+     "Audit & History Engine"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Identity Provider",
+     "Auth Client Module",
+     "API Management Gateway"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

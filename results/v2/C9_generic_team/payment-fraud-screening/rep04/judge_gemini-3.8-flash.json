@@ -1,0 +1,308 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 4,
+   "security": 3,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 3.625,
+  "justifications": {
+   "functional_suitability": "While Real-Time Scoring Container and Hot-Reload Manager address scoring and zero-downtime updates (R-01, R-03), Case Management Container has no data ingestion link from the scoring pipeline or event bus, leaving the routing of review cases disconnected.",
+   "performance_efficiency": "Model Evaluation Engine uses in-memory execution, while Event Dispatcher offloads audit logging asynchronously to AWS SQS FIFO. Rate Limiter & Idempotency Validator in ElastiCache Redis helps sustain the 3,000 req/s throughput with sub-50ms latency.",
+   "compatibility": "Ingress Router and Payload Validator provide clean interoperability with the Payment Gateway using OpenAPI and JSON Schema specifications over HTTPS/REST, conforming well to external gateway integration standards.",
+   "usability": "Fraud Analysts are acknowledged via the Case Management Container, but no concrete web UI or presentation component is modeled, only backend services (Case Workflow Controller, Case Service Layer) handling workflows.",
+   "reliability": "Resilience & Telemetry Manager includes explicit circuit breakers and fallbacks ensuring unblocked payments per R-07. Embedded Append-Only Log provides local buffering during network partitions to ensure audit durability.",
+   "security": "Tamper-Evident Audit Log Store effectively enforces 7-year WORM compliance using S3 Object Lock and SHA-256 hashing. However, specific components or mechanisms for tokenizing card data and masking PANs for analysts (R-05, PCI-DSS) are omitted.",
+   "maintainability": "The system exhibits clean modular boundaries with distinct containers for ingress, scoring, audit, and cases. Hot-Reload Manager isolates model deployment, and Case Management adopts layered service and repository patterns.",
+   "portability": "The architecture targets AWS eu-west-1 directly using managed services including Amazon S3, AWS SQS FIFO, and Secrets Manager, perfectly matching the specified cloud deployment platform."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 2,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.65625,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 3.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "In-memory model execution and asynchronous audit dispatch offload critical path work. However, synchronous hops through ingress schema validation and Redis idempotency checks add network overhead that must be tightly managed to guarantee P99 sub-50ms latency at 3,000 TPS.",
+    "elements": [
+     "Ingress Router",
+     "Payload Validator",
+     "Rate Limiter & Idempotency Validator",
+     "Model Evaluation Engine",
+     "Event Dispatcher"
+    ],
+    "sensitivity_points": [
+     "Redis network latency and connection pooling under 3,000 requests per second",
+     "In-memory evaluation runtime efficiency without garbage collection pauses"
+    ],
+    "tradeoffs": [
+     "Strict schema validation before scoring improves data quality but increases latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case Management and Real-Time Scoring are isolated into distinct containers with dedicated data persistence. Analyst workloads targeting Case Repository have zero architectural coupling with real-time scoring paths, guaranteeing complete workload and performance isolation.",
+    "elements": [
+     "Case Management Container",
+     "Case Workflow Controller",
+     "Case Repository",
+     "Real-Time Scoring Container",
+     "Model Evaluation Engine"
+    ],
+    "sensitivity_points": [
+     "Physical separation of database workloads between case reviews and scoring runtime"
+    ],
+    "tradeoffs": [
+     "Asynchronous replication to case management introduces slight eventual consistency for analysts"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "A Circuit Breaker and fallback mechanism exist inside Real-Time Scoring, but an entire container crash leaves API Gateway without an explicit fallback route or local default decision policy, risking request timeouts exceeding the one-minute constraint.",
+    "elements": [
+     "API Gateway / Ingress Container",
+     "Ingress Router",
+     "Real-Time Scoring Container",
+     "Resilience & Telemetry Manager"
+    ],
+    "sensitivity_points": [
+     "API Gateway timeout and fail-open routing configuration during upstream container outage"
+    ],
+    "tradeoffs": [
+     "Failing open preserves payment processing availability at the cost of temporary fraud exposure"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Scoring dispatches audit events asynchronously via SQS/Kinesis, completely decoupling scoring latency from audit availability. The Audit Logging container includes an Embedded Append-Only Log providing local buffer durability if downstream storage or Firehose degrades.",
+    "elements": [
+     "Event Dispatcher",
+     "AWS SQS FIFO",
+     "Audit Logging Container",
+     "Embedded Append-Only Log",
+     "Tamper-Evident Audit Log Store"
+    ],
+    "sensitivity_points": [
+     "SQS retention limits and local append-only log disk space during prolonged outages"
+    ],
+    "tradeoffs": [
+     "Local disk buffering prevents event loss but adds operational complexity during recovery"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Hot-Reload Manager polls versioned S3 artifacts and reloads memory-resident models without process restarts, achieving zero downtime. Model versions are attached to decision events, though rollback automation and verification procedures are not explicitly detailed.",
+    "elements": [
+     "Hot-Reload Manager",
+     "Model Artifacts Store",
+     "Model Evaluation Engine",
+     "Event Dispatcher"
+    ],
+    "sensitivity_points": [
+     "Atomic pointer swap during memory model reloads to prevent race conditions"
+    ],
+    "tradeoffs": [
+     "In-process model hot-reloading avoids container redeployment but increases memory footprint"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The architecture only defines machine learning model hot-reloading from S3. There is no dedicated business rule engine, dynamic rule configuration manager, or distributed state store (such as sliding-window velocity counters) to support runtime rule updates.",
+    "elements": [
+     "Model Evaluation Engine",
+     "Hot-Reload Manager",
+     "Real-Time Scoring Container"
+    ],
+    "sensitivity_points": [
+     "Absence of a shared low-latency state store for real-time velocity checks"
+    ],
+    "tradeoffs": [
+     "Coupling rules into monolithic model artifacts delays rule deployment beyond requirements"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "justification": "While tokenization and masking are required by the brief, the architecture lacks a tokenization service, PAN masking components in Case Management, and any automated security monitoring or anomaly detection system to alert on compromised analyst access.",
+    "elements": [
+     "Case Management Container",
+     "Case Service Layer",
+     "Case Repository"
+    ],
+    "sensitivity_points": [
+     "Enforcement of field-level masking and role-based data filtering across analyst views"
+    ],
+    "tradeoffs": [
+     "Tokenizing cardholder data limits analytical context to protect compliance scope"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "S3 Object Lock in compliance mode combined with cryptographic SHA-256 validation guarantees tamper-evidence and 7-year retention. Retrieving six-year-old audit logs from S3 Glacier is achievable within one working day, though querying specific transactions lacks indexing details.",
+    "elements": [
+     "Tamper-Evident Audit Log Store",
+     "Model Artifacts Store",
+     "Audit Logging Container",
+     "Validation Proxy"
+    ],
+    "sensitivity_points": [
+     "S3 Glacier retrieval latency and metadata indexing for historical query efficiency"
+    ],
+    "tradeoffs": [
+     "WORM storage with Glacier lifecycle drastically reduces cost while trading off instantaneous querying"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "none",
+   "R-06": "partial",
+   "R-07": "partial"
+  },
+  "coverage": 0.45454545454545453,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "AWS Secrets Manager / Parameter Store",
+     "Secrets Retrieval Engine",
+     "Payload Validator",
+     "Tamper-Evident Audit Log Store"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Audit Logging Container",
+     "Amazon S3",
+     "Tamper-Evident Audit Log Store",
+     "Validation Proxy"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "API Gateway / Ingress Container",
+     "Real-Time Scoring Container",
+     "Model Evaluation Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Container",
+     "Case Workflow Controller",
+     "Case Service Layer",
+     "Case Repository",
+     "Fraud Analysts"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Hot-Reload Manager",
+     "Real-Time Scoring Container",
+     "Model Artifacts Store",
+     "Amazon S3"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Container",
+     "Model Evaluation Engine",
+     "Event Dispatcher",
+     "Rate Limiter & Idempotency Validator"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "none",
+    "elements": []
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit Logging Container",
+     "Validation Proxy",
+     "Embedded Append-Only Log",
+     "Firehose Dispatcher",
+     "Tamper-Evident Audit Log Store",
+     "Amazon S3"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Resilience & Telemetry Manager"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

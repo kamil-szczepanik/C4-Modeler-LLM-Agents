@@ -1,0 +1,304 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 3.875,
+  "justifications": {
+   "functional_suitability": "The Go Scoring Engine and Node.js Case Management fulfill R-01, R-02, and R-03 via the Rule Engine Hot-Reloader. However, there is no direct link or event route connecting 'review' decisions from the scoring engine into the case management workflow.",
+   "performance_efficiency": "Sub-50ms P99 at 3,000 TPS is well-supported by the Go Scoring Engine, in-memory Amazon ElastiCache integration, and asynchronous audit offloading via Amazon SQS / EventBridge. However, using AWS API Gateway as the ingress for 3,000 TPS introduces potential latency overhead.",
+   "compatibility": "The architecture cleanly integrates with external payment gateways and core ledgers using standard interfaces, including gRPC/REST over mTLS, HTTPS, and AWS S3 Object Lock / QLDB protocols.",
+   "usability": "Fraud Analyst & Risk Manager interactions are routed via Node.js Case Management with AWS Cognito authentication, but no user interface or web client container is defined to support actual analyst workflows.",
+   "reliability": "Dead-letter queues and asynchronous decoupling are present, but the architecture lacks a concrete fallback, circuit-breaker, or fail-open mechanism in AWS API Gateway or Go Scoring Engine to satisfy R-07 when scoring becomes unavailable.",
+   "security": "Strong security mechanisms are detailed, including mTLS, KMS-backed Audit Signer, AWS Cognito, Memory Sanitizer Middleware, and QLDB ledger immutability. Explicit PAN tokenization and masking mechanisms for analysts (R-05) are omitted.",
+   "maintainability": "Clear modular separation between the Go Scoring Engine and Node.js Case Management. The use of managed AWS services (ECS Fargate, Aurora Serverless, EventBridge) is well-suited for a small team of three engineers.",
+   "portability": "While Go and Node.js containers can run anywhere, the architecture is tightly coupled to proprietary AWS managed services, including AWS QLDB, Cognito, EventBridge, and Aurora Serverless v2."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 2,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The Go scoring engine uses in-memory evaluation and Redis for sub-50ms latency. However, routing 3,000 TPS of gRPC traffic through AWS API Gateway introduces network latency risks that could threaten P99 targets under peak load.",
+    "elements": [
+     "AWS API Gateway",
+     "Go Scoring Engine",
+     "Feature Extractor Component",
+     "Scoring & Evaluation Core"
+    ],
+    "sensitivity_points": [
+     "AWS API Gateway latency overhead under 3,000 TPS",
+     "Redis read latency for feature extraction at peak load"
+    ],
+    "tradeoffs": [
+     "Managed ingress simplicity traded against raw network throughput and microsecond latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management is completely decoupled from the real-time scoring engine, running on independent ECS Fargate tasks and an Aurora PostgreSQL database. Analyst traffic cannot resource-starve the scoring path.",
+    "elements": [
+     "Node.js Case Management",
+     "Amazon Aurora PostgreSQL Serverless v2",
+     "Go Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Total compute and database isolation between scoring and review workloads"
+    ],
+    "tradeoffs": [
+     "Operational cost of dual database technologies versus workload isolation guarantees"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture lacks an explicit fallback or stand-in processing mechanism. If the Go Scoring Engine crashes, API Gateway has no alternative routing rule or degraded decision mode defined to prevent payment blocking.",
+    "elements": [
+     "AWS API Gateway",
+     "Upstream Router",
+     "Go Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Absence of stand-in processing rules or circuit-breaking fallbacks in ingress"
+    ],
+    "tradeoffs": [
+     "Architectural simplicity traded against automated fail-open/fallback decision continuity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The scoring engine emits audit events asynchronously to Amazon EventBridge and buffered Amazon SQS queues with DLQs. QLDB slowdowns or outages do not backpressure or block real-time scoring.",
+    "elements": [
+     "Go Scoring Engine",
+     "Amazon SQS / EventBridge",
+     "AWS QLDB",
+     "Audit Ingestion Service"
+    ],
+    "sensitivity_points": [
+     "SQS queue depth and retention limits during prolonged ledger outages"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of audit ingestion traded for zero impact on scoring latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Rule Engine Hot-Reloader Component facilitates dynamic model updates without downtime. However, the model version rollback mechanism and validation pipeline across Fargate container replicas are not fully detailed.",
+    "elements": [
+     "Rule Engine Hot-Reloader Component",
+     "Scoring & Evaluation Core",
+     "Go Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Atomic reloading and state synchronization across multiple running engine tasks"
+    ],
+    "tradeoffs": [
+     "In-process dynamic reloader flexibility versus container immutability best practices"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Dynamic rule hot-reloading and Redis feature extraction support rapid rule additions like velocity checks. Audit Signer logs rule evaluations, but authoring, testing, and deployment workflows for analysts are not modeled.",
+    "elements": [
+     "Rule Engine Hot-Reloader Component",
+     "Feature Extractor Component",
+     "Audit Signer Component"
+    ],
+    "sensitivity_points": [
+     "Validation of hot-reloaded rules to prevent runtime crashes during scoring"
+    ],
+    "tradeoffs": [
+     "Fast runtime rule propagation traded against formal pre-deployment regression pipelines"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "justification": "The architecture omits a card tokenization vault or token service, leaving masking mechanisms unclear. Furthermore, automated anomaly detection and alerting within 15 minutes are absent from the Cognito and access layers.",
+    "elements": [
+     "AWS Cognito & AWS Secrets Manager",
+     "Node.js Case Management",
+     "Case State Repository"
+    ],
+    "sensitivity_points": [
+     "Missing card tokenization component within the PCI-DSS boundary",
+     "Lack of real-time behavioral monitoring and alerting for analyst accounts"
+    ],
+    "tradeoffs": [
+     "Relying on off-the-shelf Cognito authentication traded against specialized fraud analyst monitoring"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The design combines AWS QLDB for cryptographic immutability with S3 Object Lock and an asynchronous verification worker. Historical decisions, signed inputs, and model versions remain tamper-evident and queryable across the 7-year retention period.",
+    "elements": [
+     "AWS QLDB",
+     "Ledger Core",
+     "Verification & Export Worker",
+     "Core Ledger / Compliance Archive"
+    ],
+    "sensitivity_points": [
+     "Long-term cryptographic digest verification and immutable storage lifecycle policies"
+    ],
+    "tradeoffs": [
+     "Dual ledger and archive retention complexity traded for guaranteed 7-year non-repudiation"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "none",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "none"
+  },
+  "coverage": 0.6363636363636364,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "AWS API Gateway",
+     "Memory Sanitizer Middleware",
+     "AWS QLDB",
+     "Ledger Core",
+     "Secrets Vault",
+     "AWS Cognito & AWS Secrets Manager"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Core Ledger / Compliance Archive",
+     "AWS QLDB",
+     "Verification & Export Worker",
+     "Audit Signer Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none"
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Go Scoring Engine",
+     "Node.js Case Management",
+     "Amazon Aurora PostgreSQL Serverless v2",
+     "AWS QLDB"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Go Scoring Engine",
+     "Scoring & Evaluation Core"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Node.js Case Management",
+     "API Router / Controller",
+     "Case Workflow Service",
+     "Amazon Aurora PostgreSQL Serverless v2",
+     "Case State Repository"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Rule Engine Hot-Reloader Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Go Scoring Engine",
+     "HTTP/gRPC Ingress Handler",
+     "Feature Extractor Component",
+     "Scoring & Evaluation Core"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Secrets Vault",
+     "Memory Sanitizer Middleware"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit Signer Component",
+     "Amazon SQS / EventBridge",
+     "AWS QLDB",
+     "Audit Ingestion Service",
+     "Ledger Core"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none"
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

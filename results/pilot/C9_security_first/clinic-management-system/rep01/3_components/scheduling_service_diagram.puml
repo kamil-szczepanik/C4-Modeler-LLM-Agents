@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Scheduling Service container
+
+System_Ext(NGINX_Kong_API_Gateway, "NGINX/Kong API Gateway", "External API gateway routing scheduling requests")
+System_Ext(Distributed_PostgreSQL_Database, "Distributed PostgreSQL Database", "Primary transactional data store persisting encrypted records")
+System_Ext(Apache_Kafka_Event_Broker, "Apache Kafka Event Broker", "Event broker for decoupling asynchronous notifications and reminders")
+
+Container_Boundary(scheduling_service, "Scheduling Service") {
+    Component(AppointmentController, "AppointmentController", "gRPC / Spring Boot / OAuth2/OIDC", "Handles incoming gRPC routing and OAuth2/OIDC JWT scope validation")
+    Component(CalendarManager, "CalendarManager", "Java / Spring Beans", "Executes core scheduling business logic and distributed locking")
+    Component(ResourceAllocationEngine, "ResourceAllocationEngine", "Java / Spring Beans", "Manages clinician, room, and equipment availability")
+    Component(SlotCacheAdapter, "SlotCacheAdapter", "Redis Protocol / Spring Data", "Interfaces with Redis to cache practitioner availability matrices")
+    Component(PersistenceAdapter, "PersistenceAdapter", "Spring Data JPA / JDBC", "Interfaces with Distributed PostgreSQL Database via Spring Data JPA")
+    Component(KafkaEventPublisher, "KafkaEventPublisher", "Apache Kafka Client", "Publishes domain events to Apache Kafka Event Broker")
+    Component(NotificationDispatcher, "NotificationDispatcher", "Java / Spring Boot Async", "Processes async domain events for automated reminders and rescheduling")
+}
+
+Rel(NGINX_Kong_API_Gateway, AppointmentController, "Routes scheduling requests", "gRPC with mTLS")
+Rel(CalendarManager, ResourceAllocationEngine, "Evaluates booking constraints", "In-process method calls")
+Rel(CalendarManager, SlotCacheAdapter, "Reads/writes availability", "Redis protocol")
+Rel(PersistenceAdapter, Distributed_PostgreSQL_Database, "Persists encrypted records", "JDBC with AES-256 and distributed locks")
+Rel(KafkaEventPublisher, Apache_Kafka_Event_Broker, "Streams domain events", "SASL/SCRAM authenticated event streaming")
+
+@enduml

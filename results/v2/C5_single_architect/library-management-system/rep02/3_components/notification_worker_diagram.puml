@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Notification Worker container
+
+Container_Boundary(notification_worker, "Notification Worker") {
+    Component(MessageConsumer, "Message Consumer", "Node.js / amqplib", "Consumes events from the message broker and passes deserialized events.")
+    Component(NotificationRouter, "Notification Router", "TypeScript", "Routes deserialized events and sends formatted payloads.")
+    Component(DeliveryClient, "Delivery Client", "Axios", "Sends notifications and forwards failed requests to the retry coordinator.")
+    Component(RetryCoordinator, "Retry Coordinator", "TypeScript / Bottleneck", "Manages exponential backoff, rate limiting, and retries failed requests.")
+    Component(DeadLetterHandler, "Dead Letter Handler", "TypeScript", "Routes poison messages to the Dead Letter Queue.")
+}
+
+System_Ext(MessageBroker, "Message Broker", "RabbitMQ / Apache Kafka", "External message broker for consuming events and routing DLQ messages.")
+System_Ext(ExternalNotificationService, "External Notification Service", "HTTPS Service", "External third-party service that receives notifications.")
+
+Rel(MessageConsumer, MessageBroker, "Consumes events", "AMQP")
+Rel(MessageConsumer, NotificationRouter, "Passes deserialized events", "In-memory function call")
+Rel(NotificationRouter, DeliveryClient, "Sends formatted payload", "In-memory function call")
+Rel(DeliveryClient, RetryCoordinator, "Forwards failed requests", "In-memory function call")
+Rel(DeliveryClient, ExternalNotificationService, "Sends notifications", "HTTPS")
+Rel(RetryCoordinator, ExternalNotificationService, "Retries requests", "HTTPS")
+Rel(DeadLetterHandler, MessageBroker, "Routes poison messages to DLQ", "AMQP")
+
+@enduml

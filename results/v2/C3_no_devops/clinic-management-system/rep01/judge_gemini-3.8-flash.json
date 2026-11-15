@@ -1,0 +1,306 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "All requirements are explicitly covered: Patient Registry Component captures demographics, Scheduling & Resource Component manages clash checks, EMR Management Component handles records, and Billing & Claims Component connects to payment clearinghouses.",
+   "performance_efficiency": "EMR sub-second targets are supported by the frontend EMR View Engine using virtualization and local caching, Redis for clash checks, and Kafka for async domain events, though database read-scaling mechanisms are omitted.",
+   "compatibility": "External interoperability is thoroughly addressed by the Interoperability Gateway via the FHIR API Facade Component, HL7 v2 to FHIR Adapter Component (Camel), and dedicated external payment gateway connectors.",
+   "usability": "Distinct interfaces serve all user roles via Patient Portal (SPA) and Staff Dashboard (SPA), supporting operational flows with the Scheduling & Intake Controller and local draft preservation in Local Session State Manager.",
+   "reliability": "While WebSocket Reconnection Manager and Kafka buffering are specified, there are no active-active data synchronization or cross-region replication mechanisms between on-prem-k8s and eu-central-1 to support 99.99% uptime.",
+   "security": "HIPAA, GDPR, and R-05 are addressed via IdP MFA, mTLS via Istio, JWE envelope encryption, S3 KMS encryption with WORM Object Lock, Audit & Compliance Interceptor Component, and Break-Glass Authorization Component.",
+   "maintainability": "Clear modular decomposition separates interoperability, gateway, and UI layers with well-defined contracts. However, Core Clinical & Billing Services aggregates multiple major business subdomains into a single container.",
+   "portability": "Workloads are containerized, but targeting a hybrid deployment (on-prem-k8s and eu-central-1) is compromised by hard dependencies on AWS KMS and S3-specific primitives without specifying on-prem equivalents."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 2.5,
+   "Modifiability": 4.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "EMR View Engine uses virtualized rendering and local caching, while API Gateway load balances traffic. However, backend database connection pooling and read-replica scaling under concurrent peak loads are not explicitly detailed.",
+    "elements": [
+     "Staff Dashboard (SPA)",
+     "EMR View Engine",
+     "API Gateway",
+     "Core Clinical & Billing Services",
+     "EMR Management Component"
+    ],
+    "sensitivity_points": [
+     "Client-side virtualization and caching efficiency",
+     "API gateway routing latency under concurrent requests",
+     "Database read throughput for EMR queries"
+    ],
+    "tradeoffs": [
+     "Client-side caching improves render speed but risks viewing slightly stale clinical data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "FHIR API Facade and Apache Camel decouple ingestion via Kafka queues, shielding core clinical services from peak ingestion loads. Rate limiting at the gateway helps maintain EMR read performance under load.",
+    "elements": [
+     "Interoperability & Analytics Gateway Container",
+     "FHIR API Facade Component",
+     "HL7 v2 to FHIR Adapter Component",
+     "API Gateway",
+     "Core Clinical & Billing Services"
+    ],
+    "sensitivity_points": [
+     "Kafka ingestion throughput and queue partitioning",
+     "HAPI FHIR translation and validation overhead"
+    ],
+    "tradeoffs": [
+     "Asynchronous queue ingestion preserves core EMR performance at the cost of slight visibility latency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "Although active-active hybrid cloud is mandated, the architecture omits global server load balancing (GSLB) and cross-region database replication mechanisms needed to failover to on-prem within 1 minute without data loss.",
+    "elements": [
+     "API Gateway",
+     "Core Clinical & Billing Services",
+     "Interoperability & Analytics Gateway Container"
+    ],
+    "sensitivity_points": [
+     "Cross-region data replication latency and synchronization consistency",
+     "Global DNS or GSLB failover switching time"
+    ],
+    "tradeoffs": [
+     "Zero data loss across hybrid sites requires synchronous replication, increasing write latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Kafka enables asynchronous retry and decoupling, but synchronous pre-validation with external gateways without an explicit distributed transaction or outbox mechanism leaves in-flight claims vulnerable to mid-crash duplication.",
+    "elements": [
+     "Core Clinical & Billing Services",
+     "Billing & Claims Component",
+     "Payment Gateway"
+    ],
+    "sensitivity_points": [
+     "Idempotency token implementation in billing requests",
+     "Database automated failover detection and promotion time"
+    ],
+    "tradeoffs": [
+     "Strict idempotency checks ensure exactly-once claim submission but add database lookup overhead"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Billing & Claims Component encapsulates clearinghouse integration, cleanly separated from EMR Management Component and other bounded contexts. Adding a clearinghouse requires modifications solely to the billing module.",
+    "elements": [
+     "Billing & Claims Component",
+     "Payment Gateway / Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Abstraction and modularity of external billing client interfaces"
+    ],
+    "tradeoffs": [
+     "Encapsulated external gateway integrations prevent cross-domain coupling across core services"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are isolated to Patient Registry Component, Staff Dashboard (Scheduling & Intake Controller), and the interceptor/audit schema. The modular domain structure ensures EMR and Billing remain unaffected.",
+    "elements": [
+     "Staff Dashboard (SPA)",
+     "Scheduling & Intake Controller",
+     "Patient Registry Component",
+     "Audit & Compliance Interceptor Component"
+    ],
+    "sensitivity_points": [
+     "Flexibility of patient demographic schema and automated audit field extraction"
+    ],
+    "tradeoffs": [
+     "Strict regulatory auditing on new fields increases form validation complexity across tiers"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Authentication is delegated to an external IdP enforcing MFA. The API Gateway's Authentication & Authorization Filter validates tokens, while the Audit & Telemetry Interceptor records failures and triggers alerts via Kafka.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "API Gateway",
+     "Authentication & Authorization Filter",
+     "Audit & Telemetry Interceptor",
+     "Telemetry & Metering Publisher"
+    ],
+    "sensitivity_points": [
+     "IdP token revocation propagation and policy enforcement latency",
+     "Real-time event delivery through Kafka"
+    ],
+    "tradeoffs": [
+     "Offloading auth to IdP centralizes MFA security but introduces an external dependency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Access is evaluated by Open Policy Agent break-glass authorization, logged immutably via Kafka and Audit Interceptor, and long-term retention is guaranteed by S3-compatible storage with WORM Object Lock and AWS KMS.",
+    "elements": [
+     "Break-Glass Authorization Component",
+     "Audit & Compliance Interceptor Component",
+     "EMR Management Component",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "OPA policy evaluation performance on record retrieval",
+     "Immutability enforcement through WORM Object Lock"
+    ],
+    "tradeoffs": [
+     "Auditing every single read operation incurs storage growth and marginal latency overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "none",
+   "C-03": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "none",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.6363636363636364,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Audit & Compliance Interceptor Component",
+     "Audit & Telemetry Interceptor",
+     "Break-Glass Authorization Component",
+     "Public Health Authority / Regulatory Registry"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "EMR Management Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Registry Component",
+     "Scheduling & Intake Controller",
+     "Patient UI Router"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling & Resource Component",
+     "Scheduling & Intake Controller"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Management Component",
+     "EMR View Engine",
+     "Audit & Compliance Interceptor Component",
+     "Audit & Telemetry Interceptor"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Component",
+     "Payment Gateway / Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Authentication & Authorization Filter",
+     "EMR Management Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "none",
+    "elements": []
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "EMR View Engine"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Interoperability & Analytics Gateway Container",
+     "FHIR API Facade Component",
+     "HL7 v2 to FHIR Adapter Component",
+     "Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

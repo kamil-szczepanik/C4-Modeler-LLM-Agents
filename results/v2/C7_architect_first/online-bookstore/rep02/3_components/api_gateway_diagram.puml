@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the API Gateway container
+
+System_Ext(spa_vendors, "SPA & Vendors", "Incoming client and vendor traffic")
+System_Ext(core_ecommerce, "Core E-Commerce Container", "Core e-commerce functionalities")
+System_Ext(recommendation_review, "Recommendation & Review Container", "Handles recommendations and reviews")
+System_Ext(tax_currency, "Tax & Currency Container", "Handles tax and multi-currency conversions")
+System_Ext(event_bus, "Event Bus & Integration", "Event bus for asynchronous messaging")
+
+Container_Boundary(api_gateway, "API Gateway") {
+    Component(request_router, "Request Router / Reverse Proxy", "AWS API Gateway / Envoy Proxy", "Terminates TLS, enforces rate limits, handles CORS, and inspects locale headers for multi-currency routing.")
+    Component(auth_filter, "Authentication & Authorization Filter Component", "AWS Cognito / Auth0", "Validates JWT tokens against AWS Cognito/Auth0 and executes user-ID-based rate limiting and RBAC.")
+    Component(transformation, "Request/Response Transformation Component", "Custom Middleware / AWS Lambda", "Performs schema validation, payload sanitization, and dynamic PII masking for GDPR compliance.")
+    Component(circuit_breaker, "Circuit Breaker & Traffic Management Component", "Envoy Proxy Circuit Breaker", "Implements adaptive traffic shedding to prioritize checkout traffic during high-load events.")
+    Component(telemetry, "Telemetry & Analytics Interceptor", "AWS CloudWatch / SQS", "Asynchronously scrubs and streams anonymized usage metrics to the event bus.")
+}
+
+Rel(spa_vendors, request_router, "Incoming client and vendor traffic", "HTTPS / WSS")
+Rel(request_router, auth_filter, "Validates incoming authentication tokens", "Internal In-Memory / gRPC")
+Rel(circuit_breaker, core_ecommerce, "Forwards prioritized requests", "gRPC over internal ALBs with mTLS")
+Rel(circuit_breaker, recommendation_review, "Forwards prioritized requests", "gRPC over internal ALBs with mTLS")
+Rel(circuit_breaker, tax_currency, "Forwards prioritized requests", "gRPC over internal ALBs with mTLS")
+Rel(telemetry, event_bus, "Publishes decoupled usage and analytics metrics", "HTTPS")
+
+@enduml

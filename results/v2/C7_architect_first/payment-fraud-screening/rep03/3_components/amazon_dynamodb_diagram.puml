@@ -1,0 +1,21 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(FraudScoringEngine, "Fraud Scoring Engine", "External container interacting with DynamoDB")
+System_Ext(AmazonS3ObjectLock, "Amazon S3 Object Lock", "Long-term tamper-evident storage backend")
+
+Container_Boundary(AmazonDynamoDB, "Amazon DynamoDB") {
+    Component(FraudDecisionsTable, "FraudDecisions Table", "Amazon DynamoDB Table", "Stores immutable audit payloads with Partition Key TransactionId and Sort Key Timestamp.")
+    Component(FraudRulesTable, "FraudRules Table", "Amazon DynamoDB Table", "Stores compiled rules with Partition Key RuleId.")
+    Component(EntityStateTable, "EntityState Table", "Amazon DynamoDB Table", "Stores entity state and velocity counters with Partition Key EntityFingerprint.")
+    Component(DynamoDBStreams, "DynamoDB Streams", "DynamoDB Streams", "Captures item-level modifications for real-time change data capture and S3 archival.")
+    Component(AWSKMS, "AWS KMS", "AWS Key Management Service", "Manages customer-managed encryption keys enforcing AES-256 encryption at rest.")
+}
+
+Rel(FraudScoringEngine, FraudDecisionsTable, "Writes immutable audit payloads", "AWS SDK / HTTPS")
+Rel(FraudScoringEngine, FraudRulesTable, "Reads compiled rules", "AWS SDK / HTTPS")
+Rel(FraudScoringEngine, EntityStateTable, "Updates velocity counters", "AWS SDK / HTTPS")
+Rel(FraudDecisionsTable, DynamoDBStreams, "Streams real-time transaction events", "AWS Internal")
+Rel(DynamoDBStreams, AmazonS3ObjectLock, "Archives tamper-evident audit logs for 7 years", "AWS Kinesis Firehose / HTTPS")
+@enduml

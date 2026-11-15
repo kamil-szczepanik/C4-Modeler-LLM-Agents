@@ -1,0 +1,340 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Video consultations via 'Media Streaming Client' and 'Consultation Workflow Orchestrator', e-prescriptions through 'Prescription Integration Container', AI symptom triage in 'Inference Engine Component', and consent management via 'Consent Management Component' and 'Consent Event Bus'.",
+   "performance_efficiency": "Bandwidth adaptation (<300 kbit/s) is handled by 'Media Streaming Client' and 'Envoy Edge Proxy'. 'Fallback Cache Component' provides fast cached lookups and 'Async Queue Publisher' buffers workloads, though explicit autoscaling policies on GKE are omitted.",
+   "compatibility": "Interoperability targets (R-08) are fully covered: 'FHIR Transformer' formats HL7 FHIR payloads for 'US Pharmacy Systems', while 'mTLS Transport Client' handles secure integration with 'National E-Prescription Networks (EU)' and external pharmacy interfaces.",
+   "usability": "'Cross-Platform Presentation Engine' serves both patients and clinicians across mobile and web. Low-bandwidth rural access is addressed by 'Media Streaming Client'. However, clinician-specific clinical tooling and patient-specific UI concerns are bundled into a single client container.",
+   "reliability": "Degraded mode (<300 kbit/s) is supported by 'Media Streaming Client'. Network failures are mitigated by 'Async Queue Publisher' and 'Idempotency Manager'. However, multi-region failover handling across europe-west3 and us-central1 is not explicitly defined.",
+   "security": "'Regional Data Router' enforces strict regional data residency with CMEK. 'Immutable Storage' with GCP Bucket Lock safeguards signed audit logs (R-07). Zero-trust edge controls are enforced by 'GCP Cloud Armor' and 'Envoy Edge Proxy', with local PHI protected by 'Local Storage Manager'.",
+   "maintainability": "Decomposition is clean and modular, isolating the AI engine, prescription integration, and core telehealth into dedicated containers. Internal responsibilities are decoupled using domain events via 'Consent Event Bus' and modular adapters like 'FHIR Transformer'.",
+   "portability": "Deployment effectively targets GCP europe-west3 and us-central1. While core services use portable runtimes (Go, Python, Envoy, Flutter), the architecture relies closely on proprietary GCP services ('GCP Cloud Armor', 'GCP Bucket Lock', 'GCP Memorystore'), slightly limiting cloud portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 3.5,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Media traffic is offloaded to the external WebRTC SFU Media Relay, while Envoy and Core Telehealth handle consultation orchestration. Scaling details for the external media relay under regional flu peaks are not fully detailed.",
+    "elements": [
+     "WebRTC SFU Media Relay",
+     "Cloud Load Balancing & Envoy API Gateway",
+     "Core Telehealth & Consent Container",
+     "Consultation Workflow Orchestrator"
+    ],
+    "sensitivity_points": [
+     "SFU signaling latency during connection establishment",
+     "Envoy edge connection saturation under concurrent call setup spikes"
+    ],
+    "tradeoffs": [
+     "Offloading SFU reduces platform compute load but limits direct end-to-end media telemetry control"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The AI Symptom Checker Container handles inference using high-throughput ONNX Runtime/PyTorch alongside an in-process LRU/Redis Fallback Cache and asynchronous API routing, effortlessly handling ~14 requests/second under the 3 s target.",
+    "elements": [
+     "Cloud Load Balancing & Envoy API Gateway",
+     "AI Symptom Checker Container",
+     "API Router Component",
+     "Inference Engine Component",
+     "Fallback Cache Component"
+    ],
+    "sensitivity_points": [
+     "Inference execution latency on ONNX/PyTorch",
+     "Cache hit ratio for recurring symptom input patterns"
+    ],
+    "tradeoffs": [
+     "Local caching accelerates responses but risks returning slightly stale triage guidance across model updates"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The client Media Streaming Client with libwebrtc explicitly adapts to connections below 300 kbit/s, while the Local Storage Manager uses SQLCipher to persist offline clinical notes without data loss.",
+    "elements": [
+     "Web/Mobile Client Application",
+     "Media Streaming Client",
+     "Local Storage Manager",
+     "Cloud Load Balancing & Envoy API Gateway"
+    ],
+    "sensitivity_points": [
+     "Dynamic bitrate switching threshold sensitivity in libwebrtc",
+     "Local cryptographic storage sync reliability upon reconnection"
+    ],
+    "tradeoffs": [
+     "Dropping video frames maintains audio continuity at the expense of visual examination fidelity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The architecture only provisions a single US GCP region (us-central1). A full regional outage cannot be mitigated without cross-region failover to another US region, which is absent from the target cloud topology.",
+    "elements": [
+     "Cloud Load Balancing & Envoy API Gateway",
+     "Regional Data Router",
+     "Core Telehealth & Consent Container"
+    ],
+    "sensitivity_points": [
+     "Availability of secondary US cloud region for residency-compliant failover",
+     "Regional database replica recovery time objectives"
+    ],
+    "tradeoffs": [
+     "Single-region deployment avoids multi-region replication costs but risks prolonged downtime during cloud regional outages"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Prescription Router, FHIR Transformer, and mTLS Transport Client localize integration changes. However, non-FHIR national EU standards (SOAP/proprietary) may require modifications beyond the single FHIR transformer component.",
+    "elements": [
+     "Prescription Integration Container",
+     "Prescription Router",
+     "FHIR Transformer",
+     "mTLS Transport Client"
+    ],
+    "sensitivity_points": [
+     "Extensibility of payload transformer for non-FHIR country standards",
+     "Configurability of routing rules within Prescription Router"
+    ],
+    "tradeoffs": [
+     "Standardizing internally on FHIR simplifies transforms but requires custom adapters for legacy national formats"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "Audit payloads log recommendations to Immutable Storage for traceability. However, explicit mechanisms for zero-downtime model version updates, runtime rollback, and model artifact registries are missing from the container architecture.",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Inference Engine Component",
+     "Audit & Traceability Component",
+     "Immutable Storage"
+    ],
+    "sensitivity_points": [
+     "Propagation of model version metadata to audit logs",
+     "Container reload strategy for instant model rollbacks"
+    ],
+    "tradeoffs": [
+     "Strict immutable write-ahead logging ensures MDR compliance but introduces latency overhead during inference"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Consent Management Component and Regional Data Router enforce consent checks before querying regional databases. Envoy provides edge authentication, preventing unconsented cross-border PHI transmission.",
+    "elements": [
+     "Envoy Edge Proxy",
+     "Core Telehealth & Consent Container",
+     "Consent Management Component",
+     "Regional Data Router"
+    ],
+    "sensitivity_points": [
+     "Strictness of PDP evaluation in Consent Management Component",
+     "Isolation of cross-region routing keys at gateway edge"
+    ],
+    "tradeoffs": [
+     "Synchronous regional consent verification increases request latency for cross-border clinician queries"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Consent Management Component publishes revocation events via Consent Event Bus. However, downstream research sinks, de-identification pipelines, and verification mechanisms for research data exclusion are unrepresented.",
+    "elements": [
+     "Core Telehealth & Consent Container",
+     "Consent Management Component",
+     "Consent Event Bus"
+    ],
+    "sensitivity_points": [
+     "Event delivery guarantees on the NATS Consent Event Bus",
+     "Propagation latency of consent revocation to secondary storage"
+    ],
+    "tradeoffs": [
+     "Asynchronous event-driven consent revocation provides service decoupling but complicates deterministic audit verification"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.875,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent Management Component",
+     "Regional Data Router",
+     "Audit & Traceability Component",
+     "Cloud Load Balancing & Envoy API Gateway"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Regional Data Router",
+     "Regional Cloud SQL",
+     "Immutable Storage",
+     "Prescription Router"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Inference Engine Component",
+     "Audit & Traceability Component",
+     "Immutable Storage"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Web/Mobile Client Application",
+     "Media Streaming Client",
+     "Local Storage Manager",
+     "Cloud Load Balancing & Envoy API Gateway",
+     "Async Queue Publisher"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Web/Mobile Client Application",
+     "WebRTC SFU Media Relay",
+     "Media Streaming Client",
+     "Consultation Workflow Orchestrator"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Prescription Integration Container",
+     "Prescription Router",
+     "mTLS Transport Client",
+     "National E-Prescription Networks (EU)",
+     "US Pharmacy Systems"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Container",
+     "API Router Component",
+     "Inference Engine Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Core Telehealth & Consent Container",
+     "Consent Management Component",
+     "Consent Event Bus"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Regional Data Router",
+     "Regional Cloud SQL",
+     "Immutable Storage",
+     "Consent Management Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Web/Mobile Client Application",
+     "Media Streaming Client",
+     "WebRTC SFU Media Relay",
+     "Cloud Load Balancing & Envoy API Gateway"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Audit & Traceability Component",
+     "Immutable Storage"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Prescription Integration Container",
+     "FHIR Transformer",
+     "Prescription Router",
+     "National E-Prescription Networks (EU)",
+     "US Pharmacy Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ },
+ "tag": "retest"
+}

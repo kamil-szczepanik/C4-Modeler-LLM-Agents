@@ -1,0 +1,324 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 4,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively met: Fraud Scoring Engine scores transactions (R-01), Case Management API & UI supports analyst workflows (R-02), and Rule/Model Authoring Service enables zero-downtime updates via SQS distribution (R-03).",
+   "performance_efficiency": "The sub-50ms P99 target at 3,000 rps is supported by Netty/WebFlux, in-memory embedded ONNX runtime, local Caffeine/Redis caching in Feature Enriched Component, DynamoDB lookups, and asynchronous offloading of audit logs and case reviews.",
+   "compatibility": "The architecture cleanly interfaces with external Payment Gateways using industry-standard gRPC and REST over TLS 1.3/mTLS, and integrates smoothly with standard AWS platform APIs and identity systems.",
+   "usability": "Fraud Analysts and Operations Managers are provided a dedicated React SPA with WebSockets. Rule authors and data scientists have specialized authoring and simulation endpoints, while compliance auditors have dedicated audit access paths.",
+   "reliability": "High availability and R-07 fail-open requirements are explicitly addressed by the Resilience4j Circuit Breaker & Fallback Component, AWS ALB health-check target groups, and asynchronous decoupling with Amazon SQS.",
+   "security": "Strong security with mTLS, WAF, KMS CMKs, and 7-year S3 Object Lock. However, attributing card tokenization directly to the native AWS ALB is technically unrealistic without an explicit tokenization proxy or Lambda@Edge component.",
+   "maintainability": "Modular domain segregation into dedicated microservices (scoring, authoring, case management) and serverless AWS components (Fargate, DynamoDB, SQS) minimizes operational maintenance overhead, fitting the three-engineer team constraint well.",
+   "portability": "While perfectly aligned with the AWS eu-west-1 target, the solution exhibits strong vendor lock-in to proprietary AWS services (DynamoDB Streams, S3 Object Lock, SQS, KMS, Fargate), making migration to another environment difficult."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.0,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Spring WebFlux with embedded ONNX Runtime and Caffeine feature caching supports sub-50ms execution. However, synchronous DynamoDB writes for entity state and audit records at 3,000 rps introduce latency jitter that could threaten P99 latency.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "API Handler Component",
+     "Feature Enriched Component",
+     "Inference Engine Component",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "Synchronous DynamoDB round-trips in the critical path",
+     "Local memory and cache hit ratios for feature enrichment"
+    ],
+    "tradeoffs": [
+     "Synchronous state persistence improves consistency but risks P99 latency degradation"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management is completely decoupled from the real-time scoring path. Review cases are routed asynchronously via Amazon SQS to a dedicated Case Management service, ensuring heavy analyst querying has zero performance impact on authorization scoring.",
+    "elements": [
+     "Amazon SQS",
+     "Case Management API & UI",
+     "Case Handler Service",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "SQS queue ingestion throughput under peak review volume"
+    ],
+    "tradeoffs": [
+     "Asynchronous case routing guarantees isolation but introduces eventual consistency for review availability"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Resilience4j provides container-level fallback logic for internal errors. However, if the entire container crashes or ECS fails, AWS ALB lacks an automated edge fail-open bypass mechanism to approve or route payments within one minute.",
+    "elements": [
+     "AWS ALB",
+     "AWS ALB Target Groups",
+     "Circuit Breaker & Fallback Component",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "ALB fail-open routing configuration when target health checks fail"
+    ],
+    "tradeoffs": [
+     "Failing open preserves payment processing availability but temporarily accepts unverified fraud risks"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "The Audit Logger uses an internal blocking queue and synchronous writes to DynamoDB. If the storage layer degrades, backpressure in the blocking queue can stall scoring threads or drop audit events without a dedicated decoupled buffer.",
+    "elements": [
+     "Audit Logger Component",
+     "FraudDecisions Table",
+     "Amazon DynamoDB",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Blocking queue capacity and eviction policies under downstream audit storage latency"
+    ],
+    "tradeoffs": [
+     "Non-blocking audit buffering prevents scoring thread starvation but risks memory exhaustion during outages"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Rule/Model Authoring Service validates and signs models, deploying via SQS and dynamic updates without container restart. ECS rolling deployments and model version tagging in decision outputs are well-supported, enabling fast rollback.",
+    "elements": [
+     "Rule/Model Authoring Service",
+     "Model Validation Service",
+     "Amazon SQS",
+     "Inference Engine Component"
+    ],
+    "sensitivity_points": [
+     "Dynamic runtime model swapping without worker thread interruption"
+    ],
+    "tradeoffs": [
+     "Embedded runtime model switching avoids restarts but increases heap and runtime complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "New rules are validated via Drools, simulated using serverless workers, and published to DynamoDB and SQS without downtime. The Explainability Formatter records rule outcomes in decision metadata, fully satisfying the 1-hour activation requirement.",
+    "elements": [
+     "Rule/Model Authoring Service",
+     "Drools Rule Engine / DRL Compiler",
+     "Simulation Worker",
+     "FraudRules Table",
+     "Explainability Formatter Component"
+    ],
+    "sensitivity_points": [
+     "Validation and dry-run execution speed in simulation workers"
+    ],
+    "tradeoffs": [
+     "Pre-deployment dry-run simulations slow down rapid publishing but prevent erroneous rule propagation"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "ALB tokenization and role segregation prevent analysts from accessing raw PANs. However, while audit logging is present, the architecture lacks SIEM, behavioral analytics, or intrusion alerting to detect and alert anomalous access within 15 minutes.",
+    "elements": [
+     "AWS ALB",
+     "Case Management API & UI",
+     "Audit & Compliance Logger",
+     "Fraud Analyst SPA"
+    ],
+    "sensitivity_points": [
+     "Absence of real-time security log analytics and alerting components"
+    ],
+    "tradeoffs": [
+     "Edge tokenization isolates PCI scope but complicates dispute investigations in the portal"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Decisions, inputs, model identifiers, and explanations are streamed via DynamoDB Streams to S3 Object Lock with 7-year retention and KMS CMKs. Immutable records can be queried directly or via the portal well within one working day.",
+    "elements": [
+     "Explainability Formatter Component",
+     "FraudDecisions Table",
+     "DynamoDB Streams",
+     "AWS S3 Object Lock",
+     "S3 Bucket with Object Lock"
+    ],
+    "sensitivity_points": [
+     "Query efficiency when retrieving historical records directly from long-term S3 storage"
+    ],
+    "tradeoffs": [
+     "Object Lock immutability guarantees regulatory compliance but restricts retroactive record modification or pruning"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "none",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "AWS ALB Native Listener with ACM",
+     "AWS WAF",
+     "AWS KMS",
+     "Audit Logger Component",
+     "Audit & Compliance Logger",
+     "AWS S3 Object Lock"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Explainability Formatter Component",
+     "Audit Logger Component",
+     "FraudDecisions Table",
+     "DynamoDB Streams",
+     "AWS S3 Object Lock"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none"
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "AWS ECS Fargate",
+     "Amazon DynamoDB",
+     "Amazon SQS"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "API Handler Component",
+     "Inference Engine Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management API & UI",
+     "Fraud Analyst SPA",
+     "Case Handler Service",
+     "Amazon SQS"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Rule/Model Authoring Service",
+     "Rule Authoring Controller",
+     "Drools Rule Engine / DRL Compiler",
+     "Model Validation Service",
+     "Simulation Worker",
+     "Amazon SQS",
+     "FraudRules Table"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "API Handler Component",
+     "Feature Enriched Component",
+     "Inference Engine Component",
+     "Amazon DynamoDB"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "AWS ALB",
+     "AWS KMS",
+     "Fraud Scoring Engine",
+     "Case Management API & UI"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Explainability Formatter Component",
+     "Audit Logger Component",
+     "FraudDecisions Table",
+     "DynamoDB Streams",
+     "AWS S3 Object Lock"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Circuit Breaker & Fallback Component",
+     "AWS ALB Target Groups"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

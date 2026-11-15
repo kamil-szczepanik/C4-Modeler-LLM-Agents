@@ -1,0 +1,307 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 3.875,
+  "justifications": {
+   "functional_suitability": "API Gateway and Azure App Service satisfy R-01 and R-02 for customer submission and adjuster handling. Azure API Management routes fallback claim types to the COBOL/DB2 Mainframe satisfying R-03, though two-way synchronization during the 3-year system-of-record period lacks specific batch-handling mechanisms.",
+   "performance_efficiency": "Azure Redis Cache with Cache Manager isolates adjuster read queries from 5-second mainframe latency, meeting R-05 (<2s). AMQP Message Publisher and Azure Service Bus decouple asynchronous writes and prevent mainframe overload during operational hours.",
+   "compatibility": "Interoperability is well supported: Microsoft Entra ID integrates enterprise identity (R-07), and the Anti-Corruption Layer (ACL) with Azure Service Bus interfaces with the COBOL/DB2 On-Premises Mainframe. However, alignment with nightly batch window constraints is not explicitly modeled.",
+   "usability": "Customers, Brokers, and Claims Adjusters have clear entry points through API Gateway and Azure App Service. However, dedicated UI presentation containers or portals for adjusters versus brokers are not explicitly decomposed within the architecture.",
+   "reliability": "Azure Service Bus provides guaranteed delivery, and Claim Data Store uses Temporal Tables. However, explicit mechanisms for exactly-once processing, deduplication, and reconciliation across the hybrid boundary to prevent duplicate claims (R-04) are missing.",
+   "security": "Authentication integrates Microsoft Entra ID via OpenID Connect/OAuth 2.0 (R-07). Network communications enforce HTTPS and TLS, and Claim Data Store implements temporal auditing. Role-based authorization policies within the Modular Monolith are lightly detailed.",
+   "maintainability": "The Azure Modular Monolith Platform isolates domains with strict per-module SQL schemas. Azure API Management routing enables switching claim types back to the mainframe within one day (R-06). The Anti-Corruption Layer cleanly isolates legacy mainframe interfaces.",
+   "portability": "The architecture addresses the hybrid cloud environment specified across on-premise and Azure West Europe. While it relies heavily on proprietary Azure PaaS services, this directly aligns with the target environment and mitigates the team's limited cloud experience."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 4.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Azure Redis Cache and read models decouple adjuster queries from 5-second mainframe response times. However, cold cache misses or uncached legacy data fetches lack explicit pre-warming strategies.",
+    "elements": [
+     "Azure Redis Cache",
+     "Cache Manager",
+     "Azure App Service",
+     "Azure Modular Monolith Platform"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio for open claims",
+     "Cache invalidation latency upon updates"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of cached read models versus sub-2-second retrieval latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "API Management and Azure Service Bus asynchronously buffer submissions. Peak submission spikes are ingested directly in Azure without putting real-time synchronous load on the mainframe during batch processing.",
+    "elements": [
+     "API Gateway",
+     "Azure API Management (APIM)",
+     "Azure Service Bus",
+     "Message Broker"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue capacity during month-end spikes",
+     "Throttling rate from queue to mainframe"
+    ],
+    "tradeoffs": [
+     "Delayed claim processing for customers versus protecting mainframe batch window capacity"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Azure Service Bus provides durable asynchronous queuing and message retention, allowing claim submissions to continue seamlessly while the mainframe is offline during the nightly 23:00-05:00 batch window.",
+    "elements": [
+     "Azure Service Bus",
+     "Message Broker",
+     "Azure App Service",
+     "Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Message retention duration on Service Bus",
+     "Resume-sync mechanism after batch window ends"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission feedback versus guaranteed availability during batch window downtime"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Service Bus offers reliable transport, but the architecture lacks explicit details on distributed transaction compensation, outbox patterns, idempotent deduplication, or automated reconciliation when half-way synchronization failures occur.",
+    "elements": [
+     "Azure Service Bus",
+     "Anti-Corruption Layer (ACL)",
+     "Azure SQL Database",
+     "COBOL/DB2 On-Premises Mainframe System of Record"
+    ],
+    "sensitivity_points": [
+     "Message deduplication and idempotent processing logic",
+     "Dead-letter queue handling and reconciliation tooling"
+    ],
+    "tradeoffs": [
+     "At-least-once message delivery overhead versus risk of duplicate claim processing"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Azure API Management routes legacy vs. migrated claims directly, and the Anti-Corruption Layer isolates mainframe payload formats. Reverting traffic via APIM policies enables one-day switch-back without mainframe alterations.",
+    "elements": [
+     "Azure API Management (APIM)",
+     "Anti-Corruption Layer (ACL)",
+     "Azure Modular Monolith Platform"
+    ],
+    "sensitivity_points": [
+     "Dynamic routing rules in Azure API Management",
+     "Bi-directional data sync capability during switch-back"
+    ],
+    "tradeoffs": [
+     "Routing complexity in APIM versus rapid rollback capability"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The modular monolith and Azure SQL Database already host full claims workflows and domain data models. Decommissioning the mainframe requires only retiring the Anti-Corruption Layer, leaving user-facing APIs and UIs untouched.",
+    "elements": [
+     "Azure Modular Monolith Platform",
+     "Claim Data Store",
+     "Anti-Corruption Layer (ACL)",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Completeness of domain data migration to Azure SQL",
+     "Clean separation of ACL from domain core"
+    ],
+    "tradeoffs": [
+     "Maintaining ACL encapsulation overhead during migration versus frictionless mainframe retirement"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Microsoft Entra ID authenticates users and APIM validates requests, but fine-grained authorization (customer-to-broker tenancy and record-level authorization) is not explicitly detailed in the architecture definitions.",
+    "elements": [
+     "Microsoft Entra ID (Azure AD)",
+     "Azure API Management (APIM)",
+     "Azure Modular Monolith Platform",
+     "Azure Application Insights"
+    ],
+    "sensitivity_points": [
+     "Enforcement point for resource-level authorization policies",
+     "Audit logging completeness for unauthorized access attempts"
+    ],
+    "tradeoffs": [
+     "Centralized gateway policy enforcement versus domain-level fine-grained data authorization"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Microsoft Entra ID provides central SSO revocation within 15 minutes for cloud services. However, propagation of revocation to legacy mainframe sessions or DB2 accounts is unaddressed in the integration model.",
+    "elements": [
+     "Microsoft Entra ID (Azure AD)",
+     "API Gateway",
+     "Azure App Service",
+     "COBOL/DB2 On-Premises Mainframe System of Record"
+    ],
+    "sensitivity_points": [
+     "Token lifetime and token revocation synchronization",
+     "Mainframe identity propagation and session termination"
+    ],
+    "tradeoffs": [
+     "Short token lifetimes improving revocation speed versus increased token refresh overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full"
+  },
+  "coverage": 0.7272727272727273,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "COBOL/DB2 On-Premises Mainframe System of Record",
+     "Anti-Corruption Layer (ACL)"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none"
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Anti-Corruption Layer (ACL)"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Azure App Service",
+     "Azure Modular Monolith Platform"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers and Brokers",
+     "API Gateway",
+     "Azure API Management (APIM)",
+     "Azure App Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Azure App Service",
+     "Azure Modular Monolith Platform"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "Azure API Management (APIM)"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Azure Service Bus",
+     "Message Broker",
+     "Claim Data Store"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Azure Redis Cache",
+     "Cache Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "API Gateway",
+     "Azure API Management (APIM)"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Azure Active Directory",
+     "Microsoft Entra ID (Azure AD)",
+     "Azure API Management (APIM)"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

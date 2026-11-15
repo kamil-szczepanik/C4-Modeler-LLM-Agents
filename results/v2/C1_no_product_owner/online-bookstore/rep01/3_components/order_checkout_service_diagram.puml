@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Order & Checkout Service container
+
+Container(aws_api_gateway_alb, "AWS API Gateway & ALB", "AWS", "External ingress and load balancing.")
+Container(aws_secrets_manager, "AWS Secrets Manager", "AWS", "Stores and rotates API keys.")
+ContainerDb(amazon_aurora_postgresql, "Amazon Aurora PostgreSQL", "PostgreSQL", "Multi-region relational data store persisting saga state and order data.")
+
+Container_Boundary(order_checkout_service, "Order & Checkout Service") {
+    Component(order_api_controller, "Order API Controller", "Node.js / TypeScript, gRPC", "Exposes gRPC endpoints for inbound requests.")
+    Component(checkout_orchestrator, "Checkout Orchestrator", "AWS Step Functions, Node.js / TypeScript", "Manages multi-step checkout sagas using AWS Step Functions.")
+    Component(payment_client, "Payment Client", "Node.js / TypeScript, HTTPS", "Integrates securely with external Payment Gateways via HTTPS.")
+    Component(fulfillment_adapter, "Fulfillment Adapter", "Node.js / TypeScript, HTTPS", "Interfaces with third-party Shipping Provider APIs via HTTPS.")
+    Component(order_repository, "Order Repository", "Prisma ORM, Node.js / TypeScript", "Handles transactional persistence using Prisma ORM.")
+}
+
+Rel(aws_api_gateway_alb, order_api_controller, "Routes incoming requests", "gRPC over mTLS")
+Rel(order_api_controller, checkout_orchestrator, "Delegates workflow execution", "Internal method calls")
+Rel(checkout_orchestrator, payment_client, "Executes external API calls", "HTTPS/REST")
+Rel(checkout_orchestrator, fulfillment_adapter, "Executes external API calls", "HTTPS/REST")
+Rel(checkout_orchestrator, aws_secrets_manager, "Fetches rotated API keys", "AWS SDK/HTTPS")
+Rel(checkout_orchestrator, amazon_aurora_postgresql, "Persists saga state", "PostgreSQL Protocol via TLS")
+Rel(order_repository, amazon_aurora_postgresql, "Persists order data", "PostgreSQL Protocol via TLS")
+
+@enduml

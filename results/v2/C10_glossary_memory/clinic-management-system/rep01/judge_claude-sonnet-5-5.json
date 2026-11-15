@@ -1,0 +1,328 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 2,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.25,
+  "justifications": {
+   "functional_suitability": "Billing & Admin Suite (Admission Management Service, Billing Management Service), Clinical Workspace, and Patient Portal's Appointment Self-Service Module cover most requirements. Gaps: no resource clash check component, no insurance claim submission component, and the Insurance Payment Gateways are only inbound; no explicit EMR audit-trail UI.",
+   "performance_efficiency": "Patient Cache Manager (Redis), Core Datastore Read Replicas with CQRS, and asynchronous WORM logging via Secure Message Broker support the <1s target. Gaps: the cache is only in the Patient Portal, not Clinical Workspace; no autoscaling or load figures; HSM calls on the critical path.",
+   "compatibility": "FHIR Integration Engine (FHIR Router, FHIR Resource Mapper) and API Gateway expose HL7 FHIR for External Labs/Imaging; IdP uses OIDC. Gaps: FHIR flow is inbound only, no outbound lab/imaging requests, insurance claim format standards (X12) unspecified, and the mapper has limited detail.",
+   "usability": "Patient Portal (Patient Web Frontend, mobile-responsive), Clinical Workspace (EMR Presentation Component), and Billing & Admin Suite serve the three user groups, and Audit Query & Export serves auditors. Gaps: no UI component for admin/billing, no accessibility or multilingual provisions, and sparse interface detail.",
+   "reliability": "Secure Message Broker prevents log loss and Core Datastore has Read Replicas. But no active-active deployment, failover, multi-region replication, backup or DR is shown. Single Primary Write Datastore, single HSM and API Gateway are SPOFs, so 99.99% is not demonstrably achievable.",
+   "security": "Strong mechanisms: IdP with MFA, Security Filter JWT/scope checks, mTLS with SPIFFE/SPIRE, TLS 1.3, HSM with FIPS 140-2 Level 3 and key rotation, and WORM Audit Logging Service with signing and S3 Object Lock. Covers authentication, authorization, encryption, integrity and accountability.",
+   "maintainability": "Clear container decomposition (Patient Portal, Clinical Workspace, Billing & Admin Suite, FHIR Integration Engine, Core Datastore) with a gateway and well-separated audit pipeline components. Minor gaps: shared Core Datastore couples services, and some component technologies are vague (Kubernetes as a component technology).",
+   "portability": "Kubernetes containers and MinIO / S3 Object Lock WORM storage suggest hybrid on-prem and AWS operation. Gaps: API Gateway labeled Kubernetes / AWS, a hardware HSM is tied to location, no deployment view for on-prem-k8s versus eu-central-1, and no infrastructure abstraction is described."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 2,
+   "MOD-02": 3,
+   "PERF-01": 3,
+   "PERF-02": 2,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.4375,
+  "by_quality_attribute": {
+   "Performance": 2.5,
+   "Availability": 2.0,
+   "Modifiability": 2.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Clinical Workspace",
+     "Core Datastore",
+     "Read Replicas",
+     "API Gateway",
+     "EMR Presentation Component"
+    ],
+    "sensitivity_points": [
+     "Replica lag affects data currency",
+     "No cache in Clinical Workspace",
+     "Gateway JWT checks add latency"
+    ],
+    "tradeoffs": [
+     "CQRS read replicas improve speed but risk stale data"
+    ],
+    "justification": "CQRS read replicas and a low-latency gateway help, but the clinical path has no cache, no scaling or load mechanism, and replica staleness is unaddressed. P95 under 1 s for 500 concurrent users is plausible but unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "elements": [
+     "FHIR Integration Engine",
+     "FHIR Router",
+     "FHIR Resource Mapper",
+     "Core Datastore",
+     "Primary Write Datastore"
+    ],
+    "sensitivity_points": [
+     "Synchronous writes to single primary",
+     "No queue or buffering for FHIR bursts",
+     "Shared datastore with EMR reads"
+    ],
+    "tradeoffs": [
+     "Direct persistence is simple but couples ingestion load to EMR performance"
+    ],
+    "justification": "FHIR results go through the gateway and straight to the single primary datastore with no buffering, back-pressure, or isolation. Burst ingestion could degrade EMR reads. Read replicas offer partial protection only."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "Core Datastore",
+     "API Gateway",
+     "Primary Write Datastore",
+     "Read Replicas"
+    ],
+    "sensitivity_points": [
+     "No failover or traffic-steering mechanism shown",
+     "Single primary write location unspecified",
+     "Replication mode unspecified"
+    ],
+    "tradeoffs": [
+     "Hybrid footprint offers resilience but multi-site consistency is undefined"
+    ],
+    "justification": "Hybrid regions are targeted, but the model shows no active-active deployment, global traffic routing, or synchronous replication. A 1-minute failover with zero data loss is not demonstrated. The single primary is a risk."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Billing & Admin Suite",
+     "Billing Management Service",
+     "Core Datastore",
+     "Primary Write Datastore",
+     "Insurance Payment Gateways"
+    ],
+    "sensitivity_points": [
+     "No database HA or automatic failover shown",
+     "No idempotency or retry mechanism for claims",
+     "Single primary master"
+    ],
+    "tradeoffs": [
+     "Simple synchronous write path lacks safe-retry guarantees"
+    ],
+    "justification": "A single PostgreSQL master has no described standby promotion, and no idempotency keys, outbox, or retry logic for claims. Lost or duplicated claims are not prevented. The claim recovery target is not supported."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "elements": [
+     "Billing & Admin Suite",
+     "Billing Management Service",
+     "API Gateway",
+     "Insurance Payment Gateways"
+    ],
+    "sensitivity_points": [
+     "No dedicated claims integration component",
+     "Billing service handles gateway integration directly"
+    ],
+    "tradeoffs": [
+     "Fewer components reduce complexity but weaken isolation of integrations"
+    ],
+    "justification": "There is no insurance integration or adapter component. Claim submission is implicit within the Billing Management Service, so adding a clearinghouse would change billing logic. The EMR is likely unaffected because it is a separate container, but confinement to one integration component is not achieved."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "elements": [
+     "Admission Management Service",
+     "Core Datastore",
+     "Patient Web Frontend",
+     "Clinical Workspace",
+     "WORM Audit Logging Service"
+    ],
+    "sensitivity_points": [
+     "Shared Core Datastore schema across containers",
+     "Demographics ownership spread across several components",
+     "No schema migration mechanism"
+    ],
+    "tradeoffs": [
+     "Shared datastore eases consistency but couples changes across containers"
+    ],
+    "justification": "Changes touch the datastore schema, admission service, UI, and audit emission. That is feasible within three components if scoped well, but demographic ownership is unclear and the shared schema creates ripple risk."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "elements": [
+     "Identity Provider (IdP)",
+     "API Gateway",
+     "Security Filter",
+     "WORM Audit Logging Service",
+     "Ingress Router"
+    ],
+    "sensitivity_points": [
+     "IdP enforces step-up MFA",
+     "Gateway must verify the MFA claim",
+     "No alerting component for failed logins"
+    ],
+    "tradeoffs": [
+     "External IdP offloads MFA but adds a dependency on its availability"
+    ],
+    "justification": "The IdP with MFA and gateway Security Filter validating JWT and MFA deny access without the second factor. However, there is no security alerting or monitoring component, and auth failures are not explicitly routed to the audit service, so the 1-minute alert is unmet."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "elements": [
+     "Clinical Data Orchestrator",
+     "WORM Audit Logging Service",
+     "Security Filter",
+     "Secure Message Broker",
+     "WORM Storage Writer Component",
+     "Cryptographic Signing & Verifier Component"
+    ],
+    "sensitivity_points": [
+     "Asynchronous logging may miss reads on failure",
+     "No explicit patient-relationship policy engine",
+     "Retention period unspecified"
+    ],
+    "tradeoffs": [
+     "Async audit lowers latency but risks audit gaps"
+    ],
+    "justification": "A strong tamper-evident trail exists: Kafka buffering, HSM signing, and S3 Object Lock. Scope-based checks exist, but no treatment-relationship policy enforcement is shown, and the 10-year retention and 100% read-audit guarantee are not explicit."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "none",
+   "C-03": "partial",
+   "R-01": "partial",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "none",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.5909090909090909,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "WORM Audit Logging Service",
+     "Hardware Security Module (HSM)",
+     "API Gateway",
+     "Identity Provider (IdP)"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "WORM Audit Logging Service",
+     "WORM Storage Writer Component",
+     "WORM Object Storage"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Admission Management Service",
+     "Billing & Admin Suite"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Appointment Self-Service Module",
+     "Billing & Admin Suite"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Clinical Workspace",
+     "EMR Presentation Component",
+     "Clinical Data Orchestrator",
+     "WORM Audit Logging Service",
+     "Core Datastore"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Billing Management Service",
+     "Insurance Payment Gateways",
+     "Billing & Admin Suite"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Security Filter",
+     "Hardware Security Module (HSM)",
+     "API Gateway"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "none",
+    "elements": []
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Read Replicas",
+     "Patient Cache Manager",
+     "Core Datastore"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Integration Engine",
+     "FHIR Router",
+     "FHIR Resource Mapper",
+     "External Labs/Imaging"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

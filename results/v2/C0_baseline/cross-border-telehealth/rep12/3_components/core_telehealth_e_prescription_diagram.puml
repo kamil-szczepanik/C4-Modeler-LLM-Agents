@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component Diagram for Core Telehealth & E-Prescription
+
+System_Ext(ConsentManagementService, "Consent Management Service", "Spring Boot on GKE", "Manages user consents.")
+System_Ext(EUNationalEPrescriptionGateways, "EU National E-Prescription Gateways", "External System", "National e-prescription gateways in the EU.")
+System_Ext(USPharmacyNetworks, "US Pharmacy Networks", "External System", "Pharmacy networks in the US.")
+System_Ext(CloudPubSub, "Cloud Pub/Sub", "Google Cloud Pub/Sub", "Asynchronous messaging, retries, and dead-letter queueing.")
+System_Ext(CloudLoggingBigQuery, "Cloud Logging & BigQuery", "Google Cloud", "Logging and analytics.")
+
+Container_Boundary(core_telehealth_eprescription, "Core Telehealth & E-Prescription") {
+    Component(TelehealthWorkflowManager, "Telehealth Workflow Manager", "Spring Boot / Spring Security / Spring Integration", "Manages core telehealth workflows and patient-clinician interactions.")
+    Component(EPrescriptionEngine, "E-Prescription Engine", "Spring Boot / Spring Security / Spring Integration", "Handles e-prescription generation and processing logic.")
+    Component(ConsentEnforcementInterceptor, "Consent Enforcement Interceptor", "Spring Boot / Spring Security / Spring Integration", "Enforces JIT consent validation for requests.")
+    Component(PrescriptionDispatcherAdapter, "Prescription Dispatcher Adapter", "Spring Boot / Spring Security / Spring Integration", "Adapts and dispatches prescriptions to external gateways and networks.")
+    Component(DeadLetterRetryQueueHandler, "Dead-Letter & Retry Queue Handler", "Spring Boot / Spring Security / Spring Integration", "Handles message retries and dead-letter queueing for asynchronous operations.")
+    Component(CryptoSigningService, "Crypto & Signing Service", "Spring Boot / BouncyCastle / Google Cloud KMS", "Provides cryptographic signing, envelope encryption, and PHI protection.")
+}
+
+Rel(ConsentEnforcementInterceptor, ConsentManagementService, "gRPC with JIT validation")
+Rel(TelehealthWorkflowManager, EUNationalEPrescriptionGateways, "REST, HL7 FHIR over HTTPS, mTLS", "REST, HL7 FHIR over HTTPS, mTLS")
+Rel(TelehealthWorkflowManager, USPharmacyNetworks, "REST, HL7 FHIR over HTTPS, mTLS", "REST, HL7 FHIR over HTTPS, mTLS")
+Rel(PrescriptionDispatcherAdapter, DeadLetterRetryQueueHandler, "In-process Java method call")
+Rel(DeadLetterRetryQueueHandler, CloudPubSub, "Google Cloud Pub/Sub with envelope encryption")
+Rel(EPrescriptionEngine, CryptoSigningService, "In-process Java method call")
+Rel(TelehealthWorkflowManager, CloudLoggingBigQuery, "Google Cloud Logging, BigQuery")
+
+@enduml

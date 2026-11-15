@@ -1,0 +1,251 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 5.0,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 and brief goals through the 'Catalogue & Search Service' (with its 'Catalog Management Component' managing physical and digital assets), 'Circulation Service' handling borrowing and fines, and 'Web Application (SPA)' offering self-service portals.",
+   "performance_efficiency": "R-05 (<800ms search) is directly targeted by the 'Search Controller & Query Optimizer' with Project Reactor, an 'OpenSearch Engine', client caching via 'API Client Layer' (TanStack Query), 'PgBouncer Connection Pooling Proxies', and 'PostgreSQL Read Replica'.",
+   "compatibility": "The design facilitates clean interoperability using standard protocols (OAuth 2.0/OIDC for 'Identity Provider (IdP)', REST/TLS 1.3 for 'Payment Gateway', and Sendinblue API for 'EU Cloud/CDN Provider') governed by an 'API Gateway' and 'Schema Registry'.",
+   "usability": "All user personas (Patrons, Staff, Administrators) are served by 'Web Application (SPA)'. It provides a 'Role-Based UI Router', WCAG 2.1 AA support via 'Localization & Accessibility Engine', and fault tolerance via 'Offline & State Persistence Manager'.",
+   "reliability": "High availability and resilience are guaranteed via 'PostgreSQL Multi-AZ', 'Kafka Brokers' with 'DLQ Manager' and 'MirrorMaker2', and 'Resilience4j' circuit breakers configured within the 'Event Publisher Component' and 'Fine & Fee Component'.",
+   "security": "EU data residency and security constraints are enforced via 'Customer-Managed Encryption Keys (CMEK)' in EU KMS, 'Data Anonymization Module' for GDPR, mTLS/TLS 1.3 across services, and 'Auth & Security Plugin' with JWT/OIDC authentication.",
+   "maintainability": "High maintainability is achieved through domain-driven container separation ('Circulation Service', 'Catalogue & Search Service', 'Notification Service'), loose event-driven coupling through 'Event Broker', and schema enforcement using 'Schema Registry'.",
+   "portability": "Portability within EU cloud regions is well accommodated by leveraging containerized runtimes (Spring Boot, Node.js, Go, Python/Celery) and managed cloud infrastructure abstraction ('PostgreSQL Multi-AZ' on AWS RDS or Cloud SQL EU-Central)."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 2.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The architecture pairs a reactive Search Controller using Project Reactor with OpenSearch indexing, client-side caching, and PgBouncer connection pooling. However, the OpenSearch cluster sizing, replica topology, and shard placement are omitted from the container and database tiers.",
+    "elements": [
+     "Web Application (SPA)",
+     "API Gateway (Nginx / Kong)",
+     "Catalogue & Search Service",
+     "Search Controller & Query Optimizer",
+     "OpenSearch Indexing & Sync Engine",
+     "Managed Databases"
+    ],
+    "sensitivity_points": [
+     "OpenSearch cluster sizing and replica count",
+     "Search query optimization and caching efficiency"
+    ],
+    "tradeoffs": [
+     "Maintaining dedicated search indexes increases operational cost and data synchronization complexity"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalog writes and search indexing are decoupled via Kafka events. The Catalog Management Component persists metadata while the OpenSearch Sync Engine updates indexes asynchronously, preventing write locks on search queries and easily satisfying the 5-minute index latency requirement.",
+    "elements": [
+     "Catalog Management Component",
+     "Event Publisher Component",
+     "Event Broker",
+     "OpenSearch Indexing & Sync Engine",
+     "Search Controller & Query Optimizer"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer lag during heavy catalog ingestion",
+     "OpenSearch index refresh intervals"
+    ],
+    "tradeoffs": [
+     "Eventual consistency allows searches to temporarily return stale data during updates"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Circulation is safely isolated in a separate microservice and transactional PostgreSQL database, preventing lost loan transactions. However, OpenSearch high-availability configurations, replica failover, and cluster recovery mechanisms are not modeled at the container or database level.",
+    "elements": [
+     "Catalogue & Search Service",
+     "Circulation Service",
+     "OpenSearch Indexing & Sync Engine",
+     "Managed Databases",
+     "PgBouncer Connection Pooling Proxies"
+    ],
+    "sensitivity_points": [
+     "Multi-node replica configuration of OpenSearch",
+     "Circuit breaking behavior when search backend fails"
+    ],
+    "tradeoffs": [
+     "Isolating services enhances fault tolerance but adds distributed architecture complexity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The SPA is distributed via CDN edge infrastructure with an offline persistence manager in IndexedDB. API Gateway manages traffic balancing across redundant backend services, and transactional loan state is preserved in multi-AZ managed PostgreSQL without loss.",
+    "elements": [
+     "EU Cloud/CDN Provider",
+     "Web Application (SPA)",
+     "Offline & State Persistence Manager",
+     "API Gateway (Nginx / Kong)",
+     "Circulation Service",
+     "Managed Databases"
+    ],
+    "sensitivity_points": [
+     "CDN edge availability and failover routing",
+     "API gateway health-check frequency and retry limits"
+    ],
+    "tradeoffs": [
+     "Offline caching requires client-side sync logic to reconcile state upon reconnection"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Catalogue & Search Service handles cataloging through a generic Catalog Management Component. There is no dedicated ingestion adapter, connector interface, or provider abstraction layer defined to isolate third-party e-book API integrations to a single new component.",
+    "elements": [
+     "Catalogue & Search Service",
+     "Catalog Management Component",
+     "Data Access Repository"
+    ],
+    "sensitivity_points": [
+     "Coupling between external provider schemas and core catalog entities",
+     "Standardization of metadata ingestion interfaces"
+    ],
+    "tradeoffs": [
+     "Introducing dedicated provider adapters adds architectural layers but confines external changes"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The Loan Management Component in the Circulation Service encapsulates loan workflows as Spring service logic. No runtime policy engine, rule repository, or dynamic configuration management is provided to change rules without code deployment.",
+    "elements": [
+     "Circulation Service",
+     "Loan Management Component",
+     "Circulation API Controller"
+    ],
+    "sensitivity_points": [
+     "Externalization of circulation business rules",
+     "Dynamic configuration reload mechanism without service restarts"
+    ],
+    "tradeoffs": [
+     "Embedding rules in code improves compile-time safety but sacrifices runtime flexibility"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Data residency is strictly enforced across all components: PostgreSQL Multi-AZ in EU-Central, CMEK via EU KMS, Sendinblue/Brevo EU endpoint, EU Cloud/CDN edge infrastructure, and Kafka/EventBridge EU instances, preventing non-EU data traversal by design.",
+    "elements": [
+     "EU Cloud/CDN Provider",
+     "Notification Service",
+     "Dispatch Adapter",
+     "Managed Databases",
+     "PostgreSQL Primary Node",
+     "Customer-Managed Encryption Keys (CMEK)"
+    ],
+    "sensitivity_points": [
+     "Strict regional binding of all managed cloud resources",
+     "Third-party provider API data routing compliance"
+    ],
+    "tradeoffs": [
+     "Restricting services to EU regions limits vendor choice and increases operational dependency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "The API Gateway and Circulation API Controller enforce JWT-based role and identity validation, blocking cross-patron record access. Security events and traces pass through the OpenTelemetry Interceptor to the Audit Log Processor and immutable PostgreSQL storage.",
+    "elements": [
+     "API Gateway (Nginx / Kong)",
+     "Auth & Security Plugin",
+     "Circulation API Controller",
+     "Telemetry & Audit Interceptor",
+     "OpenTelemetry Collector & Audit Logging Service",
+     "Audit Log Processor Component"
+    ],
+    "sensitivity_points": [
+     "Fine-grained patron ID claims verification at controller level",
+     "Reliability of immutable audit log ingestion pipeline"
+    ],
+    "tradeoffs": [
+     "Synchronous RBAC and comprehensive audit logging introduce minor API request latency"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Managed Databases",
+     "PostgreSQL Primary Node",
+     "Customer-Managed Encryption Keys (CMEK)",
+     "Dispatch Adapter",
+     "EU Cloud/CDN Provider"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalogue & Search Service",
+     "Catalog Management Component",
+     "Data Access Repository"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Catalogue & Search Service",
+     "Search Controller & Query Optimizer",
+     "OpenSearch Indexing & Sync Engine",
+     "API Client Layer",
+     "EU Cloud/CDN Provider"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

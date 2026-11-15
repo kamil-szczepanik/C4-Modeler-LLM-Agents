@@ -1,0 +1,314 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 2,
+   "security": 3,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.875,
+  "justifications": {
+   "functional_suitability": "Scoring Engine and Case Management Service directly cover R-01 and R-02. ML Inference & Rule Engine Component includes a Shadow Evaluation Router supporting zero-downtime updates (R-03), though the pipeline for deploying rule updates dynamically without container restarts is not fully detailed.",
+   "performance_efficiency": "The sub-50ms P99 at 3,000 TPS target is well-supported by AWS Application Load Balancer, gRPC Ingress Handler, embedded Java/ONNX Runtime inference, DynamoDB feature lookups, and asynchronous audit streaming via Audit Dispatcher Component.",
+   "compatibility": "The system cleanly interfaces with Payment Gateway / Acquirer using standard gRPC/HTTPS over mTLS, integrates AWS Cognito via OAuth2/OIDC, and leverages standard AWS SDKs for S3 and DynamoDB integration.",
+   "usability": "Fraud Analysts & Risk Managers are provided a dedicated Case Management UI via React and CloudFront, while external acquirers interact efficiently through well-defined gRPC and REST interfaces.",
+   "reliability": "The architecture omits a fail-open, bypass, or circuit-breaker mechanism in AWS Application Load Balancer or Scoring Engine to ensure payments are not blocked for more than 1 minute during an outage as mandated by R-07.",
+   "security": "AWS S3 Object Lock addresses tamper-evident audit logs (R-06), and Cognito provides MFA. However, explicit encryption and tokenization mechanisms for cardholder data under PCI-DSS Level 1 (R-05) are asserted in descriptions but lack dedicated components.",
+   "maintainability": "Clean separation exists between hot-path scoring and analyst workflows. Leveraging managed AWS services (ECS Fargate, DynamoDB, S3) matches the operational capacity of a three-engineer team, though component diagrams duplicate container definitions unnecessarily.",
+   "portability": "Core application logic runs in containerized Java and Node.js runtimes. However, tight coupling to proprietary AWS primitives (DynamoDB, AWS S3 Object Lock, Cognito) limits portability outside of the specified AWS target environment."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 4,
+   "PERF-02": 3,
+   "SEC-01": 2,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.5,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 2.0,
+   "Modifiability": 3.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "In-process ONNX Runtime and DynamoDB feature retrieval bypass API Gateway overhead via ALB. However, directly writing 3,000 TPS of audit events from Audit Dispatcher to S3 APIs risks throttling without a buffering queue.",
+    "elements": [
+     "AWS Application Load Balancer (ALB)",
+     "Scoring Engine",
+     "gRPC Ingress Handler",
+     "Feature Evaluator Component",
+     "ML Inference & Rule Engine Component",
+     "Amazon DynamoDB",
+     "Audit Dispatcher Component"
+    ],
+    "sensitivity_points": [
+     "DynamoDB lookup latency under high concurrent read load",
+     "Audit log dispatch throughput directly hitting S3 Object Lock"
+    ],
+    "tradeoffs": [
+     "In-process ONNX model execution minimizes latency but increases container memory footprint"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "justification": "Separate ECS services isolate frontend loads from scoring containers. However, the Case Business Logic Service queries the Scoring Engine directly via gRPC during case review, risking performance degradation on hot-path scoring instances.",
+    "elements": [
+     "Case Management Service",
+     "Case Management API Controller",
+     "Case Business Logic Service",
+     "Scoring Engine",
+     "AWS Application Load Balancer (ALB)"
+    ],
+    "sensitivity_points": [
+     "Resource contention within Scoring Engine when handling analytical gRPC queries under peak load"
+    ],
+    "tradeoffs": [
+     "Direct gRPC calls avoid a dedicated reporting database but risk hot-path interference"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "While ECS provides auto-restart for crashed tasks, there is no architectural fallback mechanism, circuit breaker, or standalone degraded-mode bypass at the ALB or gateway to process decisions within 1 minute.",
+    "elements": [
+     "AWS Application Load Balancer (ALB)",
+     "Scoring Engine",
+     "AWS ECS on Fargate"
+    ],
+    "sensitivity_points": [
+     "Absence of fallback routing logic when Scoring Engine health checks fail"
+    ],
+    "tradeoffs": [
+     "Relying on container restarts reduces operational complexity but violates payment availability timeouts"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The Scoring Engine dispatches audit logs directly to S3 Object Lock without a durable intermediate queue (such as SQS or Kinesis). If S3 throttles or fails, records risk being dropped or memory being exhausted.",
+    "elements": [
+     "Scoring Engine",
+     "Audit Dispatcher Component",
+     "AWS S3 Object Lock",
+     "Audit Log Storage API"
+    ],
+    "sensitivity_points": [
+     "Lack of persistent local or distributed queueing for audit log dispatching"
+    ],
+    "tradeoffs": [
+     "Omitting a messaging queue cuts infrastructure cost but severely compromises audit durability"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The ML Inference component includes a Shadow Evaluation Router, and ECS Fargate enables rolling deployments. ONNX models embed within container builds, facilitating rapid rollbacks and explicit version tracing.",
+    "elements": [
+     "Scoring Engine",
+     "ML Inference & Rule Engine Component",
+     "AWS ECS on Fargate"
+    ],
+    "sensitivity_points": [
+     "Model version propagation through the ML inference pipeline into audit records"
+    ],
+    "tradeoffs": [
+     "Bundling models inside container images ensures version immutability but requires container redeployment"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "The ML & Rule Engine component supports rules, and analysts access case management for updates. However, no dynamic rule storage, evaluation bus, or configuration broadcast mechanism is detailed to update running instances within an hour.",
+    "elements": [
+     "Fraud Analysts & Risk Managers",
+     "Case Management Service",
+     "Case Business Logic Service",
+     "Scoring Engine",
+     "ML Inference & Rule Engine Component"
+    ],
+    "sensitivity_points": [
+     "Rule synchronization mechanism between Case Management Service and distributed Scoring Engine nodes"
+    ],
+    "tradeoffs": [
+     "Hot-reloading rules improves agility but risks runtime syntax errors during scoring"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "justification": "Cognito MFA protects access and the Case Management Service explicitly restricts raw card data. However, the architecture contains no security monitoring, SIEM, or behavioral alerting mechanisms to detect anomalous analyst access within 15 minutes.",
+    "elements": [
+     "Fraud Analysts & Risk Managers",
+     "AWS Cognito",
+     "Case Management Service",
+     "Case Management API Controller"
+    ],
+    "sensitivity_points": [
+     "Absence of security event detection and rapid alerting pipeline"
+    ],
+    "tradeoffs": [
+     "Omitting dedicated SIEM/detection components lowers operational overhead but sacrifices anomaly detection capabilities"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "S3 Object Lock in Compliance Mode enforces immutable, tamper-evident storage for 7 years. Audit logs capture inputs, models, and explanations directly from the Audit Dispatcher, enabling straightforward retrieval well within one working day.",
+    "elements": [
+     "AWS S3 Object Lock",
+     "Audit Log Storage API",
+     "Audit Dispatcher Component",
+     "Case Management Service"
+    ],
+    "sensitivity_points": [
+     "Retention policy configuration and object lock compliance governance in S3"
+    ],
+    "tradeoffs": [
+     "S3 Object Lock Compliance Mode prevents accidental deletion but permanently locks storage costs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "none"
+  },
+  "coverage": 0.5909090909090909,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "AWS Application Load Balancer (ALB)",
+     "Case Management Service",
+     "AWS Cognito"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "AWS S3 Object Lock",
+     "Audit Log Storage API",
+     "Audit Dispatcher Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "AWS ECS on Fargate",
+     "Amazon DynamoDB",
+     "AWS S3 Object Lock"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "AWS ECS on Fargate",
+     "Amazon DynamoDB",
+     "AWS S3 Object Lock",
+     "AWS Cognito"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "gRPC Ingress Handler",
+     "Feature Evaluator Component",
+     "ML Inference & Rule Engine Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Service",
+     "Case Management API Controller",
+     "Case Management UI",
+     "Case Business Logic Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "ML Inference & Rule Engine Component",
+     "Case Business Logic Service"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "AWS Application Load Balancer (ALB)",
+     "Scoring Engine",
+     "gRPC Ingress Handler",
+     "Feature Evaluator Component",
+     "Amazon DynamoDB"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Case Management Service",
+     "AWS Application Load Balancer (ALB)"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit Dispatcher Component",
+     "AWS S3 Object Lock",
+     "Audit Log Storage API"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

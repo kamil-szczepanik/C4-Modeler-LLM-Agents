@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Audit & Compliance Log Service container
+
+Container_Boundary(audit_compliance_log_service, "Audit & Compliance Log Service") {
+    Component(Event_Ingestion_Engine, "Event Ingestion Engine", "Go component", "Consumes security and access events from the event bus and forwards streaming events to the anomaly detection engine.")
+    Component(Compliance_API_Handler, "Compliance API Handler", "Go component", "Handles compliance API requests routed from the edge container via internal mTLS.")
+    Component(Retention_Archival_Worker, "Retention & Archival Worker", "Go component", "Archives historical logs to object storage using TLS with WORM Compliance Mode.")
+    Component(Anomaly_Detection_Alerting_Engine, "Anomaly Detection & Alerting Engine", "Go component", "Processes streaming events to detect anomalies and dispatches webhooks or alerts over HTTPS.")
+}
+
+Component(Edge_Container, "Edge Container", "Kong / Envoy", "Routes requests to the Compliance API Handler and receives alerts.")
+Component(Event_Bus, "Event Bus", "Apache Kafka / RabbitMQ", "Provides reliable event streaming for security and access events.")
+Component(MongoDB, "MongoDB", "MongoDB", "Stores active audit logs securely with AES-256 encryption at rest.")
+Component(Object_Storage, "Object Storage", "Encrypted S3-compatible Object Storage", "Enforces AWS Object Lock in Compliance Mode for tamper-proof 10-year data retention.")
+
+Rel(Edge_Container, Compliance_API_Handler, "Routes requests", "gRPC and REST over mTLS")
+Rel(Event_Bus, Event_Ingestion_Engine, "Consumes security and access events", "Apache Kafka")
+Rel(Event_Ingestion_Engine, MongoDB, "Stores audit logs", "TLS-encrypted connections")
+Rel(Event_Ingestion_Engine, Anomaly_Detection_Alerting_Engine, "Forwards streaming events", "Internal Go Channel")
+Rel(Retention_Archival_Worker, Object_Storage, "Archives historical logs", "TLS with WORM Compliance Mode")
+Rel(Anomaly_Detection_Alerting_Engine, Edge_Container, "Dispatches webhooks/alerts", "HTTPS over TLS")
+
+@enduml

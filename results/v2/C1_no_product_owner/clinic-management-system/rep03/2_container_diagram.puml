@@ -1,0 +1,45 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patient, "Patient", "Interacts with the system for scheduling and managing healthcare appointments and records.")
+Person(Clinician, "Clinician", "Accesses and manages electronic medical records and patient admissions.")
+Person(Receptionist, "Receptionist", "Manages scheduling and patient admissions.")
+Person(Billing, "Billing Specialist", "Handles billing and financial transactions.")
+
+System_Ext(PaymentGateway, "Third-Party Payment Gateway", "External service for processing payments.")
+System_Ext(LabSystems, "External Lab & Imaging Systems", "External systems providing laboratory and imaging results via HL7 FHIR.")
+System_Ext(Insurance, "Insurance Clearinghouse", "External service for verifying and processing insurance claims.")
+System_Ext(IdP, "Enterprise IdP", "External identity provider for authentication and user management.")
+
+System_Boundary(ClinicSystem, "Clinic Management System") {
+    Container(ApiGateway, "API Gateway", "Traefik/NGINX", "Handles incoming routing, SSL termination, and security enforcement.")
+    Container(EmrService, "EMR Service", "Node.js/TypeScript (Fastify)", "Manages electronic medical records and patient admissions.")
+    Container(PatientService, "Patient & Scheduling Service", "Node.js/TypeScript (Fastify)", "Manages patient information and appointment scheduling.")
+    Container(BillingService, "Billing & Claims Service", "Java/Spring Boot", "Handles billing, financial transactions, and insurance claims.")
+    Container(FhirService, "FHIR Interoperability Service", ".NET", "Integrates with external lab and imaging systems using HL7 FHIR APIs.")
+    ContainerDb(CockroachDB, "CockroachDB", "CockroachDB", "Distributed, ACID-compliant transactional and document database.")
+    Container(RabbitMQ, "RabbitMQ", "RabbitMQ", "Message broker for asynchronous communication between services and external entities.")
+    Container(Vault, "HashiCorp Vault", "HashiCorp Vault", "Provides dynamic secrets and credential management.")
+    Container(ArgoCD, "ArgoCD", "ArgoCD / Helm", "GitOps continuous delivery tool for hybrid Kubernetes deployments.")
+    Container(Telemetry, "OpenTelemetry Collector", "OpenTelemetry", "Collects and exports unified traces, metrics, and logs.")
+}
+
+Rel(Patient, ApiGateway, "Secure access for scheduling and managing records", "HTTPS/REST, OAuth2/OIDC with MFA")
+Rel(Clinician, ApiGateway, "Accesses EMR and patient admissions", "HTTPS/REST, OAuth2/OIDC with MFA")
+Rel(Receptionist, ApiGateway, "Manages patient scheduling and admissions", "HTTPS/REST, OAuth2/OIDC with MFA")
+Rel(Billing, ApiGateway, "Handles billing and financial transactions", "HTTPS/REST, OAuth2/OIDC with MFA")
+
+Rel(ApiGateway, EmrService, "Routes internal API requests", "gRPC over mTLS (SPIFFE/SPIRE)")
+Rel(ApiGateway, PatientService, "Routes internal API requests", "gRPC over mTLS (SPIFFE/SPIRE)")
+Rel(ApiGateway, BillingService, "Routes internal API requests", "gRPC over mTLS (SPIFFE/SPIRE)")
+Rel(ApiGateway, FhirService, "Routes internal API requests", "gRPC over mTLS (SPIFFE/SPIRE)")
+
+Rel(BillingService, RabbitMQ, "Sends and receives asynchronous billing messages", "AMQP")
+Rel(RabbitMQ, PaymentGateway, "Integrates payment processing asynchronously", "Asynchronous Messaging")
+Rel(RabbitMQ, Insurance, "Integrates insurance claims processing asynchronously", "Asynchronous Messaging")
+Rel(FhirService, LabSystems, "Communicates lab and imaging data via HL7 FHIR APIs", "HL7 FHIR over HTTPS")
+
+@enduml

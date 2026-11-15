@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(API_Gateway, "API Gateway", "Routes external requests via gRPC and internal mTLS.")
+System_Ext(Elasticsearch, "Elasticsearch", "Clustered search engine with disk-level encryption and custom shard routing.")
+System_Ext(Apache_Kafka, "Apache Kafka", "Message broker for catalog mutation events.")
+System_Ext(Analytics_Service, "Analytics Service", "Receives telemetry via OpenTelemetry.")
+
+Container_Boundary(Search_Catalog_Service, "Search & Catalog Service") {
+    Component(SearchController, "SearchController", "Spring Boot / Spring WebFlux", "Handles external search and catalog queries with reactive, non-blocking execution.")
+    Component(CatalogQueryService, "CatalogQueryService", "Spring Boot", "Processes catalog queries and interacts with Elasticsearch for discovery and faceted search.")
+    Component(IndexSyncWorker, "IndexSyncWorker", "Spring Boot / Asynchronous Worker", "Consumes catalog mutation events from Apache Kafka to maintain real-time indexing.")
+    Component(SearchTelemetryPublisher, "SearchTelemetryPublisher", "Spring Boot / OpenTelemetry", "Emits query metrics and zero-result tracking to the Analytics Service.")
+    Component(SearchAnalyzerConfigurator, "SearchAnalyzerConfigurator", "Spring Boot", "Configures multi-lingual tokenization and search analyzers for Elasticsearch.")
+}
+
+Rel(API_Gateway, SearchController, "Routes catalog and search requests", "Internal mTLS and gRPC")
+Rel(IndexSyncWorker, Apache_Kafka, "Consumes catalog mutation events", "mTLS or SCRAM-SHA-512")
+Rel(SearchTelemetryPublisher, Analytics_Service, "Emits query metrics and zero-result tracking", "OpenTelemetry")
+Rel(SearchController, CatalogQueryService, "Delegates search and query requests", "")
+Rel(CatalogQueryService, Elasticsearch, "Executes faceted searches and typo-tolerant discovery", "")
+
+@enduml

@@ -1,0 +1,36 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalyst, "Fraud Analyst", "Reviews fraud cases using the web-based UI.")
+Person(ComplianceOfficerAuditor, "Compliance Officer / Auditor", "Accesses audit logs and compliance data.")
+Person(Cardholder, "Cardholder", "Initiates card-not-present payment transactions.")
+
+System_Ext(PaymentGatewayCoreProcessingPlatform, "Payment Gateway / Core Processing Platform", "Sends payment authorizations for fraud screening.")
+System_Ext(IdentityProviderIdP, "Identity Provider (IdP)", "Authenticates users via OAuth2/OIDC.")
+System_Ext(AWSS3, "AWS S3", "Object storage with Object Lock for 7-year tamper-evident audit retention.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(APIGatewayIngestionService, "API Gateway / Ingestion Service", "Go, Node.js/TypeScript, AWS ECS (Fargate)", "Ingests payment authorizations and routes traffic securely.")
+    Container(FraudScoringEngine, "Fraud Scoring Engine", "Rust, AWS ECS (Fargate)", "Performs real-time fraud screening with deterministic sub-50 ms tail latencies.")
+    Container(CaseManagementAPI, "Case Management API", "Go, Node.js/TypeScript, AWS ECS (Fargate)", "Manages fraud case reviews and workflows.")
+    Container(AnalystWebApplication, "Analyst Web Application", "Node.js/TypeScript, AWS ECS (Fargate)", "Provides a web-based UI for fraud analysts to review cases.")
+    Container(AuditQueryAPI, "Audit Query API", "Go, Node.js/TypeScript, AWS ECS (Fargate)", "Provides access to audit logs and query interfaces.")
+    Container(AuditCompliancePortal, "Audit & Compliance Portal", "Node.js/TypeScript, AWS ECS (Fargate)", "Portal for compliance officers and auditors.")
+    ContainerDb(AuditEventStore, "Audit & Event Store", "Amazon Aurora with immutable ledgers", "Provides tamper-evident 7-year audit storage and synchronous cryptographic ledger writes.")
+}
+
+Rel(PaymentGatewayCoreProcessingPlatform, APIGatewayIngestionService, "Sends payment authorizations for fraud screening", "HTTPS/JSON")
+Rel(APIGatewayIngestionService, FraudScoringEngine, "Routes authorization requests for real-time scoring", "gRPC with mTLS via AWS VPC security groups and AWS Certificate Manager")
+Rel(FraudAnalyst, AnalystWebApplication, "Performs analyst case reviews", "HTTPS with OIDC/JWT authentication")
+Rel(ComplianceOfficerAuditor, AuditCompliancePortal, "Accesses compliance data and audit logs", "HTTPS with OIDC/JWT authentication")
+Rel(AnalystWebApplication, CaseManagementAPI, "Sends API requests for case management", "HTTPS with OIDC/JWT authentication")
+Rel(AuditCompliancePortal, AuditQueryAPI, "Queries audit records", "HTTPS with OIDC/JWT authentication")
+Rel(FraudScoringEngine, AuditEventStore, "Performs synchronous cryptographic ledger writes", "Synchronous ledger writes")
+Rel(AuditEventStore, AWSS3, "Archives logs with Object Lock", "AWS S3 Object Lock")
+Rel(AnalystWebApplication, IdentityProviderIdP, "Authenticates users", "OIDC/JWT")
+Rel(AuditCompliancePortal, IdentityProviderIdP, "Authenticates users", "OIDC/JWT")
+
+@enduml

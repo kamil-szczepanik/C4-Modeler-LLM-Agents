@@ -1,0 +1,42 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Claim Routing Service container
+
+Container_Boundary(claim_routing_service, "Claim Routing Service") {
+    Component(Routing Engine Component, "Routing Engine Component", "Java 17 / Spring Boot", "Manages high-throughput claim traffic distribution between the modern Azure cloud platform and the legacy on-premises mainframe.")
+    Component(State & Circuit Breaker Component, "State & Circuit Breaker Component", "Resilience4j + Azure Redis Cache", "Handles circuit breaker patterns and distributed cache for dynamic failovers and rollbacks.")
+    Component(Audit & Reconciliation Logger Component, "Audit & Reconciliation Logger Component", "Java 17 / Spring Boot", "Logs claim routing and system activities for audit and reconciliation via Azure Service Bus.")
+    Component(Mainframe Fallback Adapter Component, "Mainframe Fallback Adapter Component", "Apache Camel / Java 17", "Transforms payloads and routes traffic to the legacy mainframe using enterprise integration patterns.")
+    Component(Idempotency & Deduplication Guard Component, "Idempotency & Deduplication Guard Component", "Spring Data Redis & Caffeine Cache", "Enforces idempotency and high-availability in-memory caching to prevent duplicate claims.")
+    Component(Dynamic Routing Rule Synchronizer Component, "Dynamic Routing Rule Synchronizer Component", "Java 17 / Spring Boot", "Synchronizes dynamic routing rules received from the integration service.")
+    Component(Distributed Tracing & Correlation Component, "Distributed Tracing & Correlation Component", "Micrometer Tracing & OpenTelemetry", "Provides unified end-to-end telemetry across hybrid boundaries.")
+    Component(Fallback Cache-Aside Guard Component, "Fallback Cache-Aside Guard Component", "Java 17 / Spring Boot", "Manages fallback data caching strategies for resiliency.")
+    Component(Claim Schema Validator Component, "Claim Schema Validator Component", "Java 17 / Spring Boot", "Validates incoming claim schemas before processing.")
+    Component(Secret & Endpoint Resolver Component, "Secret & Endpoint Resolver Component", "Azure Key Vault", "Manages secure credentials and mTLS certificate resolution.")
+}
+
+System_Ext(Claims Management App, "Claims Management App", "Upstream application submitting claims.")
+System_Ext(Azure Redis Cache, "Azure Redis Cache", "Distributed cache backing state and circuit breakers.")
+System_Ext(Legacy Mainframe, "Legacy Mainframe", "On-premises legacy processing system.")
+System_Ext(Integration & Sync Service, "Integration & Sync Service", "Service providing dynamic routing rules.")
+System_Ext(Observability & Audit Container, "Observability & Audit Container", "Centralized monitoring and auditing platform.")
+
+Rel(Claims Management App, Routing Engine Component, "gRPC")
+Rel(Routing Engine Component, Idempotency & Deduplication Guard Component, "In-process")
+Rel(Idempotency & Deduplication Guard Component, Claim Schema Validator Component, "In-process")
+Rel(Routing Engine Component, State & Circuit Breaker Component, "In-process / Redis TCP")
+Rel(State & Circuit Breaker Component, Azure Redis Cache, "TCP/Redis Protocol")
+Rel(State & Circuit Breaker Component, Fallback Cache-Aside Guard Component, "In-process")
+Rel(Routing Engine Component, Mainframe Fallback Adapter Component, "gRPC")
+Rel(Mainframe Fallback Adapter Component, Legacy Mainframe, "MQ / HTTPS")
+Rel(Mainframe Fallback Adapter Component, Secret & Endpoint Resolver Component, "In-process / HTTPS")
+Rel(Routing Engine Component, Audit & Reconciliation Logger Component, "Azure Service Bus / AMQP")
+Rel(Integration & Sync Service, Dynamic Routing Rule Synchronizer Component, "Azure Service Bus / AMQP")
+Rel(Dynamic Routing Rule Synchronizer Component, State & Circuit Breaker Component, "In-process / Redis")
+Rel(Routing Engine Component, Distributed Tracing & Correlation Component, "In-process")
+Rel(Mainframe Fallback Adapter Component, Distributed Tracing & Correlation Component, "In-process")
+Rel(Distributed Tracing & Correlation Component, Observability & Audit Container, "OpenTelemetry / HTTPS")
+
+@enduml

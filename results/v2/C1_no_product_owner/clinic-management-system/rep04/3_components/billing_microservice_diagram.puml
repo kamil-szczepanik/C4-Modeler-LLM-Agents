@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(api_gateway, "API Gateway", "External gateway routing requests.")
+System_Ext(external_payment_gateway_insurance_clearinghouse, "External Payment Gateway / Insurance Clearinghouse", "External payment gateways and insurance clearinghouses.")
+System_Ext(worm_audit_log_store, "WORM Audit Log Store", "10-year compliant audit retention storage.")
+System_Ext(apache_kafka_event_broker_istio_service_mesh, "Apache Kafka Event Broker & Istio Service Mesh", "Asynchronous event messaging and service mesh.")
+
+Container_Boundary(billing_microservice, "Billing Microservice") {
+    Component(billing_api_controller, "Billing API Controller", "Spring Boot REST Controller", "Handles insurance claim submissions and incoming internal requests via gRPC over mTLS.")
+    Component(claim_processing_engine, "Claim Processing Engine", "Domain Service / Spring Bean", "Processes insurance claim submissions and payment logic using validated JWTs/OAuth2.")
+    Component(payment_integration_adapter, "Payment Integration Adapter", "Outbound Adapter", "Integrates with external payment gateways and insurance clearinghouses using resilience breakers.")
+    Component(billing_data_repository, "Billing Data Repository", "Spring Data JPA", "Standardized relational data access for PostgreSQL with AES-256 encryption at rest.")
+    Component(audit_event_publisher, "Audit Event Publisher", "Spring Bean / Event Publisher", "Publishes audit events to WORM storage and the event broker over mTLS with payload signing.")
+}
+
+Rel(api_gateway, billing_api_controller, "Routes internal requests via gRPC over mTLS")
+Rel(billing_api_controller, claim_processing_engine, "In-process method calls with validated JWTs/OAuth2")
+Rel(claim_processing_engine, payment_integration_adapter, "In-process events with resilience breakers")
+Rel(payment_integration_adapter, external_payment_gateway_insurance_clearinghouse, "TLS-secured AMQP/Kafka with envelope encryption")
+Rel(claim_processing_engine, billing_data_repository, "JDBC over TLS with AES-256 encryption at rest")
+Rel(audit_event_publisher, worm_audit_log_store, "Direct immutable stream over TLS with mTLS and payload signing")
+Rel(audit_event_publisher, apache_kafka_event_broker_istio_service_mesh, "Kafka Producer API over mTLS")
+@enduml

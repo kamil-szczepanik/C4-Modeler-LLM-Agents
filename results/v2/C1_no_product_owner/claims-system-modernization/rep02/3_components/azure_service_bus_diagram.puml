@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Azure Service Bus container
+
+System_Ext(Adjuster_Backend_Service, "Adjuster Backend Service", "External system publishing claim events.")
+System_Ext(Mainframe_Integration_Adapter, "Mainframe Integration Adapter", "External adapter for legacy mainframe integration.")
+
+Container_Boundary(Azure_Service_Bus, "Azure Service Bus") {
+    Component(Topic_Router_Component, "Topic Router Component", "Azure Service Bus Topics", "Inspects incoming claim messages and routes them to type-specific subscriptions using Azure Service Bus Topics.")
+    Component(Modernization_Switcher_Component, "Modernization Switcher Component", "In-Memory / Azure App Configuration", "Evaluates dynamic routing rules to direct migrated claim types to cloud handlers and unmigrated types to the mainframe.")
+    Component(Mainframe_Sync_Queue_Component, "Mainframe Sync Queue Component", "Azure Service Bus Queues", "Buffers messages destined for the mainframe to handle backpressure during the batch window.")
+    Component(Dead_Letter_Handler_Component, "Dead-Letter Handler Component", "Azure Service Bus Dead-Letter Queue", "Captures poisoned messages exceeding max delivery retries into a secure Dead-Letter Queue (DLQ).")
+    Component(Azure_App_Configuration, "Azure App Configuration", "Azure App Configuration", "Stores migration feature flags for the Modernization Switcher.")
+}
+
+Rel(Adjuster_Backend_Service, Topic_Router_Component, "Publishes claim events", "AMQP over TLS")
+Rel(Topic_Router_Component, Modernization_Switcher_Component, "Evaluates claim type migration status", "In-Memory calls")
+Rel(Topic_Router_Component, Mainframe_Sync_Queue_Component, "Forwards unmigrated claim payloads", "AMQP")
+Rel(Mainframe_Sync_Queue_Component, Mainframe_Integration_Adapter, "Delivers buffered payloads", "AMQP")
+
+@enduml

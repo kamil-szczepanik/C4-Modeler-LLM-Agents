@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Circulation & User Service container
+
+System_Ext(api_gateway, "API Gateway", "Kong, Node.js", "Routes inbound requests via gRPC with mTLS and JWT validation")
+System_Ext(postgresql_database, "PostgreSQL Database", "AWS RDS, EU-Central-1", "Relational database utilizing AWS KMS encryption at rest")
+System_Ext(apache_kafka, "Apache Kafka (AWS MSK)", "AWS MSK", "Event streaming platform with DLQ support")
+System_Ext(external_payment_gateway, "External Payment Gateway", "External Service", "Processes external payments securely")
+
+Container_Boundary(circulation_user_service, "Circulation & User Service") {
+    Component(loan_management_component, "Loan Management Component", "Go, Chi/standard library", "Manages high-throughput loan operations.")
+    Component(patron_profile_component, "Patron Profile Component", "Go", "Manages patron profiles and user details.")
+    Component(fine_fee_component, "Fine & Fee Component", "Go", "Handles fines, fees, and external payment processing.")
+    Component(circulation_event_publisher_consumer_component, "Circulation Event Publisher/Consumer Component", "Go, segmentio/kafka-go", "Publishes and consumes domain events using Avro over Kafka.")
+}
+
+Rel(api_gateway, loan_management_component, "Routes inbound requests", "gRPC with mTLS and JWT")
+Rel(api_gateway, patron_profile_component, "Routes inbound requests", "gRPC with mTLS and JWT")
+Rel(loan_management_component, postgresql_database, "Reads/writes relational data", "pgx over Internal VPC TCP with TLS")
+Rel(patron_profile_component, postgresql_database, "Reads/writes relational data", "pgx over Internal VPC TCP with TLS")
+Rel(fine_fee_component, postgresql_database, "Reads/writes relational data", "pgx over Internal VPC TCP with TLS")
+Rel(circulation_event_publisher_consumer_component, apache_kafka, "Publishes and consumes domain events", "Avro over TLS with SASL/SCRAM and ACLs")
+Rel(fine_fee_component, external_payment_gateway, "Executes transactions", "HTTPS/REST using tokenized payment methods over TLS 1.3")
+
+@enduml

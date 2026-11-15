@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Integration & Sync Engine container
+
+Container_Boundary(integration_sync_engine, "Integration & Sync Engine") {
+    Component(Outbox_Event_Dispatcher, "Outbox Event Dispatcher", "Spring Boot", "Lightweight Spring Boot poller streaming database outbox events.")
+    Component(Mainframe_Adapter_Service, "Mainframe Adapter Service", "Apache Camel / Azure Functions", "Container translating events for the mainframe.")
+    Component(Reconciliation_Rollback_Worker, "Reconciliation & Rollback Worker", "Spring Batch", "Spring Batch worker ensuring dual-write parity and one-day fallback capability (R-06).")
+    Component(Azure_Event_Hubs, "Azure Event Hubs", "Azure Event Hubs", "Managed event streaming broker with AMQP 1.0 and native capture capabilities.")
+    Component(Azure_Key_Vault, "Azure Key Vault", "Azure Key Vault", "Secrets and certificate management storage integrated with managed identities.")
+    Component(Azure_ExpressRoute, "Azure ExpressRoute", "Azure ExpressRoute", "Dedicated hybrid network connection securing on-premise to cloud transit.")
+    Component(Azure_Monitor, "Azure Monitor", "Azure Monitor", "Observability platform tracking consumer lag, DLQs, and immutable audit logs.")
+}
+
+Component(Claims_Core_API, "Claims Core API", "JDBC", "External system component writing transactional sync state.")
+Component(Legacy_Mainframe, "Legacy Mainframe", "SFTP / Mainframe", "External legacy system receiving delta files and batch payloads.")
+
+Rel(Claims_Core_API, Outbox_Event_Dispatcher, "Writes transactional sync state", "JDBC")
+Rel(Outbox_Event_Dispatcher, Azure_Event_Hubs, "Publishes CDC events", "AMQP 1.0 / HTTPS")
+Rel(Mainframe_Adapter_Service, Azure_Key_Vault, "Retrieves SFTP/mTLS credentials", "Managed Identity / REST")
+Rel(Mainframe_Adapter_Service, Legacy_Mainframe, "Pushes delta files and batch payloads", "SFTP over Azure ExpressRoute with mTLS")
+Rel(integration_sync_engine, Azure_Monitor, "Streams operational metrics and audit logs", "HTTPS / Azure Diagnostics")
+
+@enduml

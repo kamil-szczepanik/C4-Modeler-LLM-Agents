@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Azure Data Factory container
+
+Container_Boundary(azure_data_factory, "Azure Data Factory") {
+    Component(Mainframe_Extraction_Pipeline, "Mainframe Extraction Pipeline", "Azure Data Factory Pipeline", "Extracts data from the on-premises COBOL/DB2 mainframe via the SHIR cluster and pushes payloads to staging blob storage.")
+    Component(Staging_Blob_Storage, "Staging Blob Storage", "Azure Data Lake Storage Gen2", "Temporarily holds raw parquet files to optimize processing within the strict batch window.")
+    Component(Transformation_Ingestion_Flow, "Transformation & Ingestion Flow", "ADF Mapping Data Flows", "Transforms and ingests data, writing valid payloads to the database and invalid payloads to the quarantine container.")
+    Component(Reconciliation_Error_Handling_Pipeline, "Reconciliation & Error-Handling Pipeline", "ADF Pipeline", "Ensures automated reconciliation, zero data loss, and strict consistency.")
+    Component(Monitoring_Alerting_Trigger, "Monitoring & Alerting Trigger", "ADF Tumbling Window / Azure Monitor", "Invokes the mainframe extraction pipeline and monitors system executions.")
+    Component(Self_Hosted_Integration_Runtime_SHIR_Cluster, "Self-Hosted Integration Runtime (SHIR) Cluster", "Multi-node active-active ADF SHIR", "Secures on-premises mainframe communication without opening inbound firewall ports.")
+    Component(Dead_Letter_Quarantine_Container, "Dead-Letter & Quarantine Container", "Azure Blob Storage", "Provides append blobs for isolating malformed records in the dead-letter quarantine.")
+    Component(Mainframe_Schema_Registry, "Mainframe Schema Registry", "Azure Purview / ADF Dataset Metadata", "Provides schema definitions to the transformation and ingestion flow.")
+}
+
+System_Ext(Azure_SQL_Database, "Azure SQL Database", "Stores modern claim data")
+System_Ext(Mainframe_Integration_Adapter, "Mainframe Integration Adapter", "External adapter container")
+
+Rel(Mainframe_Extraction_Pipeline, Self_Hosted_Integration_Runtime_SHIR_Cluster, "Reads from On-Premises COBOL/DB2 Mainframe", "JDBC / Encrypted TLS over HTTPS")
+Rel(Mainframe_Extraction_Pipeline, Staging_Blob_Storage, "Pushes payloads", "HTTPS")
+Rel(Transformation_Ingestion_Flow, Azure_SQL_Database, "Writes modern claim data", "T-SQL/JDBC via Managed Private Endpoint")
+Rel(Transformation_Ingestion_Flow, Dead_Letter_Quarantine_Container, "Writes invalid payloads", "REST/HTTPS")
+Rel(Transformation_Ingestion_Flow, Mainframe_Schema_Registry, "Reads schema definitions", "Metadata API")
+Rel(Monitoring_Alerting_Trigger, Mainframe_Extraction_Pipeline, "Invokes", "Internal ADF Control Plane")
+Rel(Mainframe_Integration_Adapter, Mainframe_Extraction_Pipeline, "Invokes", "Azure Event Grid / ADF REST API")
+
+@enduml

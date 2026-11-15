@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalysts, "Fraud Analysts", "Internal users responsible for reviewing and managing fraud cases.")
+
+System_Ext(PaymentGatewayCoreLedger, "Payment Gateway / Core Ledger", "External system that submits card-not-present payment authorizations.")
+System_Ext(IdentityProviderIdP, "Identity Provider / IdP", "External identity provider used for user authentication.")
+System_Ext(ComplianceArchiveAWSS3ObjectLock, "Compliance Archive / AWS S3 Object Lock", "External storage providing WORM storage for tamper-evident 7-year auditability.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(APIGatewayAWSALB, "API Gateway / AWS ALB", "AWS ALB / gRPC over TLS", "Container handling entry traffic and routing.")
+    Container(FraudScoringEngine, "Fraud Scoring Engine", "AWS ECS Fargate", "Container executing real-time fraud screening decisions.")
+    Container(CaseManagementBackend, "Case Management Backend", "AWS ECS Fargate", "Container managing analyst review cases and rule metadata.")
+    ContainerDb(AWSElastiCacheRedis, "AWS ElastiCache / Redis", "AWS ElastiCache (Redis)", "In-memory data store for feature stores and fallback circuit-breaking.")
+    ContainerDb(AmazonAuroraServerlessv2PostgreSQL, "Amazon Aurora Serverless v2 PostgreSQL", "Amazon Aurora Serverless v2 (PostgreSQL)", "Transactional database for case management and rule metadata.")
+}
+
+Rel(PaymentGatewayCoreLedger, APIGatewayAWSALB, "Synchronous payment scoring requests", "gRPC over TLS")
+Rel(FraudAnalysts, IdentityProviderIdP, "Authentication", "HTTPS")
+Rel(FraudAnalysts, CaseManagementBackend, "Case reviews", "HTTPS")
+Rel(FraudScoringEngine, AWSElastiCacheRedis, "Feature lookup", "In-memory TCP")
+Rel(FraudScoringEngine, ComplianceArchiveAWSS3ObjectLock, "Asynchronous S3 Object Lock exports", "AWS VPC Gateway Endpoints")
+
+@enduml

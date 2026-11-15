@@ -1,0 +1,305 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 3,
+   "security": 3,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 3.75,
+  "justifications": {
+   "functional_suitability": "While 'Scoring Engine Core' and 'Model Manager' address scoring and zero-downtime updates, there is no mechanism or data flow connecting 'Scoring Engine Container' to 'Case Management Container' or 'Amazon Aurora Serverless v2' for transactions routed to review.",
+   "performance_efficiency": "The 'Scoring Engine Container (Rust)' with Tokio, combined with 'Amazon ElastiCache (Redis)' for feature lookups and an asynchronous 'Audit Logger Sidecar Container' utilizing ring and disk buffers, effectively ensures sub-50ms latency at 3,000 TPS.",
+   "compatibility": "Interoperability is thoroughly supported via gRPC and HTTPS with mTLS for 'Payment Gateway / Merchant Systems', OIDC/OAuth2 for analysts, and HTTPS integration with external 'Model Registry / Feature Store'.",
+   "usability": "Fraud analysts are granted access via 'AWS Application Load Balancer' to 'Case Management Container (Python / FastAPI)', but no dedicated frontend UI container is modeled for analyst case workflows.",
+   "reliability": "Multi-AZ Aurora Serverless is specified, but the system lacks fail-open, circuit breaker, or fallback routing mechanisms in 'AWS Application Load Balancer' to satisfy R-07 when the scoring service is unavailable.",
+   "security": "Strong transport security, WAF, and 'Amazon S3 with Object Lock' are present, but the architecture lacks an explicit tokenization or PAN-masking mechanism to satisfy R-05 and PCI-DSS Level 1 restrictions for analysts.",
+   "maintainability": "Clean separation of concerns across 'Scoring Engine Container (Rust)' and 'Case Management Container (Python)'. The 'Model Manager' decouples model updates from runtime logic, though sidecar and database patterns add operational complexity for three engineers.",
+   "portability": "The design matches the AWS eu-west-1 target well, using native container runtimes, though it exhibits tight coupling to proprietary AWS services like 'Amazon Aurora Serverless v2' and 'Amazon S3 with Object Lock'."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 2,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 3.5,
+   "Modifiability": 3.5,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The Rust-based scoring engine using Tokio combined with low-latency Redis feature lookups natively provides the throughput and sub-50ms P99 latency required for 3,000 TPS.",
+    "elements": [
+     "AWS Application Load Balancer (ALB) / Ingress Router",
+     "Scoring Engine Container (Rust)",
+     "Amazon ElastiCache (Redis)",
+     "Audit Logger Sidecar Container"
+    ],
+    "sensitivity_points": [
+     "Redis feature retrieval latency directly impacts P99 decision deadlines."
+    ],
+    "tradeoffs": [
+     "In-memory caching improves evaluation speed but increases memory-related infrastructure costs."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Scoring and case management are completely decoupled at the ALB routing, compute container, and persistence layers, ensuring analyst queries on Aurora cannot degrade real-time scoring.",
+    "elements": [
+     "AWS Application Load Balancer (ALB) / Ingress Router",
+     "Path-Based Routing Engine",
+     "Scoring Engine Container (Rust)",
+     "Case Management Container (Python / FastAPI)",
+     "Amazon Aurora Serverless v2"
+    ],
+    "sensitivity_points": [
+     "ALB path-based routing isolation between scoring and analyst target groups."
+    ],
+    "tradeoffs": [
+     "Separating operational and analytical databases increases infrastructure management overhead."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture does not model a fallback engine, circuit breaker, or automated fallback routing policy at the gateway level to decide payments if the scoring engine crashes.",
+    "elements": [
+     "AWS Application Load Balancer (ALB) / Ingress Router",
+     "Scoring Engine Container (Rust)"
+    ],
+    "sensitivity_points": [
+     "Time required to detect scoring failure and switch traffic to fallback logic."
+    ],
+    "tradeoffs": [
+     "Failing open allows business continuity but risks accepting fraudulent transactions."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The audit logger sidecar decouples logging from decision latency using an in-memory ring buffer and spill-to-disk encrypted storage, buffering records seamlessly during S3 degradations.",
+    "elements": [
+     "Scoring Engine Container (Rust)",
+     "Audit Dispatcher",
+     "Audit Logger Sidecar Container",
+     "In-Memory Ring Buffer",
+     "Spill-to-Disk Buffer",
+     "Amazon S3 with Object Lock"
+    ],
+    "sensitivity_points": [
+     "Local disk capacity for spill-to-disk buffer during prolonged storage outages."
+    ],
+    "tradeoffs": [
+     "Local buffer persistence protects decision latency but delays audit log visibility."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Scoring Engine contains a dedicated Model Manager component supporting zero-downtime model updates and version tracking, though specific blue/green deployment orchestration is not fully detailed.",
+    "elements": [
+     "Scoring Engine Container (Rust)",
+     "Model Manager",
+     "Model Registry / Feature Store",
+     "Audit Dispatcher"
+    ],
+    "sensitivity_points": [
+     "Memory overhead when holding multiple model versions concurrently during rollout."
+    ],
+    "tradeoffs": [
+     "Hot-reloading models in-process risks memory leaks versus rolling container restarts."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "Aurora holds rules and the Python API manages them, but no mechanism or synchronization path is defined to propagate updated rules from Aurora into the Rust Scoring Engine.",
+    "elements": [
+     "Case Management Container (Python / FastAPI)",
+     "Amazon Aurora Serverless v2",
+     "Scoring Engine Container (Rust)",
+     "Model Manager"
+    ],
+    "sensitivity_points": [
+     "Rule synchronization latency between Aurora Serverless and the scoring engine."
+    ],
+    "tradeoffs": [
+     "Dynamic rule reloading introduces cache-coherency overhead across distributed scoring instances."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "justification": "While RBAC middleware is present, the architecture omits an explicit tokenization/masking service for cardholder data and defines no security monitoring or automated anomaly detection pipeline.",
+    "elements": [
+     "Case Management Container (Python / FastAPI)",
+     "Authentication / RBAC Middleware",
+     "Web Application Firewall"
+    ],
+    "sensitivity_points": [
+     "Enforcement of field-level data masking before responses reach analyst clients."
+    ],
+    "tradeoffs": [
+     "Masking cardholder data protects PCI scope but restricts deep forensic investigation."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Amazon S3 Object Lock in Compliance Mode enforces immutable 7-year WORM retention, while cryptographic signing by the sidecar ensures historical audit records remain explainable and tamper-evident.",
+    "elements": [
+     "Audit Logger Sidecar Container",
+     "Signer & Uploader",
+     "Amazon S3 with Object Lock",
+     "Object Lock Enforcement Engine"
+    ],
+    "sensitivity_points": [
+     "Immutable retention settings configured on S3 Object Lock buckets."
+    ],
+    "tradeoffs": [
+     "Compliance-mode Object Lock strictly prevents object deletion even in administrative errors."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "none"
+  },
+  "coverage": 0.5454545454545454,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "TLS Termination & mTLS Validator",
+     "Authentication / RBAC Middleware",
+     "Web Application Firewall"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Amazon S3 with Object Lock",
+     "Object Lock Enforcement Engine",
+     "Signer & Uploader",
+     "Audit Logger Sidecar Container"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none"
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none"
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Real-Time Payment Fraud Screening System",
+     "Scoring Engine Container (Rust)",
+     "API Router",
+     "Feature Aggregator",
+     "Scoring Engine Core"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Container (Python / FastAPI)",
+     "API / Routing Layer",
+     "Business Logic / Case Service",
+     "Data Access Layer",
+     "Amazon Aurora Serverless v2",
+     "Relational Database Engine"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model Manager",
+     "Model Registry / Feature Store",
+     "Event Publisher / Webhook Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scoring Engine Container (Rust)",
+     "Scoring Engine Core",
+     "Amazon ElastiCache (Redis)",
+     "In-Memory Feature Store Cache",
+     "In-Memory Ring Buffer"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "TLS Termination & mTLS Validator",
+     "Authentication / RBAC Middleware"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit Dispatcher",
+     "Audit Logger Sidecar Container",
+     "Signer & Uploader",
+     "Amazon S3 with Object Lock",
+     "Object Lock Enforcement Engine"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none"
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

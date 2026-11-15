@@ -1,0 +1,257 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 and brief requirements via Catalog & Search Service, Catalog Manager, and Digital Content Providers for physical and digital cataloging, Circulation Service for circulation workflows, and Patron Web App for patron self-service.",
+   "performance_efficiency": "R-05's sub-800ms search SLA is directly addressed through Elasticsearch Cluster, Search Engine Client, dedicated Read Replica Instance with PgBouncer connection pooling, and Envoy-based traffic prioritization in Core API Gateway.",
+   "compatibility": "Compatibility is well-addressed using standard protocols (OIDC with PKCE, REST/JSON, AMQP, and gRPC) to seamlessly integrate with EU Identity Provider (IdP), Payment Gateway, and external Digital Content Providers.",
+   "usability": "All target personas are addressed with tailored interfaces: Library Patrons use the Patron Web App (Search & Discovery UI, Account Portal), while Librarians and Administrators use dedicated views in the Staff Web App.",
+   "reliability": "High reliability is ensured via Circuit Breaker & Resilience Component, Patroni/etcd Failover & Consensus Manager for database replication, RabbitMQ/Kafka buffering, and offline-resilient local caching via IndexedDB in Circulation Desk Component.",
+   "security": "Strict EU data residency is upheld across Primary Database and EU-Pinned Object Storage. Strong security controls include mTLS, TLS 1.3, OIDC token enforcement at Core API Gateway, and an Audit Logging Component.",
+   "maintainability": "The system exhibits high modularity with decoupled domain services (Circulation Service, Catalog & Search Service, Notification Service) communicating via clean boundaries, standard interfaces, and clear separation of database and caching concerns.",
+   "portability": "Standard technologies like Spring Boot, Node.js, Python, PostgreSQL, and S3-compatible storage allow portable deployment across cloud and on-premise EU infrastructure, though containerization/orchestration mechanisms (e.g., Docker/Kubernetes) are not explicitly detailed."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 3,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 4.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture decouples search queries via an external Elasticsearch cluster, fronted by Envoy traffic shaping and an asynchronous Search Engine Client, easily sustaining 2,000 concurrent queries under 800 ms.",
+    "elements": [
+     "Patron Web App",
+     "Search & Discovery UI",
+     "Core API Gateway",
+     "Request Prioritization & Shaping Component",
+     "Catalog & Search Service",
+     "Search Engine Client",
+     "Elasticsearch Cluster"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster sizing and index replica distribution under peak read concurrency",
+     "Gateway rate limiting and request prioritization thresholds"
+    ],
+    "tradeoffs": [
+     "Index replication improves search latency but increases infrastructure cost and indexing overhead"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Catalog writes persist directly to PostgreSQL while Metadata Indexer asynchronously updates Elasticsearch, isolating search reads from write overhead. Near-real-time index refresh easily meets the 5-minute SLA while maintaining sub-800ms read performance.",
+    "elements": [
+     "Staff Web App",
+     "Catalog Management Component",
+     "Catalog & Search Service",
+     "Catalog Manager",
+     "Metadata Indexer",
+     "Primary Database & Read Replica",
+     "Elasticsearch Cluster"
+    ],
+    "sensitivity_points": [
+     "Throughput of the Metadata Indexer pipeline during concurrent database writes",
+     "Elasticsearch index refresh interval settings"
+    ],
+    "tradeoffs": [
+     "Eventual consistency between primary PostgreSQL storage and Elasticsearch index"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Elasticsearch clustering handles single-node failure without downtime. Circulation operates independently on PostgreSQL with Patroni HA failover, ensuring loans proceed uninterrupted without data loss.",
+    "elements": [
+     "Catalog & Search Service",
+     "Search Engine Client",
+     "Elasticsearch Cluster",
+     "Circulation Service",
+     "Primary Database Instance",
+     "Read Replica Instance",
+     "Failover & Consensus Manager"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch replica shard count and cluster quorum configuration",
+     "Patroni consensus failover detection time"
+    ],
+    "tradeoffs": [
+     "Maintaining multi-node clusters and replica shards increases operational complexity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Patron Web App is a client-side SPA; stateless gateway instances and load balancers route patron requests across surviving application nodes, preventing loss of in-flight sessions or transactions.",
+    "elements": [
+     "Patron Web App",
+     "Core API Gateway",
+     "Routing & Load Balancing Component",
+     "Circuit Breaker & Resilience Component",
+     "Circulation Service"
+    ],
+    "sensitivity_points": [
+     "Gateway health-check intervals and circuit breaker failover speed",
+     "Stateless patron session handling via OIDC tokens"
+    ],
+    "tradeoffs": [
+     "Frequent health checks increase baseline internal network traffic"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Digital provider integrations are isolated inside the Digital Asset Synchronizer within the Catalog & Search Service, confining all schema mapping and API integration code to a single component.",
+    "elements": [
+     "Catalog & Search Service",
+     "Digital Asset Synchronizer",
+     "Catalog Manager",
+     "Digital Content Providers"
+    ],
+    "sensitivity_points": [
+     "Standardized abstraction interfaces within Digital Asset Synchronizer for third-party ingestion"
+    ],
+    "tradeoffs": [
+     "Generic ingestion abstraction may require adapter layers for non-standard provider APIs"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "While the Admin Dashboard and Staff Web App support system configuration, the Circulation Service components do not explicitly define a runtime rule engine or policy configuration mechanism to adjust loan policies without redeployment.",
+    "elements": [
+     "Staff Web App",
+     "Admin Dashboard Component",
+     "Circulation Service",
+     "Loan Management Component"
+    ],
+    "sensitivity_points": [
+     "Dynamic policy evaluation decoupled from compiled JPA domain logic"
+    ],
+    "tradeoffs": [
+     "Runtime-configurable rule engines introduce query latency and validation complexity"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The architecture strictly pins all external services (EU IdP, EU-Hosted Email/SMS Providers, EU-Pinned Object Storage) and internal databases to EU residency. However, explicit egress filtering or data-loss prevention policies are not formally specified at the gateway.",
+    "elements": [
+     "EU Identity Provider (IdP)",
+     "Primary Database & Read Replica",
+     "EU-Pinned Object Storage",
+     "EU-Hosted Email/SMS Providers",
+     "Core API Gateway",
+     "Analytics & Reporting Service"
+    ],
+    "sensitivity_points": [
+     "Network-level egress controls preventing routing outside EU cloud regions"
+    ],
+    "tradeoffs": [
+     "Restricting integrations strictly to EU-pinned vendors limits third-party provider options"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The gateway validates patron identity via OIDC tokens, the Loan Management Component validates patron ownership before data retrieval, and the dedicated Audit Logging Component records any unauthorized access attempts.",
+    "elements": [
+     "Core API Gateway",
+     "Authentication Filter Component",
+     "Circulation Service",
+     "Loan Management Component",
+     "Audit Logging Component"
+    ],
+    "sensitivity_points": [
+     "Fine-grained patron authorization checks at the service and data access layers",
+     "Immutable audit log persistence guarantees"
+    ],
+    "tradeoffs": [
+     "Detailed audit logging on authorization failures adds persistent write overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Primary Database & Read Replica",
+     "EU Identity Provider (IdP)",
+     "Rate Limiting Component",
+     "EU-Pinned Object Storage",
+     "EU-Hosted Email/SMS Providers"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Service",
+     "Catalog Management Component",
+     "Catalog Manager",
+     "Metadata Indexer",
+     "Digital Asset Synchronizer",
+     "Digital Content Providers"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Service",
+     "Search Controller",
+     "Search Engine Client",
+     "Elasticsearch Cluster",
+     "Request Prioritization & Shaping Component",
+     "Read Replica Instance"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

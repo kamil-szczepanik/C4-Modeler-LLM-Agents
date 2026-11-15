@@ -1,0 +1,240 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "The architecture directly addresses all brief requirements through dedicated containers: 'Search & Catalogue Service' for physical and digital cataloguing (R-01), 'Circulation Service' for loan management, and 'Patron Portal' alongside 'Librarian Dashboard' for patron and staff workflows.",
+   "performance_efficiency": "Requirement R-05 (< 800 ms p99 search) is satisfied by the Go/gRPC 'Search API Controller' backed by the dedicated 'OpenSearch Cluster', Envoy proxy routing, read-write separation via 'Read Replica Instances', and asynchronous offloading via 'Message Broker'.",
+   "compatibility": "The 'Integration Service' implements standard REST and SOAP with circuit breakers and rate limiting to interface cleanly with 'EU Payment Gateway' and 'National Library Database'. The 'Identity Provider' supports Shibboleth SAML and OIDC federation.",
+   "usability": "Patrons and staff are provided dedicated interfaces via 'Patron Portal' (built with WCAG 2.1 AA accessibility in mind) and 'Librarian Dashboard'. The 'Identity Provider' includes a 'UI & Localization Component' for accessible, multilingual self-service login.",
+   "reliability": "High availability and fault tolerance are ensured via RabbitMQ 'Queue Manager' (quorum queues), 'Dead-Letter Routing & Policy Engine', PostgreSQL 'High-Availability Standby' with streaming replication, and circuit breakers in 'Integration Service'.",
+   "security": "EU data residency constraints are enforced at the 'Security & Wasm Filter' and EU-localized storage. The architecture employs 'HashiCorp Vault' for dynamic secrets, 'Identity Provider' for MFA/RBAC, and pervasive TLS 1.3/mTLS across services and database connections.",
+   "maintainability": "Decomposition follows clear domain boundaries across microservices ('Search & Catalogue Service', 'Circulation Service', 'Integration Service'). Loose coupling is achieved through the 'Message Broker' using the Outbox Pattern via 'Circulation Repository & Outbox Store'.",
+   "portability": "Core workloads are containerized across standard runtimes (Go, Node.js, Python), and 'OpenSearch Cluster' leverages Kubernetes StatefulSets with localized persistent volumes. Minor infrastructure bindings exist around specific secret and database tooling."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 5.0,
+   "Modifiability": 3.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The Go-based Search API Controller, gRPC communication, and dedicated OpenSearch cluster support high-throughput queries, though caching for repeated queries is not explicitly modeled.",
+    "elements": [
+     "Patron Portal",
+     "API Gateway",
+     "Search API Controller",
+     "Search Index Client",
+     "OpenSearch Cluster"
+    ],
+    "sensitivity_points": [
+     "OpenSearch cluster sizing and shard indexing configuration under peak load",
+     "gRPC connection pooling between API Gateway and Search Controller"
+    ],
+    "tradeoffs": [
+     "Real-time index querying without intermediate cache increases OpenSearch load"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Ingestion via Catalog Management Engine uses OpenSearch Bulk API asynchronously, isolating updates from the Search API Controller to maintain read performance and sub-second index refresh.",
+    "elements": [
+     "Catalog Management Engine",
+     "Search Index Client",
+     "OpenSearch Cluster",
+     "Search API Controller"
+    ],
+    "sensitivity_points": [
+     "OpenSearch refresh interval configuration balanced against bulk indexing throughput"
+    ],
+    "tradeoffs": [
+     "Near-real-time index refresh uses background I/O to ensure fast search availability"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "OpenSearch operates as a clustered StatefulSet handling single node loss, while circulation operates independently on a separate PostgreSQL cluster, preventing loan transaction loss or downtime.",
+    "elements": [
+     "OpenSearch Cluster",
+     "Search & Catalogue Service",
+     "Circulation Service",
+     "PostgreSQL Database"
+    ],
+    "sensitivity_points": [
+     "OpenSearch replica shard distribution across Kubernetes nodes",
+     "Decoupled operational boundaries between search and circulation data stores"
+    ],
+    "tradeoffs": [
+     "Running clustered OpenSearch and PostgreSQL increases infrastructure complexity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Envoy API Gateway routes requests across redundant Patron Portal instances; patron sessions use stateless OIDC tokens, allowing immediate failover without session loss or interrupted loan processing.",
+    "elements": [
+     "Patron Portal",
+     "API Gateway",
+     "Envoy Proxy Router",
+     "Identity Provider"
+    ],
+    "sensitivity_points": [
+     "Envoy active health checking and traffic re-routing speed",
+     "Stateless token-based authentication handling in Next.js BFF layer"
+    ],
+    "tradeoffs": [
+     "Stateless sessions require frequent JWT token validation at the API Gateway"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Integration Service encapsulates external system adapters and record synchronization, though adding custom metadata schemas may also require minor updates to the Catalog Management Engine.",
+    "elements": [
+     "Integration Service",
+     "API Client Component",
+     "Synchronization Orchestrator",
+     "Catalog Management Engine"
+    ],
+    "sensitivity_points": [
+     "Standardized internal record schema representation in Synchronization Orchestrator"
+    ],
+    "tradeoffs": [
+     "Centralizing integrations in one service may create a shared deployment bottleneck"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "The Loan Domain Engine handles business rules, and the Admin Console configures settings, but a dynamic, institution-specific rule engine or externalized configuration store is not explicitly modeled.",
+    "elements": [
+     "Librarian Dashboard",
+     "Loan Domain Engine",
+     "Circulation Repository & Outbox Store",
+     "PostgreSQL Database"
+    ],
+    "sensitivity_points": [
+     "Representation of dynamic tenant-specific loan policies in Loan Domain Engine"
+    ],
+    "tradeoffs": [
+     "Dynamic rule evaluation introduces runtime overhead compared to hardcoded policy logic"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Strict EU data residency is enforced by design across all tiers: Wasm ingress filters validate residency constraints, persistent volumes are EU-localized, and external notification providers are restricted to EU hosts.",
+    "elements": [
+     "API Gateway",
+     "Security & Wasm Filter",
+     "OpenSearch Cluster",
+     "HashiCorp Vault",
+     "Dispatch Adapter Component"
+    ],
+    "sensitivity_points": [
+     "Wasm filter residency validation rules and EU-restricted provider routing"
+    ],
+    "tradeoffs": [
+     "Restricting cloud regions and third-party vendors strictly to the EU limits provider options"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The Loan API Controller enforces token RBAC and Postgres implements Row-Level Security with pgaudit, ensuring unauthorized cross-patron queries are blocked and audited at both application and database layers.",
+    "elements": [
+     "Loan API Controller",
+     "Circulation Repository & Outbox Store",
+     "Primary Transaction Engine",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Consistent propagation of patron identity claims to database Row-Level Security context"
+    ],
+    "tradeoffs": [
+     "Row-Level Security and pgaudit verification add query latency overhead to each transaction"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "partial"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Security & Wasm Filter",
+     "OpenSearch Cluster",
+     "Integrated Raft Storage Backend",
+     "Queue Manager",
+     "Synchronization Orchestrator"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog Management Module",
+     "Search & Catalogue Service",
+     "Catalog Management Engine",
+     "Search Index Client",
+     "OpenSearch Cluster"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Search & Catalogue Service",
+     "Search API Controller",
+     "OpenSearch Cluster"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

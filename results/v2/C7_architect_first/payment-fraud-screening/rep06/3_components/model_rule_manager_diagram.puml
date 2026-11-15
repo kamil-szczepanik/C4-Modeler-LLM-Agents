@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(DataScientistsRiskManagers, "Data Scientists / Risk Managers", "External users uploading rules and models")
+System_Ext(AmazonS3, "Amazon S3", "Immutable WORM storage with Object Lock and AWS KMS encryption.")
+System_Ext(AmazonMSKServerless, "Amazon MSK Serverless", "Event bus for zero-downtime propagation.")
+System_Ext(FraudScoringEngine, "Fraud Scoring Engine", "Consumes updates via Kafka protocol.")
+
+Container_Boundary(ModelRuleManager, "Model/Rule Manager") {
+    Component(APIController, "API Controller", "Python, FastAPI", "FastAPI routes handling incoming rule and model upload requests.")
+    Component(ValidatorCompiler, "Validator & Compiler", "Python, ONNX Runtime", "Validates ONNX compatibility and rule payloads.")
+    Component(ModelRegistryManager, "Model Registry Manager", "Python", "Stores versioned artifacts and applies cryptographic signatures.")
+    Component(DistributionPublisher, "Distribution Publisher", "Python, Kafka Protocol", "Broadcasts model/rule update events and handles automated rollbacks.")
+    Component(AuditLogService, "Audit Log Service", "Python", "Captures immutable deployment metadata.")
+}
+
+Rel(DataScientistsRiskManagers, APIController, "Uploads rules and models", "HTTPS (OAuth2/OIDC via AWS IAM, mTLS)")
+Rel(APIController, AuditLogService, "Records deployment events", "synchronous internal calls")
+Rel(ValidatorCompiler, ModelRegistryManager, "Passes verified artifacts", "internal function calls")
+Rel(ModelRegistryManager, AmazonS3, "Persists signed bundles", "AWS SDK (HTTPS)")
+Rel(DistributionPublisher, AmazonMSKServerless, "Publishes reload events", "Kafka Protocol")
+@enduml

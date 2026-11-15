@@ -1,0 +1,328 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "Catalog Service and AWS OpenSearch Service cover R-01, Checkout & Cart Service covers R-02, Review & Rating Service covers R-03, and Recommendation Service covers R-04. However, explicit mechanisms for digital fulfillment of electronic books are not detailed.",
+   "performance_efficiency": "AWS CloudFront edge delivery, AWS API Gateway, DynamoDB Global Tables, and AWS OpenSearch Service provide sub-2s latency and scalable throughput to support 1 M MAU. Asynchronous processing via Async Event Bus and Stream Processor decouples heavy workloads.",
+   "compatibility": "Message Queues integrate cleanly with Third-Party Shipping Provider APIs via REST. Payment Gateway and Tax Service integrations are handled over HTTPS/JSON, while Localization Engine in the SPA explicitly supports multi-currency (USD, EUR, GBP).",
+   "usability": "Routing & View Manager and Localization Engine in the Single Page Application serve both Customer and Bookstore Administrator personas. However, specialized interfaces or workflows for distinct administrative duties versus consumer shopping are not differentiated.",
+   "reliability": "Amazon Aurora PostgreSQL, DynamoDB Global Tables, and multi-region deployment across AWS support the 99.95% uptime target. The Async Event Bus includes Message Queues and a DLQ Handler to buffer spikes and ensure fault tolerance.",
+   "security": "The OWASP Defense Filter (AWS WAF) addresses OWASP Top-10 threats. Rate Limiter, Envoy Proxy Router with mTLS, and AWS Lambda Data Deletion Worker with Stream Processor data masking thoroughly address GDPR and CCPA regulatory compliance.",
+   "maintainability": "Clear modular separation exists across Core Microservices (Catalog, Checkout, Recommendation, Review). Decoupling via Async Event Bus and contracts enforced by Event Schema Registry ensure low coupling and high component testability and modifiability.",
+   "portability": "The architecture directly targets the specified AWS regions using multi-region constructs like DynamoDB Global Tables and Aurora. However, heavy reliance on proprietary AWS services (EventBridge, App Mesh, Firehose) restricts easy migration to other cloud providers."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.9375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "CloudFront edge delivery and SPA asset caching combined with API Gateway rate limiting and OpenSearch catalog queries absorb massive spikes while keeping 3G latency under two seconds.",
+    "elements": [
+     "Single Page Application (SPA)",
+     "API Gateway / Envoy",
+     "OWASP Defense Filter",
+     "Rate Limiter",
+     "Catalog Service",
+     "AWS OpenSearch Service"
+    ],
+    "sensitivity_points": [
+     "Edge cache hit ratio on CloudFront for catalog pages",
+     "OpenSearch cluster scaling during concurrent query surges"
+    ],
+    "tradeoffs": [
+     "Aggressive edge caching reduces origin load but risks serving slightly stale catalog data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendation recomputation is completely isolated in a dedicated Python microservice and asynchronous stream processing pipeline, preventing background computations from degrading transactional catalog performance.",
+    "elements": [
+     "Recommendation Service",
+     "Catalog Service",
+     "AWS OpenSearch Service",
+     "Stream Processor",
+     "Async Event Bus"
+    ],
+    "sensitivity_points": [
+     "Asynchronous decoupling of recommendation model computation from transactional paths",
+     "Resource isolation between recommendation indexing and catalog search"
+    ],
+    "tradeoffs": [
+     "Off-path recommendation recomputations ensure browsing speed at the cost of eventual model freshness"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Checkout Service decouples shipping via the Async Event Bus and Amazon SQS queues with DLQ retry handlers, guaranteeing checkouts complete successfully even if shipping APIs are offline.",
+    "elements": [
+     "Checkout & Cart Service",
+     "Async Event Bus",
+     "Event Router & Bus",
+     "Message Queues",
+     "DLQ Handler",
+     "Third-Party Shipping"
+    ],
+    "sensitivity_points": [
+     "Message queue buffer retention and retry policies",
+     "Dead-letter queue handling for persistent third-party outages"
+    ],
+    "tradeoffs": [
+     "Asynchronous fulfillment improves checkout availability but delays immediate shipping confirmation to buyers"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Deployment across three AWS regions combined with DynamoDB Global Tables and multi-region Aurora PostgreSQL enables regional failover, though database failover latency requires careful replication management to eliminate order loss.",
+    "elements": [
+     "Single Page Application (SPA)",
+     "API Gateway / Envoy",
+     "Core Microservices",
+     "Amazon Aurora PostgreSQL",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "Cross-region replication latency and replication lag limits",
+     "Aurora multi-region failover and DNS routing switchover time"
+    ],
+    "tradeoffs": [
+     "Multi-region active-active replication ensures high availability but increases operational cost and data conflict complexity"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Currency handling is localized in the SPA Localization Engine, State & Session Store, and Checkout Service, allowing JPY to be introduced with zero changes to catalog or fulfillment architectures.",
+    "elements": [
+     "Localization Engine",
+     "State & Session Store",
+     "Checkout & Cart Service",
+     "Payment Gateway"
+    ],
+    "sensitivity_points": [
+     "Decoupled currency formatting in frontend localization components",
+     "Payment gateway multi-currency support and transaction schema modularity"
+    ],
+    "tradeoffs": [
+     "Client-side currency conversion simplifies backend services but requires periodic exchange rate synchronizations"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Recommendation Service is an independent microservice interacting via standardized gRPC mesh routing, Async Event Bus events, and OpenSearch, ensuring algorithm changes remain entirely encapsulated within the component.",
+    "elements": [
+     "Recommendation Service",
+     "Envoy Proxy Router",
+     "AWS OpenSearch Service",
+     "Async Event Bus"
+    ],
+    "sensitivity_points": [
+     "Loose coupling maintained across event schemas and service mesh interfaces",
+     "Encapsulated data access patterns within the recommendation microservice"
+    ],
+    "tradeoffs": [
+     "Encapsulating the algorithm in a separate microservice increases network hops compared to embedded libraries"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The API Gateway layer incorporates AWS WAF and custom Envoy defense filters to block SQL injection and XSS at the perimeter, supplemented by asynchronous review moderation.",
+    "elements": [
+     "AWS API Gateway Edge Router",
+     "OWASP Defense Filter",
+     "Rate Limiter",
+     "Moderation Worker",
+     "Review & Rating Service"
+    ],
+    "sensitivity_points": [
+     "WAF rule coverage and low-latency packet inspection at the edge",
+     "Strict input validation and parameter sanitization on incoming requests"
+    ],
+    "tradeoffs": [
+     "Strict inspection rules enhance security against attacks but add marginal latency to ingress requests"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "A dedicated AWS Lambda Data Deletion Worker orchestrates cryptographic erasure across Aurora, DynamoDB, and compliance databases, although full deletion across distributed analytics pipelines like Snowflake requires explicit verification.",
+    "elements": [
+     "AWS Lambda Data Deletion Worker",
+     "Identity & Compliance DB",
+     "Amazon Aurora PostgreSQL",
+     "Amazon DynamoDB",
+     "Analytics & Event Tracking Container"
+    ],
+    "sensitivity_points": [
+     "Centralized cryptographic key management for reliable cryptographic erasure",
+     "Traceability of deletion operations across operational and analytical datastores"
+    ],
+    "tradeoffs": [
+     "Cryptographic erasure across operational tables simplifies compliance but complicates cold historical analytics data processing"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "AWS Lambda Data Deletion Worker",
+     "Identity & Compliance DB",
+     "Stream Processor",
+     "Tax & Compliance Service"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "State & Session Store",
+     "Localization Engine"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Third-Party Shipping Provider APIs",
+     "Third-Party Shipping",
+     "Async Event Bus",
+     "Message Queues"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog Service",
+     "AWS OpenSearch Service",
+     "Single Page Application (SPA)"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Checkout & Cart Service",
+     "Amazon DynamoDB",
+     "Payment Gateway",
+     "State & Session Store"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Review & Rating Service",
+     "Moderation Worker"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Service",
+     "AWS OpenSearch Service"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Core Microservices",
+     "Async Event Bus",
+     "Message Queues",
+     "Amazon DynamoDB",
+     "Amazon Aurora PostgreSQL"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Single Page Application (SPA)",
+     "API Gateway / Envoy"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Amazon DynamoDB",
+     "Core Microservices"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "OWASP Defense Filter",
+     "API Gateway / Envoy",
+     "Rate Limiter"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

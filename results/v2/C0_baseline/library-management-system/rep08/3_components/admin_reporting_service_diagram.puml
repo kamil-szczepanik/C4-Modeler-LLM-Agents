@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Component(API_Gateway, "API Gateway", "Gateway", "External entry point routing requests to the admin controllers.")
+Component(EU_hosted_Log___Telemetry_Aggregator, "EU-hosted Log & Telemetry Aggregator", "Telemetry Aggregator", "Receives shipped audit and telemetry logs.")
+
+System_Boundary(Admin___Reporting_Service, "Admin & Reporting Service") {
+    Component(Admin_API_Controller, "Admin API Controller", "Python / FastAPI", "Routes and handles incoming admin requests, enforcing role-based access control.")
+    Component(Audit_Log_Processor, "Audit Log Processor", "Python / Celery", "Processes and ships compliance logs to the EU-hosted Log & Telemetry Aggregator.")
+    Component(Reporting_Engine, "Reporting Engine", "Python / ReportLab / Pandas", "Performs data aggregation and generates CSV/PDF scheduled reports.")
+    Component(Query_Caching_Layer, "Query Caching Layer", "Redis", "Caches analytical KPIs to prevent database starvation.")
+    Component(PostgreSQL, "PostgreSQL", "PostgreSQL (EU-hosted)", "Relational data store with column-level PII encryption.")
+    Component(EU_hosted_Object_Storage, "EU-hosted Object Storage", "MinIO / AWS S3 EU-Central", "Stores generated analytical reports and exports.")
+    Component(Celery_Broker, "Celery Broker", "Redis / AMQP", "Message broker for dispatching asynchronous report tasks.")
+}
+
+Rel(API_Gateway, Admin_API_Controller, "Routes admin requests", "gRPC / mTLS")
+Rel(Admin_API_Controller, Query_Caching_Layer, "Reads cached KPIs", "Redis Protocol / TLS")
+Rel(Admin_API_Controller, Celery_Broker, "Dispatches report tasks", "AMQP / TLS")
+Rel(Reporting_Engine, PostgreSQL, "Executes analytical queries", "Database Protocol")
+Rel(Reporting_Engine, EU_hosted_Object_Storage, "Stores exports", "TLS")
+Rel(Audit_Log_Processor, EU_hosted_Log___Telemetry_Aggregator, "Ships logs", "TLS")
+
+@enduml

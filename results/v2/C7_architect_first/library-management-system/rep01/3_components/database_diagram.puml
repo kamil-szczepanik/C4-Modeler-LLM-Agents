@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Database container
+
+System_Ext(CoreDomainService, "Core Domain Service", "Internal system component")
+System_Ext(SearchService, "Search Service", "Internal system component")
+System_Ext(AsyncWorker, "Async Worker", "Internal system component")
+
+Container_Boundary(Database, "Database") {
+    Component(DatabasePrimary, "Database Primary", "PostgreSQL", "Manages transactional state with multi-AZ replication in the EU.")
+    Component(DatabaseReadReplica, "Database Read Replica", "PostgreSQL Read Replica", "Isolates heavy reporting queries from transactional workloads.")
+    Component(PgBouncer, "PgBouncer", "PgBouncer", "Handles connection pooling to prevent connection exhaustion.")
+    Component(CatalogSchema, "Catalog Schema", "PostgreSQL Schema", "Stores metadata for physical and digital items.")
+    Component(CirculationSchema, "Circulation Schema", "PostgreSQL Schema", "Manages patron accounts, loans, and reservations.")
+    Component(AuditLoggingSchema, "Audit & Logging Schema", "PostgreSQL Schema", "Captures transactional state changes for observability.")
+}
+
+Rel(CoreDomainService, DatabasePrimary, "Reads and writes transactional data", "TLS-encrypted TCP")
+Rel(CoreDomainService, DatabaseReadReplica, "Routes heavy analytics and reporting queries", "SQL over TLS-encrypted TCP")
+Rel(DatabasePrimary, DatabaseReadReplica, "Synchronizes transactional data", "Streaming Replication over TLS-encrypted TCP")
+Rel(SearchService, DatabasePrimary, "Replicates catalog changes via Change Data Capture", "Debezium over TLS-encrypted TCP")
+Rel(AsyncWorker, DatabasePrimary, "Polls and writes background job states", "SQL over TLS-encrypted TCP")
+
+@enduml

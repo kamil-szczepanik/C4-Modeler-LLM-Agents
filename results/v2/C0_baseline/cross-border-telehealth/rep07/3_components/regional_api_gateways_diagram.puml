@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Regional API Gateways container
+
+System_Ext(Identity_Providers, "Identity Providers", "External Identity Providers")
+System_Ext(Consent_Management_Service, "Consent Management Service", "Internal service for consent verification")
+System_Ext(Consultation_Service, "Consultation Service", "Internal microservice")
+System_Ext(AI_Inference_Orchestrator, "AI Inference Orchestrator", "Internal microservice")
+System_Ext(Prescription_Interoperability_Service, "Prescription & Interoperability Service", "Internal microservice")
+System_Ext(Global_External_HTTPS_Load_Balancers, "Global External HTTP(S) Load Balancers", "GCP Global Load Balancer")
+
+Container_Boundary(regional_api_gateways, "Regional API Gateways") {
+    Component(JWT_OAuth2_Validator_Component, "JWT & OAuth2 Validator Component", "gRPC/JWKS", "Validates incoming user tokens from Identity Providers via gRPC/JWKS.")
+    Component(Cryptographic_Consent_Verifier_Plugin, "Cryptographic Consent Verifier Plugin", "Custom Lua/Go plugin", "Validating fine-grained consent tokens.")
+    Component(Rate_Limiting_Traffic_Prioritization_Component, "Rate Limiting & Traffic Prioritization Component", "Redis-backed token bucket", "Ensuring R-03 and R-01 prioritization.")
+    Component(WAF_Payload_Inspection_Component, "WAF & Payload Inspection Component", "ModSecurity/Coraza integration", "Sanitizing FHIR and JSON payloads.")
+    Component(Localization_Fault_Transformation_Component, "Localization & Fault Transformation Component", "JSON processor", "Translates backend errors into localized, patient-friendly JSON responses.")
+    Component(Regional_Router_Component, "Regional Router Component", "Kong Enterprise / GKE", "Forwards validated traffic to internal services.")
+}
+
+Rel(regional_api_gateways, Identity_Providers, "Authenticates users", "OAuth2 / OIDC")
+Rel(Cryptographic_Consent_Verifier_Plugin, Consent_Management_Service, "Verifies fine-grained permissions", "gRPC over mTLS")
+Rel(Regional_Router_Component, Consultation_Service, "Forwards requests", "gRPC over mTLS via SPIFFE/SPIRE")
+Rel(Regional_Router_Component, AI_Inference_Orchestrator, "Forwards requests", "gRPC over mTLS via SPIFFE/SPIRE")
+Rel(Regional_Router_Component, Prescription_Interoperability_Service, "Forwards requests", "gRPC over mTLS via SPIFFE/SPIRE")
+Rel(Localization_Fault_Transformation_Component, Global_External_HTTPS_Load_Balancers, "Returns localized error responses", "HTTPS")
+
+@enduml

@@ -1,0 +1,247 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 and the brief via 'Catalogue Component', 'Digital Content Sync Component', and 'Digital Content Delivery Provider' for physical and digital items, alongside 'Circulation Component' and dedicated patron and staff portals.",
+   "performance_efficiency": "The < 800 ms search target (R-05) is directly addressed by 'Search Container' using reactive 'Search API Handler', 'Search Query Cache' (Redis), dedicated 'Search Index Engine', and asynchronous updates via 'Search Worker Container' with CDC.",
+   "compatibility": "The system ensures high compatibility via the 'Integration Worker Container', featuring dedicated clients for 'National Library Registry', 'Payment Integration Adapter', 'Digital Content Sync Component', and 'Identity Provider' using standard REST, AMQP, and gRPC protocols.",
+   "usability": "Usability requirements are fulfilled by separate user interfaces in 'Web Application': 'Patron Portal SPA' for patron self-service and 'Staff Portal SPA' for internal workflows, supported by 'Session & Localization Manager' for multilingual EU locales.",
+   "reliability": "Reliability is well-architected using 'Circuit Breaker & Fallback Manager', 'Integration Router & Circuit Breaker' (Resilience4j), 'Dead Letter Exchange (DLX)', and 'Connection Pooler (PgBouncer)' for fault tolerance, retry management, and overload protection.",
+   "security": "EU data residency is enforced via 'Geo-Routing Terminator', Frankfurt-pinned 'Database', and 'Compliance & Auditing Component'. Authentication and traffic protection are managed by 'Auth & Rate Limiting Filter', 'Security Context & Session Component', and internal TLS.",
+   "maintainability": "Maintainability is exceptionally strong due to clean separation into specialized containers ('Core Services Container', 'Search Container', 'Async Worker Container') and modular Spring components ('Catalogue Component', 'Circulation Component') with low coupling via 'Message Broker'.",
+   "portability": "Containers run standardized runtimes (Spring Boot, React, Node) with AMQP and REST interfaces, though some elements introduce cloud and vendor ties (e.g., AWS SDK in 'Storage Client' and specific RDS references)."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 5.0,
+   "Modifiability": 3.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Catalogue search queries bypass transactional services entirely, flowing through an asynchronous Spring WebFlux Search API Handler backed by a Redis Search Query Cache and an Elasticsearch cluster, easily meeting sub-800 ms P99 latencies under 2,000 concurrent requests.",
+    "elements": [
+     "API Gateway",
+     "Search Container",
+     "Search API Handler",
+     "Search Query Cache",
+     "Search Index Engine"
+    ],
+    "sensitivity_points": [
+     "Redis search cache hit ratio under high concurrent load",
+     "Elasticsearch index sharding and resource allocation"
+    ],
+    "tradeoffs": [
+     "In-memory cache memory consumption versus sub-second response latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Cataloguing writes update PostgreSQL, while asynchronous CDC via Debezium and RabbitMQ streams updates to the Search Worker Container for bulk indexing into Elasticsearch. Search reads remain decoupled and fast, well within the 5-minute replication window.",
+    "elements": [
+     "Core Services Container",
+     "Database",
+     "Logical Replication Slot",
+     "Search Worker Container",
+     "CDC Source Connector Component",
+     "Search Container"
+    ],
+    "sensitivity_points": [
+     "Debezium CDC streaming throughput and replication lag under write bursts",
+     "Bulk indexing batch sizes in Elasticsearch"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of search results versus real-time query latency and database write performance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Search runs as a clustered Elasticsearch deployment with API Gateway circuit breakers. Furthermore, circulation operations run through the isolated Core Services and PostgreSQL database, guaranteeing that loan transactions and searching continue without disruption.",
+    "elements": [
+     "Search Index Engine",
+     "Circuit Breaker & Fallback Manager",
+     "Core Services Container",
+     "Database",
+     "PgBouncer"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster replica allocation and auto-recovery time",
+     "Circuit breaker timeout and fallback tuning in API Gateway"
+    ],
+    "tradeoffs": [
+     "Cluster replication overhead versus search service availability during node failure"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Web Application is a stateless SPA distributed across CDN edge nodes, and API Gateway instances handle routing and failover across redundant backend instances. Loan transactions remain atomic and safely handled by PostgreSQL and PgBouncer.",
+    "elements": [
+     "Web Application",
+     "Patron Portal SPA",
+     "API Gateway",
+     "Circuit Breaker & Fallback Manager",
+     "Core Services Container",
+     "Database"
+    ],
+    "sensitivity_points": [
+     "CDN edge failover speed and API Gateway health-checking frequency"
+    ],
+    "tradeoffs": [
+     "Stateless front-end caching complexity versus seamless patron failover"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "External digital content providers are isolated within the Digital Content Sync Component and Integration Client Component. However, responsibilities are split between the Integration Worker Container and Core Services, requiring minor adjustments across both to ingest new provider catalog schemas.",
+    "elements": [
+     "Integration Worker Container",
+     "Digital Content Sync Component",
+     "Integration Client Component",
+     "Catalogue Component"
+    ],
+    "sensitivity_points": [
+     "Standardized adapter abstraction across diverse third-party digital content APIs"
+    ],
+    "tradeoffs": [
+     "Generic metadata abstraction versus custom provider-specific content features"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The Circulation Component relies on compiled Spring Tx domain logic to enforce loan, hold, and fine policies. The model lacks a runtime rules engine, policy store, or configuration mechanism, requiring code changes and service redeployment to modify academic versus public loan rules.",
+    "elements": [
+     "Core Services Container",
+     "Circulation Component"
+    ],
+    "sensitivity_points": [
+     "Absence of externalized runtime business rule engine or dynamic configuration"
+    ],
+    "tradeoffs": [
+     "Simpler compiled domain logic versus runtime policy configurability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "EU data residency is enforced by design across all tiers: TLS/Geo-Routing termination at API Gateway, Frankfurt-region PostgreSQL RDS, EU-restricted third-party providers (Keycloak, Stripe/Adyen, Brevo), and strict localized broker/storage disk persistence.",
+    "elements": [
+     "SSL/TLS Termination & Geo-Routing Terminator",
+     "Database",
+     "Identity Provider",
+     "Persistence Log",
+     "Compliance & Auditing Component"
+    ],
+    "sensitivity_points": [
+     "Edge geo-routing accuracy and regional isolation of cloud provider infrastructure"
+    ],
+    "tradeoffs": [
+     "Regional cloud vendor constraint versus strict legal and regulatory EU compliance"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Requests are authenticated at the API Gateway and validated by the Security Context Component via JWT. The Circulation Component validates patron identity against loan records, while Compliance & Auditing (Spring AOP) and Analytics Collector log security violations.",
+    "elements": [
+     "Auth & Rate Limiting Filter",
+     "Security Context & Session Component",
+     "Circulation Component",
+     "Compliance & Auditing Component",
+     "Analytics & Logging Collector"
+    ],
+    "sensitivity_points": [
+     "Strict patron ID claim evaluation within token context in business domain logic"
+    ],
+    "tradeoffs": [
+     "Granular security and audit logging overhead versus patron data confidentiality"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "SSL/TLS Termination & Geo-Routing Terminator",
+     "Compliance & Auditing Component",
+     "Search Index Engine",
+     "Database",
+     "Persistence Log",
+     "Object Storage",
+     "Analytics & Logging Collector"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalogue Component",
+     "Digital Content Sync Component",
+     "Digital Content Delivery Provider",
+     "National Library Registry"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Container",
+     "Search API Handler",
+     "Search Query Cache",
+     "Search Index Engine",
+     "Route Dispatcher"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

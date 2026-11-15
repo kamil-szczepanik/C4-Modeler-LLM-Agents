@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Checkout & Order Service container
+
+System_Ext(API_Gateway, "API Gateway", "External API Gateway routing requests.")
+System_Ext(Third_Party_Payment_Gateway, "Third-Party Payment Gateway", "External payment processor.")
+System_Ext(Shipping_Provider, "Shipping Provider", "External shipping and fulfillment provider.")
+System_Ext(Amazon_SQS, "Amazon SQS", "Message queuing service.")
+System_Ext(Amazon_Aurora_PostgreSQL, "Amazon Aurora PostgreSQL", "Relational database for transactional persistence.")
+
+Container_Boundary(Checkout_Order_Service, "Checkout & Order Service") {
+    Component(Checkout_Orchestrator, "Checkout Orchestrator", "Node.js, Express, Zod", "Express router handling multi-step workflows, currency conversion, idempotency, and Zod input validation.")
+    Component(Payment_Gateway_Client, "Payment Gateway Client", "Node.js, TLS-HTTPS, Circuit Breaker", "Encapsulates external payment processing via TLS-HTTPS with circuit breakers.")
+    Component(Shipping_Integrator, "Shipping Integrator", "Node.js, Resilience Patterns", "Manages third-party shipping API calls using resilience patterns.")
+    Component(Order_Repository, "Order Repository", "Prisma, PgBouncer, Amazon Aurora PostgreSQL", "Handles transactional persistence via Prisma/PgBouncer with Amazon Aurora PostgreSQL.")
+    Component(Order_Compliance_Event_Publisher, "Order/Compliance Event Publisher", "Amazon SQS", "Emits asynchronous domain and PII-masking events to Amazon SQS.")
+}
+
+Rel(API_Gateway, Checkout_Orchestrator, "Routes authenticated checkout requests via mTLS and AWS IAM using OAuth2/JWT.", "mTLS / OAuth2 / JWT")
+Rel(Checkout_Orchestrator, Order_Repository, "Stores orders, idempotency keys, and column-level encrypted PII in Amazon Aurora PostgreSQL.", "Prisma")
+Rel(Order_Compliance_Event_Publisher, Amazon_SQS, "Sends asynchronous order-placed and compliance events with Dead Letter Queue backups.", "SQS API")
+Rel(Payment_Gateway_Client, Third_Party_Payment_Gateway, "Processes tokenized card transactions over TLS-secured HTTPS.", "TLS-HTTPS")
+Rel(Shipping_Integrator, Shipping_Provider, "Manages fulfillment operations via TLS-secured HTTPS.", "TLS-HTTPS")
+Rel(Checkout_Orchestrator, Payment_Gateway_Client, "Invokes payment processing", "Internal")
+Rel(Checkout_Orchestrator, Shipping_Integrator, "Invokes fulfillment operations", "Internal")
+Rel(Checkout_Orchestrator, Order_Compliance_Event_Publisher, "Triggers domain events", "Internal")
+
+@enduml

@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+Person(Clinical_Staff, "Clinical Staff", "Sends HTTPS/mTLS encrypted clinical requests.")
+Person(External_FHIR_Integrators, "External FHIR Integrators", "Accesses HL7 FHIR API through filtered traffic.")
+
+System_Boundary(Clinical_API_Gateway, "Clinical API Gateway") {
+    Component(Ingress_Controller, "Ingress Controller", "Go", "High-performance request router utilizing weighted fair queuing for clinical traffic.")
+    Component(Contextual_Policy_Engine, "Contextual Policy Engine", "Sidecar PDP", "Enforces ABAC and emergency break-glass logic for clinical access control.")
+    Component(FHIR_Transformation_Component, "FHIR Transformation Component", "Edge-based Middleware", "Performs schema validation and PII/PHI masking for HL7 FHIR data.")
+    Component(WAF_Module, "WAF Module", "Edge Protection", "Provides security filtering against XML and JSON injection attacks.")
+    Component(Global_Traffic_Manager, "Global Traffic Manager", "Istio", "Manages hybrid-cloud load balancing and mTLS service communication.")
+}
+
+Container(Audit_Logging_Sidecar, "Audit Logging Sidecar", "Asynchronous Pipeline", "Handles non-blocking, cryptographically signed log-shipping.")
+Container(Redis_Cache, "Redis Cache", "Redis", "Offloads OIDC/JWT introspection for identity validation.")
+Container(EMR_Scheduling_Services, "EMR/Scheduling Services", "Istio-managed Microservices", "Downstream clinical services receiving processed requests.")
+Container(Identity_Provider, "Identity Provider", "OIDC/JWT", "External system for user authentication and token issuance.")
+
+Rel(Clinical_Staff, Ingress_Controller, "Sends HTTPS/mTLS encrypted clinical requests", "HTTPS/mTLS")
+Rel(External_FHIR_Integrators, WAF_Module, "Accesses HL7 FHIR API through filtered traffic", "HTTPS")
+Rel(Ingress_Controller, Contextual_Policy_Engine, "Queries for authorization decisions", "gRPC")
+Rel(Ingress_Controller, FHIR_Transformation_Component, "Routes requests for schema validation and masking", "Internal")
+Rel(Ingress_Controller, Redis_Cache, "Validates OIDC/JWT tokens", "Redis Protocol")
+Rel(Ingress_Controller, EMR_Scheduling_Services, "Forwards requests via Istio service mesh", "mTLS")
+Rel(Ingress_Controller, Audit_Logging_Sidecar, "Delivers cryptographically signed audit tokens asynchronously", "Async/Queue")
+Rel(Ingress_Controller, Identity_Provider, "Performs OIDC/JWT introspection", "OIDC/JWT")
+
+@enduml

@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Messaging container
+
+System_Ext(Web_Mobile_Clients, "Web & Mobile Clients", "External clients accessing telehealth services.")
+System_Ext(Core_Telehealth_AI_Services, "Core Telehealth & AI Services", "Core platform services requiring event validation and processing.")
+
+Container_Boundary(Messaging, "Messaging") {
+    Component(EU_Pub_Sub_Topic_Partition, "EU Pub/Sub Topic Partition", "GCP Pub/Sub", "Handles asynchronous messaging and data residency for the EU region (europe-west3).")
+    Component(US_Pub_Sub_Topic_Partition, "US Pub/Sub Topic Partition", "GCP Pub/Sub", "Handles asynchronous messaging and data residency for the US region (us-central1).")
+    Component(Event_Schema_Registry, "Event Schema Registry", "Apache Avro / JSON Schema", "Enforces payload validation and schema compliance.")
+    Component(Client_Ingress_Relay, "Client Ingress Relay", "WebSocket / MQTT", "Edge connectivity protocol handler for managing rural and low-bandwidth clients.")
+    Component(Regional_Message_Forwarders, "Regional Message Forwarders", "Java / Go", "Processes and forwards messages across regional Pub/Sub partitions.")
+    Component(Dead_Letter_Queue_DLQ_Retry_Handler_Component, "Dead Letter Queue (DLQ) & Retry Handler Component", "Java / Go", "Manages failed messages, retry logic, and poisoned message isolation.")
+    Component(DLQ_Monitoring_Alerting_Component, "DLQ Monitoring & Alerting Component", "Cloud Monitoring / Cloud Functions", "Provides automated alerting and monitoring for DLQ and poisoned messages.")
+}
+
+Rel(Web_Mobile_Clients, Client_Ingress_Relay, "Connects via WebSocket/MQTT [WSS]", "WebSocket/MQTT")
+Rel(Client_Ingress_Relay, EU_Pub_Sub_Topic_Partition, "Relays messages via GCP Pub/Sub [gRPC]", "gRPC")
+Rel(Client_Ingress_Relay, US_Pub_Sub_Topic_Partition, "Relays messages via GCP Pub/Sub [gRPC]", "gRPC")
+Rel(Core_Telehealth_AI_Services, Event_Schema_Registry, "Validates payloads via [HTTPS/gRPC]", "HTTPS/gRPC")
+Rel(EU_Pub_Sub_Topic_Partition, Regional_Message_Forwarders, "Forwards messages via [gRPC]", "gRPC")
+Rel(US_Pub_Sub_Topic_Partition, Regional_Message_Forwarders, "Forwards messages via [gRPC]", "gRPC")
+Rel(EU_Pub_Sub_Topic_Partition, DLQ_Monitoring_Alerting_Component, "Routes failed messages via [gRPC/HTTPS]", "gRPC/HTTPS")
+Rel(US_Pub_Sub_Topic_Partition, DLQ_Monitoring_Alerting_Component, "Routes failed messages via [gRPC/HTTPS]", "gRPC/HTTPS")
+
+@enduml

@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Data Tier container
+
+Container_Boundary(data_tier, "Data Tier") {
+    Component(TransactionalStore_OLTP_, "Transactional Store (OLTP)", "Azure Database for PostgreSQL (core_oltp schema)", "Manages incoming claims and migrated states.")
+    Component(CQRSReadModelStore, "CQRS Read Model Store", "Azure Database for PostgreSQL (read_models schema)", "Optimized denormalized tables for fast UI queries.")
+    Component(MigrationSyncStateLedger, "Migration Sync State Ledger", "Azure Database for PostgreSQL (core_oltp schema)", "Tracks dual-write/sync status and sequence IDs.")
+    Component(ArchivalPurgeWorker, "Archival & Purge Worker", "PostgreSQL pg_cron and Native Table Partitioning", "Background service automating historical claim data retention.")
+}
+
+System(ApplicationTier, "Application Tier", "External container representing the Application Tier")
+System(IntegrationTier, "Integration Tier", "External container representing the Integration Tier")
+
+Rel(TransactionalStore_OLTP_, ArchivalPurgeWorker, "Triggers data partitioning and archiving routines", "Internal SQL / PostgreSQL pg_cron")
+Rel(ApplicationTier, TransactionalStore_OLTP_, "Reads and writes claims data", "PostgreSQL Protocol / JDBC")
+Rel(ApplicationTier, CQRSReadModelStore, "Fast queries for UI display", "PostgreSQL Protocol / JDBC")
+Rel(ApplicationTier, MigrationSyncStateLedger, "Validates claim migration status and prevents double-processing", "PostgreSQL Protocol / JDBC")
+Rel(IntegrationTier, MigrationSyncStateLedger, "Asynchronous state synchronization and updates from mainframe batch events", "PostgreSQL Protocol / JDBC")
+
+@enduml

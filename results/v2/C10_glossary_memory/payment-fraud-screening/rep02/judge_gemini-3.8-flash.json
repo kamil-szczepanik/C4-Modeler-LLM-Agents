@@ -1,0 +1,327 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 4,
+   "security": 3,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 3.625,
+  "justifications": {
+   "functional_suitability": "Scoring and case management elements exist, but there is no mechanism or data flow connecting flagged transactions from Scoring Service Container to Case Management Container. Mechanisms for updating rules and models without downtime (R-03) are also not explicitly modeled.",
+   "performance_efficiency": "While Go, gRPC, and Amazon ElastiCache for Redis support low latency, Audit Dispatcher Component writes directly to AWS S3 Object Lock via HTTPS in the critical path without an asynchronous buffer, threatening the 50ms P99 target at 3,000 RPS.",
+   "compatibility": "Integrates cleanly with the Payment Gateway via gRPC over mTLS through AWS API Gateway / Envoy Proxy, and accepts External Fraud Intelligence Feeds via HTTPS webhooks using standard protocols.",
+   "usability": "Fraud analysts are effectively served by the Case Management API Component and AWS Cognito for authenticated case review workflows, although a dedicated client-side web application container is omitted from the container diagram.",
+   "reliability": "The Circuit Breaker & Fallback Manager Component explicitly addresses fail-open/fallback behavior to satisfy R-07 when scoring is degraded. Redundancy across AWS availability zones is implicitly reliant on managed services.",
+   "security": "AWS S3 Object Lock Compliance Mode, AWS KMS, and mTLS provide strong auditability and encryption. However, specific tokenization and data masking mechanisms required to ensure analysts never see full card numbers (R-05) are omitted.",
+   "maintainability": "Good modular separation between the Scoring Service Container and Case Management Container aligns well with the small three-engineer team. Components have focused responsibilities, although C4 decomposition of managed cloud services is non-standard.",
+   "portability": "Containers deployed on AWS Fargate fully satisfy the AWS eu-west-1 target requirement. Portability beyond AWS is constrained by tight coupling to AWS-native services like Cognito, Aurora Serverless, and S3 Object Lock."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 2,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.59375,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 2.5,
+   "Modifiability": 3.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "Go on Fargate and Redis caching support low latency, but synchronously dispatching audit records directly to S3 Object Lock at 3,000 req/s will degrade P99 latency.",
+    "elements": [
+     "AWS API Gateway / Envoy Proxy",
+     "Scoring Service Container",
+     "API Handler Component",
+     "Scoring Engine Component",
+     "Amazon ElastiCache for Redis",
+     "Audit Dispatcher Component"
+    ],
+    "sensitivity_points": [
+     "Latency of direct S3 API writes on critical path",
+     "ElastiCache Redis network latency and memory bandwidth under 3,000 RPS"
+    ],
+    "tradeoffs": [
+     "Inline audit persistence to S3 guarantees auditability at the expense of request latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Scoring and case management are fully isolated across separate Fargate containers and independent datastores (Redis vs. Aurora Serverless), preventing analyst queries from impacting real-time screening.",
+    "elements": [
+     "Scoring Service Container",
+     "Case Management Container",
+     "Amazon ElastiCache for Redis",
+     "Amazon Aurora PostgreSQL Serverless v2"
+    ],
+    "sensitivity_points": [
+     "Resource isolation between Fargate task execution environments",
+     "Independent database connection limits and pool sizing"
+    ],
+    "tradeoffs": [
+     "Duplicating operational overhead of two databases to guarantee performance isolation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "The circuit breaker is situated inside the Scoring Service Container; if the container crashes entirely, fallback logic and fallback auditing cannot execute without gateway-level fallback mechanisms.",
+    "elements": [
+     "AWS API Gateway / Envoy Proxy",
+     "Scoring Service Container",
+     "Circuit Breaker & Fallback Manager Component"
+    ],
+    "sensitivity_points": [
+     "Location of fallback execution relative to container failure domain",
+     "Envoy proxy health check and failover detection timeout threshold"
+    ],
+    "tradeoffs": [
+     "Handling fallback inside microservice simplifies code but risks total failure on process crashes"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Audit Dispatcher writes directly to S3 without a durable decoupled queue (e.g., SQS or Kinesis); an S3 slowdown will block scoring or cause audit data loss.",
+    "elements": [
+     "Scoring Service Container",
+     "Audit Dispatcher Component",
+     "AWS S3 Object Lock"
+    ],
+    "sensitivity_points": [
+     "Absence of an intermediate durable buffer between scoring and immutable storage",
+     "Memory exhaustion in container if buffering writes during S3 outages"
+    ],
+    "tradeoffs": [
+     "Avoiding managed streaming infrastructure reduces cost but compromises availability under downstream storage degradation"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Fargate container deployments support zero-downtime rolling updates and fast rollback, while the Scoring Engine references versions. However, dynamic blue/green traffic shifting mechanisms are not explicitly detailed.",
+    "elements": [
+     "AWS Fargate",
+     "AWS API Gateway / Envoy Proxy",
+     "Scoring Service Container",
+     "Scoring Engine Component"
+    ],
+    "sensitivity_points": [
+     "Container startup and model warm-up times during rolling deployment",
+     "Consistency of model version metadata attached to scoring records"
+    ],
+    "tradeoffs": [
+     "Bundling models into container images guarantees immutability but slows rapid rollbacks"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "Although the Rules Cache Engine exists in Redis, the architecture lacks a path or component connecting analyst tools or external APIs to write updated rules into Redis.",
+    "elements": [
+     "Case Management Container",
+     "Amazon ElastiCache for Redis",
+     "Rules Cache Engine",
+     "Scoring Engine Component"
+    ],
+    "sensitivity_points": [
+     "Missing ingestion pipeline between case management and the rules cache",
+     "Cache synchronization and rule propagation latency across distributed instances"
+    ],
+    "tradeoffs": [
+     "Decoupling analyst tools from scoring cache prevents contention but requires an explicit rule sync mechanism"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Cognito RBAC and CloudWatch logging provide access controls and alerting, but no tokenization vault or field-level card masking mechanism is modeled to prevent analysts from accessing raw PAN.",
+    "elements": [
+     "AWS Cognito",
+     "Case Management Container",
+     "Authentication & Authorization Middleware Component",
+     "Audit & Compliance Writer Component"
+    ],
+    "sensitivity_points": [
+     "Absence of an explicit tokenization or data masking boundary in the case service",
+     "Detection latency of CloudWatch metric alarms for anomalous analyst actions"
+    ],
+    "tradeoffs": [
+     "Relying on application-layer redaction rather than a dedicated token vault increases compliance attack surface"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "AWS S3 Object Lock in Compliance Mode with AWS KMS envelope encryption directly satisfies tamper-evident, long-term retention requirements for inputs, model metadata, and explanations over 7 years.",
+    "elements": [
+     "AWS S3 Object Lock",
+     "AWS KMS",
+     "Audit Dispatcher Component"
+    ],
+    "sensitivity_points": [
+     "Retention policy enforcement on S3 bucket and object compliance locks",
+     "Key management and retention lifecycle of KMS keys over multiple years"
+    ],
+    "tradeoffs": [
+     "S3 Compliance Mode prevents early data deletion even during administrative errors or tests"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "partial",
+   "R-02": "partial",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "full"
+  },
+  "coverage": 0.5909090909090909,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "AWS KMS",
+     "AWS S3 Object Lock",
+     "Audit & Compliance Writer Component",
+     "AWS API Gateway / Envoy Proxy"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "AWS S3 Object Lock",
+     "Audit Dispatcher Component",
+     "Scoring Engine Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "AWS Fargate",
+     "Amazon Aurora PostgreSQL Serverless v2",
+     "Amazon ElastiCache for Redis"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "AWS Fargate",
+     "AWS Cognito",
+     "Amazon Aurora PostgreSQL Serverless v2",
+     "Amazon ElastiCache for Redis"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "AWS API Gateway / Envoy Proxy",
+     "Scoring Service Container",
+     "API Handler Component",
+     "Scoring Engine Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Fraud Analyst & Risk Operations Manager",
+     "Case Management Container",
+     "Case Management API Component",
+     "Amazon Aurora PostgreSQL Serverless v2",
+     "Case Data Access Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Amazon ElastiCache for Redis",
+     "Rules Cache Engine",
+     "Scoring Engine Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scoring Service Container",
+     "API Handler Component",
+     "Scoring Engine Component",
+     "Amazon ElastiCache for Redis",
+     "Feature Store Engine",
+     "Rules Cache Engine",
+     "AWS API Gateway / Envoy Proxy"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "AWS KMS",
+     "Audit & Compliance Writer Component",
+     "Case Management Container"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "AWS S3 Object Lock",
+     "Audit Dispatcher Component",
+     "Scoring Engine Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Circuit Breaker & Fallback Manager Component",
+     "API Handler Component",
+     "Scoring Service Container"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

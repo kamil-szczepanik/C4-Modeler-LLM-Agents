@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the OpenTelemetry Collector & Audit Logging Service container
+
+System_Ext(Microservices, "Microservices", "System components emitting telemetry data.")
+System_Ext(API Gateway, "API Gateway", "Entry point for external and internal API requests.")
+
+Container_Boundary(otel_audit_service, "OpenTelemetry Collector & Audit Logging Service") {
+    Component(otel_collector, "OTel Collector Core", "OpenTelemetry (otelcol-contrib)", "Low-overhead telemetry ingestion, PII scrubbing, and core data routing.")
+    Component(audit_log_processor, "Audit Log Processor Component", "Go", "Custom audit log processor implementation for handling security logs.")
+    Component(audit_log_exporter, "Audit Log Exporter", "OpenTelemetry Exporter", "Exports processed audit logs to persistent storage.")
+    Component(audit_query_api, "Audit Query API Component", "Go / REST or gRPC", "Handles query requests for audit data.")
+    ComponentDb(managed_databases, "Managed Databases", "PostgreSQL Multi-AZ & Read Replicas", "EU-compliant immutable audit storage and query offloading.")
+}
+
+Rel(Microservices, otel_collector, "Sends telemetry via gRPC (Port 4317) with mTLS", "gRPC / mTLS")
+Rel(otel_collector, audit_log_processor, "Forwards logs for processing and PII scrubbing", "Internal Pipeline")
+Rel(audit_log_processor, audit_log_exporter, "Sends processed logs", "Internal Pipeline")
+Rel(audit_log_exporter, managed_databases, "Persists audit logs via PostgreSQL wire protocol over TLS", "PostgreSQL Wire Protocol / TLS")
+Rel(API Gateway, audit_query_api, "Queries audit data via TLS 1.3", "TLS 1.3")
+Rel(audit_query_api, managed_databases, "Offloads queries to PostgreSQL Read Replicas via TLS", "PostgreSQL Wire Protocol / TLS")
+
+@enduml

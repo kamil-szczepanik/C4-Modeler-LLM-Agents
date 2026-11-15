@@ -1,0 +1,328 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: Scoring Engine Container evaluates transactions, Case Management Container processes reviews via SQS Review Queue, and Model Storage & Management (with Model Sync Agent and Model Metadata Store) enables zero-downtime model updates.",
+   "performance_efficiency": "Scoring Engine Container achieves low latency using compiled WebAssembly in Execution Core, in-memory Feature Assembler, and asynchronous Audit Publisher via SNS Audit Topic. However, AWS API Gateway routing 3,000 req/s may stress P99 50ms latency constraints.",
+   "compatibility": "The architecture cleanly integrates with Payment Gateway / Merchants using REST/gRPC over mTLS, Identity Provider via OIDC/OAuth2, and BI / Analytics Tool (Amazon QuickSight) via AWS DMS and S3 triggers.",
+   "usability": "Fraud Analysts & Risk Managers are directly supported by the Case Management Container via a React SPA and Case API Service, utilizing RBAC/ABAC and MFA to streamline manual reviews.",
+   "reliability": "Routing & Circuit Breaker Proxy addresses unblocking payments during failure, but deploying the primary Scoring Engine Container on AWS Fargate Spot risks unexpected pod evictions during sustained 3,000 req/s load without an explicit fail-open bypass strategy.",
+   "security": "Meets PCI-DSS and audit requirements using Masking & Tokenization Service, AWS WAF, mTLS, KMS CMK encryption, and Audit Storage Manager backed by Amazon S3 Object Lock in Compliance Mode.",
+   "maintainability": "High maintainability for three engineers achieved by decoupling services via Messaging Backbone, isolating models within Execution Core (Wasmtime), and using managed infrastructure like Aurora Serverless and DynamoDB.",
+   "portability": "The design deploys cleanly into AWS eu-west-1 using containerized Go, Rust, and Node.js components, though tight coupling to AWS proprietary services (DynamoDB, SQS, Object Lock) restricts migration outside AWS."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 3,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 4.0,
+   "Modifiability": 4.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "AWS API Gateway and WAF add measurable latency overhead under 3,000 req/s, and Fargate Spot introduces eviction risk. Although Go/Rust with Wasm execution is fast, the ingress chain threatens the 50 ms P99 target.",
+    "elements": [
+     "API Gateway & Routing Layer",
+     "Routing & Circuit Breaker Proxy",
+     "Scoring Engine Container",
+     "Inbound API Handler",
+     "Feature Assembler",
+     "Execution Core"
+    ],
+    "sensitivity_points": [
+     "API Gateway network hop and inspection latency under high concurrency",
+     "Fargate Spot capacity reclamation during traffic bursts"
+    ],
+    "tradeoffs": [
+     "Managed API Gateway simplifies routing but adds latency compared to bare load balancers"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management compute and storage are completely decoupled from the scoring path using dedicated containers and an asynchronous SQS Review Queue, preventing analyst traffic from impacting scoring latency.",
+    "elements": [
+     "Scoring Engine Container",
+     "Case Management Container",
+     "SQS Review Queue",
+     "Aurora Serverless v2 (PostgreSQL)"
+    ],
+    "sensitivity_points": [
+     "Complete compute and datastore isolation between scoring and review workloads"
+    ],
+    "tradeoffs": [
+     "Maintaining separate datastores increases operational overhead for a three-person team"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "The API Gateway includes a circuit breaker proxy, but the fallback decision logic (e.g., static rules or default accept) and fallback audit logging are not defined when the scoring container is offline.",
+    "elements": [
+     "API Gateway & Routing Layer",
+     "Routing & Circuit Breaker Proxy",
+     "Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Handling decision generation when the primary scoring engine cannot be reached"
+    ],
+    "tradeoffs": [
+     "Defaulting decisions at the edge improves availability but risks approving fraudulent payments"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Scoring Engine decouples audit persistence using an asynchronous Audit Publisher dispatching to SNS Audit Topic, buffering events if DynamoDB or S3 slows down without blocking the synchronous evaluation.",
+    "elements": [
+     "Scoring Engine Container",
+     "Audit Publisher",
+     "SNS Audit Topic",
+     "Audit & Event Store Container",
+     "Audit Event Ingestion Service"
+    ],
+    "sensitivity_points": [
+     "Buffering capacity of SNS and non-blocking in-memory channels"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit writing risks brief eventual consistency in exchange for lower latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Model Storage & Management enables zero-downtime hot-reloading by polling DynamoDB metadata pointers and loading immutable Wasm binaries into local memory, allowing instantaneous rollbacks and strict version tracking.",
+    "elements": [
+     "Model Storage & Management",
+     "Model Registry",
+     "Model Metadata Store",
+     "Model Sync Agent",
+     "Execution Core"
+    ],
+    "sensitivity_points": [
+     "Atomic pointer updates in DynamoDB for instant rollback"
+    ],
+    "tradeoffs": [
+     "In-memory execution sandboxing with Wasm isolates models but requires custom compilation pipelines"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "Wasm models can be redeployed within an hour, but the architecture lacks a shared, low-latency state store (e.g., Redis/ElastiCache) required to support real-time sliding window velocity checks across distributed scoring instances.",
+    "elements": [
+     "Feature Assembler",
+     "Execution Core",
+     "Model Storage & Management"
+    ],
+    "sensitivity_points": [
+     "State synchronization across scoring instances for distributed velocity calculations"
+    ],
+    "tradeoffs": [
+     "Stateless scoring simplifies scaling but prevents cross-transaction velocity tracking"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "PAN data masking is enforced via the Masking & Tokenization Service and RBAC/Cognito. However, the architecture specifies no automated anomaly detection or alerting pipeline to detect compromised analyst access within 15 minutes.",
+    "elements": [
+     "Masking & Tokenization Service",
+     "Case API Service",
+     "Identity Provider"
+    ],
+    "sensitivity_points": [
+     "Absence of automated SIEM or behavioral analysis mechanisms for compromised credentials"
+    ],
+    "tradeoffs": [
+     "Masking PANs at the API layer reduces PCI scope but relies on application code"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "7-year compliance is directly met using S3 Object Lock in Compliance Mode for model binaries and audit storage, combined with DynamoDB immutable logging and KMS encryption accessible via the Audit Query API.",
+    "elements": [
+     "Audit & Event Store Container",
+     "Audit Storage Manager",
+     "Audit Query API",
+     "Model Registry"
+    ],
+    "sensitivity_points": [
+     "S3 Object Lock Compliance Mode retention configuration and KMS key policies"
+    ],
+    "tradeoffs": [
+     "Immutable Object Lock prevents premature deletion, slightly increasing long-term storage costs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Masking & Tokenization Service",
+     "AWS WAF / Edge Terminator",
+     "Security & Secrets",
+     "Data Access Repository",
+     "API Gateway & Routing Layer"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Audit & Event Store Container",
+     "Audit Storage Manager",
+     "Audit Query API",
+     "Model Registry"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Scoring Engine Container",
+     "Messaging Backbone",
+     "Audit Storage Manager"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "API Gateway & Routing Layer",
+     "Messaging Backbone",
+     "Audit & Event Store Container",
+     "Model Storage & Management"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "API Gateway & Routing Layer",
+     "Scoring Engine Container",
+     "Inbound API Handler",
+     "Feature Assembler",
+     "Execution Core",
+     "SQS Review Queue"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Container",
+     "Case API Service",
+     "Case Workflow Controller",
+     "Data Access Repository",
+     "SQS Review Queue"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model Storage & Management",
+     "Model Registry",
+     "Model Metadata Store",
+     "Model Validation Function",
+     "Model Sync Agent",
+     "Execution Core"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scoring Engine Container",
+     "Inbound API Handler",
+     "Feature Assembler",
+     "Execution Core",
+     "API Gateway & Routing Layer"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Masking & Tokenization Service",
+     "Case Management Container",
+     "Data Access Repository"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Publisher",
+     "SNS Audit Topic",
+     "Audit Event Ingestion Service",
+     "Audit Storage Manager",
+     "Model Registry"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Routing & Circuit Breaker Proxy",
+     "API Gateway & Routing Layer"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

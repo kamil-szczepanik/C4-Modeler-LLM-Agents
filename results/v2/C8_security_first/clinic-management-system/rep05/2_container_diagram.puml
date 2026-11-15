@@ -1,0 +1,39 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patient, "Patient", "End users who interact with the system via the Patient Portal to manage registrations and view records.")
+Person("Clinic Staff", "Clinic Staff", "Staff members who manage front-desk operations, appointments, and patient intake.")
+Person(Clinician, "Clinician", "Medical professionals who access and update Electronic Medical Records (EMRs).")
+Person("Billing Specialist", "Billing Specialist", "Administrative users who handle financial transactions and insurance claims.")
+
+System_Ext("Enterprise Identity Provider (IdP)", "Enterprise Identity Provider (IdP)", "Handles authentication and OAuth 2.0 / OIDC integrations.")
+System_Ext("Insurance Claim Clearinghouse", "Insurance Claim Clearinghouse", "External clearinghouse for processing insurance claims.")
+System_Ext("Lab & Imaging Systems", "Lab & Imaging Systems", "External diagnostic systems providing lab results and medical imaging.")
+System_Ext("Notification System", "Notification System", "External notification service for dispatching appointment reminders and alerts.")
+
+System_Boundary(cms, "Clinic Management System") {
+    Container("Envoy Proxy API Gateway", "Envoy Proxy API Gateway", "Envoy Proxy", "Ingress and routing, TLS 1.3 termination, and rate limiting.")
+    Container("OAuth2-Proxy / Keycloak Sidecar", "OAuth2-Proxy / Keycloak Sidecar", "OAuth2-Proxy / Keycloak", "Handles authentication and identity verification alongside the API gateway.")
+    Container("EMR & Patient Service", "EMR & Patient Service", "Node.js / Fastify", "Manages patient admissions, scheduling, and electronic medical records (EMR).")
+    Container("Billing & Claims Service", "Billing & Claims Service", "Java Spring Boot", "Manages billing and financial workflows.")
+    Container("FHIR Interoperability Gateway", "FHIR Interoperability Gateway", "HAPI FHIR", "Ensures HL7 FHIR standards compliance for interoperability.")
+    ContainerDb(PostgreSQL, "PostgreSQL", "CloudNativePG, PostgreSQL with AES-256 encryption", "Core persistence store for structured patient and billing data.")
+    Container(Kafka, "Apache Kafka", "Apache Kafka", "Asynchronous event streaming and message queuing platform.")
+}
+
+Rel(Patient, "Envoy Proxy API Gateway", "Interacts securely to manage registrations and view records", "HTTPS / TLS 1.3")
+Rel("Clinic Staff", "Envoy Proxy API Gateway", "Manages front-desk operations and patient intake", "HTTPS / TLS 1.3")
+Rel(Clinician, "Envoy Proxy API Gateway", "Accesses and updates EMRs and clinical data", "HTTPS / TLS 1.3")
+Rel("Billing Specialist", "Envoy Proxy API Gateway", "Handles financial transactions and insurance claims", "HTTPS / TLS 1.3")
+
+Rel("Envoy Proxy API Gateway", "OAuth2-Proxy / Keycloak Sidecar", "Internal traffic authentication and routing", "Internal HTTP / mTLS")
+Rel("EMR & Patient Service", "Billing & Claims Service", "Communicates for billing integration and workflows", "gRPC over mTLS")
+Rel("Billing & Claims Service", "Insurance Claim Clearinghouse", "Asynchronous queue-based integration for claims processing", "Asynchronous queue-based integration via Apache Kafka")
+Rel("FHIR Interoperability Gateway", "Lab & Imaging Systems", "Integrates for lab and imaging data exchange", "HL7 FHIR APIs")
+Rel("EMR & Patient Service", PostgreSQL, "Reads and writes encrypted patient and EMR data", "Encrypted Database Connection")
+Rel("Billing & Claims Service", PostgreSQL, "Reads and writes billing data", "Encrypted Database Connection")
+
+@enduml

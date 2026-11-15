@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalystRiskEngineer, "Fraud Analyst & Risk Engineer", "Performs case management and review of flagged payment transactions.")
+
+System_Ext(PaymentGatewayAcquirer, "Payment Gateway / Acquirer", "Sends payment authorization requests for fraud evaluation.")
+System_Ext(AuditComplianceArchive, "Audit / Compliance Archive", "Tamper-evident 7-year log storage using AWS S3 Object Lock.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(AWSApiGateway, "AWS API Gateway", "AWS API Gateway", "Ingress layer for handling incoming API requests and payment authorizations.")
+    Container(GoFraudScoringEngine, "Go Fraud Scoring Engine", "AWS ECS Fargate, Go, gRPC", "Evaluates card-not-present payment authorizations in real-time.")
+    Container(CaseManagementBackend, "Case Management Backend", "AWS ECS Fargate, Go, AWS Cognito", "Manages analyst reviews and case management for flagged transactions.")
+    ContainerDb(AmazonElastiCacheRedis, "Amazon ElastiCache (Redis)", "Amazon ElastiCache (Redis)", "Low-latency in-memory data store for real-time velocity checks.")
+    ContainerDb(AmazonAuroraServerlessv2, "Amazon Aurora Serverless v2", "Amazon Aurora Serverless v2", "Relational database with append-only ledger tables for tamper-evident 7-year audit logs.")
+}
+
+Rel(PaymentGatewayAcquirer, AWSApiGateway, "Sends payment authorization requests", "HTTPS / HTTP/2")
+Rel(FraudAnalystRiskEngineer, CaseManagementBackend, "Manages cases and reviews flagged transactions", "HTTPS (OIDC/OAuth2 via AWS Cognito)")
+Rel(AWSApiGateway, GoFraudScoringEngine, "Forwards payment authorization requests for scoring", "gRPC over mTLS (AWS VPC Lattice)")
+Rel(GoFraudScoringEngine, AmazonElastiCacheRedis, "Performs real-time velocity checks", "TCP")
+Rel(GoFraudScoringEngine, AmazonAuroraServerlessv2, "Reads and writes transaction and audit data", "TLS")
+Rel(CaseManagementBackend, AmazonAuroraServerlessv2, "Reads and writes case and analyst review data", "TLS")
+Rel(AmazonAuroraServerlessv2, AuditComplianceArchive, "Exports tamper-evident logs for 7-year retention", "AWS S3 Object Lock (Compliance Mode)")
+
+@enduml

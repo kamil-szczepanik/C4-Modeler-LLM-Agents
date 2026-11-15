@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Customer Engagement & Notification Container container
+
+System_Ext(amazon_sqs_sns, "Amazon SQS / SNS", "AWS Messaging Service", "Triggers asynchronous notification workflows.")
+System_Ext(amazon_dynamodb, "Amazon DynamoDB", "AWS NoSQL Database", "Stores encrypted user consent profiles and non-PII audit logs.")
+System_Ext(aws_secrets_manager, "AWS Secrets Manager", "AWS Secrets Management", "Secures and retrieves third-party API keys at runtime.")
+System_Ext(external_email_notification_service, "External Email/Notification Service", "SES, Twilio", "Sends final messages to end-users via email or SMS.")
+
+Container_Boundary(customer_engagement_notification_container, "Customer Engagement & Notification Container") {
+    Component(event_consumer_component, "Event Consumer Component", "Node.js, AWS SDK", "Processes asynchronous events from SQS/SNS to trigger notification workflows.")
+    Component(notification_dispatcher_component, "Notification Dispatcher Component", "Node.js", "Coordinates message rendering and payload dispatching.")
+    Component(template_engine_component, "Template Engine Component", "Handlebars, MJML", "Renders responsive, secure HTML/text multi-channel templates.")
+    Component(consent_preference_manager_component, "Consent & Preference Manager Component", "Node.js, DynamoDB Client", "Validates user preferences and manages GDPR/CCPA compliance.")
+    Component(third_party_provider_adapter_component, "Third-Party Provider Adapter Component", "Axios, HTTPS", "Dispatches payloads securely to external providers with exponential backoff retries.")
+    Component(audit_logger_component, "Audit Logger Component", "Node.js", "Emits and persists dispatch results for auditing purposes.")
+}
+
+Rel(amazon_sqs_sns, event_consumer_component, "Triggers asynchronous notification workflows", "AWS SQS/SNS, TLS")
+Rel(event_consumer_component, consent_preference_manager_component, "Validates user preferences", "In-process / Async")
+Rel(consent_preference_manager_component, amazon_dynamodb, "Reads/writes user consent profiles", "AWS SDK, TLS 1.3")
+Rel(notification_dispatcher_component, template_engine_component, "Renders message content", "In-process")
+Rel(notification_dispatcher_component, third_party_provider_adapter_component, "Dispatches payload", "In-process")
+Rel(third_party_provider_adapter_component, external_email_notification_service, "Sends final message", "HTTPS, TLS 1.3")
+Rel(third_party_provider_adapter_component, audit_logger_component, "Emits dispatch results", "In-process / Async")
+Rel(audit_logger_component, amazon_dynamodb, "Persists audit logs", "AWS SDK, TLS 1.3")
+Rel(third_party_provider_adapter_component, aws_secrets_manager, "Retrieves API keys", "AWS SDK, TLS 1.3")
+
+@enduml

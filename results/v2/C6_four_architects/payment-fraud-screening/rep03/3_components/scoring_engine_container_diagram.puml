@@ -1,0 +1,36 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Scoring Engine Container container
+
+System_Ext(alb, "AWS Application Load Balancer (ALB)", "AWS ALB", "Routes external authorization traffic via HTTPS/gRPC.")
+System_Ext(tokenization_proxy, "Tokenization Proxy Container", "AWS Nitro Enclaves", "Isolates tokenization to achieve PCI-DSS Level 1 compliance.")
+System_Ext(feature_store, "ML Feature Store", "ML Feature Store", "Stores and provides real-time features.")
+System_Ext(dynamodb, "Amazon DynamoDB", "Amazon DynamoDB", "Stores hot state.")
+System_Ext(s3, "Amazon S3 Object Lock", "Amazon S3 Object Lock", "Stores tamper-evident audit logs.")
+
+Container_Boundary(scoring_engine, "Scoring Engine Container") {
+    Component(api_handler, "API Handler Component", "Go, net/http / gRPC", "Routes external authorization traffic and handles incoming API requests.")
+    Component(sanitization_guard, "Sanitization & Tokenization Guard Component", "Go", "Sanitizes input and interacts with the tokenization proxy for card data.")
+    Component(feature_fetcher, "Feature Fetcher Component", "Go concurrency primitives", "Retrieves real-time features concurrently for fraud evaluation.")
+    Component(circuit_breaker, "Circuit Breaker & Fallback Component", "Go", "Handles errors and provides fallback mechanisms for inference calls.")
+    Component(inference_engine, "Inference Engine Component", "C++ via cgo, ONNX Runtime", "Executes compiled fraud scoring models in-memory for microsecond-level latency.")
+    Component(model_loader, "Model Loader Component", "Go", "Hot-swaps models in-memory via pointer swaps.")
+    Component(decision_explainer, "Decision Explainer Component", "Go", "Explains decisions and passes structs to the audit component.")
+    Component(audit_persistence, "Audit & Persistence Component", "Go, AWS SDK", "Asynchronously emits events and writes hot state and audit logs.")
+}
+
+Rel(alb, api_handler, "Routes external authorization traffic", "HTTPS/gRPC")
+Rel(api_handler, sanitization_guard, "Internal Go call")
+Rel(sanitization_guard, tokenization_proxy, "Tokenizes card data", "gRPC/mTLS over internal VPC")
+Rel(feature_fetcher, feature_store, "Retrieves real-time features", "gRPC")
+Rel(feature_fetcher, circuit_breaker, "Go error handling / interface call")
+Rel(circuit_breaker, inference_engine, "Passes feature vector", "Go function call")
+Rel(model_loader, inference_engine, "Hot-swaps models", "In-memory pointer swap")
+Rel(inference_engine, decision_explainer, "In-memory Go struct passing")
+Rel(decision_explainer, audit_persistence, "Asynchronous event emission", "Go channel")
+Rel(audit_persistence, dynamodb, "Writes hot state", "AWS SDK")
+Rel(audit_persistence, s3, "Writes tamper-evident audit logs", "AWS SDK")
+
+@enduml

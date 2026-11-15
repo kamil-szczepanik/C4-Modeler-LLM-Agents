@@ -1,0 +1,360 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 2,
+   "security": 4,
+   "maintainability": 3,
+   "portability": 2
+  },
+  "mean": 2.875,
+  "justifications": {
+   "functional_suitability": "Real-Time Scoring Engine, ML Inference Service and Case Management Backend cover R-01 and R-02. Rule updates rely on the Model Loader and Rule & Model Management Console, but no rule engine or deployment pipeline is defined. The decline/review routing logic is vague and the ML Model/Rule Registry is not modelled.",
+   "performance_efficiency": "Amazon ElastiCache Redis with pipelining (Feature Aggregator), ONNX Runtime, asynchronous EventBridge and DynamoDB auto-scaling help. However, synchronous KMS signing and DynamoDB writes sit in the hot path, and there is no latency budget or scaling for Fargate. The 50 ms P99 target is unproven.",
+   "compatibility": "gRPC/mTLS toward Payment Gateway / Acquirer Systems, token resolution via Card Networks / Token Vaults, and the Audit Archive are defined. But the Token Vault call is missing from container relationships, the registry is not wired, and the circuit-breaker signal is unclear. API Gateway HTTP API gRPC support is questionable.",
+   "usability": "Fraud Analyst Frontend has a Case Management Dashboard, WebSocket Client Module and Cognito RBAC. The Rule & Model Management Console serves ML Engineers. Auditors get an Audit Query API. However, there is no explainability display and no case-detail view, and the frontend's component diagram has inconsistencies.",
+   "reliability": "A fail-open circuit breaker signal exists only at context level. EventBridge has a Dead-Letter Queue and DynamoDB is managed. But there is no multi-AZ, health-check or retry design, no timeout fallback in the Decision Orchestrator, and no backup or recovery. R-07 is poorly realized.",
+   "security": "AWS WAF, mTLS Validator, Payload Validator, Client-Side Encryption Component, Audit Log Redactor, Audit Logger & Cryptographic Signer (KMS), S3 Object Lock, Integrity Verifier, Cognito RBAC and Audit Logging & Redaction Guard cover PCI, tokenization, tamper evidence and analyst PAN masking. Minor gaps: no network segmentation and no key management detail.",
+   "maintainability": "Containers are decomposed into clear components with separate responsibilities, using managed services and an event bus for decoupling. Weaknesses: DynamoDB is shared by the scoring and case services, the S3 container wrongly hosts Lambdas, the Case Management Backend uses Go/Node.js, and the audit path is duplicated. This inconsistency hurts clarity.",
+   "portability": "The design is deeply tied to AWS-managed services such as API Gateway, DynamoDB, EventBridge, Cognito, KMS and Lambda. Containers on ECS Fargate and ONNX models are portable, but there is no abstraction layer or IaC. The brief names only AWS eu-west-1, so the fit is adequate but replaceability is low."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.40625,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 2.0,
+   "Modifiability": 2.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "AWS API Gateway",
+     "Real-Time Scoring Engine",
+     "ML Inference Service",
+     "Amazon ElastiCache",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "Synchronous hops: gateway, VPC Link, scoring, ONNX inference, DynamoDB write, KMS signing",
+     "Python inference service under 3,000 rps",
+     "Audit signing placement on hot path unclear"
+    ],
+    "tradeoffs": [
+     "Rich layered ingress adds latency versus the 50 ms budget",
+     "Explainability and signing add latency for auditability"
+    ],
+    "justification": "Fast Redis features and ONNX are good, but many synchronous hops, Python inference, API Gateway overhead and DynamoDB/KMS calls put P99 below 50 ms at risk. No capacity or latency budget is shown."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Case Management Backend",
+     "Amazon DynamoDB",
+     "Fraud Analyst Frontend",
+     "Amazon EventBridge"
+    ],
+    "sensitivity_points": [
+     "Case and transaction tables share DynamoDB account capacity",
+     "Separate ECS services isolate compute",
+     "Queue GSIs performance undefined"
+    ],
+    "tradeoffs": [
+     "Shared datastore is cheap but couples workloads",
+     "Async EventBridge decouples case creation from scoring"
+    ],
+    "justification": "Case backend runs separately and events are async, so compute is isolated. But shared DynamoDB with separate-table autoscaling and no explicit isolation or caching leaves minor risk; the 2 s case screen is plausible."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "Payment Gateway / Acquirer Systems",
+     "AWS API Gateway",
+     "Real-Time Scoring Engine",
+     "Audit Logger & Cryptographic Signer"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker signal exists only as a context-level relationship",
+     "Fail-open detection and trigger undefined",
+     "Fallback decision audit path undefined"
+    ],
+    "tradeoffs": [
+     "Fail-open favors availability but raises fraud exposure",
+     "Fallback audit adds complexity"
+    ],
+    "justification": "Context mentions circuit-breaker signals for fail-open, but no container or component implements fallback, health detection, a fallback decision or its auditing. Multi-AZ scaling is not described. Largely unaddressed."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Audit Logger & Cryptographic Signer",
+     "Amazon DynamoDB",
+     "Amazon S3 Object Lock",
+     "Telemetry & Audit Emitter",
+     "Amazon EventBridge"
+    ],
+    "sensitivity_points": [
+     "Audit write synchronous or async not specified",
+     "No local buffer or queue for audit records",
+     "Multiple overlapping audit paths"
+    ],
+    "tradeoffs": [
+     "Synchronous audit gives durability but hurts latency",
+     "Async paths risk loss without buffering"
+    ],
+    "justification": "DynamoDB and S3 are durable, and a Firehose/EventBridge DLQ exists, but the signer writes directly to the stores with no buffering or retry design. Slow audit can stall decisions or lose records; the guarantee isn't demonstrated."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "ML Inference Service",
+     "Model Loader",
+     "ML Engineers",
+     "Rule & Model Management Console",
+     "Explainability Component"
+    ],
+    "sensitivity_points": [
+     "Model Loader supplies binaries but no versioning or canary mechanism",
+     "Rollback mechanism undefined",
+     "Model version recording in decision not explicit"
+    ],
+    "tradeoffs": [
+     "Hot-loading avoids downtime but risks inconsistent state across instances",
+     "Registry is external, reducing control"
+    ],
+    "justification": "Model Loader fetches models from a registry and the console triggers deployments, giving a zero-downtime path. However, no traffic switching, rollback within 5 minutes or explicit model-version stamping in decisions is shown."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "elements": [
+     "Decision Orchestrator",
+     "Rule & Model Management Console",
+     "Case Management Backend",
+     "ML Model / Rule Registry"
+    ],
+    "sensitivity_points": [
+     "No rule engine or rule store component exists",
+     "Rule hot-reload mentioned only in description",
+     "Rule names in decision explanation absent"
+    ],
+    "tradeoffs": [
+     "Rules inside orchestrator are fast but tied to deployment",
+     "External registry decouples but adds a fetch"
+    ],
+    "justification": "Orchestrator is said to coordinate zero-downtime rules and a console exists, but no rule engine, rule loading, validation or recording of applied rules in the explanation is modeled. Explainability covers only tree attributions."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "Audit Logging & Redaction Guard",
+     "Authentication & Authorization Module",
+     "Client-Side Encryption Component",
+     "API Router & Token Handler",
+     "Case Management Backend"
+    ],
+    "sensitivity_points": [
+     "PAN redaction is client-side, so bypassable by an attacker",
+     "No anomaly detection or alerting component",
+     "Backend authorization enforcement unspecified"
+    ],
+    "tradeoffs": [
+     "Tokenization limits exposure but depends on external vault",
+     "Client-side guard is cheap but weak"
+    ],
+    "justification": "Tokenization, column encryption and Cognito RBAC reduce card exposure, but the redaction guard is browser-side only and no server-side masking is shown. There is no detection or 15-minute alerting mechanism (e.g., GuardDuty or CloudTrail alarms)."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Amazon S3 Object Lock",
+     "Audit Query API",
+     "Integrity Verifier",
+     "Audit Logger & Cryptographic Signer",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "Whether archive holds inputs, model version and explanation",
+     "KMS signing key retention for 7 years",
+     "Unclear which audit path is authoritative"
+    ],
+    "tradeoffs": [
+     "WORM guarantees integrity but complicates corrections and costs storage",
+     "Multiple audit paths add redundancy but ambiguity"
+    ],
+    "justification": "S3 Object Lock, KMS signing, Integrity Verifier and an Audit Query API support tamper-evident retrieval. But content completeness (inputs, model version, explanation) and the overlapping paths are not specified, and the Audit Query API has no connections."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial"
+  },
+  "coverage": 0.6363636363636364,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "AWS WAF",
+     "Authentication & mTLS Validator",
+     "Audit Log Redactor / Sanitizer",
+     "Client-Side Encryption Component",
+     "Audit Logging & Redaction Guard",
+     "Card Networks / Token Vaults",
+     "API Router & Token Handler"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Amazon S3 Object Lock",
+     "Audit Logger & Cryptographic Signer",
+     "Explainability Component",
+     "Integrity Verifier",
+     "Audit Stream Processor",
+     "Audit Query API"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Auto-Scaling Configuration",
+     "AWS ECS Fargate"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "ML Inference Service",
+     "Case Management Backend",
+     "Amazon DynamoDB",
+     "Amazon EventBridge"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Decision Orchestrator",
+     "ML Inference Service",
+     "Model Execution Engine",
+     "Amazon ElastiCache"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Backend",
+     "Fraud Analyst Frontend",
+     "Case Management Dashboard",
+     "Case Management Table",
+     "Amazon EventBridge",
+     "Case Management Target"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Model Loader",
+     "Rule & Model Management Console",
+     "Decision Orchestrator",
+     "ML Model / Rule Registry"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Amazon ElastiCache",
+     "Feature Aggregator",
+     "Model Execution Engine",
+     "Real-Time Scoring Engine",
+     "Amazon DynamoDB"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "API Router & Token Handler",
+     "Card Networks / Token Vaults",
+     "Client-Side Encryption Component",
+     "Audit Logging & Redaction Guard",
+     "Audit Log Redactor / Sanitizer",
+     "Authentication & mTLS Validator"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit Logger & Cryptographic Signer",
+     "Amazon S3 Object Lock",
+     "Explainability Component",
+     "Integrity Verifier",
+     "Amazon DynamoDB"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Payment Gateway / Acquirer Systems",
+     "Rate Limiter & Throttling Controller"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

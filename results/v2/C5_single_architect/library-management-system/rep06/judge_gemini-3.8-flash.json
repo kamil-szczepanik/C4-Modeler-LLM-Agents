@@ -1,0 +1,240 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "Requirements are fully met: Catalogue Management Component handles physical cataloguing, Digital Content Provider and Content Sync Worker federate digital items (R-01), and Circulation Engine Component with Circulation & Self-Service Portal covers circulation and patron workflows.",
+   "performance_efficiency": "The sub-800ms search SLA (R-05) is addressed via a dedicated Search Service backed by Elasticsearch, asynchronous event-driven index updates via Async Event Broker, client caching in API Client Layer, and PgBouncer connection pooling.",
+   "compatibility": "Interoperability is well supported through standard protocols: OIDC integration with external Identity Providers, REST interfaces for Digital Content Providers (OverDrive/OCLC) and Payment Gateways, and Apache Avro Schema Registry for event schema compatibility.",
+   "usability": "Web Application (SPA) clearly differentiates user concerns with the Catalogue & Search Module and Circulation & Self-Service Portal for Patrons and Librarians, though physical self-service kiosks or mobile-specific channels are not explicitly detailed.",
+   "reliability": "Reliability is well supported by asynchronous decoupling with Async Event Broker (Kafka), resilient queuing via Celery Background Worker, and PgBouncer connection pooling, though explicit automated failover or cross-AZ replication mechanisms are omitted.",
+   "security": "The EU-only data residency constraint is enforced across Database, Redis, and Async Event Broker. Authentication is handled via Auth & Token Relay Filter and Identity Provider, with zero client-side PII persistence in the Authentication State Module.",
+   "maintainability": "High maintainability is achieved through modular separation into Core Domain Service, Search Service, and Background Worker, loose coupling via Kafka topics with Schema Registry, and clean internal component layering across all containers.",
+   "portability": "Standard technology stacks (Spring Boot, FastAPI, React, Celery, PostgreSQL) facilitate straightforward portability across EU cloud infrastructure, though explicit infrastructure-as-code or deployment descriptor models are omitted."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.625,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 2.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The dedicated Search Service using FastAPI and Elasticsearch decoupled from transactional workloads easily handles high search concurrency. However, Elasticsearch cluster scaling and replication specifications are not explicitly detailed.",
+    "elements": [
+     "Web Application (SPA)",
+     "API Gateway",
+     "Search Service",
+     "Elasticsearch"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch shard sizing and read-replica capacity under high concurrency."
+    ],
+    "tradeoffs": [
+     "Read-optimized search index requires asynchronous replication overhead."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalogue modifications are persisted in PostgreSQL and propagated asynchronously via Kafka to Elasticsearch. Search read paths are fully isolated from write operations, comfortably meeting the 5-minute eventual consistency window and P99 latency target.",
+    "elements": [
+     "Core Domain Service",
+     "Catalogue Management Component",
+     "Event Publisher Component",
+     "Async Event Broker",
+     "Index Synchronizer Component",
+     "Elasticsearch"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer lag directly impacts the indexing latency of updated items."
+    ],
+    "tradeoffs": [
+     "Eventual consistency allows stale search reads for up to a few seconds."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Circulation operations rely on Core Domain Service and PostgreSQL, remaining entirely insulated from search index issues. Elasticsearch handles internal node failovers, though explicit multi-node index clustering is not detailed in the model.",
+    "elements": [
+     "Search Service",
+     "Elasticsearch",
+     "Core Domain Service",
+     "Database",
+     "Relational Data Store"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster minimum master nodes and replica shard configuration."
+    ],
+    "tradeoffs": [
+     "Maintaining replica shards increases storage costs to ensure high availability."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Web Application is a stateless SPA served via Nginx and backed by a stateless API Gateway and Core Domain Service. Database transactions are ACID-compliant in PostgreSQL, preventing lost loan transactions across instance failures.",
+    "elements": [
+     "Web Application (SPA)",
+     "API Gateway",
+     "Core Domain Service",
+     "Database"
+    ],
+    "sensitivity_points": [
+     "Stateless session handling in SPA client and upstream load balancing failover speed."
+    ],
+    "tradeoffs": [
+     "Relying on client-side state complicates rapid reconnection synchronization."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "A new provider requires updating both Content Sync Worker in Background Worker and the Digital Content Provider integrations in Core Domain Service. An explicit pluggable provider adapter layer is missing.",
+    "elements": [
+     "Background Worker",
+     "Content Sync Worker",
+     "Core Domain Service",
+     "Digital Content Provider"
+    ],
+    "sensitivity_points": [
+     "Standardized adapter abstraction across heterogeneous e-book and ILS APIs."
+    ],
+    "tradeoffs": [
+     "Decoupled background sync requires maintaining integration schemas across multiple containers."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The Circulation Engine is implemented as a static Spring Service with hardcoded business logic. There is no externalized rule engine, policy store, or dynamic configuration management to modify loan policies at runtime without code deployment.",
+    "elements": [
+     "Core Domain Service",
+     "Circulation Engine Component"
+    ],
+    "sensitivity_points": [
+     "Absence of a configuration-driven rule engine for circulation policies."
+    ],
+    "tradeoffs": [
+     "Embedding business logic in compiled code improves performance at the expense of modifiability."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Database, Redis, and Kafka specify EU deployment. However, third-party SaaS systems (Auth0, SendGrid, Stripe) lack architectural boundary controls, data-residency proxies, or tokenization mechanisms to prevent patron PII from exiting EU boundaries.",
+    "elements": [
+     "Database",
+     "Async Event Broker",
+     "Identity Provider",
+     "Payment Gateway",
+     "Notification Provider",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Egress of unmasked patron PII to external multi-tenant cloud providers."
+    ],
+    "tradeoffs": [
+     "Strict on-premise or EU-only hosted dependencies increase operational maintenance overhead."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "The API Gateway validates JWT tokens and logs requests, but domain-level object authorization (ensuring a patron can only access their own loan records) and dedicated security audit logging are not explicitly defined in the Core Domain Service.",
+    "elements": [
+     "API Gateway",
+     "Auth & Token Relay Filter",
+     "Request Transformation & Logging Filter",
+     "Core Domain Service",
+     "Circulation Engine Component"
+    ],
+    "sensitivity_points": [
+     "Fine-grained object-level access control (ABAC) in the domain service."
+    ],
+    "tradeoffs": [
+     "Centralized gateway token introspection does not obviate downstream domain authorization checks."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Async Event Broker",
+     "Database",
+     "Redis"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalogue & Search Module",
+     "Catalogue Management Component",
+     "Digital Content Provider",
+     "Content Sync Worker"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Service",
+     "Search API Controller",
+     "Query Builder Component",
+     "Search Client Component",
+     "Elasticsearch",
+     "Async Event Broker",
+     "Index Synchronizer Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

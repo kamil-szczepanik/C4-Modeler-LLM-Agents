@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Background Worker / Job Processing Container container
+
+Container_Boundary(background_worker, "Background Worker / Job Processing Container") {
+    Component(event_consumer_and_router, "Event Consumer and Router", "AWS ECS/EKS tasks, AWS SQS/SNS, W3C Trace Context", "Consumes segmented messages (high-priority, default, bulk) from AWS SQS and routes them based on payload envelopes while preserving distributed tracing context.")
+    Component(idempotency_and_state_manager, "Idempotency and State Manager", "Redis, DynamoDB", "Provides distributed locking for atomic state management and tracks idempotency keys to ensure safe message redelivery and processing.")
+    Component(external_integration_handler, "External Integration Handler", "Resilience4j, Polly, HTTPS", "Communicates with third-party shipping providers, payment gateways, and notification services, protected by circuit breakers and exponential backoff.")
+    Component(dlq_triage_and_replay_manager, "DLQ Triage and Replay Manager", "AWS SQS DLQ", "Isolates poisoned messages after the maximum receive count is exceeded and provides triage and replay mechanisms.")
+}
+
+System_Ext(notification_services, "Notification Services", "External notification service")
+System_Ext(third_party_shipping_providers, "Third-Party Shipping Providers", "External shipping provider")
+
+Rel(event_consumer_and_router, idempotency_and_state_manager, "Checks state and acquires distributed locks for incoming domain events")
+Rel(event_consumer_and_router, external_integration_handler, "Delegates fulfillment, tracking, and notification tasks to external services")
+Rel(event_consumer_and_router, dlq_triage_and_replay_manager, "Sends poisoned or repeatedly failing messages to the Dead-Letter Queue")
+Rel(external_integration_handler, notification_services, "Sends asynchronous email/SMS notifications", "HTTPS")
+Rel(external_integration_handler, third_party_shipping_providers, "Communicates fulfillment and tracking requests", "HTTPS")
+
+@enduml

@@ -1,0 +1,323 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 3,
+   "portability": 4
+  },
+  "mean": 3.625,
+  "justifications": {
+   "functional_suitability": "Catalog Container and Recommendation Engine Container support browsing and recommendations (R-01, R-04). However, R-02 lacks an explicit shopping cart component, and R-03 customer review submission is missing for shoppers, appearing only as moderation tasks in Support/Moderation Portals.",
+   "performance_efficiency": "Achieves high performance via AWS CloudFront CDN, OpenSearch in Search Query Processor, and Redis Sidecar / Redis Cache. These concrete caching and search mechanisms support <2s load times and 1M MAU scalability, though async event-driven queues are omitted at container levels.",
+   "compatibility": "Third-Party Payment APIs, Warehouse / Fulfillment Partner, and Third-Party Financial APIs are integrated using HTTPS REST and circuit breakers. However, coupling shipping fulfillment to Catalog Container rather than an order fulfillment service is an architectural misalignment.",
+   "usability": "Support/Moderation Portals adequately support internal staff (Customer Support Agent, Content Moderator, Site Administrator). However, Customer (Shopper) lacks a defined frontend container (such as a SPA or Mobile Web App), interfacing directly with AWS CloudFront and the API Gateway.",
+   "reliability": "Fault tolerance is aided by Istio Service Mesh, Redis Sidecar, and circuit breakers on the Payment Gateway Client. However, persistent transactional databases and cross-region data replication across the target AWS regions are completely missing, risking data availability.",
+   "security": "Thoroughly addressed through AWS WAF, Ingress Router, Rate Limiter, Authentication & Token Verifier (JWS), Secrets Manager Client, AWS KMS encryption, and Istio mTLS zero-trust communication across all container interactions.",
+   "maintainability": "Services are modularized into EKS microservices, but domain cohesion is compromised by putting shipping partner integration in Catalog Container. Additionally, Level 3 diagrams conflate containers with actors and external systems inside the Currency Localization Container diagram.",
+   "portability": "Amazon EKS microservices and Istio provide multi-region container portability across us-east-1, eu-west-1, and ap-southeast-1. Tight coupling to proprietary AWS services (AWS KMS, Secrets Manager, OpenSearch) is appropriate given the specified AWS deployment brief."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 2.5,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront edge caching, API Gateway rate limiting, and AWS OpenSearch provide strong read-scaling capabilities. However, specific auto-scaling policies and payload optimization strategies for constrained 3G networks are not explicitly specified.",
+    "elements": [
+     "AWS CloudFront",
+     "AWS WAF",
+     "API Gateway",
+     "Catalog Container",
+     "Search Query Processor"
+    ],
+    "sensitivity_points": [
+     "Edge cache hit ratio on CloudFront during traffic surges",
+     "OpenSearch cluster sizing and query performance under load"
+    ],
+    "tradeoffs": [
+     "Aggressive edge caching improves response latency but risks stale catalog inventory and pricing"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "The Recommendation Engine is separated into an independent container, decoupling compute workloads from catalog browsing. The Redis sidecar serves cached recommendations to avoid live inference latency, keeping customer browsing performance intact.",
+    "elements": [
+     "Recommendation Engine Container",
+     "Recommendation Engine Core",
+     "Redis Sidecar",
+     "Catalog Container"
+    ],
+    "sensitivity_points": [
+     "Redis sidecar cache hit ratio and cache invalidation timing",
+     "Asynchronous compute resource isolation within Amazon EKS"
+    ],
+    "tradeoffs": [
+     "Serving recommendations from cache protects browsing throughput but may show outdated suggestions"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Level 1 mentions asynchronous encrypted queues for shipping, but Level 2 shows a direct synchronous link with circuit breakers from the Catalog Container. Checkout is not explicitly decoupled from fulfillment with durable event stores or sagas.",
+    "elements": [
+     "Checkout/Payment Container",
+     "Catalog Container",
+     "Warehouse / Fulfillment Partner"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker fallback handling and durable queueing mechanism"
+    ],
+    "tradeoffs": [
+     "Asynchronous fulfillment improves checkout resilience but risks inventory reconciliation delays"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Multi-region deployment on EKS/ECS is noted, but the architecture lacks cross-region database replication, global state synchronization, and transactional data persistence. A total outage of us-east-1 risks significant data loss and inconsistent session states.",
+    "elements": [
+     "AWS CloudFront",
+     "API Gateway",
+     "Ingress Router",
+     "AWS ECS / EKS"
+    ],
+    "sensitivity_points": [
+     "Cross-region database replication lag and failover automation"
+    ],
+    "tradeoffs": [
+     "Multi-region active-active replication ensures high availability but increases write latencies and consistency complexity"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Currency Localization Container encapsulates exchange rate lookups, pricing conversions, and integrations with external financial APIs. Checkout references it via dedicated localization clients, allowing addition of JPY without impacting core business components.",
+    "elements": [
+     "Currency Localization Container",
+     "Redis Cache",
+     "Checkout/Payment Container",
+     "Localization Integration Component"
+    ],
+    "sensitivity_points": [
+     "Standardized multi-currency interface contract across services"
+    ],
+    "tradeoffs": [
+     "Decoupled currency conversion simplifies expansion but introduces network hops during checkout"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Recommendation Engine Container is strictly isolated behind mTLS service mesh interfaces and API Gateway routes. Algorithmic modifications in the Recommendation Engine Core are completely encapsulated and require no changes to external microservices.",
+    "elements": [
+     "Recommendation Engine Container",
+     "Recommendation Engine Core",
+     "Redis Sidecar",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Stable API contract between recommendation services and consumers"
+    ],
+    "tradeoffs": [
+     "Encapsulated inference service enables rapid algorithm swaps but requires independent service orchestration"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "AWS WAF and Rate Limiter inspect incoming traffic to mitigate OWASP risks before reaching services. OpenSearch isolates catalog queries from classic SQL injection, though explicit sanitization for customer review submissions is not fully detailed.",
+    "elements": [
+     "AWS WAF",
+     "API Gateway",
+     "Rate Limiter",
+     "Search Query Processor"
+    ],
+    "sensitivity_points": [
+     "Completeness of AWS WAF managed rule sets",
+     "Strict input validation and parameterization in search processors"
+    ],
+    "tradeoffs": [
+     "Rigorous WAF inspection blocks injection attempts but adds marginal edge processing latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "The Support/Moderation Portals container supports GDPR/CCPA workflows and KMS handles data encryption. However, there is no orchestrated distributed deletion mechanism or event-driven pipeline to reliably purge user records across OpenSearch, Redis caches, and persistent stores.",
+    "elements": [
+     "Support/Moderation Portals",
+     "AWS KMS",
+     "Checkout/Payment Container",
+     "Recommendation Engine Container"
+    ],
+    "sensitivity_points": [
+     "Absence of distributed deletion orchestration across decoupled microservices"
+    ],
+    "tradeoffs": [
+     "Decentralized microservice datastores increase autonomy but complicate coordinated PII data deletion"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Support/Moderation Portals",
+     "Customer Support Agent",
+     "AWS KMS",
+     "Istio Service Mesh"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Currency Localization Container",
+     "Redis Cache",
+     "Third-Party Financial APIs",
+     "Checkout/Payment Container"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Warehouse / Fulfillment Partner",
+     "Catalog Container"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog Container",
+     "Catalog Controller",
+     "Search Query Processor"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Checkout/Payment Container",
+     "Payment Controller",
+     "Transaction Engine",
+     "Payment Gateway Client",
+     "Third-Party Payment APIs"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Support/Moderation Portals",
+     "Content Moderator",
+     "Customer Support Agent",
+     "Customer (Shopper)"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Engine Container",
+     "Recommendation Engine Core",
+     "Redis Sidecar",
+     "Recommendation Data Consumer"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "AWS ECS / EKS",
+     "AWS CloudFront",
+     "Redis Sidecar",
+     "Redis Cache"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "AWS CloudFront",
+     "Redis Sidecar",
+     "Redis Cache",
+     "Search Query Processor"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "AWS CloudFront",
+     "AWS ECS / EKS",
+     "Payment Gateway Client"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "AWS WAF",
+     "Rate Limiter",
+     "Authentication & Token Verifier",
+     "AWS KMS",
+     "Secrets Manager Client"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

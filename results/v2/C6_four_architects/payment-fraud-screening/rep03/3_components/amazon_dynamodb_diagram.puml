@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Amazon DynamoDB container
+
+Container(ScoringEngineContainer, "Scoring Engine Container", "Container", "External scoring engine container.")
+Container(CaseManagementBackendContainer, "Case Management Backend Container", "Container", "External case management backend container.")
+System_Ext(AWSKMS, "AWS KMS", "External Key Management Service.")
+
+Container_Boundary(AmazonDynamoDB, "Amazon DynamoDB") {
+    Component(HotStateTableModule, "Hot State Table Module", "DynamoDB provisioned capacity table", "Stores transaction velocity counters and card profiles.")
+    Component(CaseManagementTableModule, "Case Management Table Module", "DynamoDB on-demand capacity table", "Stores analyst investigation cases and audit logs.")
+    Component(DynamoDBStreamsProcessor, "DynamoDB Streams Processor", "AWS Lambda function", "Captures mutation events for downstream audit export.")
+    Component(AuditLedgerArchiveModule, "Audit Ledger Archive Module", "Amazon S3 with Object Lock (Compliance Mode)", "Provides immutable 7-year retention.")
+    Component(IAMFineGrainedAccessPolicyModule, "IAM Fine-Grained Access Policy Module", "AWS IAM", "Enforces least-privilege attribute-based access control (ABAC).")
+    Component(GlobalTableReplicationModule, "Global Table Replication Module", "DynamoDB Global Tables", "Ensures multi-AZ resilience in eu-west-1.")
+    Component(TimeToLiveTTLExpiryModule, "Time-To-Live (TTL) Expiry Module", "Native DynamoDB background process", "Purges transient records.")
+    Component(DynamoDBPointInTimeRecoveryPITRModule, "DynamoDB Point-in-Time Recovery (PITR) Module", "Continuous backup module", "Provides continuous backup for investigation logs.")
+}
+
+Rel(ScoringEngineContainer, HotStateTableModule, "Reads/Writes velocity state", "AWS SDK (TCP/443 via VPC Endpoint)")
+Rel(CaseManagementBackendContainer, CaseManagementTableModule, "Reads/Writes case data", "AWS SDK (TCP/443)")
+Rel(HotStateTableModule, DynamoDBStreamsProcessor, "Triggers audit logging", "DynamoDB Streams")
+Rel(DynamoDBStreamsProcessor, AuditLedgerArchiveModule, "Flushes encrypted mutation logs", "AWS SDK (HTTPS)")
+Rel(CaseManagementTableModule, AWSKMS, "Encrypts data at rest", "AWS KMS CMK (Envelope Encryption)")
+Rel(IAMFineGrainedAccessPolicyModule, HotStateTableModule, "Secures access boundaries", "IAM Policies")
+Rel(HotStateTableModule, TimeToLiveTTLExpiryModule, "Automatically purges expired records", "Native DynamoDB TTL background process")
+Rel(CaseManagementTableModule, DynamoDBPointInTimeRecoveryPITRModule, "Continuously backs up logs", "DynamoDB PITR")
+
+@enduml

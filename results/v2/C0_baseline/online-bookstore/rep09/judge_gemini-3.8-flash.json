@@ -1,0 +1,318 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "Catalogue Service, OpenSearch, Order & Checkout Service, and Recommendation & Review Service address search, checkout, reviews, and recommendations. However, shopping cart management prior to checkout is only implicitly represented within the SPA client state rather than a dedicated cart service.",
+   "performance_efficiency": "CloudFront, Amazon ElastiCache (Redis), Amazon OpenSearch, and asynchronous processing via Amazon SQS/SNS effectively handle high loads and search performance. However, specific asset and payload optimization mechanisms tailored for 3G networks are not detailed.",
+   "compatibility": "Well-defined integration points like Payment Integration Component, Fulfillment Client Component, and Pricing & Localization Component explicitly support external systems including Payment Gateways, Shipping Provider APIs, and Tax APIs via standard REST, mTLS, and SQS mechanisms.",
+   "usability": "The Single Page Application (SPA) supports Book Buyers and Store Administrators. Usability is enhanced by State and Localization Store and Consent and Compliance Manager, though the administrative interface lacks distinct UX modeling or separate portal segregation.",
+   "reliability": "Fault tolerance is addressed via Resilience4j circuit breakers and Saga orchestration in Checkout Orchestrator Component. However, multi-region failover and data replication strategies across us-east-1, eu-west-1, and ap-southeast-1 are omitted despite the 99.95% uptime target.",
+   "security": "Security is addressed thoroughly: AWS WAF rate limiting, JWT authorization filters, mTLS communication, HttpOnly cookies in Auth and Session Interceptor, KMS encryption in Order Repository Component, and pseudonymized data flows for compliance with GDPR and CCPA.",
+   "maintainability": "Modular microservice architecture cleanly separates Catalogue, Order & Checkout, and Recommendation & Review concerns. Within services, responsibilities are cleanly divided into specialized components (orchestrators, repositories, controllers) with asynchronous decoupling via Amazon SNS/SQS.",
+   "portability": "The architecture leverages AWS-native services matching the brief. However, it lacks deployment models, containerization specifications (e.g., ECS/EKS), and configurations demonstrating multi-region deployment across the required US, EU, and AP regions."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.0,
+   "Modifiability": 5.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront CDN, Amazon OpenSearch, and ElastiCache Redis caching decouple read traffic from persistent stores to sustain high throughput. However, explicit auto-scaling mechanisms for backend containers during a 10x traffic spike are omitted from the design.",
+    "elements": [
+     "Single Page Application (SPA)",
+     "API Gateway",
+     "Catalogue Service",
+     "Amazon OpenSearch",
+     "Amazon ElastiCache (Redis)"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios on CloudFront and Redis under sudden traffic bursts",
+     "OpenSearch cluster read capacity sizing"
+    ],
+    "tradeoffs": [
+     "Aggressive edge caching improves latency but risks transient stale catalog data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalogue Service is completely decoupled from the Recommendation & Review Service. Background recommendation computations run asynchronously via message queues and an external ML service, preventing any resource contention or latency degradation on catalogue browsing.",
+    "elements": [
+     "Catalogue Service",
+     "Recommendation & Review Service",
+     "Amazon SQS/SNS",
+     "Recommendation Engine"
+    ],
+    "sensitivity_points": [
+     "Decoupled asynchronous communication between browsing and recommendation pipelines"
+    ],
+    "tradeoffs": [
+     "Eventual consistency in recommendations in exchange for zero browsing latency impact"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The Checkout Orchestrator utilizes the Saga pattern and circuit breakers (Resilience4j) to decouple checkout completion from external dependencies. However, the Fulfillment Client makes direct HTTPS calls rather than relying strictly on durable queues for dispatch fallback.",
+    "elements": [
+     "Order & Checkout Service",
+     "Checkout Orchestrator Component",
+     "Payment Integration Component",
+     "Fulfillment Client Component",
+     "Shipping Provider APIs"
+    ],
+    "sensitivity_points": [
+     "Resilience4j circuit breaker configuration and Saga compensation reliability"
+    ],
+    "tradeoffs": [
+     "Asynchronous fulfillment allows successful checkout but delays shipping label generation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Although multiple AWS regions are listed in the brief, the architecture does not define multi-region database replication (such as Aurora Global Database), DNS failover routing, or cross-region replication strategies, creating severe risks of downtime and data loss during a regional outage.",
+    "elements": [
+     "API Gateway",
+     "Order & Checkout Service",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Database replication lag and failover latency across cloud regions"
+    ],
+    "tradeoffs": [
+     "Active-passive cross-region replication adds operational complexity and egress costs"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Currency and localization logic are strictly isolated into dedicated components across all tiers: State and Localization Store in the SPA, Context & Localization Injector at the gateway, and Pricing & Localization Component in the Catalogue Service.",
+    "elements": [
+     "State and Localization Store",
+     "Context & Localization Injector",
+     "Pricing & Localization Component",
+     "Tax & Localization API"
+    ],
+    "sensitivity_points": [
+     "Standardized localization schemas shared between the gateway injector and services"
+    ],
+    "tradeoffs": [
+     "Dynamic FX rate synchronization requires cached fallbacks to protect catalog latency"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Recommendation capabilities are encapsulated within the external Recommendation Engine and the Recommendation API Controller. Changes to recommendation algorithms are isolated to the external service or recommendation container without altering catalogue, checkout, or client components.",
+    "elements": [
+     "Recommendation Engine",
+     "Recommendation & Review Service",
+     "Recommendation API Controller"
+    ],
+    "sensitivity_points": [
+     "Stability of the gRPC/REST API contract with the Recommendation Engine"
+    ],
+    "tradeoffs": [
+     "Generic recommendation interfaces limit algorithm-specific frontend query customizations"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "AWS WAF at the gateway blocks injection attacks at the perimeter, HttpOnly cookies prevent session hijacking via XSS, and OpenSearch query protocols combined with JDBC repositories mitigate SQL injection risks. Additional input sanitation layers inside review services are implicit.",
+    "elements": [
+     "API Gateway",
+     "Rate Limiting & Throttling Engine",
+     "Auth and Session Interceptor",
+     "Order Repository Component",
+     "Amazon OpenSearch"
+    ],
+    "sensitivity_points": [
+     "WAF rule coverage and strict parameterized database querying"
+    ],
+    "tradeoffs": [
+     "Strict WAF and input sanitation slightly increase request inspection latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "The SPA includes a Consent and Compliance Manager and mentions pseudonymized data, but the backend lacks an orchestration mechanism or event-driven workflow to coordinate personal data deletion across Aurora PostgreSQL, OpenSearch, reviews, and external third parties.",
+    "elements": [
+     "Consent and Compliance Manager",
+     "Order Repository Component",
+     "Recommendation & Review Service",
+     "Identity Provider / Notification Service"
+    ],
+    "sensitivity_points": [
+     "Absence of distributed data deletion and audit logging mechanisms"
+    ],
+    "tradeoffs": [
+     "Hard deletion of user records risks breaking financial order history integrity"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent and Compliance Manager",
+     "Recommendation Engine"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "State and Localization Store",
+     "Context & Localization Injector",
+     "Pricing & Localization Component",
+     "Amazon ElastiCache (Redis)",
+     "Tax & Localization API"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Provider APIs",
+     "Order & Checkout Service",
+     "Fulfillment Client Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalogue Service",
+     "Search & Filter Component",
+     "Amazon OpenSearch"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Order & Checkout Service",
+     "Checkout Orchestrator Component",
+     "Payment Integration Component",
+     "Order Repository Component",
+     "Payment Gateway Provider"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Recommendation & Review Service",
+     "Review API Controller",
+     "Moderation Pipeline Component",
+     "Review Aggregator Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Engine",
+     "Recommendation & Review Service",
+     "Recommendation API Controller"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "Single Page Application (SPA)",
+     "Amazon ElastiCache (Redis)",
+     "Amazon OpenSearch",
+     "Amazon SQS/SNS"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Single Page Application (SPA)",
+     "Amazon ElastiCache (Redis)"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Payment Integration Component",
+     "Order Repository Component"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Rate Limiting & Throttling Engine",
+     "Authentication & Authorization Filter",
+     "Auth and Session Interceptor",
+     "Order Repository Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

@@ -1,0 +1,39 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Library Management System
+
+Person(LibraryPatron, "Library Patron", "Library patron using the self-service portals and system features.")
+Person(LibraryStaffLibrarian, "Library Staff / Librarian", "Library staff managing item cataloging and circulation.")
+
+System_Ext(PaymentGateway, "Payment Gateway", "External payment processing service.")
+System_Ext(NotificationProvider, "Notification Provider", "External service for sending notifications.")
+System_Ext(EUCloudInfrastructureProvider, "EU Cloud Infrastructure Provider", "Cloud infrastructure provider enforcing EU data residency.")
+System_Ext(AuditLogStream, "Audit Log Stream", "Centralized stream for audit logs.")
+
+System_Boundary(LibraryManagementSystem, "Library Management System") {
+    Container(APIGateway, "API Gateway", "Kong / NGINX, OAuth 2.0 / OIDC", "Handles edge routing, authentication, and external client requests.")
+    Container(SearchCatalogService, "Search & Catalog Service", "Java / Spring Boot, Elasticsearch", "Manages catalog search workloads to satisfy sub-second SLAs.")
+    Container(CoreCirculationService, "Core Circulation Service", "Node.js / Go, PostgreSQL", "Manages core relational circulation data and operations.")
+    Container(AnalyticsService, "Analytics Service", "Python / FastAPI, ClickHouse", "Processes analytical circulation trends.")
+    Container(NotificationWorker, "Notification Worker", "Python / Celery or Go", "Asynchronously processes and dispatches notifications.")
+    Container(MessageBroker, "Message Broker", "Apache Kafka / RabbitMQ", "Handles event-driven asynchronous messaging between services.")
+    Container(AuditLoggingSidecar, "Audit Logging Sidecar", "Fluentbit / Vector", "Collects and forwards system logs and audit data securely.")
+    Container(EUKubernetesClusterandEUCloudProvidersHSM, "EU Kubernetes Cluster and EU Cloud Provider's HSM", "Kubernetes, OpenTelemetry, Hardware Security Module", "Orchestrates containers and secures cryptographic keys within the EU cloud.")
+}
+
+Rel(LibraryPatron, APIGateway, "Accesses self-service portals and system features", "HTTPS / TLS 1.3")
+Rel(LibraryStaffLibrarian, APIGateway, "Manages cataloging and circulation", "HTTPS / TLS 1.3 with OAuth 2.0 / OIDC")
+Rel(APIGateway, SearchCatalogService, "Routes catalog and search requests", "Internal mTLS and gRPC")
+Rel(APIGateway, CoreCirculationService, "Routes circulation requests", "Internal mTLS and gRPC")
+Rel(APIGateway, AnalyticsService, "Routes analytics queries", "Internal mTLS and gRPC")
+Rel(CoreCirculationService, MessageBroker, "Publishes circulation events", "AMQP / gRPC")
+Rel(MessageBroker, NotificationWorker, "Consumes event messages for notifications", "Kafka topics")
+Rel(MessageBroker, AnalyticsService, "Consumes event messages for analytical processing", "Kafka topics")
+Rel(AuditLoggingSidecar, AuditLogStream, "Streams audit logs externally", "TLS")
+Rel(LibraryManagementSystem, PaymentGateway, "Processes payments", "REST/TLS 1.3 with circuit breakers")
+Rel(LibraryManagementSystem, NotificationProvider, "Sends notifications", "SMTP/API with HMAC-verified webhooks")
+Rel(LibraryManagementSystem, EUCloudInfrastructureProvider, "Utilizes infrastructure ensuring EU data residency", "Cloud native APIs")
+
+@enduml

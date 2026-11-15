@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(Kong_Envoy_API_Gateway, "Kong/Envoy API Gateway", "Kong/Envoy / mTLS (Istio)", "Routes incoming external traffic via gRPC/REST.")
+System_Ext(Patient_Portal_BFF, "Patient Portal BFF", "HTTPS", "Requests patient-facing invoices and copay settlements.")
+System_Ext(External_Payment_Gateway_Insurance_Clearinghouse, "External Payment Gateway & Insurance Clearinghouse", "HTTPS (REST/SOAP)", "Receives claim submissions and insurance verifications.")
+
+Container_Boundary(billing_service, "Billing Service") {
+    Component(Billing_API_Controller, "Billing API Controller", "Spring MVC / REST / gRPC", "Exposes REST/gRPC endpoints for invoice retrieval and copay settlements.")
+    Component(Invoice_Ledger_Component, "Invoice & Ledger Component", "Java / Spring Boot", "Manages core billing logic, patient invoices, and immutable ledger entries.")
+    Component(Claim_Processing_Engine, "Claim Processing Engine", "Java / Spring Boot", "Handles insurance claim validation and clearinghouse submissions.")
+    Component(Dispute_Adjustment_Workflow_Component, "Dispute & Adjustment Workflow Component", "Java / Spring Boot", "Manages claim rejections, appeals, and state-machine dispute workflows.")
+    Component(Apache_Kafka, "Apache Kafka", "Event Streaming Platform", "Used for outbox pattern, async event publishing, and Dead Letter Queues (DLQ).")
+    Component(PostgreSQL_Clusters, "PostgreSQL Clusters", "PostgreSQL with TDE", "Encrypted primary data store with append-only audit tables.")
+    Component(Redis_Enterprise, "Redis Enterprise", "Redis Enterprise", "Caching and deduplication tracking layer.")
+    Component(WORM_Object_Storage, "WORM Object Storage", "WORM Object Storage", "Storage for cryptographically signed, immutable financial audit logs.")
+}
+
+Rel(Kong_Envoy_API_Gateway, Billing_API_Controller, "Routes incoming external traffic via gRPC/REST over mTLS (Istio).", "gRPC/REST / mTLS")
+Rel(Patient_Portal_BFF, Billing_API_Controller, "Requests patient-facing invoices and copay settlements via HTTPS.", "HTTPS")
+Rel(Invoice_Ledger_Component, PostgreSQL_Clusters, "Stores encrypted financial records via JPA/JDBC.", "JPA/JDBC")
+Rel(Claim_Processing_Engine, External_Payment_Gateway_Insurance_Clearinghouse, "Submits claims and verifies insurance via HTTPS (REST/SOAP).", "HTTPS (REST/SOAP)")
+Rel(Claim_Processing_Engine, Apache_Kafka, "Publishes and consumes domain events and outbox messages.", "Event Streams")
+Rel(Dispute_Adjustment_Workflow_Component, Apache_Kafka, "Publishes and consumes claim rejections and domain events.", "Event Streams")
+Rel(Dispute_Adjustment_Workflow_Component, WORM_Object_Storage, "Writes cryptographically signed audit logs via secure object storage protocols.", "Secure Protocol")
+
+@enduml

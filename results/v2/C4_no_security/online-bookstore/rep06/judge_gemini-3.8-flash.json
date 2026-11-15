@@ -1,0 +1,324 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "All requirements are addressed: Catalog & Search handles search, Order & Checkout coordinates purchases, Content & Review manages ratings, and Recommendation provides suggestions. Cart state persistence is slightly implicit within Order & Checkout.",
+   "performance_efficiency": "Scalability and sub-2s latency targets are supported via Amazon CloudFront, OpenSearch, ElastiCache Redis caching in Localization & Tax, and asynchronous decoupled processing via Amazon SQS and EventBridge.",
+   "compatibility": "External integrations are explicitly specified with defined protocols: Payment Gateway and Third-Party Shipping Provider via HTTPS, and Tax & Currency Provider via Localization & Tax supporting USD, EUR, and GBP.",
+   "usability": "Dedicated interfaces address all personas: Shoppers use Frontend Container with Radix UI and WCAG 2.1 AA accessibility, while Store Administrators and Support use Admin UI within Admin Back-Office.",
+   "reliability": "Reliability is supported by Resilience4j in TaxCalculationEngine, Idempotency Manager, and SQS DLQs. However, multi-region failover and data replication mechanisms across us-east-1, eu-west-1, and ap-southeast-1 are not detailed.",
+   "security": "Strong security mechanisms are included: Perimeter Router and Security Enforcement with JWT validation, Auth & RBAC Controller, Audit Logger with S3 Object Lock, and Compliance & Consent Manager for GDPR/CCPA.",
+   "maintainability": "Services are well-decomposed around business domains using gRPC and event-driven patterns. However, Content & Review component definitions conflate external infrastructure and actors with internal components.",
+   "portability": "The design relies heavily on AWS-managed services like Amazon DocumentDB, OpenSearch, Comprehend, and S3 Object Lock without abstraction layers, limiting portability beyond AWS."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Edge caching via CloudFront and OpenSearch indexing handle high read loads, though heavy client-side React SPA bundles may challenge 2s load times on 3G.",
+    "elements": [
+     "Frontend Container",
+     "API Gateway",
+     "Catalog & Search",
+     "Search Controller & Facade",
+     "Sync Worker"
+    ],
+    "sensitivity_points": [
+     "CloudFront cache hit ratio",
+     "OpenSearch cluster auto-scaling capacity"
+    ],
+    "tradeoffs": [
+     "Client-side SPA bundle richness versus initial load latency on cellular networks"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendation recomputation occurs asynchronously via offline batch jobs in ECS/SageMaker, persisting pre-computed results to Redis without impacting online browsing traffic.",
+    "elements": [
+     "Recommendation",
+     "Algorithm Engine",
+     "Recommendation API Controller"
+    ],
+    "sensitivity_points": [
+     "Redis memory bandwidth and write throughput during batch ingestion"
+    ],
+    "tradeoffs": [
+     "Serving stale pre-computed recommendations versus online runtime processing overhead"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "SQS/SNS event publishing decouples fulfillment so orders can complete, but synchronous shipping rate calculation during checkout lacks an explicit fallback mechanism in the design.",
+    "elements": [
+     "Order & Checkout",
+     "Checkout Orchestrator",
+     "Event Publisher",
+     "Third-Party Shipping Provider"
+    ],
+    "sensitivity_points": [
+     "Asynchronous message delivery reliability in SQS",
+     "Shipping rate estimation fallback policy"
+    ],
+    "tradeoffs": [
+     "Immediate shipping confirmation accuracy versus checkout resilience during third-party outages"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Target regions are defined, but the architecture lacks explicit cross-region data replication (e.g. Aurora Global Database) and automated multi-region failover routing to guarantee zero lost orders.",
+    "elements": [
+     "Frontend Container",
+     "API Gateway",
+     "Order & Checkout",
+     "Order Management"
+    ],
+    "sensitivity_points": [
+     "Cross-region data replication lag",
+     "Health check detection latency for regional failover"
+    ],
+    "tradeoffs": [
+     "Strict cross-region data consistency versus write latency during checkout"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Currency handling is centralized in Localization & Tax and dynamic conversion caching exists, but Frontend's Localization & Currency Context explicitly hardcodes USD, EUR, and GBP state.",
+    "elements": [
+     "Localization & Tax",
+     "CurrencyConverter",
+     "Localization & Currency Context",
+     "Order & Checkout"
+    ],
+    "sensitivity_points": [
+     "Coupling between frontend state components and allowed ISO currency lists"
+    ],
+    "tradeoffs": [
+     "Static client currency types versus dynamic currency configuration loading"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Algorithm Engine runs offline batch jobs isolated from other services, writing to a Redis data store. Changing the algorithm requires no modifications outside the Recommendation container.",
+    "elements": [
+     "Recommendation",
+     "Algorithm Engine",
+     "Recommendation API Controller"
+    ],
+    "sensitivity_points": [
+     "Schema compatibility of co-purchase matrices written to the cache"
+    ],
+    "tradeoffs": [
+     "Batch algorithm simplicity versus real-time model training adaptability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The API Gateway has perimeter routing and logging, but critical OWASP mitigations like AWS WAF, request validation layers, and input sanitization mechanisms are omitted from the design.",
+    "elements": [
+     "API Gateway",
+     "Perimeter Router and Security Enforcement",
+     "Catalog & Search",
+     "Content & Review"
+    ],
+    "sensitivity_points": [
+     "WAF rule coverage at the edge",
+     "Input validation rigor across polyglot microservice controllers"
+    ],
+    "tradeoffs": [
+     "Edge-level payload deep inspection latency versus backend sanitization complexity"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "Beyond a client-side cookie banner, the architecture lacks mechanisms, services, or workflows to orchestrate, execute, or verify personal data erasure across multiple databases and audit logs.",
+    "elements": [
+     "Compliance & Consent Manager",
+     "Admin Back-Office",
+     "Operations & Support API",
+     "Audit Logger"
+    ],
+    "sensitivity_points": [
+     "Tracking personal data across polyglot databases",
+     "Conflict with immutable WORM audit storage"
+    ],
+    "tradeoffs": [
+     "Tamper-proof compliance logging versus legal right-to-erasure requirements"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "partial"
+  },
+  "coverage": 0.7272727272727273,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Compliance & Consent Manager",
+     "Audit Logger",
+     "Telemetry Publisher Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Localization & Currency Context",
+     "Localization & Tax",
+     "CurrencyConverter",
+     "Tax & Currency Provider",
+     "Amazon ElastiCache (Redis)"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Third-Party Shipping Provider",
+     "Order & Checkout"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search",
+     "Search Controller & Facade",
+     "Catalog Management Service",
+     "Sync Worker"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Order & Checkout",
+     "Checkout Orchestrator",
+     "Order Management",
+     "Payment Integration",
+     "Idempotency Manager",
+     "Payment Gateway"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Content & Review",
+     "Content & Review Container",
+     "Amazon DocumentDB",
+     "Amazon ElastiCache (Redis)",
+     "Amazon SQS",
+     "AWS Comprehend"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation",
+     "Recommendation API Controller",
+     "Algorithm Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Frontend Container",
+     "API Gateway",
+     "Amazon ElastiCache (Redis)",
+     "Amazon SQS"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Frontend Container",
+     "API Client Layer",
+     "Amazon ElastiCache (Redis)"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "TaxCalculationEngine",
+     "API Gateway"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "partial",
+    "elements": [
+     "Perimeter Router and Security Enforcement",
+     "API Gateway",
+     "Auth & RBAC Controller",
+     "Audit Logger"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

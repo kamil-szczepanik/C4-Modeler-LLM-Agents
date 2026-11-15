@@ -1,0 +1,38 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalysts, "Fraud Analysts", "Internal users responsible for reviewing and managing fraud cases.")
+
+System_Ext(PaymentGatewayCoreLedger, "Payment Gateway / Core Ledger", "External system that submits card-not-present payment authorizations.")
+System_Ext(AWSCognito, "AWS Cognito", "Identity Provider for authentication and user management.")
+System_Ext(AWSS3ObjectLock, "AWS S3 Object Lock", "Tamper-evident WORM storage for 7-year audit retention.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(APIGatewayEnvoy, "API Gateway / Envoy", "Envoy / HTTPS / TLS", "Ingress point handling TLS termination, routing, and fail-open circuit breaking.")
+    Container(FraudScoringEngine, "Fraud Scoring Engine", "Go / gRPC", "Core engine processing transactions for fraud within strict latency limits.")
+    Container(CaseManagementBackend, "Case Management Backend", "Java / Spring Boot", "Backend supporting enterprise analyst workflows and case management.")
+    Container(ModelRuleRegistryService, "Model & Rule Registry Service", "Python / FastAPI / S3", "Service managing models and zero-downtime rule updates.")
+    Container(AnalystUI, "Analyst UI", "React / AWS S3 / CloudFront", "Single page application delivering the fraud analyst dashboard.")
+    Container(AsynchronousAuditWorker, "Asynchronous Audit Worker", "Go / AWS Lambda", "Serverless worker handling asynchronous auditing and export to S3 Object Lock.")
+    ContainerDb(RedisClusterAmazonElastiCache, "Redis Cluster / Amazon ElastiCache", "Amazon ElastiCache (Redis)", "Low-latency feature store and in-memory cache.")
+    ContainerDb(PostgreSQLAmazonAurora, "PostgreSQL / Amazon Aurora", "Amazon Aurora (PostgreSQL)", "Transactional data store for cases and rules.")
+    Container(AmazonSQSSNS, "Amazon SQS / SNS", "Amazon SQS / SNS", "Asynchronous event bus for telemetry and auditing.")
+    Container(AWSSecretsManagerParameterStore, "AWS Secrets Manager / Parameter Store", "AWS Secrets Manager", "Configuration and secrets management supporting PCI-DSS compliance.")
+}
+
+Rel(PaymentGatewayCoreLedger, APIGatewayEnvoy, "Submits payment authorizations", "HTTPS/JSON")
+Rel(APIGatewayEnvoy, FraudScoringEngine, "Invokes fraud screening", "gRPC")
+Rel(FraudScoringEngine, RedisClusterAmazonElastiCache, "Queries feature data", "TCP/TLS")
+Rel(FraudScoringEngine, AmazonSQSSNS, "Publishes telemetry and audit events", "SQS/SNS")
+Rel(AmazonSQSSNS, AsynchronousAuditWorker, "Triggers audit event processing", "AWS internal protocols")
+Rel(AsynchronousAuditWorker, AWSS3ObjectLock, "Writes tamper-evident audit logs", "HTTPS")
+Rel(FraudScoringEngine, ModelRuleRegistryService, "Fetches compiled models", "gRPC/polling")
+Rel(FraudAnalysts, AnalystUI, "Accesses case management dashboard", "HTTPS / CloudFront")
+Rel(AnalystUI, AWSCognito, "Authenticates users", "OAuth2/OIDC (HTTPS)")
+Rel(AnalystUI, CaseManagementBackend, "Manages fraud cases and workflows", "HTTPS/REST")
+Rel(CaseManagementBackend, PostgreSQLAmazonAurora, "Persists case data", "TLS")
+
+@enduml

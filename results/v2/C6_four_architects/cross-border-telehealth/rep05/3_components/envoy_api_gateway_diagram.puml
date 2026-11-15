@@ -1,0 +1,39 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Envoy API Gateway container
+
+System_Ext(gcp_lb, "GCP Global HTTPS Load Balancer", "External Load Balancer")
+System_Ext(redis, "Memorystore for Redis", "In-memory data store")
+System_Ext(backends, "Backend Service & Consent & Policy Service", "Microservices handling business logic, consent, and policies")
+
+Container_Boundary(envoy_gateway, "Envoy API Gateway") {
+    Component(listener, "Listener & TLS Termination Component", "Envoy TLS Filter / BoringSSL", "Terminates incoming TLS connections and handles cryptographic handshakes.")
+    Component(routing, "Routing & Traffic Management Component", "Envoy Router Filter", "Manages secure routing and traffic flow across GCP regions.")
+    Component(ext_authz, "External Authorization Filter", "Envoy Ext_Authz Filter + Open Policy Agent / OPA", "Enforces policy, GDPR, HIPAA, and consent validation.")
+    Component(telemetry, "Telemetry & Audit Logging Component", "Envoy Access Log Service / ALS with OpenTelemetry OTel Filter", "Emits span data and access logs for EU MDR traceability.")
+    Component(rate_limiting, "Rate Limiting & Circuit Breaking Component", "Envoy Local/Global Rate Limit Filters & Memorystore for Redis", "Evaluates traffic quotas and client health using distributed token buckets.")
+    Component(waf, "WAF & Threat Mitigation Component", "Google Cloud Armor", "Inspects incoming edge traffic and filters malicious payloads.")
+    Component(geo_routing, "Geo-Routing & Header Enforcement Filter", "Envoy Header Mutation & Lua/Wasm Filter", "Evaluates client context and tags requests for regional upstreams.")
+    Component(health_check, "Upstream Health Checking & Failover Component", "Envoy Active/Passive Health Checking & Outlier Detection", "Performs active health probes and queries endpoint health status.")
+    Component(compression, "Compression & Content Optimization Component", "Envoy Compression Filter / Brotli & Gzip", "Passes outgoing response streams for dynamic API compression.")
+    Component(mtls, "mTLS & Upstream TLS Context Component", "Envoy Upstream TLS Context / Secret Discovery Service", "Enforces cryptographic tunnel parameters and mutual TLS encrypted connections.")
+}
+
+Rel(gcp_lb, waf, "Inspects incoming edge traffic", "HTTPS")
+Rel(waf, listener, "Passes sanitized traffic to Envoy", "HTTPS")
+Rel(listener, geo_routing, "Evaluates client context", "Internal HTTP")
+Rel(geo_routing, routing, "Forwards tagged requests to regional upstreams", "gRPC")
+Rel(routing, ext_authz, "Queries for permission checks", "gRPC")
+Rel(routing, rate_limiting, "Evaluates traffic quotas and client health", "gRPC/Internal")
+Rel(rate_limiting, redis, "Fetches distributed token buckets for rate limiting", "RESP")
+Rel(routing, telemetry, "Emits span data and access logs", "gRPC over OTel protocol")
+Rel(routing, health_check, "Queries endpoint health status", "Internal gRPC")
+Rel(health_check, backends, "Performs active health probes", "HTTP/gRPC health checks")
+Rel(routing, compression, "Passes outgoing response streams for encoding", "Internal HTTP/2")
+Rel(compression, listener, "Delivers compressed payloads back to the client", "HTTPS")
+Rel(routing, mtls, "Enforces cryptographic tunnel parameters", "Internal gRPC")
+Rel(mtls, backends, "Establishes mutual TLS encrypted connections", "gRPC over mTLS")
+
+@enduml

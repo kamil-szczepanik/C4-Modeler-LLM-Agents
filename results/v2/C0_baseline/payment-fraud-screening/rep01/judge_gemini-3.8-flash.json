@@ -1,0 +1,325 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 3,
+   "portability": 4
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "Scoring Engine (Rule Evaluator, Model Runner) covers R-01, while Case Management (Analyst SPA, Case Workflow Engine) addresses R-02. However, zero-downtime updates for rules and models (R-03) lack an explicit update or hot-reloading mechanism beyond signing verification.",
+   "performance_efficiency": "Sub-50ms latency is supported by Go, in-memory Rule Evaluator, and ElastiCache Serverless Redis. Audit logging is offloaded asynchronously to SQS. However, using SQS FIFO at 3,000 TPS requires careful partitioning, and API Gateway invoking gRPC directly is architecturally non-standard.",
+   "compatibility": "Merchant / Payment Gateway integrates via standard gRPC over TLS 1.3, while Identity Provider integrates over OAuth2/OIDC. Internal datastores utilize standard protocols like RESP and PostgreSQL wire protocol, fulfilling interoperability requirements.",
+   "usability": "The Fraud Analyst is well-served by the Analyst SPA, and Compliance & Risk Officer has defined access to S3 Object Lock. However, interfaces for the three-engineer team to operate, tune, or inspect rules and models are omitted.",
+   "reliability": "While SQS DLQs provide fault isolation, R-07 is unaddressed: API Gateway lacks a circuit breaker or fail-open bypass to prevent payment blocking if Scoring Engine fails. Conflicting definitions (Lambda in Container vs ECS Fargate in Component) also impair operational clarity.",
+   "security": "Security is thoroughly designed for PCI-DSS: Edge Tokenizer Lambda Component strips PAN before the API Handler, AWS KMS manages encryption, and S3 Object Lock compliance mode satisfies 7-year tamper-evident audit requirements. AWS WAF provides edge defense.",
+   "maintainability": "Component boundaries are clear, but contradictions exist: Scoring Engine is specified as AWS Lambda at Level 2 and ECS Fargate at Level 3. Audit logging flows are inconsistently duplicated across Data Layer, Observability, and Async Messaging, complicating maintenance for three engineers.",
+   "portability": "The design is tailored specifically to AWS eu-west-1 using managed components like Aurora Serverless v2, S3 Object Lock, and KMS. Deep coupling to proprietary AWS primitives prevents easy migration, though it satisfies the brief's AWS requirement."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 4.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "While using Go, in-memory rules, and ElastiCache supports low latency, architectural contradictions between AWS Lambda and ECS Fargate for the scoring engine, alongside gRPC routing through AWS API Gateway, introduce serialization and configuration overhead that risks the 50 ms P99 target at 3,000 TPS.",
+    "elements": [
+     "AWS API Gateway (HTTP APIs)",
+     "Edge Tokenizer Lambda Component",
+     "API Handler",
+     "Rule Evaluator",
+     "Model Runner",
+     "Feature Store"
+    ],
+    "sensitivity_points": [
+     "Latency of edge tokenization in the critical path",
+     "Network hop latency across API Gateway, Lambda/Fargate, and ElastiCache"
+    ],
+    "tradeoffs": [
+     "Serverless simplicity versus predictable P99 latency overheads under peak load"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Analyst workloads are fully isolated from the real-time scoring path. Case Management runs on ECS Fargate querying Aurora PostgreSQL, while the real-time scoring engine relies exclusively on in-memory rules, local ONNX runtimes, and ElastiCache Redis, preventing workload contention.",
+    "elements": [
+     "Analyst SPA",
+     "Case Management",
+     "Transactional Store",
+     "Scoring Engine",
+     "Feature Store"
+    ],
+    "sensitivity_points": [
+     "Strict isolation between transactional case storage and real-time feature storage"
+    ],
+    "tradeoffs": [
+     "Data duplication between Aurora and Redis versus total workload performance isolation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture lacks an explicit fallback mechanism or circuit breaker. If the scoring engine crashes, API Gateway has no stand-in default policy or alternate scoring route defined, leaving payments at risk of being blocked beyond the one-minute limit.",
+    "elements": [
+     "API Gateway",
+     "AWS API Gateway (HTTP APIs)",
+     "Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Absence of edge circuit breaking and stand-in authorization fallback logic"
+    ],
+    "tradeoffs": [
+     "Strict risk control versus authorization availability during engine outage"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Audit logging is entirely decoupled from the synchronous evaluation path using in-memory Go channels and an asynchronous SQS queue with a dead-letter queue, ensuring that latency spikes or outages in downstream audit storage cannot degrade scoring latency or lose records.",
+    "elements": [
+     "Audit Logger",
+     "SQS FIFO Queue",
+     "Dead-Letter Queue",
+     "Audit Ingestion Queue",
+     "Compliance Storage"
+    ],
+    "sensitivity_points": [
+     "Asynchronous queue buffering depth and DLQ alerting"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of audit records versus bounded decision latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Model Runner supports loading signed model artifacts verified with KMS, and decisions record model versions. Rolling updates or artifact hot-reloading allow zero downtime and rapid rollback, though automated canary deployment pipelines are not fully specified in the architecture.",
+    "elements": [
+     "Model Runner",
+     "AWS KMS",
+     "Audit Logger",
+     "Infrastructure Services"
+    ],
+    "sensitivity_points": [
+     "Dynamic runtime artifact verification and hot-reloading latency"
+    ],
+    "tradeoffs": [
+     "Pre-warmed runtime artifact verification versus deployment speed"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The Rule Evaluator compiles deterministic rules to in-memory bytecodes, enabling fast evaluation and rule tagging in decisions. While the execution engine is well designed, the exact ingestion and hot-reload deployment mechanism for analysts' rule updates is not explicitly detailed.",
+    "elements": [
+     "Rule Evaluator",
+     "API Handler",
+     "Audit Logger"
+    ],
+    "sensitivity_points": [
+     "Mechanism for zero-downtime bytecode reloading across instances"
+    ],
+    "tradeoffs": [
+     "In-memory bytecode evaluation speed versus rule distribution synchronization complexity"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "PAN data is stripped and tokenized at the API boundary, ensuring Case Management and analysts only handle tokens, protecting card data. CloudWatch and SNS provide alerting, but specific behavioral anomaly detection mechanisms for compromised analyst accounts are only generically covered.",
+    "elements": [
+     "Edge Tokenizer Lambda Component",
+     "API Handler",
+     "Case Management",
+     "Identity Provider (IdP)",
+     "Amazon CloudWatch",
+     "Amazon SNS"
+    ],
+    "sensitivity_points": [
+     "Comprehensive tokenization at the edge prior to any analyst access"
+    ],
+    "tradeoffs": [
+     "Masked operational data view for analysts versus data exposure risk"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Decision inputs, rule outputs, and model versions are cryptographically signed via KMS and archived using Amazon S3 Object Lock in compliance mode for 7 years. Compliance officers can directly query and reproduce decisions well within one working day.",
+    "elements": [
+     "Audit Logger",
+     "AWS KMS",
+     "AWS Firehose",
+     "Compliance Storage",
+     "Compliance & Risk Officer"
+    ],
+    "sensitivity_points": [
+     "S3 Object Lock retention policy configuration and payload cryptographic completeness"
+    ],
+    "tradeoffs": [
+     "Higher WORM storage costs over 7 years versus regulatory compliance guarantees"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "none"
+  },
+  "coverage": 0.6818181818181818,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Edge Tokenizer Lambda Component",
+     "AWS KMS",
+     "API Handler",
+     "AWS WAF"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "AWS S3 Object Lock",
+     "Compliance Storage",
+     "Audit Logger",
+     "AWS Firehose",
+     "Audit Logger Component with AWS KMS integration"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "AWS API Gateway (HTTP APIs)",
+     "Scoring Engine",
+     "Data Layer"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "API Gateway",
+     "Scoring Engine",
+     "Case Management",
+     "Data Layer",
+     "Observability"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "API Handler",
+     "Rule Evaluator",
+     "Model Runner"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management",
+     "Analyst SPA",
+     "API Router & Auth Component",
+     "Case Workflow Engine with Prioritization Queue",
+     "Transactional Store"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Rule Evaluator",
+     "Model Runner"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "Feature Store",
+     "Audit Logger",
+     "Async Messaging",
+     "Rule Evaluator"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Edge Tokenizer Lambda Component",
+     "API Handler",
+     "AWS KMS",
+     "Case Management"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit Logger",
+     "Model Runner",
+     "AWS S3 Object Lock",
+     "Compliance Storage",
+     "Audit Ingestion Queue"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

@@ -1,0 +1,247 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 5.0,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 and circulation workflows through the 'Search & Catalog Service', 'Digital Content Sync Worker' for digital assets, 'Circulation & Core Engine' for loans, and 'Patron Portal' for self-service functionality.",
+   "performance_efficiency": "The sub-800 ms target (R-05) is directly addressed via 'Search & Catalog Service' leveraging an 'Elasticsearch Client Adapter', 'API Gateway / BFF' rate limiting, and asynchronous processing using 'Digital Content Sync Worker' and RabbitMQ.",
+   "compatibility": "Standard protocols are defined across external integrations, including OIDC/OAuth2 for 'EU Identity Provider (IdP)' and 'Third-Party Digital Content Providers (OverDrive/Libby)', Syslog/HTTPS for 'EU Compliance & Audit Logging Service', and OTLP for APM.",
+   "usability": "All target personas are provided dedicated user interfaces: 'Patron Portal' for library members, 'Staff Circulation App' (with offline capabilities) for librarians, and 'Admin Console' for library administrators.",
+   "reliability": "High reliability is ensured via 'Replication & Failover Component', secondary backups with 'EU Secondary Region Backup Target', 'Sync Circuit Breaker & Retry Manager', and the 'Offline Sync & Caching Service' in the staff app.",
+   "security": "EU data residency is strictly enforced across 'EU Cloud Infrastructure'. Security includes TLS 1.3, internal mTLS, token validation in 'Authentication & JWT Validation Filter', and AES-256 database encryption via 'Encryption & Key Management Component'.",
+   "maintainability": "The system exhibits high modularity and low coupling, cleanly separating frontends, the 'API Gateway / BFF', discrete domain backend services ('Search & Catalog Service', 'Circulation & Core Engine'), and decoupled asynchronous workers.",
+   "portability": "The solution utilizes standard containerized environments, agnostic technologies (Go, Node.js, Java Spring Boot, React), and explicitly abstracts cloud hosting across compliant regions in 'EU Cloud Infrastructure (AWS/Azure EU Region)'."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 3,
+   "MOD-02": 3,
+   "PERF-01": 4,
+   "PERF-02": 3,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 4.0,
+   "Modifiability": 3.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The architecture dedicates an Elasticsearch-backed Search & Catalog Service queried via gRPC and fronted by Envoy. While cluster sizing and horizontal autoscaling policies are not detailed, the architectural separation from the transactional database enables sub-800ms search responses at scale.",
+    "elements": [
+     "Anycast CDN / DDoS Protection Service (EU-PoPs)",
+     "API Gateway / BFF",
+     "Search & Catalog Service",
+     "Elasticsearch Client Adapter"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster capacity and indexing refresh intervals"
+    ],
+    "tradeoffs": [
+     "In-memory and cluster indexing cost versus low query latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "justification": "Catalog Management Service interfaces directly with Elasticsearch for updates. However, digital asset sync writes to PostgreSQL without an explicit change-data-capture or queue pipeline to update the Elasticsearch index, creating uncertainty around whether all item changes are searchable within 5 minutes.",
+    "elements": [
+     "Search & Catalog Service",
+     "Catalog Management Service",
+     "Elasticsearch Client Adapter",
+     "Digital Content Sync Worker",
+     "Primary Database"
+    ],
+    "sensitivity_points": [
+     "Synchronization consistency between PostgreSQL and Elasticsearch"
+    ],
+    "tradeoffs": [
+     "Asynchronous search indexing improves write throughput but delays index visibility"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Circulation is isolated from the search index in a separate Go container backed by PostgreSQL with automated failover, guaranteeing zero lost loans. Search uses an Elasticsearch cluster, but cluster replica settings and automatic node replacement are not explicitly detailed.",
+    "elements": [
+     "Search & Catalog Service",
+     "Elasticsearch Client Adapter",
+     "Circulation & Core Engine",
+     "Primary Database",
+     "Replication & Failover Component"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch replica configuration and automatic master failover"
+    ],
+    "tradeoffs": [
+     "Read replica redundancy increases infrastructure costs to prevent search outages"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Patron Portal is a stateless React web application decoupled from backend services by CDN and API Gateway Envoy proxies. Loans are processed transactionally in the backend database. Failover across client instances preserves loans, though gateway health check timing is implicit.",
+    "elements": [
+     "Patron Portal",
+     "Anycast CDN / DDoS Protection Service (EU-PoPs)",
+     "API Gateway / BFF",
+     "Circulation & Core Engine",
+     "Primary Database"
+    ],
+    "sensitivity_points": [
+     "Health check and failover latency in CDN and API Gateway"
+    ],
+    "tradeoffs": [
+     "Stateless UI architecture requires external token validation per request"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Adding an e-book provider requires modifying the Provider Integration Client in the worker. However, the Patron Portal also defines a dedicated Digital Content Access Handler, meaning changes are not strictly confined to a single integration component.",
+    "elements": [
+     "Digital Content Sync Worker",
+     "Provider Integration Client",
+     "Patron Portal",
+     "Digital Content Access Handler"
+    ],
+    "sensitivity_points": [
+     "Tight coupling between digital provider APIs and UI content handlers"
+    ],
+    "tradeoffs": [
+     "Direct client handlers in the portal reduce latency but compromise modularity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "The Admin Console provides a System Configuration Client, and the engine includes a Patron Policy Component. However, the architecture does not specify a dynamic rules engine, externalized configuration store, or data-driven policy schema to modify loan rules without redeploying code.",
+    "elements": [
+     "Admin Console",
+     "System Configuration Client",
+     "Circulation & Core Engine",
+     "Patron Policy Component",
+     "Primary Database"
+    ],
+    "sensitivity_points": [
+     "Policy engine schema flexibility without code deployments"
+    ],
+    "tradeoffs": [
+     "Configurable rules add operational complexity compared to hardcoded policy logic"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "EU data residency is explicitly designed into every tier: EU-PoP CDN, EU cloud hosting, EU-hosted PostgreSQL, EU Identity Provider, and EU secondary backup targets. Ingress, egress, storage, and processing boundaries strictly prohibit non-EU patron data flows.",
+    "elements": [
+     "EU Cloud Infrastructure (AWS/Azure EU Region)",
+     "Primary Database",
+     "EU Identity Provider (IdP)",
+     "EU Compliance & Audit Logging Service",
+     "Anycast CDN / DDoS Protection Service (EU-PoPs)",
+     "EU Secondary Region Backup Target"
+    ],
+    "sensitivity_points": [
+     "Cloud region boundary enforcement across all services and dependencies"
+    ],
+    "tradeoffs": [
+     "Restricting hosting strictly to EU limits vendor choices and multi-region routing"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Envoy validates JWTs, while the Circulation API and Auth Facade enforces patron authorization boundaries. Unauthorized access triggers audit events dispatched via the Audit & Event Dispatcher Component to the EU Compliance & Audit Logging Service. Explicit object-level access control rules are somewhat high-level.",
+    "elements": [
+     "API Gateway / BFF",
+     "Authentication & JWT Validation Filter",
+     "Circulation API & Auth Facade",
+     "Loan Management Component",
+     "Audit & Event Dispatcher Component",
+     "EU Compliance & Audit Logging Service"
+    ],
+    "sensitivity_points": [
+     "Fine-grained patron identity verification on object-level resource requests"
+    ],
+    "tradeoffs": [
+     "In-line audit logging overhead versus security compliance observability"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "EU Cloud Infrastructure (AWS/Azure EU Region)",
+     "EU Secondary Region Backup Target",
+     "Primary Database",
+     "Relational Storage Engine Component",
+     "Anycast CDN / DDoS Protection Service (EU-PoPs)",
+     "EU Identity Provider (IdP)",
+     "EU Compliance & Audit Logging Service",
+     "EU Monitoring & APM Provider"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Search & Catalog Service",
+     "Catalog Management Service",
+     "Digital Content Sync Worker",
+     "Provider Integration Client",
+     "Catalog Persistence Adapter",
+     "Third-Party Digital Content Providers (OverDrive/Libby)"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search & Catalog Service",
+     "Elasticsearch Client Adapter",
+     "Search API Controller"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

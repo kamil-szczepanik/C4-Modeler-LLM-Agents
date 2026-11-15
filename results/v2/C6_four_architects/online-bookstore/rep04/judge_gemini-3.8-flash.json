@@ -1,0 +1,350 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "Core requirements are well covered: Catalog Service and Amazon OpenSearch address R-01; Order & Checkout Service handles R-02; Recommendation Service covers R-04. However, R-03 (reviews and 5-star ratings) lacks dedicated persistence and service components, appearing only as an SPA view module and image trigger.",
+   "performance_efficiency": "Performance and 1M MAU scalability are thoroughly addressed through CDN distribution with CloudFront, SPA code-splitting, multi-tier caching (ElastiCache Redis, DynamoDB DAX), RDS Proxy connection pooling, Amazon OpenSearch indexing, and asynchronous queue offloading using SQS/SNS.",
+   "compatibility": "Compatibility is fully addressed. Dedicated integration points explicitly interface with Payment Gateway, Shipping Provider APIs, Tax Calculation Service, and Identity Provider via REST/OIDC. Pricing & Currency component and Currency Rate Sync Worker manage multi-currency conversion requirements.",
+   "usability": "Customers and Store Administrators interact via the Single-Page Application (SPA). Localization & Currency Provider supports international users with currency formatting. However, administrator-specific operational interfaces (e.g., catalog moderation workflows) lack detailed architectural component separation from customer views within the SPA.",
+   "reliability": "High availability (99.95%) is supported by Aurora Replica DB Instances, DynamoDB distributed storage, Worker Health & DLQ Manager, and Resilience4j circuit breakers in Payment Integration. However, automated cross-region traffic routing across the three targeted AWS regions is not explicitly detailed.",
+   "security": "Excellently addressed: AWS WAF, edge TLS 1.3 termination, Argon2 password hashing, and Brute-Force Guard mitigate OWASP risks. Privacy Service, DSAR Orchestrator, Data Redaction Component, and pgAudit enforce GDPR/CCPA compliance alongside CloudFront Origin Access Control and signed URLs.",
+   "maintainability": "The architecture exhibits high modularity with domain-bounded microservices (Catalog, Order & Checkout, Auth, Privacy, Recommendation) deployed on ECS Fargate. EventBridge Schema Registry ensures strict event contract enforcement, decoupling services via SQS/SNS and promoting testability and maintainability.",
+   "portability": "Backend services are containerized via Docker on ECS Fargate, providing portability for application code. However, heavy reliance on AWS-proprietary services (DynamoDB, DAX, Aurora fabric, AppSync/API Gateway, SQS/SNS) creates substantial cloud-provider lock-in and impedes infrastructure replaceability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.90625,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "CloudFront edge caching, Redis caching via ElastiCache, OpenSearch index decoupling, RDS Proxy pooling, and read replicas handle extreme read traffic spikes efficiently.",
+    "elements": [
+     "Amazon S3 & CloudFront",
+     "Catalog Cache Interceptor / Repository",
+     "Amazon OpenSearch",
+     "AWS RDS Proxy",
+     "Replica DB Instances"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios at CloudFront and ElastiCache directly dictate backend database load."
+    ],
+    "tradeoffs": [
+     "Aggressive edge and Redis caching can serve slightly stale catalog data during rapid updates."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Model training and scoring updates run asynchronously decoupled via Amazon SQS and Celery workers, caching output to Redis without competing with Catalog Service resources.",
+    "elements": [
+     "Recommendation Service",
+     "Model Ingestion Worker",
+     "Amazon SQS",
+     "Recommendation Cache Client",
+     "Catalog Service"
+    ],
+    "sensitivity_points": [
+     "SQS queue ingestion rate and asynchronous worker CPU limits."
+    ],
+    "tradeoffs": [
+     "Asynchronous recommendation updates sacrifice immediate consistency for browsing catalog performance."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Circuit breakers protect checkout integrations while SQS queues and Background Worker order fulfillment processors defer shipping tasks, though synchronous shipping quotes during checkout require fallback.",
+    "elements": [
+     "Checkout Orchestrator",
+     "Payment Integration",
+     "Fulfillment Integration",
+     "Order Fulfillment Processor",
+     "Worker Health & DLQ Manager"
+    ],
+    "sensitivity_points": [
+     "Resilience4j circuit breaker thresholds and timeout configurations on external shipping APIs."
+    ],
+    "tradeoffs": [
+     "Allowing checkout without live shipping verification risks undercharging shipping fees."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Although multi-region replicas are noted for Aurora, missing explicit global DNS routing (Route 53) and cross-region transactional write failover mechanisms create risks during regional outages.",
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Primary DB Instance",
+     "Replica DB Instances",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Cross-region replication lag and DNS failover convergence time."
+    ],
+    "tradeoffs": [
+     "Synchronous multi-region consistency increases latency and operational cost significantly."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Multi-currency support is properly isolated within the SPA Localization & Currency Provider, the Order Service's Pricing & Currency component, and the Currency Rate Sync Worker.",
+    "elements": [
+     "Localization & Currency Provider",
+     "Pricing & Currency",
+     "Payment Integration",
+     "Currency Rate Sync Worker"
+    ],
+    "sensitivity_points": [
+     "Extensibility of currency exchange rate feeds and payment gateway multi-currency support."
+    ],
+    "tradeoffs": [
+     "Decoupled currency conversion logic requires constant background exchange rate synchronization."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Recommendation logic is strictly encapsulated inside the Recommendation Service container, isolating the Scoring Engine and Vector DB client behind consistent internal API contracts.",
+    "elements": [
+     "Recommendation Service",
+     "Scoring Engine",
+     "Model Ingestion Worker",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Stability of internal REST/gRPC API contracts between API Gateway and Recommendation Service."
+    ],
+    "tradeoffs": [
+     "Independent algorithmic services add operational overhead compared to in-process scoring libraries."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "AWS WAF provides perimeter XSS/SQLi filtering at the API Gateway, TypeORM ORM enforces parameterized queries, and pgAudit alongside CloudWatch records all access attempts.",
+    "elements": [
+     "Rate Limiting",
+     "Relational Persistence Adapter",
+     "PostgreSQL Extension Manager",
+     "Request Logging & Audit Component"
+    ],
+    "sensitivity_points": [
+     "WAF rule sensitivity and rigorous ORM query parameterization across services."
+    ],
+    "tradeoffs": [
+     "Strict WAF payload inspection introduces minor request latency overhead at ingress."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The Privacy Service coordinates DSAR workflows asynchronously via SQS, dispatching tasks to Data Redaction components and Background Worker purge handlers across Aurora, DynamoDB, and S3.",
+    "elements": [
+     "DSAR Orchestrator Component",
+     "Data Redaction Component",
+     "GDPR Data Purge Handler",
+     "TTL Background Cleaner",
+     "Compliance Reporting Component"
+    ],
+    "sensitivity_points": [
+     "Completeness of data discovery and redaction schemas across all persistent datastores."
+    ],
+    "tradeoffs": [
+     "Cascading asynchronous data scrubbing requires extensive transactional auditing across distributed databases."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Privacy Service",
+     "Privacy & Consent Manager",
+     "Consent Controller & Middleware Component",
+     "DSAR Orchestrator Component",
+     "Data Redaction Component",
+     "Compliance Reporting Component",
+     "GDAR Consent Manager",
+     "GDPR Data Purge Handler",
+     "TTL Background Cleaner",
+     "PostgreSQL Extension Manager"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Localization & Currency Provider",
+     "Pricing & Currency",
+     "Currency Rate Sync Worker"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Provider APIs",
+     "Fulfillment Integration",
+     "Order Fulfillment Processor"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog Service",
+     "Catalog API Controller",
+     "Product Domain Service",
+     "Search & Indexing Repository",
+     "Amazon OpenSearch",
+     "Distributed Search Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Order & Checkout Service",
+     "Order API Controller",
+     "Checkout Orchestrator",
+     "Cart Management",
+     "Order Processing",
+     "Payment Integration",
+     "Payment Gateway",
+     "Amazon DynamoDB"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Feature Modules",
+     "Media Processing Trigger"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation API Controller",
+     "Scoring Engine",
+     "Model Ingestion Worker",
+     "Recommendation Cache Client",
+     "Feature Store / Vector DB Client",
+     "Amazon OpenSearch",
+     "Amazon ElastiCache (Redis)",
+     "Recommendation Sync Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "AWS RDS Proxy",
+     "Replica DB Instances",
+     "DAX Cluster",
+     "Amazon ElastiCache (Redis)",
+     "Amazon S3 & CloudFront",
+     "Messaging & Observability"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Router Component",
+     "Feature Modules",
+     "CDN Distribution",
+     "Amazon S3 & CloudFront",
+     "Catalog Cache Interceptor / Repository",
+     "DAX Cluster"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Replica DB Instances",
+     "Aurora Storage Volume",
+     "Data Replication Manager",
+     "Payment Integration",
+     "Worker Health & DLQ Manager",
+     "CDN Distribution"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "SSL Termination",
+     "Rate Limiting",
+     "Authentication Interceptor",
+     "Auth Service",
+     "Rate Limiting & Brute-Force Guard",
+     "User Credential Repository",
+     "Security & Access Control Module",
+     "PostgreSQL Extension Manager"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

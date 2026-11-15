@@ -1,0 +1,320 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 5
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: Patient Registration, Scheduling Engine (with Drools rules for clash checks), EMR Service (with CDR Manager and Audit Interceptor), and Billing & Claims Component interfacing with the Insurance Gateway.",
+   "performance_efficiency": "The sub-second EMR target (R-07) is supported by TanStack Query in Web Frontend, a Redis Caching Layer in EMR Service, PgBouncer connection pooling, Kafka event streaming, and Citus/BDR query optimization.",
+   "compatibility": "HL7 FHIR compliance (R-08) is directly addressed via the Integration Worker (FHIR Transformer, HAPI FHIR), Core Services FHIR Translation Adapter, and REST/SOAP integration with external Insurance Gateways and Lab/Imaging systems.",
+   "usability": "Patients, Clinicians/Staff, and Administrators are provided dedicated UI views via Web Frontend feature modules and Notification Gateway integration. However, dedicated mobile or specialized clinical UX interfaces are not explicitly detailed.",
+   "reliability": "High availability of 99.99% (active-active) is achieved using Route 53 Geo-DNS, Envoy Anycast, Patroni automated failovers, Kafka MirrorMaker 2, BDR multi-master replication, and Temporal.io workflow durability.",
+   "security": "Thoroughly addresses HIPAA/GDPR: IdP integration (OIDC/SAML MFA), Vault/AWS KMS envelope encryption (AES-256), mTLS across containers, append-only WORM Audit Log Store with cryptographic chaining, and automated PII redaction.",
+   "maintainability": "Clear domain decomposition with microservices, event-driven decoupling via Kafka, and OpenTelemetry observability. Minor inconsistencies exist between Level 1 and Level 2 service boundaries (e.g., Core Services vs. separated Go/.NET services in L1).",
+   "portability": "The hybrid multi-region requirement (on-prem-k8s and AWS eu-central-1) is well architected using containerized services, Kafka MirrorMaker 2 cross-cloud replication, multi-cloud KMS adapters, and S3 Glacier offload."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 1.0,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture incorporates Redis caching in the EMR Service, client-side caching in the Web Frontend, and PgBouncer connection pooling to efficiently handle concurrent read spikes, easily meeting the sub-second P95 latency target.",
+    "elements": [
+     "Web Frontend",
+     "API Gateway",
+     "EMR Service",
+     "Database Layer"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios directly govern EMR screen load latency under high concurrency."
+    ],
+    "tradeoffs": [
+     "Aggressive caching introduces cache invalidation complexity to prevent serving stale clinical records."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Integration Worker processes FHIR payloads and buffers them through Kafka, decoupling high-throughput asynchronous ingestion from synchronous EMR queries. This protects interactive clinician workloads while completing ingestion well within 10 minutes.",
+    "elements": [
+     "Integration Worker",
+     "Event Broker",
+     "EMR Service",
+     "Database Layer"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer throughput and batch database insert efficiency dictate ingestion lag."
+    ],
+    "tradeoffs": [
+     "Asynchronous event processing trades immediate cross-system consistency for sustained ingestion throughput."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Active-active multi-region configuration with Geo-DNS and Anycast traffic management routes traffic away from eu-central-1 automatically upon health check failure. Citus/Postgres-BDR and MirrorMaker 2 ensure data is synchronized without downtime.",
+    "elements": [
+     "Global Load Balancer",
+     "Database Layer",
+     "Event Broker",
+     "Core Services Container"
+    ],
+    "sensitivity_points": [
+     "Failover latency is sensitive to health-probe intervals and DNS TTL expiration."
+    ],
+    "tradeoffs": [
+     "Multi-master active-active replication introduces distributed lock overhead and write-conflict resolution complexity."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Patroni provides automated database failover within 30 seconds. Temporal.io manages durable workflow execution for claim submissions, safely retrying in-flight steps without duplicating claims or losing transaction state.",
+    "elements": [
+     "Database Layer",
+     "Background Job Scheduler",
+     "Core Services Container"
+    ],
+    "sensitivity_points": [
+     "Patroni leader election timeout and Temporal activity retry policies determine recovery speed."
+    ],
+    "tradeoffs": [
+     "Durable workflow persistence increases commit overhead to guarantee idempotency across failures."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Clear service boundaries isolate insurance processing within the Billing & Claims Component and Integration Worker. Adding an insurance clearinghouse requires updates solely to the claims connector, leaving the EMR Service completely unaffected.",
+    "elements": [
+     "Core Services Container",
+     "Integration Worker",
+     "Insurance Gateway"
+    ],
+    "sensitivity_points": [
+     "Clean encapsulation in connector modules determines the blast radius of clearinghouse changes."
+    ],
+    "tradeoffs": [
+     "Standardized adapter abstractions slightly increase initial development and mapping overhead."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Adding an audited demographic field requires modifying exactly three components: the UI Feature Module, the Patient Registration Component, and the Database schema. Spring AOP Audit Interceptor automatically captures method mutations without dedicated code changes.",
+    "elements": [
+     "Web Frontend",
+     "Core Services Container",
+     "Database Layer"
+    ],
+    "sensitivity_points": [
+     "Aspect-oriented auditing abstraction minimizes cross-cutting modifications across domain services."
+    ],
+    "tradeoffs": [
+     "Automated audit interception trades execution transparency and slight reflection overhead for maintainability."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Authentication delegates to an external Identity Provider enforcing OIDC/SAML MFA. Password-only logins are rejected at the edge, and anomalous attempts are captured by the API Gateway and Observability Collector within seconds.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "API Gateway",
+     "Observability & Monitoring Collector"
+    ],
+    "sensitivity_points": [
+     "Strict MFA enforcement rules at the Identity Provider prevent single-factor credential misuse."
+    ],
+    "tradeoffs": [
+     "Delegating to an external IdP adds an external operational dependency for authentication."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Policy enforcement checks access permissions while the Audit Trail Interceptor writes every read event to an immutable, cryptographically chained PostgreSQL table. The Archival Worker offloads records to AWS S3 Glacier for 10-year compliance retention.",
+    "elements": [
+     "EMR Service",
+     "Audit Log Store",
+     "Cloud Backup (AWS S3 Glacier)",
+     "Key Management Service (KMS)"
+    ],
+    "sensitivity_points": [
+     "Interception completeness guarantees that zero EMR read operations bypass the audit pipeline."
+    ],
+    "tradeoffs": [
+     "Comprehensive read auditing increases storage consumption and write amplification significantly."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit Interceptor Component",
+     "Data Redaction Processor",
+     "Encryption & Masking Engine",
+     "Traffic Routing Policy Engine",
+     "Security Context & Policy Enforcer",
+     "Audit Log Store"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Global Load Balancer",
+     "Geo-DNS Resolver",
+     "Failover & Health Monitor",
+     "PostgreSQL Primary/Active-Active Nodes",
+     "Logical Replication Manager"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Audit Log Store",
+     "Cloud Backup (AWS S3 Glacier)",
+     "Archival Worker",
+     "Backup & Archival Agent"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Registration Component",
+     "Core Services Container",
+     "Web Frontend"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Scheduling Engine Component",
+     "Background Job Scheduler"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "CDR Manager",
+     "Audit Trail Interceptor",
+     "Audit Log Store",
+     "Immutable Storage Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Component",
+     "Core Services Container",
+     "Insurance Gateway"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Data Encryption & Key Handler",
+     "Key Management Service (KMS)"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Global Load Balancer",
+     "Geo-DNS Resolver",
+     "PostgreSQL Primary/Active-Active Nodes",
+     "Logical Replication Manager",
+     "Failover & Health Monitor"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "Local State & Cache Manager",
+     "Caching Layer",
+     "PgBouncer"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Worker",
+     "FHIR Transformer",
+     "Connector Client",
+     "External Lab & Imaging Systems",
+     "FHIR Translation Adapter",
+     "FHIR Transformation Engine"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

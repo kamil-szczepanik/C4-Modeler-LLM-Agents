@@ -1,0 +1,318 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Patient Registry Component handles demographics (R-01), Scheduling Engine handles clash checks (R-02), EMR Core Component and WORM Storage Vault handle medical records and audits (R-03), and Billing Component interfaces with Payment Gateway / Insurance Clearinghouse (R-04).",
+   "performance_efficiency": "EMR sub-second latency (R-07) is supported by lazy-loaded Role-Based UI Modules, Redis distributed locking, Reporting & Analytics Read Replicas offloading queries from the Primary Operational Database, and Kafka-based asynchronous processing with RUM tracking.",
+   "compatibility": "The Integration Service includes a dedicated FHIR Adapter supporting HL7 FHIR over mTLS and OAuth2 for External Lab & Imaging Systems (R-08), alongside OIDC/SAML 2.0 integration with external Identity Providers and standard payment clearinghouse interfaces.",
+   "usability": "Frontend SPAs serve all specified personas (Patient, Clinician, Receptionist, Billing Specialist, Administrator) through Role-Based UI Modules with tailored feature bundles and responsive static UI delivery via Nginx Web Server.",
+   "reliability": "Achieves high availability with Envoy circuit breaking, outbox pattern via Outbox Message Relay, and DLQ Alert Dispatcher. However, concrete active-active multi-master replication and conflict resolution mechanisms between AWS RDS and On-premise PostgreSQL are insufficiently detailed.",
+   "security": "Meets HIPAA/GDPR constraints and R-05 via Identity Provider MFA, External Authorization Filter (OPA sidecars), WASM Security & Sanitization Filter for PII masking, mTLS service mesh, AES-256 storage encryption, and immutable WORM Storage Vault.",
+   "maintainability": "Clean separation of concerns with decoupled Domain Microservices, dedicated Integration Service, separate API Gateway layers, and event-driven architecture using Event Bus Publisher (Kafka) to ensure low coupling and component replaceability.",
+   "portability": "Architected for hybrid deployment across on-prem-k8s and AWS eu-central-1 using containerized technologies (Docker/K8s, Istio), platform-agnostic Spring Boot services, and storage abstraction supporting both AWS S3 Object Lock and MinIO."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 2.5,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Role-Based UI Modules offer lazy loading and Envoy routes over gRPC to EMR Core. However, there is no explicit caching layer for EMR clinical reads, placing peak concurrent read load directly on PostgreSQL.",
+    "elements": [
+     "Role-Based UI Modules",
+     "Nginx Web Server",
+     "Envoy API Gateway",
+     "EMR Core Component",
+     "Primary Operational Database"
+    ],
+    "sensitivity_points": [
+     "Database read throughput and indexing under concurrent round queries",
+     "Latency added by WASM sanitization and authorization filters in Envoy"
+    ],
+    "tradeoffs": [
+     "Bypassing read caches ensures strict data freshness but increases database query load"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Integration Service decouples high-volume FHIR ingestion using Outbox Message Relay and Kafka event streaming, queuing messages to prevent operational database saturation while preserving sub-second EMR responsiveness.",
+    "elements": [
+     "FHIR Adapter",
+     "Outbox Message Relay",
+     "Event Bus Publisher",
+     "EMR Core Component",
+     "Primary Operational Database"
+    ],
+    "sensitivity_points": [
+     "Buffer capacity of Redis BullMQ and Kafka partition throughput",
+     "Concurrency limits on backend worker processing FHIR payloads"
+    ],
+    "tradeoffs": [
+     "Asynchronous ingestion guarantees core performance but introduces eventual consistency for lab results"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "Achieving RPO=0 active-active failover within 1 minute across hybrid on-prem Kubernetes and AWS RDS PostgreSQL is unfeasible with standard RDS replication without deep multi-master or synchronous cross-site mechanisms.",
+    "elements": [
+     "Envoy API Gateway",
+     "Domain Microservices",
+     "Decoupled Data Tier",
+     "Primary Operational Database"
+    ],
+    "sensitivity_points": [
+     "Cross-site replication latency between on-premises and eu-central-1",
+     "DNS failover routing and split-brain resolution protocols"
+    ],
+    "tradeoffs": [
+     "Synchronous hybrid replication prevents data loss but severely degrades transactional write latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "While RDS provides automated failover, PostgreSQL node failovers typically exceed 30 seconds. Idempotency handling and retry state machines for in-flight clearinghouse claims are not explicitly specified in the Billing Component.",
+    "elements": [
+     "Billing Component",
+     "Primary Operational Database",
+     "Payment Gateway / Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Relational database failover detection time and connection pool recovery",
+     "External payment gateway transaction idempotency token persistence"
+    ],
+    "tradeoffs": [
+     "Aggressive database failover timeouts risk false positives and split-brain scenarios"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Domain Microservices segregate Billing Component from EMR Core, ensuring EMR remains untouched. However, clearinghouse integration details are housed in Billing rather than encapsulated in the dedicated Integration Service.",
+    "elements": [
+     "Billing Component",
+     "Event Bus Publisher",
+     "Payment Gateway / Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Coupling between Billing domain logic and clearinghouse protocols",
+     "Standardization of outbound claim schemas across different clearinghouses"
+    ],
+    "tradeoffs": [
+     "Direct integration inside the Billing service speeds development but reduces integration reusability"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Changes are strictly bounded to three components: Role-Based UI Modules, Patient Registry Component, and Primary Operational Database schema. The Audit & Archive Manager automatically captures field changes via Debezium CDC.",
+    "elements": [
+     "Role-Based UI Modules",
+     "Patient Registry Component",
+     "Primary Operational Database",
+     "Audit & Archive Manager"
+    ],
+    "sensitivity_points": [
+     "Database schema evolution and non-breaking API contract updates",
+     "CDC schema registry synchronization upon entity model modifications"
+    ],
+    "tradeoffs": [
+     "Automated CDC audit streaming eliminates custom audit code but couples audits to database schema"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Authentication is delegated to the external IdP enforcing MFA via OIDC/SAML. The Envoy External Authorization Filter rejects unauthenticated traffic, and Telemetry Emitter dispatches immediate security audit events.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "External Authorization Filter",
+     "Envoy API Gateway",
+     "Telemetry & Metrics Emitter"
+    ],
+    "sensitivity_points": [
+     "Strictness of MFA enforcement policies on the Identity Provider",
+     "Low-latency streaming of failed authentication events to security alerting"
+    ],
+    "tradeoffs": [
+     "Enforcing external MFA per session improves security but introduces external authentication dependency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "OPA sidecars enforce strict ABAC/RBAC relationship checks on read requests, and WORM storage satisfies 10-year retention. However, auditing read operations requires application-level audit logging since Debezium CDC only captures write WALs.",
+    "elements": [
+     "Authorization & Policy Enforcement Component",
+     "EMR Core Component",
+     "WORM Storage Vault",
+     "Audit Logger"
+    ],
+    "sensitivity_points": [
+     "Granularity of ABAC policies evaluating clinician-patient care relationships",
+     "Coverage of application-level read-access logging before data dispatch"
+    ],
+    "tradeoffs": [
+     "Logging every read access creates high storage overhead in exchange for full compliance auditability"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "WASM Security & Sanitization Filter",
+     "Authorization & Policy Enforcement Component",
+     "Audit & Archive Manager",
+     "WORM Storage Vault",
+     "Audit Logger"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Primary Operational Database",
+     "Envoy API Gateway",
+     "Domain Microservices"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "WORM Storage Vault",
+     "Audit & Archive Manager",
+     "Decoupled Data Tier"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Registry Component",
+     "Receptionist/Front Desk",
+     "Patient"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Engine"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Core Component",
+     "Audit & Archive Manager",
+     "WORM Storage Vault"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Component",
+     "Payment Gateway / Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "External Authorization Filter",
+     "Decoupled Data Tier"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Primary Operational Database",
+     "Domain Microservices",
+     "Envoy API Gateway"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Role-Based UI Modules",
+     "Telemetry & Monitoring Module",
+     "Primary Operational Database"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Adapter",
+     "Integration Service",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

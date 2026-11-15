@@ -1,0 +1,40 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Cross-Border Telehealth Platform
+
+Person(Patients_EU_and_US, "Patients (EU and US)", "End-users accessing services via mobile and web clients for video consultations and symptom checking.")
+Person(Licensed_Clinicians, "Licensed Clinicians", "Healthcare providers conducting consultations and issuing e-prescriptions.")
+
+System_Ext(Identity_and_Consent_Provider, "Identity & Consent Provider", "Third-party/federated service managing OAuth2/OIDC authentication and consent ledgers.")
+System_Ext(EU_National_E_Prescription_Gateways, "EU National E-Prescription Gateways", "External system for EU e-prescription standards integration.")
+System_Ext(US_Surescripts, "US Surescripts", "External system for US pharmacy clearinghouse integration using HL7 FHIR.")
+System_Ext(AI_Model_Registry, "AI Model Registry", "External registry for symptom analysis and model version logging.")
+
+System_Boundary(Cross_Border_Telehealth_Platform, "Cross-Border Telehealth Platform") {
+    Container(API_Gateway_and_Routing_Layer, "API Gateway & Routing Layer", "Google Cloud Load Balancing, Apigee", "Routes traffic regionally to GKE containers in europe-west3 and us-central1.")
+    Container(Core_Telehealth_Service, "Core Telehealth Service", "Go on GKE", "Handles primary telehealth business logic, reading and writing to regional datastores.")
+    Container(Video_Media_Server, "Video Media Server", "WebRTC SFU on GKE", "Streams WebRTC video between participants, supporting adaptive bitrate.")
+    Container(AI_Inference_Wrapper, "AI Inference Wrapper", "Python on Vertex AI", "Powers the AI symptom checker and logs inputs and model versions.")
+    Container(Integration_Service, "Integration Service", "Go / Camel-K on GKE", "Communicates with EU National E-Prescription Gateways and US Surescripts using HL7 FHIR and national standards.")
+    Container(Audit_and_Traceability_Ledger, "Audit & Traceability Ledger", "Cloud Pub/Sub, BigQuery", "Provides immutable logging for EU MDR traceability and audit data.")
+    ContainerDb(Datastores, "Datastores", "Cloud SQL PostgreSQL", "Secures relational data with regional partitioning per region.")
+}
+
+Rel(Patients_EU_and_US, API_Gateway_and_Routing_Layer, "Interacts via HTTPS and WebRTC", "HTTPS / WebRTC")
+Rel(Licensed_Clinicians, API_Gateway_and_Routing_Layer, "Interacts via HTTPS and WebRTC", "HTTPS / WebRTC")
+Rel(API_Gateway_and_Routing_Layer, Core_Telehealth_Service, "Routes regional traffic", "gRPC / HTTP")
+Rel(API_Gateway_and_Routing_Layer, Video_Media_Server, "Routes WebRTC video traffic", "WebRTC")
+Rel(API_Gateway_and_Routing_Layer, AI_Inference_Wrapper, "Routes AI symptom checker requests", "gRPC / HTTP")
+Rel(Core_Telehealth_Service, Datastores, "Reads and writes regional data", "PostgreSQL Protocol")
+Rel(Video_Media_Server, Patients_EU_and_US, "Streams video consultations", "WebRTC")
+Rel(Video_Media_Server, Licensed_Clinicians, "Streams video consultations", "WebRTC")
+Rel(AI_Inference_Wrapper, Audit_and_Traceability_Ledger, "Logs inputs and model versions", "Cloud Pub/Sub")
+Rel(Integration_Service, EU_National_E_Prescription_Gateways, "Communicates e-prescriptions using national standards", "HL7 FHIR / REST")
+Rel(Integration_Service, US_Surescripts, "Communicates e-prescriptions using HL7 FHIR", "HL7 FHIR / REST")
+Rel(API_Gateway_and_Routing_Layer, Identity_and_Consent_Provider, "Authenticates users and verifies consent", "OAuth2 / OIDC over HTTPS")
+Rel(AI_Inference_Wrapper, AI_Model_Registry, "Fetches models and logs version details", "gRPC / REST")
+Rel(Audit_and_Traceability_Ledger, Datastores, "Persists audit and traceability data", "SQL / BigQuery API")
+
+@enduml

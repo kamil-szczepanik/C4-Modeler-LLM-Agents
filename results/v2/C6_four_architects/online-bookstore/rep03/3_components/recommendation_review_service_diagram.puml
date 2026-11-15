@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Recommendation & Review Service container
+
+Container_Boundary(recommendation_review_service, "Recommendation & Review Service") {
+    Component(api_router_controller, "API Router / Controller", "FastAPI", "Routes incoming HTTP requests and delegates logic to internal managers and clients.")
+    Component(review_rating_manager, "Review & Rating Manager", "FastAPI / SQLAlchemy / asyncpg", "Manages reviews and ratings, interfacing with the PostgreSQL database.")
+    Component(recommendation_engine_client, "Recommendation Engine Client", "Python SDK", "Fetches personalized recommendations from AWS Personalize.")
+    Component(caching_aggregation_layer, "Caching & Aggregation Layer", "async-lru / Redis client", "Handles caching of rating aggregates, review snippets, and recommendation payloads.")
+    Component(event_consumer_worker, "Event Consumer Worker", "Python / boto3", "Polls asynchronous events and triggers internal async method calls.")
+}
+
+ContainerDb(amazon_rds_postgresql, "Amazon RDS (PostgreSQL)", "PostgreSQL", "Stores persistent relational data for reviews and ratings.")
+ContainerDb(amazon_elasticache_redis, "Amazon ElastiCache (Redis)", "Redis", "Caches rating aggregates, review snippets, and recommendation payloads.")
+Container(aws_personalize, "AWS Personalize", "Managed ML Service", "Powers personalized book recommendations.")
+Container(amazon_sqs, "Amazon SQS", "AWS SQS", "Queues asynchronous events for consumption by the worker.")
+
+Rel(api_router_controller, review_rating_manager, "In-process method calls")
+Rel(api_router_controller, recommendation_engine_client, "In-process method calls")
+Rel(review_rating_manager, amazon_rds_postgresql, "SQL over TLS [TCP 5432] via asyncpg connection pooling")
+Rel(review_rating_manager, amazon_elasticache_redis, "Caches rating aggregates and review snippets [Redis RESP over TLS]")
+Rel(recommendation_engine_client, aws_personalize, "Fetches personalized recommendations [HTTPS]")
+Rel(recommendation_engine_client, amazon_elasticache_redis, "Caches recommendation payloads [Redis RESP over TLS]")
+Rel(amazon_sqs, event_consumer_worker, "Polls asynchronous events [HTTPS / SQS Long Polling]")
+Rel(event_consumer_worker, review_rating_manager, "Internal async method calls")
+
+@enduml

@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component Diagram for Amazon MSK
+
+System_Ext(Core_Ecommerce_Service_Notification_Worker, "Core E-Commerce Service & Notification Worker", "External services/workers producing and consuming events.")
+System_Ext(Recommendation_Engine, "Recommendation Engine", "External system receiving clickstream and order events.")
+System_Ext(AWS_Glue_Athena, "AWS Glue & Athena", "External analytics and query services.")
+
+Container_Boundary(Amazon_MSK, "Amazon MSK") {
+    Component(Broker_Nodes, "Broker Nodes", "Apache Kafka Brokers (Apache KRaft mode)", "Handles message ingestion, replication, and persists event streams to internal storage.")
+    Component(Schema_Registry, "Schema Registry", "Confluent / AWS Glue Schema Registry", "Validates Avro/JSON event payloads and event schemas.")
+    Component(Kafka_Connect, "Kafka Connect", "AWS MSK Connect", "Syncs stream data to DynamoDB and Aurora.")
+    Component(Client_Authentication_Authorization_Manager, "Client Authentication & Authorization Manager", "AWS IAM and SASL/SCRAM", "Enforces ACLs and authenticates connections.")
+    Component(Cluster_Monitoring_Metrics_Exporter, "Cluster Monitoring & Metrics Exporter", "Amazon CloudWatch and Prometheus", "Emits and monitors telemetry metrics.")
+    Component(Topic_Partition_Manager, "Topic & Partition Manager", "Kafka Admin Client API", "Manages and provisions topic configurations and retention.")
+    Component(Internal_Storage_Volumes, "Internal Storage Volumes", "Amazon EBS gp3", "Provides persistent block storage attached to broker nodes.")
+}
+
+Rel(Core_Ecommerce_Service_Notification_Worker, Broker_Nodes, "Publishes/consumes events", "Kafka protocol over TLS")
+Rel(Core_Ecommerce_Service_Notification_Worker, Schema_Registry, "Validates payloads", "HTTP/REST over TLS")
+Rel(Broker_Nodes, Schema_Registry, "Validates event schemas", "HTTP/REST")
+Rel(Core_Ecommerce_Service_Notification_Worker, Client_Authentication_Authorization_Manager, "Authenticates connections", "IAM / SASL over TLS")
+Rel(Broker_Nodes, Cluster_Monitoring_Metrics_Exporter, "Emits telemetry", "Prometheus metrics / AWS CloudWatch")
+Rel(Topic_Partition_Manager, Broker_Nodes, "Manages topic configurations", "Kafka Admin Protocol over TLS")
+Rel(Broker_Nodes, Internal_Storage_Volumes, "Persists event streams", "NVMe/EBS block storage interface")
+Rel(Broker_Nodes, Recommendation_Engine, "Streams clickstream and order events", "Kafka protocol over TLS")
+Rel(Broker_Nodes, AWS_Glue_Athena, "Streams transactional audit data via S3 sink connectors", "HTTPS")
+
+@enduml

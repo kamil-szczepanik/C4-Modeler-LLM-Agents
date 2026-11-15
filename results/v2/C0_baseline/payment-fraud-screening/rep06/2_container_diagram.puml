@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Fraud Screening Engine
+
+Person(Cardholder_End_Customer, "Cardholder / End Customer", "Performs card-not-present transactions.")
+Person(Fraud_Analyst, "Fraud Analyst", "Reviews cases and performs fraud investigation.")
+Person(Risk_Fraud_Manager, "Risk / Fraud Manager", "Manages fraud strategies and policies.")
+
+System_Ext(External_Identity_Provider_IdP, "External Identity Provider (IdP)", "Manages authentication.")
+System_Ext(Tokenization_Vault, "Tokenization Vault", "Resolves card tokens for secure data handling.")
+System_Ext(WORM_Compliance_Storage, "WORM Compliance Storage", "Amazon S3 with Object Lock for tamper-evident audit compliance.")
+
+System_Boundary(fraud_screening_engine, "Fraud Screening Engine") {
+    Container(AWS_API_Gateway_ALB, "AWS API Gateway / ALB", "AWS API Gateway / ALB", "Ingresses and routes incoming HTTP traffic.")
+    Container(Scoring_Engine, "Scoring Engine", "Go / Rust, AWS ECS Fargate", "Evaluates card-not-present transactions in real time with low latency.")
+    Container(Case_Management_API, "Case Management API", "AWS ECS Fargate", "Provides case management functionalities for fraud analysts.")
+    Container(Rule_Model_Registry, "Rule & Model Registry", "Amazon S3", "Stores scoring rules and machine learning models.")
+    Container(Amazon_DynamoDB, "Amazon DynamoDB", "Amazon DynamoDB", "Delivers low-latency storage for feature stores and case data.")
+    Container(Amazon_Kinesis_Data_Streams_AWS_S3_Firehose, "Amazon Kinesis Data Streams & AWS S3 Firehose", "Amazon Kinesis Data Streams / AWS S3 Firehose", "Handles high-throughput, durable audit log streaming.")
+}
+
+Rel(Cardholder_End_Customer, AWS_API_Gateway_ALB, "Initiates transactions", "HTTPS/JSON")
+Rel(AWS_API_Gateway_ALB, Scoring_Engine, "Routes scoring requests", "mTLS / gRPC")
+Rel(Scoring_Engine, Amazon_DynamoDB, "Reads/Writes feature stores and transaction data", "AWS SDK")
+Rel(Scoring_Engine, Amazon_Kinesis_Data_Streams_AWS_S3_Firehose, "Streams audit logs", "AWS SDK")
+Rel(Scoring_Engine, Rule_Model_Registry, "Fetches rules and models", "HTTPS")
+Rel(Fraud_Analyst, Case_Management_API, "Reviews cases and manages alerts", "HTTPS/OAuth2")
+Rel(Scoring_Engine, WORM_Compliance_Storage, "Persists immutable compliance logs", "S3 Firehose")
+Rel(Case_Management_API, WORM_Compliance_Storage, "Persists audit trail", "S3 Firehose")
+
+@enduml

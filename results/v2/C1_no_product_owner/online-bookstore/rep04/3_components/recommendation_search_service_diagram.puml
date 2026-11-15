@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway routing traffic to the internal VPC")
+
+Container_Boundary(recommendation_search_service, "Recommendation & Search Service") {
+    Component(api_controller_component, "API Controller Component", "Python, FastAPI, gRPC", "FastAPI app handling incoming gRPC requests, JWT validation, and schema checks.")
+    Component(search_engine_component, "Search Engine Component", "Python, OpenSearch DSL", "Translates user queries into OpenSearch DSL queries with input sanitization.")
+    Component(recommendation_engine_component, "Recommendation Engine Component", "Python, NumPy, SciPy", "Computes collaborative filtering heuristics and manages a circuit breaker.")
+    Component(catalog_sync_consumer_component, "Catalog Sync Consumer Component", "Python, AWS SDK", "Processes domain events asynchronously from SQS to update search indices.")
+    Component(amazon_opensearch, "Amazon OpenSearch", "Managed Search Cluster", "Managed search cluster storing book catalog and search indexes.")
+    Component(amazon_elasticache_redis, "Amazon ElastiCache Redis", "In-memory Data Store", "In-memory data store caching precomputed recommendation vectors.")
+    Component(amazon_sqs_sns, "Amazon SQS / SNS", "Messaging Infrastructure", "Messaging infrastructure with Dead Letter Queues (DLQs) for asynchronous catalog synchronization.")
+}
+
+Rel(api_gateway, api_controller_component, "Routes search and recommendation queries", "gRPC with JWT over internal VPC")
+Rel(api_controller_component, search_engine_component, "Delegates execution flows", "In-process async calls via Python asyncio")
+Rel(api_controller_component, recommendation_engine_component, "Delegates execution flows", "In-process async calls via Python asyncio")
+Rel(search_engine_component, amazon_opensearch, "Queries index", "HTTPS/REST with SigV4 and mTLS")
+Rel(recommendation_engine_component, amazon_elasticache_redis, "Fetches cached vectors", "Redis Protocol with TLS via redis-py")
+Rel(catalog_sync_consumer_component, amazon_sqs_sns, "Consumes catalog update events", "AWS SDK")
+Rel(catalog_sync_consumer_component, amazon_opensearch, "Updates document indices", "HTTPS/REST")
+
+@enduml

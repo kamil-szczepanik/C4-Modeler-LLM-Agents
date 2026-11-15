@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Circulation Service container
+
+Component(api_gateway, "API Gateway", "Nginx / Kong", "Routes patron self-service and staff requests using gRPC and internal REST over mTLS.")
+Component(postgres_db, "Managed PostgreSQL Database", "PostgreSQL", "Stores transactional data with AES-256 encryption in a private VPC.")
+Component(payment_gateway, "External Payment Gateway", "REST APIs over TLS 1.3", "Processes fine payments and tokenized references.")
+Component(event_broker, "Event Broker", "Apache Kafka", "Handles asynchronous domain event messaging.")
+
+Container_Boundary(circulation_service, "Circulation Service") {
+    Component(circulation_api_controller, "Circulation API Controller", "Spring @RestController", "Exposes REST endpoints for patron self-service and staff requests, enforcing JWT-based RBAC.")
+    Component(loan_management_component, "Loan Management Component", "Spring @Service", "Executes business logic for borrowing workflows and renewals.")
+    Component(fine_fee_component, "Fine & Fee Component", "Spring @Service", "Manages fine processing and interfaces with external payment gateways.")
+    Component(data_access_repository, "Data Access Repository", "Spring Data JPA", "Queries and persists transactional data to the managed PostgreSQL database.")
+    Component(event_publisher_consumer, "Event Publisher/Consumer", "Spring Cloud Stream / Kafka", "Publishes and consumes domain events asynchronously.")
+    Component(notification_event_adapter, "Notification Event Adapter", "Spring @Component", "Adapts notification events for downstream messaging.")
+}
+
+Rel(api_gateway, circulation_api_controller, "Routes patron self-service and staff requests", "gRPC and internal REST over mTLS")
+Rel(circulation_api_controller, loan_management_component, "Executes business logic with JWT-based RBAC enforcement", "")
+Rel(circulation_api_controller, fine_fee_component, "Executes business logic with JWT-based RBAC enforcement", "")
+Rel(data_access_repository, postgres_db, "Queries and persists transactional data", "private VPC with AES-256 encryption")
+Rel(fine_fee_component, payment_gateway, "Processes fine payments and tokenized references", "REST APIs over TLS 1.3 with Resilience4j circuit breakers")
+Rel(event_publisher_consumer, event_broker, "Publishes domain events", "Kafka protocol with acks=all and W3C Trace Context headers")
+
+@enduml

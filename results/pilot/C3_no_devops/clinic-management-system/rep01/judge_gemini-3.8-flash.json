@@ -1,0 +1,316 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "All core functional requirements are addressed by Demographics Manager, Conflict Resolution Engine, AuditTrailLogger, and Claim Processor. However, an explicit archival or retention mechanism satisfying the required 10-year data retention constraint is not specified in the database or storage components.",
+   "performance_efficiency": "Sub-second P95 latency and efficiency are well-supported by CacheInvalidationManager using Redis, PgBouncer connection pooling, Kafka asynchronous pipelines, and an Analytics Service Read Replica that prevents analytical query contention on the primary transactional database.",
+   "compatibility": "HL7 FHIR Integration Service leverages HAPI FHIR to interface with External Labs/Imaging over HL7 FHIR REST APIs. Billing Service seamlessly integrates with Insurance Clearinghouses via X12/EDI protocols and external payment gateways via REST over TLS 1.3.",
+   "usability": "Patients are served by the Patient Portal Service and Localization Manager. However, dedicated client applications or user interfaces for Clinical Staff, Receptionists, and Billing Specialists are omitted, routing human actors straight to the API Gateway.",
+   "reliability": "High availability is supported by Kong active-active routing, Patroni Cluster with etcd automated failover, Kafka KRaft, and Resilience4j. However, true active-active multi-region writes across on-prem and eu-central-1 are constrained by standard primary-replica PostgreSQL streaming replication.",
+   "security": "Security thoroughly addresses the brief via multi-factor authentication at API Gateway, AES-256 database encryption at rest, AuditTrailLogger for compliance, Kafka Streams PII-masking Processor, and Hardware Security Root of Trust backed by FIPS 140-2 Level 3 HSM.",
+   "maintainability": "Decomposition into discrete domain microservices (EMR, Billing, Scheduling) communicating via gRPC and Kafka provides low coupling. Modular isolation is mirrored in PostgreSQL with separate schemas (emr_schema, billing_schema, patient_schema).",
+   "portability": "Microservices deploy on Kubernetes across on-prem-k8s and cloud environments using Kong and HashiCorp Vault Raft storage. However, reliance on proprietary cloud services like AWS Redshift and AWS CloudHSM slightly limits complete environment portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture incorporates Redis chart caching via CacheInvalidationManager and database connection pooling via PgBouncer specifically sized to sustain sub-second P95 response times under concurrent read spikes.",
+    "elements": [
+     "ClinicalChartController",
+     "CacheInvalidationManager",
+     "PgBouncer",
+     "emr_schema",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in CacheInvalidationManager during morning concurrency spikes",
+     "PgBouncer connection pool sizing for the emr_schema"
+    ],
+    "tradeoffs": [
+     "In-memory caching improves read latency but risks serving stale clinical charts"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "The HL7 FHIR Integration Service uses an outbox pattern to offload high-volume ingestion onto Kafka, insulating the core database from ingestion spikes while PgBouncer protects EMR query capacity.",
+    "elements": [
+     "FHIR Parser and Transformer",
+     "Integration Event Producer",
+     "Apache Kafka Message Broker",
+     "PgBouncer",
+     "EMR Service"
+    ],
+    "sensitivity_points": [
+     "Kafka partition throughput and consumer processing rate for FHIR events",
+     "Database connection isolation between ingestion workers and interactive EMR queries"
+    ],
+    "tradeoffs": [
+     "Asynchronous event ingestion protects EMR read latency but introduces eventual consistency for lab results"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Active-active hybrid routing is supported by Kong Enterprise, Patroni with etcd orchestrates PostgreSQL failover, and Vault Raft handles secret sync. However, cross-region zero data loss depends on synchronous WAN replication tuning.",
+    "elements": [
+     "Kong Enterprise Routing Module",
+     "Patroni Cluster with etcd",
+     "PostgreSQL Database",
+     "Vault Raft Storage Backend"
+    ],
+    "sensitivity_points": [
+     "Patroni consensus heartbeat and failover detection timeout across hybrid cloud boundaries",
+     "Synchronous replication lag over WAN between on-prem and eu-central-1"
+    ],
+    "tradeoffs": [
+     "Enforcing strict zero data loss across regions increases write latency on transactional operations"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Patroni etcd provides automated database failover within 30 seconds. Payment Orchestrator uses Resilience4j circuit breaking and retry patterns to safely recover or replay claim transactions without duplicates.",
+    "elements": [
+     "Payment Orchestrator",
+     "Claim Processor",
+     "Billing Data Access Repository",
+     "Patroni Cluster with etcd",
+     "billing_schema"
+    ],
+    "sensitivity_points": [
+     "Patroni leader election and failover window duration under node failure",
+     "Idempotency token validation in Payment Orchestrator during connection retries"
+    ],
+    "tradeoffs": [
+     "Strict transactional idempotency adds verification overhead during high-volume claim submissions"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Claim processing logic and X12 EDI / FHIR transformations are fully isolated within Billing Service's Claim Processor component. The EMR Service is decoupled via domain boundaries and Kafka.",
+    "elements": [
+     "Claim Processor",
+     "Billing Service",
+     "Insurance Clearinghouses"
+    ],
+    "sensitivity_points": [
+     "Strict encapsulation of clearinghouse protocol mappings inside Claim Processor"
+    ],
+    "tradeoffs": [
+     "Decoupled billing domain reduces EMR coupling but requires integration testing across external gateways"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Updating an audited demographic field is isolated to Demographics Manager, patient_schema, and Kafka event definitions. Modular container and schema separation confines code modifications well within three components.",
+    "elements": [
+     "Demographics Manager",
+     "patient_schema",
+     "Apache Kafka Message Broker"
+    ],
+    "sensitivity_points": [
+     "Schema migration compatibility and Avro Schema Registry validation rules"
+    ],
+    "tradeoffs": [
+     "Enforcing schema registries prevents breaking changes but requires coordinated schema evolution workflows"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Multi-factor authentication is mandated at both the Identity Provider and API Gateway token validation modules, preventing single-password compromise. However, dedicated SIEM alerting infrastructure is not explicitly modeled.",
+    "elements": [
+     "Identity Provider",
+     "Authentication and Token Validation Module",
+     "API Gateway",
+     "Authentication Controller"
+    ],
+    "sensitivity_points": [
+     "MFA enforcement consistency at Kong gateway before token issuance",
+     "Latency of real-time security event dispatching to alerting endpoints"
+    ],
+    "tradeoffs": [
+     "Strict MFA gating on every authentication flow increases login latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "EncounterManagementEngine delegates all chart access to AuditTrailLogger, persisting access logs into emr_schema. However, automated policy evaluation for unauthorized relationship checks and explicit 10-year archival tiers are only partially specified.",
+    "elements": [
+     "EncounterManagementEngine",
+     "AuditTrailLogger",
+     "emr_schema",
+     "Transit Secrets Engine"
+    ],
+    "sensitivity_points": [
+     "Synchronous audit record generation on every clinical chart read operation",
+     "Long-term immutable storage and tamper-proofing mechanisms for audit logs"
+    ],
+    "tradeoffs": [
+     "Auditing 100% of read accesses increases database write amplification and storage footprint"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Anonymization Engine",
+     "Kafka Streams PII-masking Processor",
+     "AuditTrailLogger",
+     "External Vault/HSM",
+     "Transit Secrets Engine"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Kong Enterprise Routing Module",
+     "Patroni Cluster with etcd",
+     "Vault Raft Storage Backend"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Portal Service",
+     "Demographics Manager",
+     "patient_schema"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Service",
+     "Appointment API Controller",
+     "Conflict Resolution Engine",
+     "Calendar Management Service",
+     "scheduling_schema"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "ClinicalChartController",
+     "EncounterManagementEngine",
+     "AuditTrailLogger",
+     "emr_schema"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service",
+     "Invoice Engine",
+     "Claim Processor",
+     "Payment Orchestrator",
+     "Insurance Clearinghouses",
+     "billing_schema"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider",
+     "Authentication and Token Validation Module",
+     "Authentication Controller",
+     "PostgreSQL Database",
+     "External Vault/HSM",
+     "Transit Secrets Engine"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Kong Enterprise Routing Module",
+     "Patroni Cluster with etcd",
+     "Vault Raft Storage Backend"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "PgBouncer",
+     "CacheInvalidationManager",
+     "ClinicalChartController"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "HL7 FHIR Integration Service",
+     "FHIR Parser and Transformer",
+     "InteroperabilityAdapter",
+     "External Labs/Imaging"
+    ]
+   }
+  }
+ }
+}

@@ -1,0 +1,326 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.75,
+  "justifications": {
+   "functional_suitability": "Search, cart/checkout, recommendations, and shipping are addressed. However, R-03 (reviews and 5-star ratings) has no dedicated backend container, components, or persistence model, and constraints like multi-currency and GDPR/CCPA are omitted beyond passing mentions.",
+   "performance_efficiency": "Robust mechanisms exist to handle 1M MAU and fast loads: CloudFront CDN, OpenSearch, Aurora read replicas, Redis caching via ElastiCache, EventBridge asynchronous messaging, and DynamoDB for carts.",
+   "compatibility": "Shipping Provider APIs are integrated via Shipping Integrator Component using REST/JSON. External systems like Payment Gateway, Tax & Compliance Service, and IAM are explicitly interfaced, though webhook ingress or specific shipping carrier formats are not deeply detailed.",
+   "usability": "Customer and Admin/Support Staff are modeled accessing tailored interfaces in SPA (Feature Views, Router / Navigation Component). Dedicated back-office interfaces or workflows for support staff are not elaborated.",
+   "reliability": "Uptime of 99.95% is supported by multi-region read replicas in Aurora, DLQ Handler Component for poison messages, asynchronous decoupling with EventBridge/SQS, and auto-scaling Fargate containers.",
+   "security": "API Gateway features Rate Limiting & Throttling, Schema & Protocol Translation, and JWT Authentication & Authorization Filter. Communication uses TLS 1.3/mTLS, and Secrets Manager Client secures credentials. Concrete GDPR/CCPA data handling is missing.",
+   "maintainability": "Clean domain-oriented decomposition across Catalog, Order & Checkout, Recommendations, and Notification services. Components use clear internal boundaries (e.g., adapters, repositories, dispatchers), though infrastructure elements are improperly placed inside Level 3 containers.",
+   "portability": "Target regions (us-east-1, eu-west-1, ap-southeast-1) are acknowledged, but specific multi-region synchronization mechanisms are absent. Architecture relies heavily on AWS-managed proprietary services (DynamoDB, EventBridge, OpenSearch, SQS)."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 3,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.625,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 2.5,
+   "Modifiability": 4.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Static assets on CloudFront and read replicas for Aurora and OpenSearch absorb high traffic. However, sustaining sub-2s page loads over high-latency 3G under 10x traffic heavily depends on bundle size and edge caching not fully detailed.",
+    "elements": [
+     "SPA",
+     "API Gateway",
+     "Catalog & Search Container",
+     "Search Service",
+     "Product Query Service"
+    ],
+    "sensitivity_points": [
+     "CloudFront and API Gateway edge caching efficiency",
+     "Aurora PostgreSQL read replica scaling latency"
+    ],
+    "tradeoffs": [
+     "Aggressive caching improves responsiveness but risks temporary catalogue data staleness"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Recommendations Container uses dedicated Fargate compute, ElastiCache Redis, and a dedicated Aurora read replica, completely decoupling recommendation workloads from customer catalogue browsing queries and the primary database.",
+    "elements": [
+     "Recommendations Container",
+     "Amazon ECS (AWS Fargate)",
+     "Amazon ElastiCache (Redis)",
+     "Amazon Aurora PostgreSQL Read Replica",
+     "Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Database read-replica isolation from primary write traffic",
+     "Cache-aside hit ratio in ElastiCache"
+    ],
+    "tradeoffs": [
+     "Offloading scoring to read replicas adds infrastructure cost to prevent browse degradation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The Shipping Integrator synchronously calls external shipping APIs during checkout without an asynchronous retry queue, circuit breaker, or deferred fulfillment workflow, causing order checkout to fail when shipping providers are down.",
+    "elements": [
+     "Order & Checkout Container",
+     "Checkout Orchestrator Component",
+     "Shipping Integrator Component",
+     "Shipping Provider APIs"
+    ],
+    "sensitivity_points": [
+     "Synchronous integration dependencies in critical transactional paths",
+     "Absence of queue-based deferred shipping label generation"
+    ],
+    "tradeoffs": [
+     "Synchronous rate validation prevents checkout under outages but guarantees immediate accurate pricing"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Target cloud lists three regions and API Gateway uses Redis Global Datastores, but cross-region replication and failover automation for write-heavy components like Aurora PostgreSQL and EventBridge are not specified.",
+    "elements": [
+     "API Gateway",
+     "Order & Checkout Container",
+     "Order Processing Component",
+     "Amazon EventBridge"
+    ],
+    "sensitivity_points": [
+     "Cross-region database write failover mechanisms",
+     "Data synchronization consistency across AWS regions"
+    ],
+    "tradeoffs": [
+     "Multi-region active-active deployment achieves high availability but introduces complex data synchronization"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "There is no centralized currency conversion or pricing service. Currency logic is implicitly spread across Catalog queries, DynamoDB cart management, Order Processing, and external payment and tax services.",
+    "elements": [
+     "Catalog & Search Container",
+     "Cart Management Component",
+     "Order Processing Component",
+     "Payment Gateway",
+     "Tax & Compliance Service"
+    ],
+    "sensitivity_points": [
+     "Decentralized pricing and multi-currency handling logic"
+    ],
+    "tradeoffs": [
+     "Handling currencies inside existing order services avoids service overhead but increases modification effort"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The scoring logic is cleanly encapsulated inside the Scoring Engine component in the isolated Recommendations Container behind standard gRPC/REST endpoints, allowing complete replacement without impacting any other service.",
+    "elements": [
+     "Recommendations Container",
+     "Scoring Engine",
+     "Cache Manager",
+     "Recommendation API Router"
+    ],
+    "sensitivity_points": [
+     "Clear interface boundary between recommendation router and scoring engine"
+    ],
+    "tradeoffs": [
+     "Modular container encapsulation increases deployment overhead but isolates recommendation algorithm changes"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The architecture incorporates Schema & Protocol Translation at the API Gateway, Zod validation at the client, and uses ORMs and OpenSearch clients. However, an explicit review backend and AWS WAF are omitted.",
+    "elements": [
+     "API Gateway",
+     "Schema & Protocol Translation",
+     "Catalog & Search Container",
+     "Search Service",
+     "Product Query Service"
+    ],
+    "sensitivity_points": [
+     "Strictness of edge schema validation and parameterization in ORMs"
+    ],
+    "tradeoffs": [
+     "Strict schema validation at gateway adds latency but prevents injection attacks"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "No data erasure workflow, privacy orchestration component, or distributed deletion saga is defined to propagate deletion requests across DynamoDB carts, Aurora orders, notification logs, search indexes, and IAM systems.",
+    "elements": [
+     "Order & Checkout Container",
+     "Catalog & Search Container",
+     "Notification Service Container",
+     "Identity & Access Management"
+    ],
+    "sensitivity_points": [
+     "Lack of orchestration for cross-datastore personal data deletion"
+    ],
+    "tradeoffs": [
+     "Decentralized data storage improves domain autonomy but complicates unified GDPR/CCPA data purging"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "none",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.7272727272727273,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Tax & Compliance Service",
+     "Security Monitoring Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none"
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Provider APIs",
+     "Order & Checkout Container",
+     "Shipping Integrator Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Container",
+     "Search Controller",
+     "Search Service",
+     "Product Query Service",
+     "Search Index Client",
+     "Catalog Synchronization Worker"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Order & Checkout Container",
+     "Cart Management Component",
+     "Checkout Orchestrator Component",
+     "Order Processing Component",
+     "Payment Gateway"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "SPA",
+     "Feature Views"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendations Container",
+     "Recommendation API Router",
+     "Cache Manager",
+     "Scoring Engine",
+     "Recommendation Repository",
+     "Amazon ElastiCache (Redis)",
+     "Amazon Aurora PostgreSQL Read Replica"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Amazon ECS (AWS Fargate)",
+     "Rate Limiting & Throttling",
+     "Amazon ElastiCache (Redis)",
+     "Amazon Aurora PostgreSQL",
+     "Notification Service Container"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "SPA",
+     "API Client Service",
+     "Amazon ElastiCache (Redis)",
+     "Cache Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "DLQ Handler Component",
+     "Rate Limiting & Throttling",
+     "Amazon Aurora PostgreSQL Read Replica"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Schema & Protocol Translation",
+     "Rate Limiting & Throttling",
+     "Authentication & Authorization Filter",
+     "Cart Management Component",
+     "Security Monitoring Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

@@ -1,0 +1,241 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "\"Item Aggregate Component\" and \"Search Engine Container\" enable cataloguing, while \"Loan Aggregate Component\" handles circulation. However, explicit mechanisms differentiating physical versus digital asset workflows (such as digital licensing or media streaming/downloads) are not detailed.",
+   "performance_efficiency": "Requirement R-05 is directly addressed by \"Search Engine Container\" and \"Query Processor\" (Elasticsearch/OpenSearch). High throughput is supported by \"PgBouncer\", \"PostgreSQL Read Replicas\", Redis-based \"Rate-Limit State Cache Component\", and asynchronous handling via \"Message Broker Core\".",
+   "compatibility": "The system interfaces cleanly with \"External Identity Providers (SSO/OAuth)\" via OIDC/OAuth 2.0, \"Payment Gateways\" via HTTPS webhooks, and \"External Archival/Reporting System\" via secure batch transfers, adhering to standardized contracts and protocols.",
+   "usability": "All target users are accommodated via dedicated interfaces: \"Patron Portal UI Component\" provides self-service discovery and account portals for patrons, while \"Staff App UI Component\" equips library staff with circulation and cataloguing management tools.",
+   "reliability": "Availability and resilience are supported by \"PostgreSQL Read Replicas\", \"PgBouncer\", fail-open routing in \"Routing & Resilience Component\", and decoupled messaging via \"Message Broker Core\". However, automated disaster recovery and cross-region EU failover are not detailed.",
+   "security": "EU data residency is enforced in \"Data Access Layer / Persistence Container\" and \"OpenTelemetry Collector\". It incorporates perimeter JWT validation, envelope encryption via \"HashiCorp Vault\", \"pgaudit\" for access logging, and in-memory auth storage for XSS protection.",
+   "maintainability": "Modularity is well achieved through DDD patterns (\"Loan Aggregate Component\", \"Item Aggregate Component\"), repository patterns, automated \"Flyway / Liquibase\" migrations, and contract-driven messaging governed by \"Schema Registry\".",
+   "portability": "Components use portable open-source technologies (PostgreSQL, Redis, Elasticsearch, OpenTelemetry) deployable in any EU-compliant infrastructure. However, container packaging standards and orchestration abstractions (such as Kubernetes manifests or Helm charts) are not explicitly specified."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 2.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The dedicated Search Engine container with OpenSearch/Elasticsearch isolates search workloads from transaction processing to maintain sub-800ms latencies. Routing search requests through the Core Business Logic container rather than directly from the API Gateway introduces minor processing overhead during 2,000 concurrent queries.",
+    "elements": [
+     "API Gateway Container",
+     "Core Business Logic / Circulation API Container",
+     "Search Engine Container",
+     "Query Processor"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster sizing and node capacity",
+     "Network latency introduced by intermediate Core API routing hop"
+    ],
+    "tradeoffs": [
+     "Intermediary service routing preserves central domain contracts at the expense of slight latency overhead"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalog writes in the Item Aggregate emit asynchronous events via the Message Broker to the Search Indexer. This decoupled event-driven architecture prevents catalog updates from contending with search query execution, easily fulfilling the five-minute eventual consistency window without degrading sub-800ms read performance.",
+    "elements": [
+     "Item Aggregate Component",
+     "Event Publisher Component",
+     "Asynchronous Message Broker Container",
+     "Search Indexer",
+     "Query Processor"
+    ],
+    "sensitivity_points": [
+     "Message broker processing throughput",
+     "Elasticsearch index refresh rate configuration"
+    ],
+    "tradeoffs": [
+     "Eventual consistency in search indices trades immediate read-your-writes guarantees for sustained query performance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Circulation operations depend on the PostgreSQL persistence layer and are completely decoupled from the Search Engine container. An Elasticsearch node failure does not impact loan processing. Fast replica promotion in the search cluster ensures searches resume quickly, although cluster topology and node quorum details are omitted.",
+    "elements": [
+     "Search Engine Container",
+     "Core Business Logic / Circulation API Container",
+     "Data Access Layer / Persistence Container",
+     "PostgreSQL Database",
+     "Loan Aggregate Component"
+    ],
+    "sensitivity_points": [
+     "Search cluster replica failover duration",
+     "Isolation of transactional database connections from search failure modes"
+    ],
+    "tradeoffs": [
+     "Maintaining search index replicas increases operational compute costs to safeguard read availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The client architecture separates stateless single-page/mobile apps from backend processing via an API Gateway with resilience components. If a client app instance or gateway instance fails, clients fail over to active instances, while persistent state and loan transactions remain safe in PostgreSQL with ACID guarantees.",
+    "elements": [
+     "Client-Side SPA/Mobile Container",
+     "API Gateway Container",
+     "Routing & Resilience Component",
+     "PostgreSQL Database",
+     "Loan Aggregate Component"
+    ],
+    "sensitivity_points": [
+     "Gateway health check response times",
+     "State rehydration handling on the client client-side"
+    ],
+    "tradeoffs": [
+     "Stateless client failover simplifies availability but requires patrons to hold local session tokens"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "The architecture lacks an integration layer, adapter pattern, or external provider connector component for digital e-book providers. Adding a new external provider requires directly modifying the Item Aggregate and core cataloging components, failing the requirement to confine changes to a single dedicated integration component.",
+    "elements": [
+     "Item Aggregate Component",
+     "API Controller / Endpoint Component",
+     "Core Business Logic / Circulation API Container"
+    ],
+    "sensitivity_points": [
+     "Coupling between core item aggregates and external vendor interfaces"
+    ],
+    "tradeoffs": [
+     "Consolidating all item types in a single aggregate reduces initial complexity but increases modification cost"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "While a Configuration and Secrets Management container exists, the Loan Aggregate lacks an explicit runtime rule engine or policy strategy pattern. Circulation rules are embedded in domain aggregate code, requiring code updates and redeployments to adjust circulation policies for academic versus public library profiles.",
+    "elements": [
+     "Loan Aggregate Component",
+     "Configuration & Secrets Management Container",
+     "Configuration Validation Service"
+    ],
+    "sensitivity_points": [
+     "Hardcoded loan policies within the domain aggregate logic"
+    ],
+    "tradeoffs": [
+     "Hardcoded business logic improves execution speed and code simplicity but sacrifices dynamic runtime reconfigurability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "EU data residency is explicitly enforced across all architectural levels. The Data Access Layer, HashiCorp Vault, and Observability containers are constrained to EU regions. Furthermore, the API Gateway enforces token-based residency claims, and the OpenTelemetry collector provides automated PII scrubbing within EU infrastructure.",
+    "elements": [
+     "Data Access Layer / Persistence Container",
+     "PostgreSQL Database",
+     "Configuration & Secrets Management Container",
+     "Centralized Observability Container",
+     "Routing & Resilience Component"
+    ],
+    "sensitivity_points": [
+     "Consistent geographic tagging across infrastructure and configuration deployments",
+     "Enforcement of token-based residency claims at the perimeter"
+    ],
+    "tradeoffs": [
+     "Restricting data flows to EU infrastructure eliminates cross-region failover capabilities outside Europe"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Perimeter security performs JWT authentication while domain aggregates and API controllers handle authorization. Unauthorized attempts to view another patron's loans are rejected by aggregate logic. The attempt is logged and traced via pgaudit and the OpenTelemetry collector, though explicit access-denied alerting mechanisms are not detailed.",
+    "elements": [
+     "API Gateway Container",
+     "Perimeter Security & TLS Termination Component",
+     "Loan Aggregate Component",
+     "pgaudit",
+     "Centralized Observability Container"
+    ],
+    "sensitivity_points": [
+     "Strict validation of token identity against target patron ID in domain aggregates",
+     "Reliability and tamper-resistance of pgaudit log streams"
+    ],
+    "tradeoffs": [
+     "Granular audit logging with pgaudit introduces minor database transaction overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Data Access Layer / Persistence Container",
+     "PostgreSQL Database",
+     "Routing & Resilience Component",
+     "Secrets Management Engine",
+     "OpenTelemetry Collector"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Item Aggregate Component",
+     "Patron Portal UI Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Engine Container",
+     "Query Processor",
+     "Search Indexer"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

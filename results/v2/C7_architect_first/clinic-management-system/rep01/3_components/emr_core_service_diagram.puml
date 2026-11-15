@@ -1,0 +1,21 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Component(ApiGatewayEdgeProxy, "API Gateway / Edge Proxy", "Envoy / Kubernetes Ingress", "Routes client requests securely via mTLS/gRPC to the EMR Core Service.")
+Component_Ext(FhirInteroperabilityService, "FHIR Interoperability Service", "Java / Spring Boot", "Receives broadcasted clinical updates via Apache Kafka.")
+
+Container_Boundary(emr_core_service, "EMR Core Service") {
+    Component(EmrControllerComponent, "EMR Controller Component", "Spring MVC", "Exposes RESTful endpoints via HTTPS/JSON.")
+    Component(ClinicalDataProcessingComponent, "Clinical Data Processing Component", "Java / Spring Boot", "Enforces clinical business logic and emergency break-glass overrides.")
+    Component(BreakGlassInterceptorSubcomponent, "Break-Glass Interceptor Sub-component", "Spring Interceptor", "Validates multi-factor emergency override tokens.")
+    Component(PersistenceAuditRepositoryComponent, "Persistence & Audit Repository Component", "Spring Data JPA / Hibernate, PostgreSQL", "Interfaces with PostgreSQL utilizing RLS and AES-256 encryption.")
+    Component(FhirEventPublisherComponent, "FHIR Event Publisher Component", "Spring Cloud Stream, Apache Kafka", "Publishes asynchronous clinical updates.")
+}
+
+Rel(ApiGatewayEdgeProxy, EmrControllerComponent, "Routes client requests securely via mTLS/gRPC", "mTLS/gRPC")
+Rel(EmrControllerComponent, ClinicalDataProcessingComponent, "Delegates requests using direct local method calls", "Direct Method Call")
+Rel(ClinicalDataProcessingComponent, PersistenceAuditRepositoryComponent, "Reads and writes records via TLS/SQL with Row-Level Security", "TLS/SQL")
+Rel(ClinicalDataProcessingComponent, FhirEventPublisherComponent, "Publishes events asynchronously using Spring ApplicationEventPublisher", "Spring ApplicationEventPublisher")
+Rel(FhirEventPublisherComponent, FhirInteroperabilityService, "Broadcasts clinical updates via Apache Kafka with dynamic Vault tokens", "Apache Kafka")
+@enduml

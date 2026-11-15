@@ -1,0 +1,21 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(ComplianceOfficer, "Compliance Officer", "Queries audit integrity and proof-of-custody reports.")
+System_Ext(CentralSIEMImmutableStorage, "Central SIEM / Immutable Storage", "Receives asynchronously streamed signed audit bundles.")
+System_Ext(CoreClinicalEMRContainer, "Core Clinical & EMR Container", "Sends local access logs and traces to the log interceptor.")
+
+Container_Boundary(AuditSidecarContainer, "Audit Sidecar Container") {
+    Component(LogInterceptor, "Log Interceptor", "Fluentbit / Envoy sidecar proxy", "Captures local access logs and traces via Shared Volume and Unix Socket (gRPC).")
+    Component(CryptographicSigner, "Cryptographic Signer", "Go / Rust micro-service using Merkle trees", "Encrypts and cryptographically signs core clinical application telemetry and access logs to guarantee a 10-year audit trail.")
+    Component(VaultAgent, "Vault Agent", "HashiCorp Vault Agent", "Handles dynamic secret injection and AES-256-GCM encryption key management.")
+    Component(ComplianceQueryProxy, "Compliance Query Proxy", "Go REST API", "Serves audit integrity and proof-of-custody reports to compliance officers.")
+    Component(LocalDiskBuffer, "Local Disk Buffer", "AES-256-GCM encrypted volume", "Stores backpressure spillover for the log interceptor.")
+}
+
+Rel(CoreClinicalEMRContainer, LogInterceptor, "Sends local access logs and traces", "Shared Volume / Unix Socket (gRPC)")
+Rel(LogInterceptor, LocalDiskBuffer, "Stores backpressure spillover", "AES-256-GCM encrypted volume")
+Rel(CryptographicSigner, CentralSIEMImmutableStorage, "Streams signed audit bundles asynchronously", "HTTPS (TLS 1.3)")
+Rel(ComplianceOfficer, ComplianceQueryProxy, "Queries audit integrity and proof-of-custody reports", "HTTPS (TLS 1.3) with OAuth2/JWT")
+@enduml

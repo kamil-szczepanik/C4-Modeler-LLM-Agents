@@ -1,0 +1,333 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Real-Time Scoring Engine evaluates payments (R-01), Case Management Backend and Frontend support analyst workflows (R-02), and Model Loader with Rule & Model Management Console enables zero-downtime rule and model updates (R-03).",
+   "performance_efficiency": "Under 50 ms P99 at 3,000 TPS is supported by Redis Feature Store, Go-based scoring, ONNX Runtime, and DynamoDB auto-scaling. However, synchronous DynamoDB reads/writes during scoring and API Gateway/mTLS overhead may challenge strict P99 latency.",
+   "compatibility": "Architecture clearly specifies gRPC over HTTP/2 and mTLS for Payment Gateway / Acquirer Systems, token resolution via secure APIs with Card Networks / Token Vaults, and seamless integration with AWS-managed interfaces.",
+   "usability": "Fraud Analysts are well served by Fraud Analyst Frontend with Case Management Dashboard and real-time updates via WebSocket Client Module. ML Engineers are supported by Rule & Model Management Console and ML Model / Rule Registry interfaces.",
+   "reliability": "High availability is supported via EventBridge DLQs, DynamoDB auto-scaling, and circuit-breaker signals back to acquirers for fail-open fallback (R-07). However, explicit automated fail-open detection within the scoring path during outages lacks deep implementation detail.",
+   "security": "PCI-DSS Level 1 compliance is thoroughly addressed: Client-Side Encryption Component, Audit Log Redactor / Sanitizer, Token Vault integration, DOM PAN redaction guard, mTLS validation, and tamper-evident storage via S3 Object Lock and cryptographic signing.",
+   "maintainability": "Clean separation of concerns across microservices, decoupled queues (SQS, EventBridge), and modular Go/Python components make the system manageable for a 3-engineer team. However, modeling AWS-managed services (S3 Object Lock, DynamoDB) as container-internal component hierarchies adds conceptual friction.",
+   "portability": "Designed explicitly for AWS eu-west-1 using ECS Fargate, DynamoDB, ElastiCache, and S3 Object Lock. Core application logic runs in containerized Go and ONNX runtimes, facilitating porting, though data storage is heavily locked into AWS-specific services."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 2,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.625,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.0,
+   "Modifiability": 3.5,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "The pipeline uses Go, Redis pipelining, and ONNX, but synchronous AWS KMS signing and DynamoDB writes on the critical path at 3,000 TPS risk violating the 50 ms P99 latency target.",
+    "elements": [
+     "AWS API Gateway",
+     "Real-Time Scoring Engine",
+     "Amazon ElastiCache",
+     "ML Inference Service",
+     "Amazon DynamoDB",
+     "Audit Logger & Cryptographic Signer"
+    ],
+    "sensitivity_points": [
+     "Synchronous KMS cryptographic signing latency under 3,000 requests per second",
+     "DynamoDB write latency and throttling limits on the synchronous critical scoring path"
+    ],
+    "tradeoffs": [
+     "Synchronous persistence guarantees tamper-evidence immediately but increases P99 scoring latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Analyst workflows are completely segregated onto Case Management Backend, separate DynamoDB tables/GSIs, and asynchronous EventBridge queues, preventing analyst traffic from degrading real-time scoring.",
+    "elements": [
+     "Case Management Backend",
+     "Amazon DynamoDB",
+     "Amazon EventBridge",
+     "Fraud Analyst Frontend",
+     "Real-Time Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "DynamoDB partition isolation between Transaction Table and Case Management Table"
+    ],
+    "tradeoffs": [
+     "Asynchronous event delivery via EventBridge decouples workload but introduces eventual consistency for analyst queues"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "System context mentions fail-open circuit breaker signals to acquirers, but internal fallback scoring logic and automated audit logging of fallback decisions during complete scoring engine outages are not detailed.",
+    "elements": [
+     "AWS API Gateway",
+     "Real-Time Scoring Engine",
+     "Payment Gateway / Acquirer Systems"
+    ],
+    "sensitivity_points": [
+     "External handling and propagation of fail-open fallback signals during container crashes"
+    ],
+    "tradeoffs": [
+     "Failing open preserves transaction flow but increases short-term exposure to undetected fraud"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "The Scoring Engine component diagram depicts synchronous SDK writes from Audit Logger to DynamoDB and S3 Object Lock, making scoring latency vulnerable to audit storage degradation.",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Audit Logger & Cryptographic Signer",
+     "Amazon DynamoDB",
+     "Amazon S3 Object Lock"
+    ],
+    "sensitivity_points": [
+     "Direct coupling of synchronous decision responses to audit persistence endpoints"
+    ],
+    "tradeoffs": [
+     "Strong durability via synchronous audit writing conflicts with strict sub-50ms latency availability"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The ML Inference Service includes a Model Loader and ONNX runtime to pull binaries with zero downtime, and decisions carry attribution metadata and versions. Automated 5-minute rollback mechanisms are implicitly manual.",
+    "elements": [
+     "ML Inference Service",
+     "Model Loader",
+     "Model Execution Engine",
+     "Explainability Component"
+    ],
+    "sensitivity_points": [
+     "Dynamic model reloading mechanism in ONNX runtime without dropping active gRPC connections"
+    ],
+    "tradeoffs": [
+     "In-memory dynamic model swapping optimizes deployment speed but requires careful memory management"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "The UI includes a rule console and the scoring engine has a Decision Orchestrator, but the architecture lacks a defined distribution mechanism linking Case Management Backend to the Scoring Engine.",
+    "elements": [
+     "Rule & Model Management Console",
+     "Case Management Backend",
+     "Decision Orchestrator",
+     "Real-Time Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Dynamic configuration propagation latency from Case Management Backend to distributed Scoring Engine nodes"
+    ],
+    "tradeoffs": [
+     "Decoupling rule authoring from engine code enables rapid updates but introduces configuration sync risks"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "justification": "Card data protection relies partly on client-side frontend interceptors rather than strict backend tokenization and masking. An attacker compromising an analyst account could inspect API payloads. Anomalous detection within 15 minutes is unspecified.",
+    "elements": [
+     "Fraud Analyst Frontend",
+     "Audit Logging & Redaction Guard",
+     "Case Management Backend",
+     "Authentication & Authorization Module"
+    ],
+    "sensitivity_points": [
+     "Client-side redaction vulnerability to compromised credentials inspecting direct REST responses"
+    ],
+    "tradeoffs": [
+     "Frontend filtering simplifies backend implementations but violates defense-in-depth and PCI-DSS compliance"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Inputs, model versions, and path attributions are cryptographically signed and stored in Amazon S3 Object Lock WORM storage for 7 years, queried efficiently via dedicated Audit Query API and Integrity Verifier.",
+    "elements": [
+     "Amazon S3 Object Lock",
+     "Audit Query API",
+     "Integrity Verifier",
+     "Audit Logger & Cryptographic Signer",
+     "Explainability Component"
+    ],
+    "sensitivity_points": [
+     "Immutability enforcement policies and retention lifecycle management on S3 Object Lock buckets"
+    ],
+    "tradeoffs": [
+     "WORM compliance guarantees unalterable legal auditability but incurs fixed multi-year retention storage costs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Authentication & mTLS Validator",
+     "Audit Log Redactor / Sanitizer",
+     "API Router & Token Handler",
+     "Client-Side Encryption Component",
+     "Audit Logging & Redaction Guard",
+     "Card Networks / Token Vaults"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Explainability Component",
+     "Amazon S3 Object Lock",
+     "Object Lifecycle Manager",
+     "Integrity Verifier",
+     "Audit / Compliance Archive"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Auto-Scaling Configuration"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "ML Inference Service",
+     "Amazon DynamoDB",
+     "Amazon EventBridge"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "AWS API Gateway HTTP API",
+     "Real-Time Scoring Engine",
+     "Decision Orchestrator",
+     "ML Inference Service",
+     "Model Execution Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Fraud Analyst Frontend",
+     "Case Management Dashboard",
+     "Case Management Backend",
+     "Case Logic Handler",
+     "Case Management Target",
+     "Case Management Table"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Rule & Model Management Console",
+     "Decision Orchestrator",
+     "ML Inference Service",
+     "Model Loader"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Feature Aggregator",
+     "Amazon ElastiCache",
+     "Redis Feature Store",
+     "Model Execution Engine",
+     "Auto-Scaling Configuration"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Card Networks / Token Vaults",
+     "API Router & Token Handler",
+     "Client-Side Encryption Component",
+     "Audit Logging & Redaction Guard",
+     "Audit Log Redactor / Sanitizer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Explainability Component",
+     "Audit Logger & Cryptographic Signer",
+     "Telemetry & Audit Emitter",
+     "Amazon S3 Object Lock",
+     "Integrity Verifier",
+     "DynamoDB Streams Processor"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Payment Gateway / Acquirer Systems",
+     "Real-Time Fraud Screening and Case Management System"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ },
+ "tag": "retest"
+}

@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Billing & Claims Service container
+
+System_Ext(ExternalClients, "External Clients", "External clients interacting with the API.")
+System_Ext(InsurancePaymentGateway, "Insurance Payment Gateway", "External payment and claims gateway.")
+System_Ext(PatientDB, "Patient DB", "PostgreSQL database.")
+System_Ext(AsyncMessageBroker, "Async Message Broker", "Message broker for async events.")
+System_Ext(AuditComplianceLogShipper, "Audit & Compliance Log Shipper", "Log shipping system.")
+System_Ext(DistributedCache, "Distributed Cache", "Redis distributed cache.")
+
+Container_Boundary(BillingAndClaimsService, "Billing & Claims Service") {
+    Component(ClaimProcessingEngine, "Claim Processing Engine", ".NET Core / MediatR", "Processes insurance claims and manages workflow logic.")
+    Component(InvoiceAndLedgerAPIController, "Invoice & Ledger API Controller", ".NET Core ASP.NET Web API", "Handles synchronous billing requests and payment status queries.")
+    Component(InsuranceGatewayAdapter, "Insurance Gateway Adapter", ".NET Core HttpClient / Polly", "Processes insurance claims and payments with external gateways.")
+    Component(BillingDataRepository, "Billing Data Repository", "Entity Framework Core", "Interfaces with the patient database using connection pooling.")
+    Component(EventDispatcherWorker, "Event Dispatcher Worker", ".NET Core BackgroundService", "Publishes domain events to the async message broker.")
+    Component(BillingAuditInterceptor, "Billing Audit Interceptor", "EF Core SaveChangesInterceptor", "Forwards immutable audit logs asynchronously to the log shipper.")
+    Component(ClaimEventConsumer, "Claim Event Consumer", ".NET Core BackgroundService / MassTransit", "Consumes domain events from the async message broker.")
+    Component(BillingLocalCacheManager, "Billing Local Cache Manager", "StackExchange.Redis", "Temporarily stores tariff schedules and rules.")
+    Component(PHIMaskingAndTokenizationEngine, "PHI Masking & Tokenization Engine", ".NET Core Middleware", "Ensures data compliance and privacy for PHI.")
+    Component(HealthAndCircuitBreakerHealthCheckEndpoint, "Health & Circuit Breaker Health Check Endpoint", ".NET Core HealthChecks", "Monitors health and implements circuit breaker patterns.")
+}
+
+Rel(InvoiceAndLedgerAPIController, ExternalClients, "Handles synchronous billing requests and payment status queries", "HTTPS")
+Rel(InsuranceGatewayAdapter, InsurancePaymentGateway, "Processes insurance claims and payments", "External HTTPS")
+Rel(BillingDataRepository, PatientDB, "Interfaces with PostgreSQL using connection pooling", "SQL/TCP")
+Rel(EventDispatcherWorker, AsyncMessageBroker, "Publishes and consumes domain events", "AMQP/TCP")
+Rel(ClaimEventConsumer, AsyncMessageBroker, "Publishes and consumes domain events", "AMQP/TCP")
+Rel(BillingAuditInterceptor, AuditComplianceLogShipper, "Forwards immutable audit logs asynchronously", "Fluentbit/Vector")
+Rel(BillingLocalCacheManager, DistributedCache, "Temporarily stores tariff schedules and rules", "Redis Protocol")
+
+@enduml

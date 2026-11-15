@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(alb, "Amazon API / Application Load Balancer (ALB)", "External load balancer routing requests.")
+System_Ext(dynamodb, "Amazon DynamoDB", "Persists encrypted case states.")
+System_Ext(qldb, "Amazon QLDB", "Tamper-evident audit log storage.")
+
+Container_Boundary(case_management_service, "Case Management Service") {
+    Component(case_api_handler, "Case API Handler", "Python (FastAPI)", "Exposes REST/JSON endpoints and enforces strict RBAC and token masking.")
+    Component(token_masking_filter, "Token Masking Filter", "Python", "Programmatically strips and masks card details at the serialization boundary.")
+    Component(case_workflow_engine, "Case Workflow Engine", "Python", "Manages payment review states (Pending, Approved, Declined).")
+    Component(encryption_middleware, "Encryption Middleware", "Python / AWS SDK", "Enforces client-side envelope encryption via AWS KMS.")
+    Component(audit_trail_emitter, "Audit Trail Emitter", "Python", "Formats, cryptographically signs, and emits immutable action logs.")
+    Component(sqs_dlq, "SQS DLQ", "Amazon SQS", "Decouples audit logging to ensure uninterrupted analyst workflows.")
+}
+
+Rel(alb, case_api_handler, "Routes case management requests", "gRPC over mTLS")
+Rel(case_api_handler, token_masking_filter, "Passes case data for sanitization", "In-memory Python objects")
+Rel(token_masking_filter, case_workflow_engine, "Passes sanitized case data", "In-memory Python objects")
+Rel(case_workflow_engine, encryption_middleware, "Passes case states for encryption", "In-memory Python objects")
+Rel(encryption_middleware, dynamodb, "Persists encrypted case states", "AWS SDK over TLS, port 443")
+Rel(case_workflow_engine, audit_trail_emitter, "Triggers audit log emission", "In-memory Python objects")
+Rel(audit_trail_emitter, sqs_dlq, "Enqueues audit logs asynchronously", "AWS SDK")
+Rel(sqs_dlq, qldb, "Asynchronously flushes tamper-evident audit logs", "AWS SDK over TLS, port 443")
+
+@enduml

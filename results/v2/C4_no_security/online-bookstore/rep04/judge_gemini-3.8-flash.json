@@ -1,0 +1,357 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "Covers catalog search, cart/checkout, shipping integrations, multi-currency, and recommendations via Catalog Service, Order & Checkout Service, and Recommendation Worker. However, backend storage and management for customer reviews and 5-star ratings (R-03) lack dedicated components beyond UI modules.",
+   "performance_efficiency": "AWS CloudFront, Amazon S3, and ElastiCache (Redis) absorb read spikes and optimize static delivery for 3G networks. Asynchronous processing via AWS SQS/SNS, DynamoDB streaming, and RDS Read Replicas enable scalable handling of 1M MAU.",
+   "compatibility": "Explicit adapters handle external integrations cleanly: Payment Adapter connects to Payment Gateway, Fulfillment Adapter integrates Shipping Provider APIs, and User & Compliance Service bridges external Identity Providers via OIDC/OAuth2 standards.",
+   "usability": "The Single Page Application serves Shopper, Catalog Manager, and Customer Support Agent roles with dedicated routing modules. TanStack Query caching and IndexedDB offline persistence enhance responsiveness, though specialized administrative workflows are lightly detailed.",
+   "reliability": "High availability (99.95%) is addressed via AWS Route 53 DNS Failover Controller, multi-region RDS Read Replicas, Transactional Outbox Pattern, Dead Letter Queues (DLQs), and Resilience4j circuit breakers isolating third-party services.",
+   "security": "OWASP risks and compliance are mitigated via AWS API Gateway Authorizer (JWT/OAuth2), rate-limiting Throttling, private VPC links, tokenized external checkout, and immutable records in Audit Logger for CCPA/GDPR compliance.",
+   "maintainability": "High modularity is achieved through domain-aligned microservices (Catalog, Order & Checkout, User & Compliance) communicating via gRPC and decoupled by AWS SQS/SNS messaging, ensuring low coupling and independent deployability.",
+   "portability": "While containerized with ECS/Fargate and distributed across AWS regions using Route 53, the architecture is deeply coupled to proprietary AWS services (DynamoDB, SQS/SNS, CloudFront), limiting adaptability outside AWS."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Edge caching via CloudFront and S3, alongside ElastiCache Redis cluster and RDS Read Replicas, decouples traffic and satisfies the low-latency target under 10x traffic spikes.",
+    "elements": [
+     "AWS CloudFront & Amazon S3",
+     "Amazon ElastiCache (Redis)",
+     "Catalog Service",
+     "Cache-Aside Proxy",
+     "Read Replicas",
+     "AWS API Gateway"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in CloudFront and Redis under high concurrency",
+     "Read replica replication lag during traffic surges"
+    ],
+    "tradeoffs": [
+     "Increased infrastructure cost for caching clusters against reduced origin server load"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendation recomputation is offloaded asynchronously to AWS SQS and the background Recommendation Worker. Browsing requests interact solely with Redis and the Catalog Service without blocking.",
+    "elements": [
+     "AWS SQS/SNS with DLQs",
+     "Recommendation Worker",
+     "Amazon ElastiCache (Redis)",
+     "Catalog Service",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "Decoupling compute-heavy recommendation jobs via asynchronous message queues",
+     "Redis write throughput during bulk recommendation cache updates"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of recommendation data traded for zero latency impact on browsing"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The Checkout Orchestrator isolates external shipping calls via a Resilience Layer and Transactional Outbox pattern, but synchronous invocation requires explicit fallback handling to prevent checkout stalling.",
+    "elements": [
+     "Order & Checkout Service",
+     "Checkout Orchestrator",
+     "Resilience Layer",
+     "Fulfillment Adapter",
+     "Event Dispatcher Component",
+     "AWS SQS/SNS with DLQs"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker configuration and timeout thresholds on the shipping adapter",
+     "Reliable event publishing using the transactional outbox pattern"
+    ],
+    "tradeoffs": [
+     "Accepting delayed shipment confirmation in exchange for guaranteed order completion"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "While Route 53 failover routes traffic across regions, the shared standard RDS PostgreSQL instance relies on asynchronous replication, introducing significant risk of data loss and downtime during primary region failure.",
+    "elements": [
+     "AWS Route 53",
+     "Routing Policies Engine",
+     "DNS Failover Controller",
+     "Amazon RDS PostgreSQL",
+     "Primary Database Instance",
+     "Read Replicas"
+    ],
+    "sensitivity_points": [
+     "Cross-region database replication latency and failover promotion time",
+     "Route 53 DNS TTL and client cache expiration during failover"
+    ],
+    "tradeoffs": [
+     "Lower replication latency with asynchronous cross-region replicas versus risk of lost write data"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Support for new currencies is encapsulated within the Localized Pricing Service and the Payment Adapter, allowing currency expansion with minimal localized changes and no architectural refactoring.",
+    "elements": [
+     "Catalog Service",
+     "Localized Pricing Service",
+     "Order & Checkout Service",
+     "Payment Adapter",
+     "Cart & Checkout Module"
+    ],
+    "sensitivity_points": [
+     "Isolation of multi-currency exchange rates and rules within dedicated services",
+     "External payment gateway capability to process target currency transactions"
+    ],
+    "tradeoffs": [
+     "Service abstraction complexity traded for localized, low-risk currency extension"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The recommendation engine integration is cleanly abstracted behind the Recommendation Worker and SQS queues, storing results in Redis. Replacing the algorithm only affects the external engine adapter.",
+    "elements": [
+     "Third-Party Recommendation Engine",
+     "Recommendation Worker",
+     "Recommendation Processor Component",
+     "AWS SQS/SNS with DLQs",
+     "Amazon ElastiCache (Redis)"
+    ],
+    "sensitivity_points": [
+     "Adherence to standardized ingestion and export interfaces in the recommendation worker",
+     "Asynchronous contract decoupling between worker and message broker"
+    ],
+    "tradeoffs": [
+     "Worker decoupling complexity traded for independent deployability and algorithm portability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "SQL injection is mitigated via standard Data Access Layer abstraction and parameterized JDBC, while XSS is reduced by React. However, a perimeter AWS WAF is omitted for edge filtering.",
+    "elements": [
+     "AWS API Gateway",
+     "Authorizer",
+     "Data Access Layer",
+     "Single Page Application (SPA)",
+     "Product API Controller"
+    ],
+    "sensitivity_points": [
+     "Strict input sanitization and parameterized SQL queries in the data layer",
+     "Absence of a centralized edge Web Application Firewall (WAF)"
+    ],
+    "tradeoffs": [
+     "Relying on application-level defenses avoids WAF costs but increases edge vulnerability surface"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The system explicitly models CCPA/GDPR workflows with a Compliance Manager, Audit Logger, and Erasure Event Publisher that broadcasts deletion events across downstream caches and workers.",
+    "elements": [
+     "User & Compliance Service",
+     "Compliance Manager",
+     "Audit Logger",
+     "Erasure Event Publisher",
+     "Recommendation Worker",
+     "Compliance Enforcement Component"
+    ],
+    "sensitivity_points": [
+     "Guaranteed delivery of UserDeletedEvent to all data-retaining consumers",
+     "Immutability of compliance audit logs for regulatory verification"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of data deletion traded for decoupled asynchronous purge processing"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "partial"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "User & Compliance Service",
+     "Compliance Manager",
+     "Audit Logger",
+     "Erasure Event Publisher",
+     "Preference & Compliance Manager Component",
+     "Compliance Enforcement Component",
+     "Query Logging & Auditing Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Single Page Application (SPA)",
+     "Cart & Checkout Module",
+     "Localized Pricing Service"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Order & Checkout Service",
+     "Fulfillment Adapter",
+     "Shipping Provider APIs"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Module",
+     "Catalog Service",
+     "Product API Controller",
+     "Search & Filter Engine",
+     "Cache-Aside Proxy",
+     "Catalog Cache Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Cart & Checkout Module",
+     "Order & Checkout Service",
+     "Cart Controller & Manager",
+     "Checkout Orchestrator",
+     "Payment Adapter",
+     "Payment Gateway",
+     "Shopping Cart Table",
+     "Session & Cart Cache Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Reviews & Recommendations Module",
+     "Read Replicas"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Reviews & Recommendations Module",
+     "Third-Party Recommendation Engine",
+     "Recommendation Worker",
+     "Event Consumer Component",
+     "Recommendation Processor Component",
+     "Amazon SQS Recommendation Queue",
+     "User Activity Stream Table"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "AWS Route 53",
+     "AWS CloudFront & Amazon S3",
+     "AWS API Gateway",
+     "Amazon RDS PostgreSQL",
+     "Read Replicas",
+     "Amazon DynamoDB",
+     "Amazon ElastiCache (Redis)",
+     "AWS SQS/SNS with DLQs"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "AWS CloudFront & Amazon S3",
+     "CloudFront Distribution",
+     "Routing & Shell Component",
+     "API Client & State Manager",
+     "Cache-Aside Proxy"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Health Check Probes",
+     "DNS Failover Controller",
+     "Primary Database Instance",
+     "Read Replicas",
+     "Resilience Layer",
+     "Dead Letter Queues (DLQs)"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "partial",
+    "elements": [
+     "Authorizer",
+     "Throttling",
+     "Identity Provider",
+     "Payment Adapter"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

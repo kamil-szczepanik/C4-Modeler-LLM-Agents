@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container_Boundary(case_management_backend, "Case Management Backend") {
+    Component(CaseController, "Case Controller", "Spring MVC", "Exposes REST endpoints for the analyst UI.")
+    Component(CaseWorkflowService, "Case Workflow Service", "Spring Service", "Manages business state transitions and writes audit events transactionally.")
+    Component(CaseRepository, "Case Repository", "Spring Data JPA", "Persists case records transactionally to the database.")
+    Component(MaskingInterceptor, "Masking & Authorization Interceptor", "Spring Aspect/Filter", "Masks cardholder data dynamically for the analyst UI.")
+    Component(OutboxEventPublisher, "Outbox Event Publisher", "Spring Transactional Outbox Pattern", "Dispatches signed audit payloads to messaging infrastructure.")
+    Component(AuditPublisher, "Audit Publisher", "Spring Cloud Stream / AWS SDK", "Publishes audit events using AWS SDK.")
+}
+
+System_Ext(AnalystUI, "Analyst UI", "External Analyst User Interface")
+System_Ext(PostgreSQL, "PostgreSQL / Amazon Aurora", "Managed relational database")
+System_Ext(OutboxTable, "Outbox Table", "Transactional database table")
+System_Ext(AmazonSQSSNS, "Amazon SQS / SNS", "Asynchronous message queue")
+
+Rel(CaseController, AnalystUI, "Exposes REST endpoints", "HTTPS/REST")
+Rel(CaseWorkflowService, CaseRepository, "Manages business state transitions", "In-process")
+Rel(CaseRepository, PostgreSQL, "Persists case records transactionally", "JDBC / TLS")
+Rel(CaseWorkflowService, OutboxTable, "Writes audit events transactionally", "JDBC / TLS")
+Rel(OutboxEventPublisher, AmazonSQSSNS, "Dispatches signed audit payloads", "AWS SDK / HTTPS")
+Rel(MaskingInterceptor, AnalystUI, "Masks cardholder data dynamically", "HTTPS/REST")
+
+@enduml

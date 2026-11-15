@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Identity & Access Management (IAM) / Consent Service container
+
+System_Ext(api_gateway, "API Gateway", "API Gateway")
+System_Ext(external_identity_providers, "External Identity Providers", "eIDAS, OAuth2/OIDC IdPs")
+System_Ext(google_secret_manager, "Google Secret Manager", "Google Cloud Secret Manager")
+
+Container_Boundary(iam_consent_service, "Identity & Access Management (IAM) / Consent Service") {
+    Component(authentication_component, "Authentication Component", "Spring Security / OIDC", "Manages user authentication and federates with external identity providers.")
+    Component(consent_engine, "Consent Engine", "Spring Boot / Domain Model", "Handles granular consent-driven access and business logic.")
+    Component(consent_ledger, "Consent Ledger", "Cloud SQL PostgreSQL per region", "Persists immutable consent logs ensuring strict regional data residency.")
+    Component(policy_enforcement_interceptor, "Policy Enforcement Interceptor", "gRPC / Envoy Filter", "Enforces regional data residency and regulatory compliance by intercepting and validating requests.")
+    Component(revocation_cache_component, "Revocation Cache Component", "Google Cloud Memorystore Redis", "Provides low-latency revocation checks without cross-region leaks.")
+}
+
+Rel(api_gateway, policy_enforcement_interceptor, "Validates requests", "gRPC with mTLS via Istio/Anthos")
+Rel(authentication_component, external_identity_providers, "Federates authentication", "OAuth2 / OIDC / eIDAS")
+Rel(policy_enforcement_interceptor, revocation_cache_component, "Checks consent state", "gRPC with mTLS")
+Rel(consent_engine, consent_ledger, "Persists immutable logs", "PostgreSQL with CMEK")
+
+@enduml

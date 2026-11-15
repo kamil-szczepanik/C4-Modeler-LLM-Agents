@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Recommendation Service container
+
+System_Ext(API_Gateway, "API Gateway", "External API Gateway")
+System_Ext(Amazon_MSK_Kafka, "Amazon MSK (Kafka)", "Managed Streaming for Apache Kafka")
+System_Ext(Amazon_Kinesis_Data_Firehose, "Amazon Kinesis Data Firehose", "Managed streaming service for delivery to data lakes and analytics destinations")
+
+Container_Boundary(Recommendation_Service, "Recommendation Service") {
+    Component(API_Handler, "API Handler", "FastAPI", "Exposes asynchronous REST endpoints and validates user consent tokens.")
+    Component(Inference_Engine, "Inference Engine", "Python / NumPy", "Computes collaborative filtering and Customers also bought scores.")
+    Component(Clickstream_Consumer, "Clickstream Consumer", "Kafka / Python Worker", "Ingests real-time event streams asynchronously from Amazon MSK.")
+    ComponentDb(Recommendation_Datastore, "Recommendation Datastore", "Amazon DynamoDB", "Stores precomputed and real-time affinity models with global replication.")
+    Component(Metrics_Emitter, "Metrics Emitter", "Python Worker", "Asynchronously publishes CTR and attributed revenue analytics.")
+}
+
+Rel(API_Gateway, API_Handler, "REST over mTLS", "HTTPS/mTLS")
+Rel(Clickstream_Consumer, Amazon_MSK_Kafka, "Subscribes to user click events", "TCP/TLS")
+Rel(Inference_Engine, Recommendation_Datastore, "Reads/Writes vectors", "AWS SDK / HTTPS")
+Rel(Recommendation_Datastore, Inference_Engine, "Reads/Writes vectors", "AWS SDK / HTTPS")
+Rel(API_Handler, Metrics_Emitter, "Asynchronous event dispatch", "Internal Queue / Memory")
+Rel(Metrics_Emitter, Amazon_Kinesis_Data_Firehose, "Streams analytics payloads", "HTTPS/TLS")
+
+@enduml

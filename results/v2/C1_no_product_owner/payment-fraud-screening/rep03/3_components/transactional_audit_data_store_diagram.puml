@@ -1,0 +1,21 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(FraudScoringEngine, "Fraud Scoring Engine", "External system")
+System_Ext(CaseManagementAPI, "Case Management API", "External system")
+System_Ext(S3GlacierVault, "S3 Glacier Vault", "External system")
+
+Container_Boundary(TransactionalAuditDataStore, "Transactional & Audit Data Store") {
+    Component(CaseManagementRepository, "Case Management Repository", "Relational tables with pgx driver", "Stores active review cases and evaluation results, read and updated by the Case Management API.")
+    Component(AuditLogSubsystem, "Audit Log Subsystem", "PostgreSQL Append-Only Tables, RLS, and pgcrypto", "Appends immutable decision logs with INSERT-only access via Row-Level Security.")
+    Component(PartitionManager, "Partition Manager", "pg_partman", "Automates time-based table partitioning for 7-year data retention.")
+    Component(ReadReplica, "Read Replica", "Amazon RDS PostgreSQL Read Replica", "Isolates analytics workloads and provides read scalability.")
+}
+
+Rel(FraudScoringEngine, CaseManagementRepository, "Writes evaluation results and initial case state", "PostgreSQL Wire Protocol over TLS 1.3")
+Rel(CaseManagementAPI, CaseManagementRepository, "Reads and updates active review cases", "PostgreSQL Wire Protocol over TLS 1.3")
+Rel(CaseManagementAPI, AuditLogSubsystem, "Appends immutable decision logs", "PostgreSQL Wire Protocol, INSERT-only via RLS")
+Rel(AuditLogSubsystem, S3GlacierVault, "Delegates cold partition export", "AWS SDK via IAM Role")
+
+@enduml

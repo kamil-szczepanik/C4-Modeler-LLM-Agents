@@ -1,0 +1,334 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "Requirements R-01, R-02, and R-04 are well-supported by 'Catalog & Search Service', 'Checkout & Payment Service', and 'Recommendation Service'. However, R-03 has a 'Reviews & Ratings Component' in the SPA without a dedicated backend service, and GDPR/CCPA data deletion mechanisms are not explicitly detailed.",
+   "performance_efficiency": "Target latencies and 1M MAU scalability are supported via 'CDN & Edge Caching' (CloudFront Origin Shield), 'Route 53 DNS & Geo-Resolver', 'Cart Manager' (Redis), 'Amazon ElastiCache', 'AWS OpenSearch Service', and 'Cross-Region Read Replica Instance' for low-latency multi-region data access.",
+   "compatibility": "Clean interoperability is achieved via 'Payment Gateway Adapter' (Stripe/PayPal), 'Fulfillment Integration Component' (FedEx/UPS), 'API Gateway & Edge Auth' (AWS Cognito/Auth0), and notification hooks to AWS SES/SendGrid using standard REST, OAuth 2.0, and AMQP interfaces.",
+   "usability": "Customers, Store Administrators, and Marketing Managers are supported with dedicated interfaces via the 'Single Page Application'. However, specific mechanisms for delivering or viewing purchased electronic books (e-books) versus physical fulfillment are not articulated.",
+   "reliability": "Achieving 99.95% uptime is well addressed through 'Amazon Aurora PostgreSQL Global Database' with cross-region replication, 'Global Database Proxy', asynchronous decoupling via 'Shipping FIFO Queue', and fault-isolation using 'Dead-Letter FIFO Queue' with redrive policies.",
+   "security": "OWASP Top-10 mitigations are enforced by 'Security & Traffic Controls' (AWS WAF, Shield), TLS 1.3, and 'API Gateway & Edge Auth' checking OAuth scopes. However, concrete architectural mechanisms for GDPR/CCPA compliance (consent tracking, right-to-be-forgotten pipelines) are largely omitted.",
+   "maintainability": "Decomposition into distinct domain services ('Catalog & Search', 'Checkout & Payment', 'Recommendation') ensures low coupling and high cohesion. However, listing multiple backend languages ('Go, Node.js, Python / FastAPI') within single containers creates ambiguity regarding technical uniformity.",
+   "portability": "The architecture satisfies target deployment across us-east-1, eu-west-1, and ap-southeast-1 via 'Route 53' and multi-region Aurora. However, heavy coupling to proprietary AWS primitives (Cognito, SQS FIFO, Aurora Global DB, WAF) limits portability beyond AWS."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 4.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront CDN with Origin Shield caches catalogue assets at the edge, while Aurora read replicas handle read query scaling. However, maintaining under 2 seconds on 3G under heavy write contention and cache invalidations poses residual latency risks on high traffic bursts.",
+    "elements": [
+     "Amazon CloudFront / API Gateway / ALB",
+     "CDN & Edge Caching",
+     "Route 53 DNS & Geo-Resolver",
+     "Catalog & Search Service",
+     "Amazon Aurora PostgreSQL Global Database"
+    ],
+    "sensitivity_points": [
+     "Origin Shield cache hit ratio under peak burst",
+     "Read replica replication lag"
+    ],
+    "tradeoffs": [
+     "Aggressive edge caching increases risk of stale pricing or inventory"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendation vector recomputations are handled asynchronously via SQS and ingestion workers into ElastiCache Redis. Precomputed recommendation vectors are read via sub-10ms queries, completely isolating heavy background batch processing from customer browsing and catalogue query paths.",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Engine",
+     "Cache & Ingestion Worker",
+     "Amazon ElastiCache (Redis)",
+     "Amazon SQS / SNS"
+    ],
+    "sensitivity_points": [
+     "Redis cache hit latency",
+     "SQS queue ingestion throughput"
+    ],
+    "tradeoffs": [
+     "Precomputed recommendation vectors sacrifice real-time responsiveness for browsing performance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Checkout & Payment Service decouples shipping fulfillment via Amazon SNS and SQS FIFO queues with a dead-letter queue. Temporary outages of FedEx or UPS do not block synchronous checkout completion, allowing shipping requests to be retried asynchronously.",
+    "elements": [
+     "Checkout Orchestrator",
+     "Fulfillment Integration Component",
+     "Amazon SQS / SNS",
+     "Shipping FIFO Queue",
+     "Dead-Letter FIFO Queue"
+    ],
+    "sensitivity_points": [
+     "SQS FIFO queue depth and DLQ redrive policies"
+    ],
+    "tradeoffs": [
+     "Asynchronous shipping decoupled from checkout delays tracking number generation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Although Aurora Global Database provides cross-region read replicas and Route 53 handles DNS failover, writes depend on a single primary writer in us-east-1. Regional failure requires database promotion which carries failover latency and risks transaction loss during an unplanned outage.",
+    "elements": [
+     "Primary Database Instance (Writer)",
+     "Cross-Region Read Replica Instance (EU)",
+     "Cross-Region Read Replica Instance (AP)",
+     "Route 53 DNS & Geo-Resolver",
+     "Global Database Proxy"
+    ],
+    "sensitivity_points": [
+     "Aurora cross-region replication lag during sudden regional outage"
+    ],
+    "tradeoffs": [
+     "Single-writer architecture simplifies transactional consistency at the cost of cross-region failover automation"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The system isolates currency handling within the Cart & Checkout Component and Payment Gateway Adapter, delegating multi-currency processing to external gateways. However, dynamic exchange rate conversion and catalog price configuration mechanisms are not explicitly detailed.",
+    "elements": [
+     "Cart & Checkout Component",
+     "Cart Manager",
+     "Checkout Orchestrator",
+     "Payment Gateway Adapter",
+     "Route 53 DNS & Geo-Resolver"
+    ],
+    "sensitivity_points": [
+     "Stripe and PayPal multi-currency payment capabilities"
+    ],
+    "tradeoffs": [
+     "Delegating currency conversion to payment gateways limits custom pricing strategies"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Recommendation logic is fully encapsulated within the Recommendation Engine and isolated behind gRPC and API handlers. Serving relies on precomputed Redis vectors, ensuring algorithmic replacements require no changes to frontend components or upstream catalog services.",
+    "elements": [
+     "Recommendation Engine",
+     "Cache & Ingestion Worker",
+     "API Handler",
+     "Amazon ElastiCache (Redis)"
+    ],
+    "sensitivity_points": [
+     "gRPC contract stability between API handler and recommendation engine"
+    ],
+    "tradeoffs": [
+     "Strict component encapsulation limits deep integration with search scoring features"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "AWS WAF and Shield Advanced provide edge inspection against OWASP Top-10 attacks, blocking SQLi and XSS before hitting backends. Microservices persist data to Aurora via parameterized SQL over TLS, though dedicated backend validation for user reviews is not explicitly modeled.",
+    "elements": [
+     "Security & Traffic Controls",
+     "API Gateway & Edge Auth",
+     "API Router / Controller",
+     "Catalog Management Component",
+     "Amazon Aurora PostgreSQL Global Database"
+    ],
+    "sensitivity_points": [
+     "WAF rule inspection coverage and false-positive rates"
+    ],
+    "tradeoffs": [
+     "Strict WAF inspection adds marginal request latency at the edge"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "The architecture lacks a dedicated data subject request orchestrator or privacy worker to propagate deletion requests across Aurora, event queues, external auth providers, and payment systems, leaving CCPA and GDPR compliance largely unsupported by explicit mechanisms.",
+    "elements": [
+     "Amazon Aurora PostgreSQL Global Database",
+     "AWS Cognito / Auth0",
+     "Checkout & Payment Service",
+     "Recommendation Service"
+    ],
+    "sensitivity_points": [
+     "Data propagation across decoupled transactional and analytical stores"
+    ],
+    "tradeoffs": [
+     "Event-driven distributed architecture increases complexity of coordinated data deletion"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Online Bookstore System"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Stripe / PayPal",
+     "Checkout & Payment Service",
+     "Cart & Checkout Component",
+     "Route 53 DNS & Geo-Resolver"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "FedEx / UPS",
+     "Checkout & Payment Service",
+     "Fulfillment Integration Component",
+     "Amazon SQS / SNS",
+     "Shipping FIFO Queue"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Service",
+     "Catalogue & Search Component",
+     "Search Engine Component",
+     "Catalog Management Component",
+     "AWS OpenSearch Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Cart & Checkout Component",
+     "Checkout & Payment Service",
+     "Cart Manager",
+     "Checkout Orchestrator",
+     "Payment Gateway Adapter",
+     "Stripe / PayPal"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Single Page Application",
+     "Reviews & Ratings Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Component",
+     "Recommendation Service",
+     "Recommendation Engine",
+     "Cache & Ingestion Worker",
+     "Amazon ElastiCache (Redis)"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Amazon CloudFront / API Gateway / ALB",
+     "Catalog & Search Service",
+     "Checkout & Payment Service",
+     "Recommendation Service",
+     "Amazon Aurora PostgreSQL Global Database",
+     "Global Database Proxy"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Single Page Application",
+     "CDN & Edge Caching",
+     "Route 53 DNS & Geo-Resolver",
+     "Cross-Region Read Replica Instance (EU)",
+     "Cross-Region Read Replica Instance (AP)"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Route 53 DNS & Geo-Resolver",
+     "Internal Application Load Balancer",
+     "Amazon Aurora PostgreSQL Global Database",
+     "Primary Database Instance (Writer)",
+     "Cross-Region Read Replica Instance (EU)",
+     "Cross-Region Read Replica Instance (AP)",
+     "Amazon SQS / SNS"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Security & Traffic Controls",
+     "API Gateway & Edge Auth"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

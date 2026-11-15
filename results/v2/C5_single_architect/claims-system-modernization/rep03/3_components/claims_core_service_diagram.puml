@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Claims Core Service container
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway")
+System_Ext(message_broker, "Integration Message Broker", "External Message Broker")
+
+Container_Boundary(claims_core_service, "Claims Core Service") {
+    Component(claim_submission_controller, "Claim Submission Controller", ".NET Core API", "Handles incoming claim submission requests.")
+    Component(claims_router, "Claims Router / Strategy Selector", ".NET Core", "Evaluates and routes claims to either modern workflows or the mainframe.")
+    Component(claim_workflow_engine, "Claim Workflow Engine", ".NET Core / Workflow Core", "Executes modern claim workflows and manages complex state transitions.")
+    Component(data_access_repository, "Data Access Repository", "Entity Framework Core", "Persists state and domain models using Azure SQL Database.")
+    Component(mainframe_sync_publisher, "Mainframe Sync Publisher", ".NET Core", "Synchronizes state with the legacy mainframe system.")
+    Component(outbox_processor, "Outbox Processor", ".NET Core Background Service", "Processes transactional outbox events to ensure reliable messaging.")
+    Component(mainframe_ac_client, "Mainframe Anti-Corruption Client", ".NET Core", "Forwards unmigrated claims to the legacy mainframe.")
+}
+
+Rel(api_gateway, claim_submission_controller, "Routes incoming requests", "gRPC")
+Rel(claim_submission_controller, claims_router, "Forwards requests for evaluation", "In-Memory")
+Rel(claims_router, claim_workflow_engine, "Executes modern claim workflows", "In-Memory")
+Rel(claims_router, mainframe_ac_client, "Forwards unmigrated claims", "HTTP/AMQP")
+Rel(claim_workflow_engine, data_access_repository, "Persists state and domain models", "EF Core / TDS")
+Rel(data_access_repository, outbox_processor, "Stores transactional outbox events", "EF Core / TDS")
+Rel(outbox_processor, message_broker, "Publishes reliable domain events", "AMQP")
+Rel(mainframe_sync_publisher, message_broker, "Synchronizes state with legacy system", "AMQP")
+
+@enduml

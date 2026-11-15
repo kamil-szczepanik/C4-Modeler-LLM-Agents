@@ -1,0 +1,312 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 5,
+   "compatibility": 3,
+   "usability": 2,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 3.75,
+  "justifications": {
+   "functional_suitability": "Ingestion, handling, and incremental migration (R-01–R-03) are supported via 'Claim Ingestion & Validation Module' and 'Anti-Corruption Layer (ACL)'. However, dedicated user interface containers (Adjuster Web Application and Broker/Customer Portal) are omitted from Level 2, with users connecting directly to the 'API Gateway'.",
+   "performance_efficiency": "Requirement R-05 is directly addressed by 'Read-Model Cache' using 'Azure Redis Cache' to decouple adjuster queries from the 5-second mainframe latency. Asynchronous processing via 'Azure Service Bus' and 'Data Synchronization Worker' prevents ingestion bottlenecks.",
+   "compatibility": "The 'Anti-Corruption Layer (ACL)' with 'Claim Translation Component' bridges modern data formats with the 'On-Premises COBOL/DB2 Mainframe'. However, the architecture fails to address or accommodate the unextendable 23:00-05:00 nightly batch window constraint.",
+   "usability": "Neither the customer/broker portal nor the adjuster web application are modeled as first-class client containers in Level 2; users interact directly with the 'API Gateway'. User-specific interface channels and accessibility requirements are absent.",
+   "reliability": "Addressed well via 'Azure Service Bus' for idempotent delivery (R-04), Polly circuit breakers in 'Legacy Dispatcher Component', and Optimistic Concurrency Control in 'Data Synchronization Worker'. Handling of mainframe downtime during batch windows is not explicitly detailed.",
+   "security": "Meets R-07 via 'Azure Active Directory' SSO. The 'Security and Validation Component' enforces JWT/OAuth2 validation, 'Azure Key Vault' secures secrets using Managed Identities, and 'Audit Trail Manager' guarantees accountability through structured audit logs.",
+   "maintainability": "R-06 is thoroughly addressed by 'Feature Flag Management Module' and 'Routing Control Component' for instant rollback. The modular monolith design and 'Repository Abstraction Layer' prudently cater to the team's limited cloud experience.",
+   "portability": "Supports the hybrid deployment model between Azure and on-premise mainframe. However, modules are tightly coupled to Azure-proprietary services (Azure App Configuration, Azure Service Bus, Azure Monitor), complicating environment adaptability outside Azure."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 4.0,
+   "Modifiability": 4.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "The Read-Model Cache (Redis) provides sub-2-second reads for pre-cached data, but no mechanism is defined for proactive hydration from the mainframe. A cache miss requiring a synchronous fetch from the mainframe would exceed the 2-second target.",
+    "elements": [
+     "Read-Model Cache",
+     "Azure Redis Cache",
+     "API Gateway",
+     "Data Synchronization Worker"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio on claim read requests",
+     "Proactive data pre-fetching before adjuster access"
+    ],
+    "tradeoffs": [
+     "Eventual consistency versus real-time data freshness across legacy boundaries"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Azure Service Bus and Edge Rate Limiting decouple ingress spikes from mainframe processing, protecting the mainframe. However, scheduled throttling specific to the nightly 23:00-05:00 batch window is not explicitly documented.",
+    "elements": [
+     "API Gateway",
+     "Edge Routing and Rate Limiting Component",
+     "Azure Service Bus",
+     "Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Queue buffering capacity during peak submission hours",
+     "Mainframe transaction throughput limits"
+    ],
+    "tradeoffs": [
+     "Buffering requests introduces dispatch latency to protect legacy batch windows"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Ingestion via Azure Service Bus decouples submissions asynchronously, and the Legacy Dispatcher with Polly circuit breakers suspends mainframe forwarding during the nightly batch window without dropping submissions.",
+    "elements": [
+     "Claim Ingestion & Validation Module",
+     "Azure Service Bus",
+     "Anti-Corruption Layer (ACL)",
+     "Legacy Dispatcher Component"
+    ],
+    "sensitivity_points": [
+     "Message retention duration in Azure Service Bus",
+     "Circuit breaker trip and reset configuration"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission acceptance trades immediate confirmation for high availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Idempotent messaging and optimistic concurrency are mentioned, but there is no explicit transactional outbox, distributed reconciliation job, or dead-letter processing strategy to detect and reconcile half-way synchronization failures between DB2 and Azure.",
+    "elements": [
+     "Data Synchronization Worker",
+     "Azure Service Bus",
+     "Anti-Corruption Layer (ACL)",
+     "Read-Model Cache"
+    ],
+    "sensitivity_points": [
+     "Idempotency key enforcement across hybrid boundaries",
+     "Automated reconciliation interval for failed synchronizations"
+    ],
+    "tradeoffs": [
+     "Reconciliation complexity versus overhead of distributed two-phase commit protocols"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Azure App Configuration feature flags combined with the Anti-Corruption Layer and Routing Control Component enable runtime routing per claim type and instant switch-back within minutes without mainframe code deployments.",
+    "elements": [
+     "Feature Flag Management Module",
+     "Routing Control Component",
+     "Anti-Corruption Layer (ACL)",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Feature flag propagation latency to gateway and worker nodes",
+     "Granularity of claim-type routing rules"
+    ],
+    "tradeoffs": [
+     "Dynamic routing flexibility increases configuration governance overhead"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The API Gateway and Modular Monolith abstract legacy dependencies, preventing UI rewrites when retiring the mainframe. The target relational schema runner is present, though the final system-of-record persistence architecture remains minimally detailed.",
+    "elements": [
+     "API Gateway",
+     "Claim Ingestion & Validation Module",
+     "Anti-Corruption Layer (ACL)",
+     "Database Migration & Schema Versioning Module"
+    ],
+    "sensitivity_points": [
+     "Decoupling of frontend contracts from legacy DB2 models",
+     "Completeness of the cloud relational database storage model"
+    ],
+    "tradeoffs": [
+     "Maintaining abstraction layers during migration adds short-term implementation overhead"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The gateway provides token authentication and audit logging, but fine-grained authorization (tenant isolation or broker-to-claim ownership validation) is not explicitly defined in the security or ingestion components.",
+    "elements": [
+     "API Gateway",
+     "Security and Validation Component",
+     "Centralized Observability & Audit Logging Module",
+     "Audit Trail Manager"
+    ],
+    "sensitivity_points": [
+     "Enforcement point for claim-level authorization rules",
+     "Completeness of broker identifier claims in JWT tokens"
+    ],
+    "tradeoffs": [
+     "Centralized gateway authorization checks versus domain-level policy evaluations"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Adjuster access to modern applications is governed via Azure Active Directory SSO and can be revoked rapidly. However, propagation or revocation of credentials into the on-premises mainframe security subsystem is unaddressed.",
+    "elements": [
+     "Azure Active Directory",
+     "Claims Adjusters",
+     "API Gateway",
+     "Security and Validation Component"
+    ],
+    "sensitivity_points": [
+     "Token lifetime and revocation sync across Active Directory",
+     "Identity mapping between cloud identities and mainframe RACF profiles"
+    ],
+    "tradeoffs": [
+     "Short token lifetimes improve revocation speed but increase re-authentication load"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "On-Premises COBOL/DB2 Mainframe",
+     "Anti-Corruption Layer (ACL)"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Anti-Corruption Layer (ACL)",
+     "Claim Translation Component",
+     "Legacy Dispatcher Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Repository Abstraction Layer",
+     "Claim Ingestion & Validation Module",
+     "Anti-Corruption Layer (ACL)"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers and Brokers",
+     "API Gateway",
+     "Claim Ingestion & Validation Module"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Claims Adjusters",
+     "API Gateway"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Feature Flag Management Module",
+     "Routing Control Component",
+     "API Gateway"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Azure Service Bus",
+     "Claim Ingestion & Validation Module",
+     "Data Synchronization Worker"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Read-Model Cache",
+     "Azure Redis Cache",
+     "Data Synchronization Worker"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Feature Flag Management Module",
+     "Routing Control Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Azure Active Directory",
+     "API Gateway",
+     "Security and Validation Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

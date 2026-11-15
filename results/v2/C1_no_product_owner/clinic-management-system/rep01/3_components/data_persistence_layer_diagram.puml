@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Data Persistence Layer container
+
+System_Ext(external_services, "Patient, Scheduling, EMR, & Billing Services", "External microservices")
+System_Ext(multi_region, "Multi-Region Infrastructure", "Multi-region cloud infrastructure (eu-central-1)")
+System_Ext(external_siem, "External SIEM", "Security Information and Event Management")
+
+Container_Boundary(data_persistence_layer, "Data Persistence Layer") {
+    Component(patient_data_store, "Patient Data Store", "PostgreSQL 15 with Citus Extension and pg_partman", "Stores partitioned patient demographics.")
+    Component(emr_audit_repository, "EMR Audit Repository", "PostgreSQL 15 with immutable append-only tables and pgaudit", "Provides tamper-proof audit trails.")
+    Component(transaction_coordinator, "Transaction Coordinator", "PgBouncer", "Manages high-concurrency connection pooling.")
+    Component(failover_orchestrator, "Failover Orchestrator", "Patroni", "Handles automated leader election and active-passive failover.")
+    Component(replication_backup_manager, "Replication & Backup Manager", "Barman with PostgreSQL streaming replication", "Manages replication and backups.")
+    Component(observability_archival_agents, "Observability & Archival Agents", "Prometheus PostgreSQL Exporter, pg_stat_statements, and Automated Compliance Archival Daemon", "Handles observability and automated compliance archival.")
+}
+
+Rel(external_services, transaction_coordinator, "Transmits queries and transactions", "TLS 1.3 / JDBC with SCRAM-SHA-256")
+Rel(transaction_coordinator, patient_data_store, "Routes read/write operations", "Internal mTLS / TCP")
+Rel(transaction_coordinator, emr_audit_repository, "Routes read/write operations", "Internal mTLS / TCP")
+Rel(replication_backup_manager, multi_region, "Synchronizes primary databases in on-prem-k8s with eu-central-1", "Streaming Replication")
+Rel(observability_archival_agents, external_siem, "Streams security and audit logs", "HTTPS / TLS")
+
+@enduml

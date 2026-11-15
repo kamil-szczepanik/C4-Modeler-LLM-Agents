@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Go Audit Logging Container container
+
+System_Ext(istio_service_mesh, "Istio Service Mesh", "External system")
+System_Ext(postgresql, "PostgreSQL", "External system")
+System_Ext(worm_object_storage, "WORM Object Storage (MinIO/S3)", "External system")
+System_Ext(apache_superset, "Apache Superset", "External system")
+
+Container_Boundary(go_audit_logging_container, "Go Audit Logging Container") {
+    Component(api_ingestion_handler, "API Ingestion Handler", "Go, net/http, gRPC", "Ingests audit events via gRPC over mTLS (Strict) from the Istio Service Mesh.")
+    Component(event_validation_sanitizer, "Event Validation & Sanitizer", "Go", "Performs validation and PHI/PII scrubbing on incoming audit events.")
+    Component(batch_writer_engine, "Batch Writer Engine", "Go routines, channels, pgx", "Processes events through Go routines and channels, writing them in batches using pgx connection pooling.")
+    Component(archival_policy_manager, "Archival & Policy Manager", "Go", "Manages lifecycle and retention policies, archiving data securely to WORM storage.")
+    Component(local_disk_backed_queue_wal, "Local Disk-Backed Queue / WAL", "Local Disk, Go", "Acts as a backpressure buffer using Write-Ahead Logging.")
+}
+
+Rel(istio_service_mesh, api_ingestion_handler, "gRPC over mTLS (Strict)", "gRPC")
+Rel(api_ingestion_handler, event_validation_sanitizer, "Passes raw events for validation", "")
+Rel(event_validation_sanitizer, batch_writer_engine, "Internal Go Channels", "")
+Rel(batch_writer_engine, postgresql, "TCP/SSL with pgx connection pooling", "TCP/SSL")
+Rel(archival_policy_manager, worm_object_storage, "HTTPS with Object Lock API", "HTTPS")
+Rel(batch_writer_engine, apache_superset, "Read-only PostgreSQL replica queries", "")
+
+@enduml

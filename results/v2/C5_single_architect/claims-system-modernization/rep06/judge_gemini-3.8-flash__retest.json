@@ -1,0 +1,312 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All requirements are met: R-01 via 'Customer Portal', R-02 via 'Adjuster Workspace', and R-03 via 'Claim Type Configuration Client' and 'Routing & Aggregation Component' routing between modern core services and legacy adapters.",
+   "performance_efficiency": "Target R-05 (< 2s screen loads) is directly addressed by decoupling adjusters from slow mainframe queries using 'Claim Cache Service' (Redis) and asynchronous buffering in the 'Integration & Sync Engine'.",
+   "compatibility": "Interoperability is thoroughly handled: 'ACL Translator Component' and 'Mainframe Adapter Component' coexist with 'Legacy Mainframe COBOL/DB2', while 'Authentication & Authorization Component' integrates with 'Insurer's Active Directory' via OAuth2/OIDC.",
+   "usability": "Target user groups are supported via tailored frontends: 'Claim Frontend UI' in 'Customer Portal' serves customers and brokers, while 'SPA Frontend' in 'Adjuster Workspace' provides dedicated workflows for claims adjusters.",
+   "reliability": "R-04 (zero claim loss) is ensured by 'Outbox Pattern Component', durable messaging via 'Inbound Event Consumer', 'Mainframe Batch Staging Repository' to honor nightly windows, and 'Reconciliation & Dead Letter Monitor'.",
+   "security": "SSO with 'Insurer's Active Directory' via OAuth2/OIDC is handled by 'API Gateway' and 'Auth Handler'. However, authorization models and separation between internal adjusters and public customers are only briefly detailed.",
+   "maintainability": "Clean modularity using an Anti-Corruption Layer and schema-driven forms supports incremental migration. However, the concrete operational mechanism to switch claim types back to the mainframe within one day (R-06) lacks detailed definition.",
+   "portability": "The hybrid environment (on-prem and Azure West Europe) is correctly partitioned. However, heavy reliance on proprietary Azure services (App Service, Functions, Service Bus) limits flexibility given the inexperienced cloud team."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 2,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 4.5,
+   "Modifiability": 4.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "Redis caching in the Adjuster Workspace accelerates repeated reads, but the architecture lacks an explicit read-model projection or asynchronous hydration mechanism to handle cache misses when mainframe queries take up to 5 seconds.",
+    "elements": [
+     "Adjuster Workspace",
+     "Claim Cache Service",
+     "Workspace API Controller",
+     "Claims Anti-Corruption Layer / Core Domain Service"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios and cache invalidation latency from mainframe updates"
+    ],
+    "tradeoffs": [
+     "Data freshness traded off for sub-second UI response times"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Peak submission volumes are absorbed through asynchronous messaging, the transactional Outbox Pattern, and the Mainframe Batch Staging Repository, completely isolating the legacy batch window from online traffic spikes.",
+    "elements": [
+     "API Gateway",
+     "Rate Limiting & Throttling Component",
+     "Outbox Pattern Component",
+     "Inbound Event Consumer",
+     "Mainframe Batch Staging Repository"
+    ],
+    "sensitivity_points": [
+     "Storage capacity and throughput of the Mainframe Batch Staging Repository"
+    ],
+    "tradeoffs": [
+     "Immediate mainframe consistency sacrificed for batch isolation and peak ingest rate"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Submissions are captured in the Core Domain repository and queued via Outbox and Azure Service Bus into the Mainframe Batch Staging Repository, safely queuing records until the mainframe is operational.",
+    "elements": [
+     "Outbox Pattern Component",
+     "Inbound Event Consumer",
+     "Mainframe Batch Staging Repository",
+     "Outbound Sync Orchestrator"
+    ],
+    "sensitivity_points": [
+     "Queue retention limits during extended mainframe downtime"
+    ],
+    "tradeoffs": [
+     "Temporary eventual consistency accepted to achieve high submission availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The design includes Durable Functions in Outbound Sync Orchestrator, an Outbox Pattern, and a Reconciliation & Dead Letter Monitor. However, explicit idempotency keys and two-phase compensation routines are not fully specified.",
+    "elements": [
+     "Outbox Pattern Component",
+     "Outbound Sync Orchestrator",
+     "Reconciliation & Dead Letter Monitor",
+     "Mainframe Batch Staging Repository"
+    ],
+    "sensitivity_points": [
+     "Automated reconciliation frequency versus manual intervention on dead-lettered claims"
+    ],
+    "tradeoffs": [
+     "Operational complexity added by outbox pattern and automated dead-letter reconciliation"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The API Gateway routing, Claim Type Configuration Client, and ACL Translator permit incremental migrations and routing switches. However, operational switch-back tooling and rollback synchronization procedures are not fully detailed.",
+    "elements": [
+     "Routing & Aggregation Component",
+     "Claim Type Configuration Client",
+     "ACL Translator Component",
+     "Mainframe Adapter Component"
+    ],
+    "sensitivity_points": [
+     "Flexibility of the ACL schema mapping per claim type"
+    ],
+    "tradeoffs": [
+     "ACL maintenance overhead traded off against legacy mainframe interface stability"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The presentation layers decouple completely from the mainframe using BFF patterns and the Anti-Corruption Layer. Decommissioning the mainframe only requires retiring the sync engine and mainframe adapter without impacting UI tiers.",
+    "elements": [
+     "Customer Portal",
+     "Adjuster Workspace",
+     "Claims Anti-Corruption Layer / Core Domain Service",
+     "Mainframe Adapter Component",
+     "Integration & Sync Engine"
+    ],
+    "sensitivity_points": [
+     "Strict adherence to domain boundaries within the Core Domain Service"
+    ],
+    "tradeoffs": [
+     "Upfront ACL indirection overhead pays off during legacy decommissioning"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "justification": "While Azure API Management and OpenID Connect handle authentication and coarse access, there is no explicit domain authorization, tenant isolation, or audit logging mechanism to enforce broker-to-claim ownership rules.",
+    "elements": [
+     "API Gateway",
+     "Authentication & Authorization Component",
+     "Monitoring & Analytics Component",
+     "Claim Submission Controller"
+    ],
+    "sensitivity_points": [
+     "Enforcement point for fine-grained claim ownership checks"
+    ],
+    "tradeoffs": [
+     "Centralized gateway auth simplicity leaves fine-grained claim authorization unaddressed"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Adjuster access is mediated through the Adjuster Workspace using AD SSO via OpenID Connect token validation. Because adjusters work exclusively through the modern app, AD revocation immediately cuts off access, though token expiration windows require enforcement.",
+    "elements": [
+     "Insurer's Active Directory",
+     "Auth Handler",
+     "Authentication & Authorization Component",
+     "Adjuster Workspace"
+    ],
+    "sensitivity_points": [
+     "Token lifetimes and revocation propagation speed in OpenID Connect middleware"
+    ],
+    "tradeoffs": [
+     "Centralized AD directory simplicity traded off against token invalidation latency"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe (COBOL/DB2, On-Premises)",
+     "Integration & Sync Engine",
+     "Outbound Sync Orchestrator",
+     "Mainframe Batch Staging Repository"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Mainframe Batch Staging Repository",
+     "Enterprise ESB / Integration Middleware",
+     "Outbound Sync Orchestrator"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Claims Anti-Corruption Layer / Core Domain Service",
+     "ACL Translator Component",
+     "Mainframe Adapter Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer Portal",
+     "Claim Frontend UI",
+     "Claim Submission Controller"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Web Application",
+     "Adjuster Workspace",
+     "SPA Frontend",
+     "Workspace API Controller"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Routing & Aggregation Component",
+     "Claim Type Configuration Client",
+     "Claims Anti-Corruption Layer / Core Domain Service"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Outbox Pattern Component",
+     "Integration & Sync Engine",
+     "Reconciliation & Dead Letter Monitor",
+     "Inbound Event Consumer"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Claim Cache Service",
+     "Workspace API Controller"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Routing & Aggregation Component",
+     "Claim Type Configuration Client"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Insurer's Active Directory",
+     "Authentication & Authorization Component",
+     "Authentication Middleware",
+     "Auth Handler"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ },
+ "tag": "retest"
+}

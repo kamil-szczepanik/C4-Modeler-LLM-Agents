@@ -1,0 +1,34 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Background Worker container
+
+System_Ext(MessageBroker, "Message Broker", "Apache Kafka / RabbitMQ")
+System_Ext(PostgreSQL, "PostgreSQL", "PostgreSQL database")
+System_Ext(IntegrationService, "Integration Service", "Apache Camel / Node.js")
+System_Ext(ObjectStorage, "Object Storage", "MinIO / S3")
+System_Ext(AuditLogging, "Audit & Compliance Logging", "FluentBit / OpenSearch")
+
+Container_Boundary(BackgroundWorker, "Background Worker") {
+    Component(JobConsumerComponent, "Job Consumer Component", "Go / goroutines", "Consumes asynchronous events from the Message Broker.")
+    Component(TaskProcessorComponent, "Task Processor Component", "Go", "Executes and processes background tasks, dispatching to other components.")
+    Component(DataAccessComponent, "Data Access Component", "Go / database/sql", "Persists job state and business entities to PostgreSQL.")
+    Component(IntegrationDispatcherComponent, "Integration Dispatcher Component", "Go", "Delegates external sync tasks and offloads export chunks.")
+    Component(RetryDeadLetterManagerComponent, "Retry & Dead-Letter Manager Component", "Go", "Forwards failed job executions and manages backoff tasks or DLQ.")
+    Component(EncryptionDecryptionUtilityComponent, "Encryption/Decryption Utility Component", "Go / crypto/aes", "Invokes cryptographic operations for data security.")
+}
+
+Rel(MessageBroker, JobConsumerComponent, "Consumes asynchronous events", "AMQP / TLS")
+Rel(JobConsumerComponent, TaskProcessorComponent, "Dispatches tasks", "Go channels")
+Rel(TaskProcessorComponent, EncryptionDecryptionUtilityComponent, "Invokes cryptographic operations", "In-memory function calls")
+Rel(TaskProcessorComponent, DataAccessComponent, "Persists job state and business entities", "Go channels / Postgres Wire Protocol / TLS")
+Rel(DataAccessComponent, PostgreSQL, "Persists encrypted data", "Postgres Wire Protocol / TLS")
+Rel(TaskProcessorComponent, IntegrationDispatcherComponent, "Delegates external sync tasks", "Go channels")
+Rel(IntegrationDispatcherComponent, IntegrationService, "Submits batch payloads", "HTTPS / TLS 1.3")
+Rel(IntegrationDispatcherComponent, ObjectStorage, "Offloads EMR export chunks", "S3 API / TLS")
+Rel(TaskProcessorComponent, RetryDeadLetterManagerComponent, "Forwards failed job executions", "Go channels")
+Rel(RetryDeadLetterManagerComponent, MessageBroker, "Re-queues backoff tasks or publishes to DLQ", "AMQP / TLS")
+Rel(TaskProcessorComponent, AuditLogging, "Emits compliance trails", "gRPC")
+
+@enduml

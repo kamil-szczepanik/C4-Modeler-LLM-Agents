@@ -1,0 +1,369 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "All requirements are directly fulfilled: Catalog & Search Service with Amazon OpenSearch handles R-01, Order & Checkout Service covers R-02, Customer Review Service fulfills R-03, and Personalization Service delivers R-04. Multi-currency, shipping integrations (FedEx/UPS), and GDPR/CCPA compliance mechanisms are explicitly designed.",
+   "performance_efficiency": "Performance and scalability (1M MAU, sub-2s loads) are well supported via AWS CloudFront, Redis multi-tier caching, Amazon OpenSearch, Aurora Read Replicas, DynamoDB On-Demand capacity, and asynchronous decoupled processing with Amazon EventBridge, SQS, and Celery.",
+   "compatibility": "Interoperability is thoroughly defined for external dependencies: Payment Gateway Client integrates Stripe/PayPal via HTTPS REST, Dispatch Adapter Component integrates FedEx/UPS APIs and AWS SES, and Authentication Validator integrates OAuth2/OIDC with AWS Cognito/Auth0.",
+   "usability": "All target users from the brief are accommodated within the Single Page Application, featuring dedicated components such as Admin & Author Dashboard Component, Catalog & Search Component, and Consent & Localization Provider, supplemented by OpenSearch Dashboards.",
+   "reliability": "Meets 99.95% uptime using Aurora Global Database and DynamoDB Global Tables across us-east-1, eu-west-1, and ap-southeast-1. Resilience is reinforced by Resilience4j circuit breakers, SQS Dead-Letter Queues, idempotency keys, and automated AWS Backup.",
+   "security": "OWASP mitigations and compliance are thoroughly addressed with Joi/DOMPurify sanitization against XSS, Redis rate limiting against bot abuse, Secrets Manager credential rotation, Event Payload Sanitizer/Tokenizer for GDPR/CCPA, and Cognito/Auth0 JWT token validation.",
+   "maintainability": "The architecture exhibits high maintainability through modular, domain-driven microservices (Catalog, Order, Personalization, Review, Notification). Components are decoupled asynchronously via EventBridge and SQS, each service maintaining well-isolated data stores and dedicated layers.",
+   "portability": "The design deploys cleanly across the required AWS multi-region targets (us-east-1, eu-west-1, ap-southeast-1). However, high reliance on proprietary AWS managed services (Aurora Global Database, DynamoDB Global Tables, EventBridge) introduces cloud lock-in if replatforming is ever needed."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 3,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.90625,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 4.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "CloudFront edge caching, API Gateway caching, Redis ElastiCache with request collapsing, and Aurora read replicas effectively distribute and absorb high-throughput Black Friday read traffic without degrading 3G page loads.",
+    "elements": [
+     "AWS CloudFront/Route 53",
+     "AWS API Gateway",
+     "Catalog & Search Service",
+     "Redis",
+     "Amazon OpenSearch",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Edge and Redis cache hit ratios determine origin load",
+     "OpenSearch query latency under concurrency"
+    ],
+    "tradeoffs": [
+     "Aggressive caching improves throughput but risks serving stale catalog data",
+     "Read replicas scale reads but incur replica lag"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendation recomputation is offloaded to asynchronous Celery workers and isolated in the Personalization Service with a 200ms API timeout and Redis fallback, completely decoupling model execution from user browsing paths.",
+    "elements": [
+     "Personalization Service",
+     "Recommendation Engine",
+     "Event Consumer Worker",
+     "Amazon SQS",
+     "Redis"
+    ],
+    "sensitivity_points": [
+     "Celery worker CPU and memory saturation during recomputation",
+     "Strict 200ms recommendation API fallback timeout"
+    ],
+    "tradeoffs": [
+     "Asynchronous batch inference saves online resources but causes delayed recommendation freshness",
+     "Fast timeouts prioritize browsing speed over personalization accuracy"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Checkout asynchronously emits order events to EventBridge and SQS, completely isolating the Order Service from external shipping APIs. The Notification Service consumes the queue using circuit breakers and dead-letter queues without blocking checkout.",
+    "elements": [
+     "Order & Checkout Service",
+     "Amazon EventBridge and Amazon SQS",
+     "Notification Service",
+     "Dispatch Adapter Component",
+     "FedEx/UPS APIs"
+    ],
+    "sensitivity_points": [
+     "SQS dead-letter queue retention and retry backoff policies",
+     "Circuit breaker trip thresholds on shipping carrier endpoints"
+    ],
+    "tradeoffs": [
+     "Asynchronous shipping decoupling improves availability but introduces eventual consistency for tracking numbers",
+     "Queued dispatching requires idempotent consumer processing"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Route 53, DynamoDB Global Tables, and Aurora Global Database support multi-region operation across three target regions. However, Aurora cross-region storage replication is asynchronous, creating minor failover RTO/RPO risks for active in-flight transactions.",
+    "elements": [
+     "AWS CloudFront/Route 53",
+     "Amazon Aurora PostgreSQL",
+     "Amazon DynamoDB",
+     "AWS API Gateway",
+     "Order & Checkout Service"
+    ],
+    "sensitivity_points": [
+     "Cross-region replication lag between Aurora primary and secondary regions",
+     "Route 53 DNS TTL and health check failover delay"
+    ],
+    "tradeoffs": [
+     "Asynchronous cross-region replication minimizes write latency but risks losing in-flight data during catastrophic failover",
+     "Multi-region active-passive topology adds operational failover complexity"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Currency support is tightly coupled across multiple independent containers and components (SPA Consent & Localization Provider, Catalog Controller, Faceted Navigation Component, Order Controller, and Notification Template Engine), violating clean boundary isolation for new currency additions.",
+    "elements": [
+     "Consent & Localization Provider",
+     "Catalog Controller",
+     "Faceted Navigation Component",
+     "Order Controller",
+     "Template & Localization Engine"
+    ],
+    "sensitivity_points": [
+     "Hardcoded currency enum definitions across polyglot microservices",
+     "Exchange rate caching and synchronization consistency in Redis"
+    ],
+    "tradeoffs": [
+     "Decentralized currency formatting simplifies service self-containment but increases change blast radius",
+     "Decoupled formatting logic requires synchronized multi-service deployments"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Personalization Service isolates inference logic strictly inside the Recommendation Engine component behind stable internal gRPC and REST APIs. Upgrading algorithms or heuristics requires no structural or interface changes in external services.",
+    "elements": [
+     "Personalization Service",
+     "Recommendation Engine",
+     "Recommendation API Router"
+    ],
+    "sensitivity_points": [
+     "Strict contract stability of internal gRPC/REST endpoints",
+     "Resource footprint and inference latency of the replacement model"
+    ],
+    "tradeoffs": [
+     "Encapsulated algorithmic logic enables independent deployments but requires separate model artifact lifecycle management",
+     "Decoupled engine relies on generic feature vectors over bespoke schemas"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "SQL injection and XSS are thoroughly mitigated by the Review Validation & Sanitization Engine (Joi, DOMPurify), Spring Data JPA parameterized queries, OpenSearch query isolation, and Secrets Manager database credential rotation.",
+    "elements": [
+     "Review Validation & Sanitization Engine",
+     "Persistence Adapter",
+     "Search Engine Client",
+     "Amazon OpenSearch",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Thoroughness of Joi and DOMPurify sanitization rule sets",
+     "Parameterization compliance across all dynamic database queries"
+    ],
+    "tradeoffs": [
+     "Strict input sanitization prevents injection attacks but introduces parsing overhead",
+     "Rigid query parameterization constrains ad-hoc complex query composition"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "GDPR/CCPA deletion requests trigger UserAnonymized domain events via EventBridge. Dedicated compliance managers, DynamoDB purge adapters, background TTL evaluators, and Notification preference handlers ensure complete cross-service personal data removal within the 30-day requirement.",
+    "elements": [
+     "Customer Review Service",
+     "Moderation & Compliance Manager",
+     "Amazon EventBridge and Amazon SQS",
+     "Amazon DynamoDB",
+     "Notification Service",
+     "Preference Manager Component"
+    ],
+    "sensitivity_points": [
+     "Event delivery reliability to all data-owning consumers",
+     "DynamoDB TTL evaluation delays and background purge execution times"
+    ],
+    "tradeoffs": [
+     "Asynchronous deletion via EventBridge avoids service lockup but requires verifiable audit logging",
+     "Data tokenization aids privacy compliance but complicates analytic aggregation"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent & Localization Provider",
+     "Moderation & Compliance Manager",
+     "Preference Manager Component",
+     "AWS Backup",
+     "TTL Background Evaluator",
+     "Event Payload Sanitizer / Tokenizer"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Consent & Localization Provider",
+     "Catalog Controller",
+     "Faceted Navigation Component",
+     "Order Controller",
+     "Cache & Idempotency Manager",
+     "Template & Localization Engine"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "FedEx/UPS",
+     "FedEx/UPS APIs",
+     "Notification Service",
+     "Dispatch Adapter Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Component",
+     "Catalog & Search Service",
+     "Catalog Controller",
+     "Search Engine Client",
+     "Faceted Navigation Component",
+     "Amazon OpenSearch",
+     "Search Engine Core",
+     "Ingest Pipeline"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Checkout & Cart Component",
+     "Order & Checkout Service",
+     "Order Controller",
+     "Order Service",
+     "Payment Gateway Client",
+     "Stripe/PayPal",
+     "Session & Cart Store Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Reviews & Recommendations Component",
+     "Customer Review Service",
+     "Review Controller",
+     "Review Validation & Sanitization Engine",
+     "Moderation & Compliance Manager",
+     "Review Data Access Layer"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Reviews & Recommendations Component",
+     "Personalization Service",
+     "Recommendation API Router",
+     "Recommendation Engine",
+     "Event Consumer Worker",
+     "Real-Time Recommendation Cache Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "AWS CloudFront/Route 53",
+     "Regional Caching and Throttling Module",
+     "Redis",
+     "Amazon RDS Proxy",
+     "Aurora Replicas (Read-Scale)",
+     "Aurora Global Database Cluster",
+     "Storage Nodes (Partition Engine)",
+     "Amazon EventBridge and Amazon SQS",
+     "AWS ECS Fargate & Application Load Balancer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "AWS CloudFront/Route 53",
+     "Single Page Application",
+     "Regional Caching and Throttling Module",
+     "Redis",
+     "Cache Facade"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "AWS CloudFront/Route 53",
+     "Aurora Global Database Cluster",
+     "Replication Engine",
+     "SQS Dead-Letter Queues (DLQs)",
+     "Payment Gateway Client"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Authentication Validator",
+     "AWS Cognito/Auth0",
+     "Review Validation & Sanitization Engine",
+     "AWS Secrets Manager",
+     "Rate Limiter Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

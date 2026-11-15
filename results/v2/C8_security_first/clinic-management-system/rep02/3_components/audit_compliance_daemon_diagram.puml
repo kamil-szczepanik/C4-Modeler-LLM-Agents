@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(ComplianceOfficers, "Compliance Officers", "Person / DPO", "Requests audit reports and compliance certificates.")
+
+System_Boundary(AuditComplianceDaemon, "Audit & Compliance Daemon") {
+    Component(AuditComplianceDaemonContainer, "Audit & Compliance Daemon", "Go container", "Manages compliance logging, audit event publishing, and cryptographic validation.")
+    Component(IngestionWorker, "Ingestion Worker", "Go", "Consumes audit streams and validates JWT scopes.")
+    Component(ImmutableLogEngine, "Immutable Log Engine", "Go", "Writes hash-chained audit logs.")
+    Component(ComplianceQueryAPI, "Compliance Query API", "Go / REST", "Serves audit reports and compliance certificates.")
+    Component(ReportGenerator, "Report Generator", "Go", "Verifies cryptographic chain-of-custody and generates PDFs.")
+    Component(KeyManagementIntegrator, "Key Management Integrator", "Go / gRPC", "Integrates with key management services for cryptographic verification.")
+}
+
+Component(MessageBroker, "Message Broker", "NATS JetStream", "Publishes and consumes cryptographically signed audit events.")
+Component(WORMStorage, "WORM Storage", "AWS S3 Object Lock / MinIO", "Enforces tamper-proof 10-year data retention in Compliance Mode.")
+
+Rel(AuditComplianceDaemonContainer, MessageBroker, "Publishes cryptographically signed audit events", "NATS/TCP, mTLS")
+Rel(IngestionWorker, MessageBroker, "Consumes audit streams and validates JWT scopes", "NATS/TCP")
+Rel(ImmutableLogEngine, WORMStorage, "Writes hash-chained audit logs", "S3 API / HTTPS, Compliance Mode")
+Rel(ComplianceOfficers, ComplianceQueryAPI, "Requests audit reports and compliance certificates", "HTTPS / REST, mTLS, OAuth2/OIDC")
+Rel(ReportGenerator, KeyManagementIntegrator, "Verifies cryptographic chain-of-custody", "gRPC / mTLS")
+
+@enduml

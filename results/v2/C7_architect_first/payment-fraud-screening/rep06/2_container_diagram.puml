@@ -1,0 +1,37 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(FraudAnalysts, "Fraud Analysts", "Reviews suspicious cases to make final fraud determinations.")
+Person(DataScientistsRiskManagers, "Data Scientists / Risk Managers", "Updates scoring models and rules to adapt to new fraud patterns.")
+Person(RegulatoryComplianceAuditors, "Regulatory / Compliance Auditors", "Audits system logs and decision inputs for compliance.")
+
+System_Ext(PaymentGatewayAcquirerSystems, "Payment Gateway / Acquirer Systems", "Submits payment authorizations for fraud screening.")
+System_Ext(CardNetworksTokenizationProviders, "Card Networks / Tokenization Providers", "Provides token resolution and network-level integrations.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(APIGateway, "API Gateway", "Nginx / AWS ALB", "Intercepts card-not-present payment authorizations and routes traffic.")
+    Container(FraudScoringEngine, "Fraud Scoring Engine", "Go service with embedded ONNX runtime", "Assesses fraud risk in real-time while balancing sub-50ms latency SLAs.")
+    Container(CaseManagementBackend, "Case Management Backend", "Node.js / Express service", "Handles backend logic for analyst review of suspicious transactions.")
+    Container(ModelRuleManager, "Model/Rule Manager", "Python / FastAPI service", "Manages and updates models and rules with zero-downtime.")
+    ContainerDb(AmazonElastiCacheforRedis, "Amazon ElastiCache for Redis", "Amazon ElastiCache for Redis", "Feature Store for real-time feature lookups.")
+    ContainerDb(AmazonAuroraServerlessv2, "Amazon Aurora Serverless v2", "Amazon Aurora Serverless v2", "Case DB for analyst data access.")
+    ContainerDb(AmazonS3, "Amazon S3", "Amazon S3", "Audit WORM Archives for 7-year audit requirements.")
+    Container(AmazonMSKServerless, "Amazon MSK Serverless", "Amazon MSK Serverless", "Decouples scoring from audit persistence to protect hot-path latency.")
+    Container(AWSECSFargate, "AWS ECS Fargate", "AWS ECS Fargate", "Container orchestration providing serverless scaling.")
+}
+
+Rel(PaymentGatewayAcquirerSystems, APIGateway, "Submits payment authorizations for fraud screening", "HTTPS/JSON")
+Rel(APIGateway, FraudScoringEngine, "Routes authorization requests", "gRPC")
+Rel(FraudScoringEngine, AmazonElastiCacheforRedis, "Performs feature lookups", "TCP")
+Rel(AmazonElastiCacheforRedis, FraudScoringEngine, "Returns feature data", "TCP")
+Rel(FraudScoringEngine, AmazonMSKServerless, "Streams asynchronous audit logs", "TLS")
+Rel(AmazonMSKServerless, AmazonS3, "Persists audit logs via native consumer connectors", "Native connector")
+Rel(AmazonMSKServerless, AmazonAuroraServerlessv2, "Persists data via native consumer connectors", "Native connector")
+Rel(FraudAnalysts, CaseManagementBackend, "Accesses case management for analyst review", "HTTPS")
+Rel(CaseManagementBackend, AmazonAuroraServerlessv2, "Performs analyst data access", "SQL/TCP")
+Rel(AmazonAuroraServerlessv2, CaseManagementBackend, "Returns analyst data", "SQL/TCP")
+Rel(DataScientistsRiskManagers, ModelRuleManager, "Updates scoring models and rules", "HTTPS")
+Rel(ModelRuleManager, FraudScoringEngine, "Performs zero-downtime rules updates", "HTTP/gRPC")
+
+@enduml

@@ -1,0 +1,40 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patients, "Patients", "Users interacting with the clinic system for admissions, scheduling, and personal records.")
+Person(Practitioners, "Practitioners", "Medical practitioners managing EMRs, patient schedules, and treatments.")
+Person(Administrators, "Administrators", "System and clinic administrators managing operations, users, and configurations.")
+
+System_Ext(Insurance_Providers, "Insurance Providers", "External systems for processing billing, claims, and insurance verification.")
+System_Ext(External_Labs_Imaging, "External Labs/Imaging", "External medical laboratories and imaging centers integrating via HL7 FHIR APIs.")
+System_Ext(IAM, "IAM", "Identity and Access Management service for authentication and access control.")
+System_Ext(Centralized_Audit_Logging, "Centralized Audit Logging", "Records audit logs for regulatory compliance and security tracking.")
+System_Ext(DR_Storage, "DR Storage", "Air-gapped disaster recovery storage targets for historical records.")
+System_Ext(Centralized_Secrets_Management, "Centralized Secrets Management", "Stores and retrieves credentials and system secrets securely.")
+
+System_Boundary(Clinic_Management_System, "Clinic Management System") {
+    Container(API_Gateway_Container, "API Gateway Container", "Container, JWT, Rate Limiting", "Single entry point handling routing, authentication, and rate limiting via TLS 1.3.")
+    Container(Core_Domain_Containers, "Core Domain Containers", "Containers, Microservices", "Handles patient registration, EMR, scheduling, and billing business logic.")
+    Container(Read_Model___Query_Container, "Read-Model / Query Container", "Container, CQRS Pattern", "Optimized container for high-throughput reads using the CQRS pattern.")
+    Container(Integration___Adapter_Container, "Integration / Adapter Container", "Container, HL7 FHIR, REST", "Anti-Corruption Layer interfacing with external labs and imaging using HL7 FHIR APIs.")
+    Container(Background_Worker_Container, "Background Worker Container", "Container, Asynchronous Worker", "Performs asynchronous tasks such as PDF generation and bulk claims processing.")
+    Container(Data_Archival___Migration_Container, "Data Archival & Migration Container", "Container, Data Archival", "Offloads and transfers historical records for 10-year retention to DR storage.")
+    Container(Session___State_Management_Container, "Session & State Management Container", "Container, Redis", "Provides Redis-backed distributed locks and session management.")
+    Container(Envoy_Sidecars, "Envoy Sidecars", "Container, Envoy Proxy", "Resilience proxy providing circuit breakers, telemetry injection, and mTLS enforcement.")
+    Container(Asynchronous_Message_Broker, "Asynchronous Message Broker", "Apache Kafka / RabbitMQ", "Handles asynchronous, event-driven messaging and decoupled workflows.")
+}
+
+Rel(Patients, API_Gateway_Container, "Communicate via HTTPS and TLS 1.3", "HTTPS, TLS 1.3")
+Rel(Practitioners, API_Gateway_Container, "Communicate via HTTPS and TLS 1.3", "HTTPS, TLS 1.3")
+Rel(Administrators, API_Gateway_Container, "Communicate via HTTPS and TLS 1.3", "HTTPS, TLS 1.3")
+Rel(API_Gateway_Container, Core_Domain_Containers, "Routes traffic via mTLS", "mTLS")
+Rel(API_Gateway_Container, Read_Model___Query_Container, "Routes read traffic via mTLS", "mTLS")
+Rel(Core_Domain_Containers, Asynchronous_Message_Broker, "Emits events to the asynchronous message broker", "Kafka/RabbitMQ")
+Rel(Asynchronous_Message_Broker, Background_Worker_Container, "Consumes asynchronous tasks", "Kafka/RabbitMQ")
+Rel(External_Labs_Imaging, Integration___Adapter_Container, "Interfaces using HL7 FHIR over REST", "HL7 FHIR over REST")
+Rel(Data_Archival___Migration_Container, DR_Storage, "Transfers historical data to air-gapped targets", "Encrypted Storage Transfer")
+
+@enduml

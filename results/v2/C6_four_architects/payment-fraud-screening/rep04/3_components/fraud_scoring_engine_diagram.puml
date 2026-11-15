@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(alb, "AWS Application Load Balancer (ALB)", "External Load Balancer")
+System_Ext(repo, "Rule/Model Artifact Repository", "External S3 or storage repository")
+System_Ext(messaging, "Asynchronous Messaging", "Amazon SQS")
+
+Container_Boundary(fraud_scoring_engine, "Fraud Scoring Engine") {
+    Component(api_controller, "API Controller", "Spring WebFlux", "Manages HTTP/2 ingress and timeouts.")
+    Component(feature_aggregator, "Feature Aggregator", "Jedis Client", "Queries Amazon ElastiCache Redis and Amazon DynamoDB for real-time velocity metrics.")
+    Component(inference_executor, "Inference Executor", "Microsoft ONNX Runtime", "Executes embedded LightGBM models.")
+    Component(decision_explainer, "Decision Explainer", "Native Java", "Generates SHAP-lite feature attributions synchronously.")
+    Component(audit_logger, "Audit Logger", "Spring Events & Amazon SQS Publisher", "Emits immutable decision records.")
+    Component(hot_reloader, "Model & Rule Hot-Reloader", "Custom File Watcher", "Polls Amazon S3 for dynamic in-memory model swapping.")
+    Component(circuit_breaker, "Circuit Breaker & Fallback Manager", "Resilience4j", "Enforces sub-millisecond degradation policies.")
+}
+
+Rel(alb, api_controller, "Receives authorization requests", "HTTP/2 over TLS")
+Rel(api_controller, circuit_breaker, "Wraps scoring invocation", "in-memory")
+Rel(circuit_breaker, feature_aggregator, "Fetches user and card velocity features", "TCP/Redis")
+Rel(feature_aggregator, inference_executor, "Passes assembled feature vectors", "in-memory execution")
+Rel(api_controller, inference_executor, "Passes assembled feature vectors", "in-memory execution")
+Rel(hot_reloader, repo, "Polls for model binaries and rule artifacts", "HTTPS")
+Rel(inference_executor, decision_explainer, "Forwards raw scores and feature contributions", "in-memory")
+Rel(decision_explainer, audit_logger, "Submits enriched decision records asynchronously", "Spring Events")
+Rel(audit_logger, messaging, "Publishes audit payloads", "HTTPS")
+
+@enduml

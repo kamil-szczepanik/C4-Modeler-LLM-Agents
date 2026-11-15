@@ -1,0 +1,330 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "Elements like EMR Management Component, Scheduling Engine Component, and Billing & Estimation Engine cover R-01 to R-04 well. However, explicit mechanisms for resource clash detection in scheduling are minimally specified.",
+   "performance_efficiency": "The Clinical Session Cache Component (Redis with AES-GCM), PgBouncer connection pooler, and asynchronous event streaming via Event Broker Component directly support the sub-second EMR P95 latency target.",
+   "compatibility": "The FHIR Ingress/Egress Router and Data Transformation Engine use Apache Camel to strictly implement HL7 FHIR APIs for Lab & Imaging Systems, alongside standard OAuth2/OIDC integrations with Identity Provider.",
+   "usability": "The Patient Portal provides targeted interfaces for patients, but internal personas (Clinicians, Receptionists, Billing Specialists) connect directly to the API Gateway without dedicated staff portal or UI client containers defined.",
+   "reliability": "CloudNativePG, DLQ Manager, and Event Broker Component provide high resilience. However, an explicit cross-region active-active database replication mechanism between on-prem-k8s and eu-central-1 is missing to prove 99.99% uptime.",
+   "security": "MFA, AES-256 at rest via HashiCorp Vault, WORM Object Storage for 10-year audits, Consent & Policy Enforcement (OPA), and Istio mTLS thoroughly fulfill HIPAA and GDPR security constraints.",
+   "maintainability": "Clean separation of concerns across Core Clinical Service, Billing & Scheduling Service, and Integration / Interoperability Service. GitOps Engine (ArgoCD) and Telemetry Collector facilitate modular lifecycle management.",
+   "portability": "Containerized workloads, CloudNativePG, and Istio allow seamless execution on on-prem-k8s and cloud environments, though tight binding to AWS S3 Object Lock slightly limits multi-cloud portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 3,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.0,
+   "Modifiability": 4.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture incorporates Redis caching with AES-GCM encryption in the Core Clinical Service alongside PgBouncer connection pooling to offload Postgres, meeting the sub-second P95 latency target.",
+    "elements": [
+     "Core Clinical Service",
+     "Clinical Session Cache Component",
+     "EMR Management Component",
+     "Connection Pooler",
+     "Relational Database"
+    ],
+    "sensitivity_points": [
+     "Redis cache hit ratio for active clinician sessions",
+     "PgBouncer connection limits during concurrent bursts"
+    ],
+    "tradeoffs": [
+     "Memory consumption and short cache TTLs vs. immediate clinical data freshness"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Integration Service uses Apache Camel and Kafka event streaming to buffer and asynchronously ingest HL7 FHIR payloads, isolating background ingestion throughput from interactive EMR query workloads.",
+    "elements": [
+     "Integration / Interoperability Service",
+     "FHIR Ingress/Egress Router",
+     "Data Transformation Engine",
+     "Event Broker Component",
+     "Core Clinical Service"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer lag and partition scaling under high ingest volume",
+     "Batch commit frequency into PostgreSQL"
+    ],
+    "tradeoffs": [
+     "Asynchronous eventual consistency of lab results vs. guaranteed sub-second EMR UI response"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The model specifies a hybrid setup, but AWS is primarily modeled as a backup/WORM archive rather than a live active-active application replica, leaving cross-region failover and synchronization under-specified.",
+    "elements": [
+     "AWS Cloud Infrastructure",
+     "API Gateway / Reverse Proxy",
+     "Data Storage Layer",
+     "GitOps Engine"
+    ],
+    "sensitivity_points": [
+     "Cross-site replication latency between on-prem-k8s and eu-central-1",
+     "Automated DNS and ingress failover convergence times"
+    ],
+    "tradeoffs": [
+     "Synchronous cross-region database replication overhead vs. zero RPO data loss requirement"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "CloudNativePG provides automated failover within 30 seconds, while asynchronous claim dispatch via Kafka allows message buffering, replayability, and safe retries without losing submissions.",
+    "elements": [
+     "Relational Database",
+     "Connection Pooler",
+     "Billing & Scheduling Service",
+     "Event Broker Component"
+    ],
+    "sensitivity_points": [
+     "CloudNativePG election and promotion timeout settings",
+     "Idempotency handling in billing claim producers and consumers"
+    ],
+    "tradeoffs": [
+     "Strict transactional idempotency checks vs. claim processing throughput"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Insurance gateways are directly integrated via the Billing & Scheduling Service rather than through the dedicated Integration Service, requiring changes inside the billing service itself, though EMR remains unaffected.",
+    "elements": [
+     "Billing & Scheduling Service",
+     "Billing & Estimation Engine Component",
+     "Event Broker Component",
+     "Insurance Payment Gateways"
+    ],
+    "sensitivity_points": [
+     "Coupling between billing domain logic and external payment gateway protocols"
+    ],
+    "tradeoffs": [
+     "Direct integration inside billing service vs. centralized interoperability routing"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Adding an audited demographic field cleanly maps to exactly three components: Registration & Profile Manager (UI), EMR Management Component, and the Relational Database schema, supported by standard GitOps deployment.",
+    "elements": [
+     "Registration & Profile Manager",
+     "EMR Management Component",
+     "Relational Database",
+     "Audit & Compliance Component"
+    ],
+    "sensitivity_points": [
+     "Backward compatibility of schema migrations in PostgreSQL via CloudNativePG"
+    ],
+    "tradeoffs": [
+     "Schema modification overhead and data migration vs. rapid single-sprint delivery"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Authentication mandates MFA via the external IdP and JWT validation at the API Gateway; failed authentication events trigger OpenTelemetry traces and Prometheus security alerts within 1 minute.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "OIDC/JWT Validation Engine",
+     "WAF & Security Inspector",
+     "Telemetry Collector & Monitoring"
+    ],
+    "sensitivity_points": [
+     "Strictness of MFA enforcement policies on the external IdP",
+     "Latency of Prometheus alert rule evaluation and firing"
+    ],
+    "tradeoffs": [
+     "Strict MFA enforcement latency vs. frictionless user authentication experience"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Audit & Compliance Component emits immutable audit events to Kafka and S3 WORM storage with 10-year retention; however, runtime policy checks are primarily defined in Interoperability rather than Core Clinical.",
+    "elements": [
+     "Core Clinical Service",
+     "Audit & Compliance Component",
+     "Event Broker Component",
+     "Object Storage",
+     "Consent & Policy Enforcement"
+    ],
+    "sensitivity_points": [
+     "Coverage of relationship-based access control inside the Core Clinical Service",
+     "Durability guarantees of S3 WORM Object Lock configuration"
+    ],
+    "tradeoffs": [
+     "Synchronous policy validation overhead on every read vs. audit-only break-glass access"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Compliance Auditors / Data Protection Officers (DPOs)",
+     "Audit & Compliance Component",
+     "Consent & Policy Enforcement",
+     "Audit Interceptor",
+     "Object Storage",
+     "WAF & Security Inspector"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Relational Database",
+     "Event Broker Component",
+     "Routing & Upstream Load Balancer",
+     "Data Storage Layer"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AWS Cloud Infrastructure",
+     "Object Storage"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Receptionists / Front Desk",
+     "Patient Portal",
+     "Registration & Profile Manager"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Appointment Self-Service UI",
+     "Billing & Scheduling Service",
+     "Scheduling Engine Component",
+     "Rescheduling & Waitlist Sub-component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Clinicians / Doctors",
+     "Core Clinical Service",
+     "EMR Management Component",
+     "Audit & Compliance Component",
+     "Data Storage Layer"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Specialists",
+     "Billing & Scheduling Service",
+     "Billing & Estimation Engine Component",
+     "Insurance Payment Gateways"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Patient Authentication Controller",
+     "OIDC/JWT Validation Engine",
+     "Secret Management",
+     "Data Storage Layer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Data Storage Layer",
+     "Relational Database",
+     "Routing & Upstream Load Balancer"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Clinical Session Cache Component",
+     "Core Clinical Service",
+     "Connection Pooler"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration / Interoperability Service",
+     "FHIR Ingress/Egress Router",
+     "Data Transformation Engine",
+     "Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

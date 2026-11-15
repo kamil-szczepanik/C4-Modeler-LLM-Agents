@@ -1,0 +1,41 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Online Bookstore System
+
+Person(Shopper, "Shopper", "End-user browsing catalogues, managing carts, purchasing books, and leaving reviews.")
+Person(Administrator, "Administrator", "Staff managing catalogue inventory, pricing, and content moderation.")
+
+System_Ext(ThirdPartyPaymentGateway, "Third-Party Payment Gateway", "External PCI-DSS compliant system for secure checkout and tokenized payments.")
+System_Ext(ThirdPartyShippingProvider, "Third-Party Shipping Provider", "External logistics service handling fulfillment dispatch and tracking.")
+System_Ext(ThirdPartyCurrencyExchangeService, "Third-Party Currency Exchange Service", "External provider supplying real-time conversion rates.")
+System_Ext(ThirdPartyRecommendationEngine, "Third-Party Recommendation Engine", "External service powering cross-selling features.")
+
+System_Boundary(OnlineBookstoreSystem, "Online Bookstore System") {
+    Container(FrontendApp, "Frontend App", "React SPA, Amazon CloudFront, Amazon S3", "Delivers the user interface for shoppers and administrators.")
+    Container(AmazonAPIGateway, "Amazon API Gateway", "Amazon API Gateway", "Single entry point and rate limiter for backend services.")
+    Container(CatalogService, "Catalog Service", "Node.js, AWS ECS Fargate", "Manages book catalog data and retrieval.")
+    Container(OrderCheckoutService, "Order & Checkout Service", "Java, Spring Boot, AWS ECS Fargate", "Handles secure global checkout and order processing.")
+    Container(RecommendationService, "Recommendation Service", "Python, FastAPI, AWS ECS Fargate", "Provides personalized recommendations to shoppers.")
+    ContainerDb(AmazonAuroraPostgreSQL, "Amazon Aurora PostgreSQL", "Amazon Aurora PostgreSQL", "Multi-region transactional database persistence.")
+    ContainerDb(AmazonOpenSearch, "Amazon OpenSearch", "Amazon OpenSearch", "Provides keyword search capabilities.")
+}
+
+Rel(Shopper, FrontendApp, "Browses and interacts with the store", "HTTPS/JSON via browser")
+Rel(Administrator, FrontendApp, "Administers the platform", "HTTPS/JSON via browser")
+Rel(FrontendApp, AmazonAPIGateway, "Sends API requests with edge currency routing", "HTTPS/JSON")
+Rel(AmazonAPIGateway, CatalogService, "Forwards catalog requests with JWT validation", "HTTPS via AWS App Mesh")
+Rel(AmazonAPIGateway, OrderCheckoutService, "Forwards order and checkout requests with JWT validation", "HTTPS via AWS App Mesh")
+Rel(AmazonAPIGateway, RecommendationService, "Forwards recommendation requests with JWT validation", "HTTPS via AWS App Mesh")
+Rel(CatalogService, AmazonAuroraPostgreSQL, "Persists and retrieves catalog data", "TLS with IAM authentication")
+Rel(CatalogService, AmazonOpenSearch, "Indexes and searches catalog items", "TLS with IAM authentication")
+Rel(OrderCheckoutService, AmazonAuroraPostgreSQL, "Persists order and transactional data", "TLS with IAM authentication")
+Rel(OrderCheckoutService, ThirdPartyPaymentGateway, "Processes secure payments", "HTTPS/REST")
+Rel(OrderCheckoutService, ThirdPartyShippingProvider, "Coordinates fulfillment dispatch", "HTTPS/REST")
+Rel(RecommendationService, ThirdPartyCurrencyExchangeService, "Retrieves real-time currency conversion rates", "HTTPS/REST")
+Rel(RecommendationService, ThirdPartyRecommendationEngine, "Fetches advanced recommendation data with circuit breakers", "HTTPS API calls with Envoy")
+Rel(CatalogService, OrderCheckoutService, "Communicates internally between microservices", "gRPC over mTLS")
+Rel(OrderCheckoutService, RecommendationService, "Communicates internally between microservices", "gRPC over mTLS")
+
+@enduml

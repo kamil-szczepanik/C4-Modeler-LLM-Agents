@@ -1,0 +1,261 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.875,
+  "justifications": {
+   "functional_suitability": "Catalogue Management Component handles item CRUD in PostgreSQL, and Catalogue & Search Service fetches digital assets via Digital Repository / DRM Provider, so R-01 (physical and digital items) is covered. Circulation & User Service adds loans and fines. Gaps: no explicit physical vs digital item model.",
+   "performance_efficiency": "Search Query Component uses Elasticsearch, Search Indexer Component syncs asynchronously via Kafka, CloudFront caches assets, React Query caches client-side, PgBouncer pools connections, and RUM monitoring exists. Gaps: no explicit autoscaling, and no load-test or latency budget for the 800 ms P99 target.",
+   "compatibility": "Integrates with External Payment Gateway (REST/TLS), Digital Repository / DRM Provider (async REST), External Notification Service (mTLS), and standard protocols (OIDC, gRPC, Avro, OTLP). Gaps: no anti-corruption adapter for DRM and no standard library interoperability protocols such as MARC or Z39.50.",
+   "usability": "Web Application provides separate patron and staff views via Router & Layout Component and a Circulation & Self-Service Portal Module, plus Core Web Vitals monitoring. Gaps: no accessibility, mobile or multilingual mechanisms, and no dedicated staff or kiosk interface.",
+   "reliability": "Kafka Broker Nodes span 3 AZs, Multi-AZ Redis serves rate limiting, Retry & DLQ Manager Component and the Search Indexer DLQ handle failures, and asynchronous decoupling is used. Gaps: no explicit database replication or backup/failover, no circuit breakers, and no DR/RTO targets.",
+   "security": "Authentication & Authorization Filter does JWT validation, with OIDC and HttpOnly cookies in Authentication & Session Manager, mTLS gRPC, TLS 1.3, WAF/DDoS at CloudFront, Secrets Manager, Kafka SASL/ACLs, tokenized payments, PII-scrubbed DLQ, audit logs via Kafka, and Zod validation.",
+   "maintainability": "Clear service decomposition (Catalogue & Search, Circulation & User, Notification Worker), event-driven decoupling via Apache Kafka, Schema Registry, Flyway/Liquibase migrations, and OTel tracing. Gaps: shared Database across services creates coupling, and mixed Go/Java stacks plus inconsistent technology labels.",
+   "portability": "Terraform/OpenTofu and open technologies (PostgreSQL, Kafka, Kong, Elasticsearch) help portability. However, heavy AWS reliance (MSK, RDS, CloudFront, Secrets Manager, Glue) creates lock-in, and there are no containerisation or orchestration details."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 2,
+   "MOD-02": 1,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.375,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 2.0,
+   "Modifiability": 1.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "AWS CloudFront Frankfurt",
+     "API Gateway",
+     "Search Query Component",
+     "Catalogue & Search Service",
+     "Elasticsearch"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch sizing and sharding unspecified",
+     "Elasticsearch deployment ambiguous (modelled as Database relation)"
+    ],
+    "tradeoffs": [
+     "Eventual-consistency indexing vs low-latency dedicated search",
+     "Gateway JWT and mTLS hops add latency"
+    ],
+    "justification": "Dedicated Elasticsearch search path, stateless JWT validation, and rate limiting support low latency. But no search-result caching, replica/shard sizing, autoscaling or load test evidence for 2,000 concurrent users; P99 is unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "elements": [
+     "Catalogue Management Component",
+     "Search Indexer Component",
+     "Apache Kafka (AWS MSK)",
+     "Search Query Component",
+     "Elasticsearch"
+    ],
+    "sensitivity_points": [
+     "Indexer consumer lag under write bursts",
+     "Indexing load competing with search queries on Elasticsearch"
+    ],
+    "tradeoffs": [
+     "Async indexing decouples writes but delays searchability",
+     "DLQ protects the pipeline but can leave items unindexed"
+    ],
+    "justification": "Writes go to PostgreSQL and are asynchronously indexed through Kafka, with a DLQ, keeping the read path separate. A 5-minute freshness is plausible. Lag monitoring, DLQ replay and index/search isolation are not specified."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "Elasticsearch",
+     "Search Query Component",
+     "Catalogue & Search Service",
+     "Database",
+     "Apache Kafka (AWS MSK)"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster topology and replicas undefined",
+     "Failover detection time vs 1-minute limit"
+    ],
+    "tradeoffs": [
+     "Replica count raises resilience but increases cost and indexing load",
+     "Kafka decoupling aids loans but not search"
+    ],
+    "justification": "Elasticsearch has no stated clustering, replicas or failover, so a node failure could interrupt search. Circulation uses PostgreSQL and Kafka (3 AZ), but database HA/Multi-AZ is not stated and no explicit loan durability mechanism is given. Weakly addressed."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Web Application",
+     "AWS CloudFront Frankfurt",
+     "API Gateway",
+     "Circulation & User Service"
+    ],
+    "sensitivity_points": [
+     "Number of service instances not specified",
+     "No load balancer or health checks modelled"
+    ],
+    "tradeoffs": [
+     "Static SPA via CDN is highly available",
+     "Stateless services scale but require session handling via cookies"
+    ],
+    "justification": "The SPA is served by a CDN, so the front end is resilient, and the gateway rate limiter is Multi-AZ. But the brief's 'portal instance' failure is not addressed: no replicas, load balancing, health checks or orchestration is modelled. Loan durability depends on an unspecified database HA."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "elements": [
+     "Catalogue & Search Service",
+     "Digital Repository / DRM Provider",
+     "Catalogue Management Component"
+    ],
+    "sensitivity_points": [
+     "Provider integration is embedded in Catalogue & Search Service",
+     "No provider adapter abstraction"
+    ],
+    "tradeoffs": [
+     "Fewer containers is simpler but couples integrations to the catalogue",
+     "Single DRM interface hides provider differences, if one exists"
+    ],
+    "justification": "A single DRM/repository link exists, but no dedicated integration component or provider-adapter abstraction. A new provider would likely change the catalogue service internals, not one confined component. Feasible with moderate rework."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 1,
+    "elements": [
+     "Loan Management Component",
+     "Circulation & User Service",
+     "Database"
+    ],
+    "sensitivity_points": [
+     "Loan rules location undefined; likely hardcoded in Go",
+     "No rules engine or configuration store"
+    ],
+    "tradeoffs": [
+     "Hardcoded rules are fast and simple but need redeploys",
+     "Configurable rules add flexibility but complexity"
+    ],
+    "justification": "No rules engine, configuration service, or per-library policy store is modelled. Loan rules are implicitly within Loan Management code, so differing rules would need code changes and redeployment, contrary to the runtime configuration requirement."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "AWS CloudFront Frankfurt",
+     "Relational Data Store",
+     "Apache Kafka (AWS MSK)",
+     "External Notification Service",
+     "External Payment Gateway",
+     "Digital Repository / DRM Provider"
+    ],
+    "sensitivity_points": [
+     "External providers' hosting regions are unspecified",
+     "CloudFront is global with edge locations outside the EU",
+     "Egress controls described only for notifications"
+    ],
+    "tradeoffs": [
+     "Managed AWS services ease operations but depend on region configuration",
+     "Third-party notification delivery may leave the EU"
+    ],
+    "justification": "RDS Frankfurt, MSK and Frankfurt endpoints support EU storage, and egress filtering exists. But no preventive guardrails (SCPs, region policies) are shown, CloudFront edge caching is global, and external notification/payment providers are not constrained to the EU."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Authentication & Authorization Filter",
+     "API Gateway",
+     "Loan Management Component",
+     "Circulation & User Service",
+     "Observability & Tracing Agent"
+    ],
+    "sensitivity_points": [
+     "Object-level ownership check not modelled in Loan Management",
+     "Denied-access audit logging not explicit"
+    ],
+    "tradeoffs": [
+     "Gateway-only JWT validation is fast but cannot enforce per-record ownership",
+     "Audit via Kafka is decoupled but asynchronous"
+    ],
+    "justification": "JWT validation and claims propagation authenticate patrons, and gateway access logs go to Kafka. But no component enforces patron-to-loan ownership authorization or explicitly logs denied attempts, leaving the core requirement unaddressed."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "R-01": "full",
+   "R-05": "partial"
+  },
+  "coverage": 0.6666666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "AWS CloudFront Frankfurt",
+     "Database",
+     "Relational Data Store",
+     "Rate Limiting & Throttling Module",
+     "Apache Kafka (AWS MSK)"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalogue & Search Service",
+     "Catalogue Management Component",
+     "Search Query Component",
+     "Search Indexer Component",
+     "Digital Repository / DRM Provider",
+     "Database"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Catalogue & Search Service",
+     "Search Query Component",
+     "Search Indexer Component",
+     "Connection Pooler",
+     "Catalogue & Search UI Module",
+     "Performance Monitoring and Real User Monitoring",
+     "AWS CloudFront Frankfurt"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

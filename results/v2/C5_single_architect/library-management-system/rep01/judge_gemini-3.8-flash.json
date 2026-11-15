@@ -1,0 +1,240 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 3,
+   "usability": 4,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "Catalog Management Component, Circulation Component, and Web Application satisfy R-01 and general circulation. However, integration with 'Digital Content Providers / e-Book Vendors' is defined at Context level but omitted in Container and Component relationship definitions.",
+   "performance_efficiency": "R-05 (<800ms search) is strongly targeted via a dedicated Elasticsearch Search Service, Caffeine Query Cache Layer, Redis Rate Limiting, PgBouncer connection pooling, and direct API Gateway routing bypassing relational queries.",
+   "compatibility": "Integrations with Payment Gateway and Notification Service are defined, but e-Book Vendors is completely disconnected in Level 2 and 3 diagrams. Standard library interoperability protocols (e.g., MARC21, Z39.50, OAI-PMH) are entirely unaddressed.",
+   "usability": "Patrons and Librarians access tailored functions via the Web Application container, which separates Catalogue & Search and Circulation & Self-Service components. Distinct operational needs across physical kiosks and mobile portals are not further differentiated.",
+   "reliability": "The Notification Worker implements a Retry & Dead-Letter Handler, and Redis references a Sentinel Interface. However, high-availability and failover topologies for PostgreSQL, Elasticsearch, and the Core Business Service are not detailed.",
+   "security": "Strict EU data residency is explicitly managed across perimeter SSL/TLS termination, pgAudit logging, and Compliance Sanitizer components. Kong JWT/OAuth2 provides robust edge authentication and role-based access control.",
+   "maintainability": "The system shows excellent modular decomposition. The API Gateway cleanly decouples search, core business, and notification domains with standard interfaces (REST, gRPC), isolating distinct responsibilities into modular containers and components.",
+   "portability": "Containers use portable, open runtime technologies (Java, Node.js, PostgreSQL, React) deployable across EU cloud or on-premise environments, with no proprietary vendor lock-in compromising the residency constraint."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.625,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 2.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture routes search directly from API Gateway to Elasticsearch Search Service, bypassing the business service, and includes a Caffeine Query Cache Layer to sustain low latency under 2,000 concurrent queries.",
+    "elements": [
+     "Web Application",
+     "API Gateway",
+     "Routing & Load Balancing Component",
+     "Search Service",
+     "Search API Application",
+     "Query Cache Layer"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in Query Cache Layer",
+     "Elasticsearch cluster indexing and query capacity"
+    ],
+    "tradeoffs": [
+     "Memory consumption for Caffeine query caching versus search response latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Catalog Management updates PostgreSQL and pushes metadata updates to Search Service via REST, making items searchable well within 5 minutes while dedicated search infrastructure shields patron read queries.",
+    "elements": [
+     "Catalog Management Component",
+     "Search Service",
+     "Database",
+     "Redis Cache"
+    ],
+    "sensitivity_points": [
+     "Synchronous REST overhead from Catalog Management Component to Search Service"
+    ],
+    "tradeoffs": [
+     "Direct REST indexing updates simplicity versus write throughput during peak load"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Circulation and search are decoupled into separate containers. Database persistence handles circulation transactions independently of Elasticsearch node failures, preventing loan transaction loss.",
+    "elements": [
+     "Search Service",
+     "Core Business Service",
+     "Circulation Component",
+     "Database",
+     "Relational Storage Engine"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch replica shard configuration for seamless node failover"
+    ],
+    "tradeoffs": [
+     "Resource cost of search cluster replication versus high search availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Web Application instances are stateless frontends fronted by an API Gateway load balancer. Failure of a frontend instance allows immediate rerouting without interrupting circulation or losing database transactions.",
+    "elements": [
+     "Web Application",
+     "API Gateway",
+     "Routing & Load Balancing Component",
+     "Core Business Service",
+     "Circulation Component"
+    ],
+    "sensitivity_points": [
+     "Stateless web client deployment and rapid gateway health check failover"
+    ],
+    "tradeoffs": [
+     "Client-side state reconstruction versus server-side session affinity overhead"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "No dedicated e-book integration component exists in Core Business Service. Incorporating a new vendor requires directly modifying the Catalog Management Component, failing the single-integration-component constraint.",
+    "elements": [
+     "Core Business Service",
+     "Catalog Management Component",
+     "Digital Content Providers / e-Book Vendors"
+    ],
+    "sensitivity_points": [
+     "Coupling between catalog management domain logic and vendor-specific content APIs"
+    ],
+    "tradeoffs": [
+     "Monolithic catalog component simplicity versus extensible vendor adapter plugin architecture"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "Circulation rules are embedded within Spring Transactions in the Circulation Component. The architecture provides no dynamic rule engine or externalized runtime configuration mechanism to alter loan policies without redeployment.",
+    "elements": [
+     "Circulation Component",
+     "Core Business Service"
+    ],
+    "sensitivity_points": [
+     "Hardcoded business logic within Circulation Component versus externalized rule engine"
+    ],
+    "tradeoffs": [
+     "Compiled Java transaction performance versus dynamic configuration flexibility"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The architecture explicitly assigns EU-only infrastructure boundaries across the API Gateway, Relational Storage Engine, and Search Service, complemented by a Compliance Sanitizer component in the notification pipeline.",
+    "elements": [
+     "API Gateway",
+     "SSL/TLS Termination Component",
+     "Database",
+     "Relational Storage Engine",
+     "Search Service",
+     "Notification Worker",
+     "Compliance Sanitizer Component"
+    ],
+    "sensitivity_points": [
+     "Strict hosting of all infrastructure components exclusively within EU regions"
+    ],
+    "tradeoffs": [
+     "Constrained cloud region deployment choices versus strict regulatory compliance guarantees"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "The API Gateway verifies JWTs and pgAudit logs database queries, but the architecture lacks explicit fine-grained object-level authorization (ownership validation) and application-level security audit logging for unauthorized access attempts.",
+    "elements": [
+     "Authentication & Authorization Component",
+     "Circulation Component",
+     "Audit Logging Extension",
+     "Database"
+    ],
+    "sensitivity_points": [
+     "Enforcement of patron-to-resource ownership checks in Core Business Service"
+    ],
+    "tradeoffs": [
+     "Fine-grained domain authorization overhead versus edge authentication simplicity"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Database",
+     "Relational Storage Engine",
+     "SSL/TLS Termination Component",
+     "Search API Application"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog Management Component",
+     "Catalogue & Search",
+     "Digital Content Providers / e-Book Vendors",
+     "Core Business Service"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Service",
+     "Search API Application",
+     "Query Cache Layer",
+     "Rate Limiting & Throttling Component",
+     "Catalogue & Search"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

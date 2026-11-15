@@ -1,0 +1,325 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Scoring Engine Container evaluates transactions (R-01), Case Management Backend and UI handle analyst reviews (R-02), and Rule & Model Distribution Service enables dynamic hot-reloading without downtime (R-03).",
+   "performance_efficiency": "The sub-50ms P99 target at 3,000 TPS is well supported by high-performance Rust in the Wasm Execution Runtime, low-latency Amazon ElastiCache Redis feature lookups, and asynchronous offloading via Audit Writer Sidecar.",
+   "compatibility": "Interoperability is thoroughly addressed with standardized interfaces: gRPC and HTTPS for Payment Processor Systems, OIDC for the Identity Provider, and native AWS SDK/REST integrations for S3 and SageMaker Model Registry.",
+   "usability": "Fraud analysts and compliance officers are directly served by the Case Management UI, featuring specialized components including Case Workspace, Queue Analytics, and an Audit & Explainability View powered by D3.js.",
+   "reliability": "While Audit Writer Sidecar provides local ring buffering and DLQs, the architecture lacks an explicit fallback, circuit breaker, or fail-open mechanism in AWS API Gateway / Envoy to prevent blocking payments during scoring outages (R-07).",
+   "security": "Security is robust: Wasm Tokenization Engine strips cardholder data at ingress, AWS KMS CMK encrypts data at rest, mTLS protects internal transit, and QLDB/S3 Object Lock ensures 7-year immutable, tamper-evident audit records.",
+   "maintainability": "Modular domain separation and managed AWS services reduce operational burden for three engineers. However, managing a polyglot stack across Rust, Go, Python, and TypeScript creates maintenance friction for a small team.",
+   "portability": "The design deploys cleanly into AWS eu-west-1 using ECS Fargate, Lambda, and S3, though deep coupling with proprietary services like Amazon QLDB and AWS KMS limits migration or multi-cloud portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Rust/Go scoring runtime with in-memory Redis feature lookups and asynchronous audit dispatch ensures hot path execution finishes well within 50 ms at 3,000 TPS.",
+    "elements": [
+     "Edge Router & Ingestion Handler",
+     "Wasm Tokenization Engine",
+     "Scoring Engine Container",
+     "Wasm Execution Runtime",
+     "Feature Fetcher",
+     "Amazon ElastiCache"
+    ],
+    "sensitivity_points": [
+     "In-memory Redis lookup latency",
+     "Wasm runtime execution overhead"
+    ],
+    "tradeoffs": [
+     "In-memory feature storage increases infrastructure cost to meet strict P99 latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Complete decoupling of Case Management (Aurora PostgreSQL) from the synchronous scoring path (Rust/Redis) prevents analyst workload contention, preserving sub-50ms scoring and sub-2s case loading.",
+    "elements": [
+     "Case Management UI",
+     "Case Management Backend",
+     "Amazon Aurora PostgreSQL",
+     "Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Database read capacity on Aurora PostgreSQL under heavy analyst query load"
+    ],
+    "tradeoffs": [
+     "Data duplication between operational scoring datastores and case management relational storage"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "No fallback scoring logic or circuit-breaker routing is defined in API Gateway/Envoy or Scoring Engine to decide payments when the engine crashes.",
+    "elements": [
+     "AWS API Gateway / Envoy",
+     "Edge Router & Ingestion Handler",
+     "Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Lack of circuit-breaker fallback routing at ingress layer"
+    ],
+    "tradeoffs": [
+     "Omitting stand-in fallback logic simplifies edge proxies but risks payment blocking on engine failure"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Asynchronous audit dispatch to a dedicated sidecar with mmap ring buffering and DLQ decouples scoring from audit store degradation, guaranteeing zero record loss and stable latency.",
+    "elements": [
+     "Audit Dispatcher",
+     "Audit Writer Sidecar / Async Worker",
+     "Local Ring Buffer & Persistence Manager",
+     "DLQ & Metric Forwarder",
+     "Immutable Storage Client"
+    ],
+    "sensitivity_points": [
+     "Local disk buffer capacity during sustained audit store outages"
+    ],
+    "tradeoffs": [
+     "Asynchronous buffering risks small lag in audit durability to protect scoring latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Hot-reloading of verified Wasm artifacts via Rule & Model Distribution Service enables zero-downtime model deployments, rapid rollback, and explicit tracking of model versions in decision logs.",
+    "elements": [
+     "Rule & Model Distribution Service",
+     "Distribution Coordinator",
+     "Wasm Execution Runtime",
+     "QLDB Journal Ledger"
+    ],
+    "sensitivity_points": [
+     "Atomic reloading of Wasm execution runtime without dropping in-flight requests"
+    ],
+    "tradeoffs": [
+     "Compiling models to Wasm adds build complexity but enables safe zero-downtime hot reloading"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Wasm rules are validated, compiled, and hot-reloaded dynamically into the scoring runtime, while decision payloads log applied rules and features without service restarts.",
+    "elements": [
+     "Rule & Model Distribution Service",
+     "Model Validation & Compilation Worker",
+     "Wasm Execution Runtime",
+     "Audit Dispatcher"
+    ],
+    "sensitivity_points": [
+     "Rule validation and compilation pipeline latency"
+    ],
+    "tradeoffs": [
+     "Compiling rules through a formal validation pipeline slows publication slightly but guarantees runtime safety"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Wasm tokenization prevents card number exposure to analysts, but automated anomalous analyst behavior detection and 15-minute alerting mechanisms are not architected in the case management components.",
+    "elements": [
+     "Wasm Tokenization Engine",
+     "Case Management Backend",
+     "Identity Provider",
+     "Audit Logger Component"
+    ],
+    "sensitivity_points": [
+     "Absence of behavioral anomaly detection and rapid alerting mechanisms"
+    ],
+    "tradeoffs": [
+     "Early edge tokenization reduces PCI-DSS scope across internal services"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "S3 Object Lock in Compliance Mode paired with QLDB cryptographic ledger preserves immutable decision metadata, inputs, and explanations for 7 years, enabling rapid compliance retrieval.",
+    "elements": [
+     "AWS QLDB / S3 Object Lock",
+     "QLDB Journal Ledger",
+     "S3 Compliance Vault",
+     "AWS KMS"
+    ],
+    "sensitivity_points": [
+     "Retention policy enforcement and index efficiency over long-term archive"
+    ],
+    "tradeoffs": [
+     "Dual-storage in QLDB and S3 Object Lock increases complexity and cost for immutable auditability"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "none"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Wasm Tokenization Engine",
+     "Security & Encryption Module",
+     "S3 Compliance Vault",
+     "AWS KMS"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "AWS QLDB / S3 Object Lock",
+     "QLDB Journal Ledger",
+     "S3 Compliance Vault",
+     "Audit Dispatcher",
+     "Tamper-Evident Formatter & Signer"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Scoring Engine Container",
+     "Case Management UI",
+     "Amazon ElastiCache"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Case Management Backend",
+     "Case Management UI",
+     "AWS QLDB / S3 Object Lock"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "AWS API Gateway / Envoy",
+     "Edge Router & Ingestion Handler",
+     "Scoring Engine Container",
+     "Wasm Execution Runtime"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management UI",
+     "Case Management Backend",
+     "Case Workspace Component",
+     "Case Service",
+     "SLA Worker / Scheduler Component",
+     "Queue Analytics & Filtering Engine Component",
+     "Amazon Aurora PostgreSQL"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Rule & Model Distribution Service",
+     "Distribution Coordinator",
+     "Model Validation & Compilation Worker",
+     "Distribution API",
+     "Wasm Execution Runtime"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scoring Engine Container",
+     "Wasm Execution Runtime",
+     "Feature Fetcher",
+     "Amazon ElastiCache",
+     "In-Memory Feature Store"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Wasm Tokenization Engine",
+     "AWS API Gateway / Envoy",
+     "Security & Encryption Module"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Dispatcher",
+     "Audit Writer Sidecar / Async Worker",
+     "Tamper-Evident Formatter & Signer",
+     "Audit Ingestion Service",
+     "QLDB Journal Ledger",
+     "S3 Compliance Vault"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

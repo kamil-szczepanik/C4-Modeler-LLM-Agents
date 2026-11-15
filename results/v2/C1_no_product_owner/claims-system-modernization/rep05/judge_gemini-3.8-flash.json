@@ -1,0 +1,314 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01, R-02, and R-03 thoroughly. The Claims Web Application serves Customers, Brokers, and Claims Adjusters, while the Integration & Anti-Corruption Layer and Routing Registry Component explicitly manage the incremental migration of claim types.",
+   "performance_efficiency": "R-05 is directly met by decoupling adjuster reads from the 5-second mainframe response via Read Model Projections in the New Claims Database, asynchronous message handling via Azure Service Bus, and client-side caching in the Claim Form & Validation Component.",
+   "compatibility": "The Mainframe Adapter and Claim Translation Component form an effective Anti-Corruption Layer connecting to the COBOL/DB2 mainframe over ExpressRoute/mTLS. Coexistence is well-architected, and SSO integration with on-premise Active Directory is supported via standard OIDC/SAML protocols.",
+   "usability": "All target personas (Customers, Brokers, Adjusters) are provided dedicated interaction paths through the Claims Dashboard and Claim Form components with RBAC routing. However, hosting both public submission and internal adjuster workflows in a single web application container introduces minor usability compromises.",
+   "reliability": "R-04 is achieved through the Outbox Schema, Sync & Reconciliation Router with dead-letter queues, and Sync Tracking Schema. Fault tolerance is reinforced by Polly circuit breakers in the Mainframe Adapter and Routing Dispatcher.",
+   "security": "R-07 is satisfied via Active Directory integration for SSO. Confidentiality and integrity are enforced using Azure Key Vault with Managed Identities, mTLS between internal components, TDE, and Private Link isolation.",
+   "maintainability": "R-06 is handled via the Routing Registry Component in Azure App Configuration for fast rollbacks. The Anti-Corruption Layer provides clean decoupling, though the high number of distributed Azure PaaS services adds operational complexity for a team with little cloud experience.",
+   "portability": "The design satisfies the hybrid deployment topology between on-premise and Azure West Europe. However, tight coupling to proprietary Azure PaaS services (Azure Static Web Apps, App Configuration, Service Bus, Key Vault) significantly limits infrastructure replaceability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.90625,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Read Model Projections in Azure SQL and client-side caching serve UI requests under 2 seconds, shielding adjusters from 5-second mainframe calls. However, explicit pre-fetching or asynchronous mirroring for legacy claim slices is not fully detailed.",
+    "elements": [
+     "Claims Web Application",
+     "API Gateway & BFF",
+     "New Claims Database",
+     "Read Model Projections",
+     "Claim Form & Validation Component"
+    ],
+    "sensitivity_points": [
+     "Eventual consistency lag between mainframe updates and read model projections"
+    ],
+    "tradeoffs": [
+     "Data freshness sacrificed for low screen latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Scale spikes are absorbed by Azure Container Apps and queued asynchronously via Azure Service Bus and the Outbox pattern. Batching and rate-limited throttling towards the mainframe adapter prevent any impact on the nightly batch window.",
+    "elements": [
+     "API Gateway & BFF",
+     "New Claims Database",
+     "Outbox Schema",
+     "Sync & Reconciliation Router",
+     "Mainframe Adapter"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue capacity and consumer rate limits during month-end spikes"
+    ],
+    "tradeoffs": [
+     "Immediate customer submission acceptance traded against delayed mainframe persistence"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The transactional outbox and Azure Service Bus buffer submissions durably while the mainframe is offline during the batch window. Once available, messages are processed without loss.",
+    "elements": [
+     "New Claims Database",
+     "Outbox Schema",
+     "Sync & Reconciliation Router",
+     "Mainframe Adapter"
+    ],
+    "sensitivity_points": [
+     "Storage retention and DLQ thresholds during extended mainframe downtime"
+    ],
+    "tradeoffs": [
+     "Storage overhead in outbox tables to guarantee delivery during downtime"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Sync Tracking Schema with SQL bulk reconciliation, Azure Service Bus DLQs, and Polly retry policies in the Mainframe Adapter handle partial sync failures and enforce idempotency to prevent duplicate processing.",
+    "elements": [
+     "New Claims Database",
+     "Sync Tracking Schema",
+     "Sync & Reconciliation Router",
+     "Mainframe Adapter",
+     "Integration & Anti-Corruption Layer"
+    ],
+    "sensitivity_points": [
+     "Idempotency key consistency across modern and legacy mainframe schemas"
+    ],
+    "tradeoffs": [
+     "Reconciliation logic complexity versus strict at-least-once message processing"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Anti-Corruption Layer isolates legacy interfaces, while the Routing Registry using Azure App Configuration provides dynamic feature flags that allow rerouting or rolling back claim types within minutes without code redeployments.",
+    "elements": [
+     "Claim Translation Component",
+     "Routing Registry Component",
+     "Mainframe Adapter",
+     "Routing Dispatcher Component"
+    ],
+    "sensitivity_points": [
+     "Granularity of feature flag toggles per claim type in App Configuration"
+    ],
+    "tradeoffs": [
+     "Operational overhead of maintaining dual routing logic and schemas"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Frontend applications depend strictly on the API Gateway & BFF. When the mainframe is retired, only the Integration & Anti-Corruption Layer is decommissioned; UI layers require zero rewrites.",
+    "elements": [
+     "Claims Web Application",
+     "API Gateway & BFF",
+     "Integration & Anti-Corruption Layer",
+     "New Claims Database"
+    ],
+    "sensitivity_points": [
+     "Decoupling quality between BFF endpoints and legacy-specific data contracts"
+    ],
+    "tradeoffs": [
+     "BFF abstraction layer maintenance cost during the multi-year migration period"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "YARP API Router and Auth & RBAC components enforce authentication and basic permissions, logged via Application Insights. However, fine-grained object-level authorization (broker-to-customer ownership validation) is not explicitly formalized.",
+    "elements": [
+     "Auth & RBAC Routing Component",
+     "YARP API Router",
+     "Claims BFF Service",
+     "Azure Application Insights"
+    ],
+    "sensitivity_points": [
+     "Enforcement point of domain-level multi-tenancy and data ownership checks"
+    ],
+    "tradeoffs": [
+     "BFF-layer authorization logic complexity versus generic gateway pass-through"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "SSO integrates both environments with Active Directory. Terminating an adjuster in AD halts access, but short-lived token lifetimes or active session invalidation across both Azure Static Web Apps and legacy systems are not detailed.",
+    "elements": [
+     "Active Directory",
+     "API Gateway & BFF",
+     "Auth & RBAC Routing Component"
+    ],
+    "sensitivity_points": [
+     "OAuth2 access token expiration times and token revocation handling"
+    ],
+    "tradeoffs": [
+     "Frequent token re-validation overhead versus rapid access revocation"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Integration & Anti-Corruption Layer",
+     "Sync & Reconciliation Router",
+     "Mainframe Adapter",
+     "Sync Tracking Schema"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Integration & Anti-Corruption Layer",
+     "Mainframe Adapter",
+     "Claim Translation Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers",
+     "Brokers",
+     "Claims Web Application",
+     "Claim Form & Validation Component",
+     "API Gateway & BFF"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Claims Web Application",
+     "Claims Dashboard Component",
+     "API Gateway & BFF",
+     "Claims BFF Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Routing Registry Component",
+     "Routing Dispatcher Component",
+     "Claim Translation Component",
+     "New Claims Database"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Outbox Schema",
+     "Sync & Reconciliation Router",
+     "Mainframe Adapter",
+     "Sync Tracking Schema"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Read Model Projections",
+     "Claims Dashboard Component",
+     "Claim Form & Validation Component",
+     "Claims BFF Service"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Routing Registry Component",
+     "Routing Dispatcher Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Active Directory",
+     "Auth & RBAC Routing Component",
+     "API Gateway & BFF",
+     "YARP API Router"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

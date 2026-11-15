@@ -1,0 +1,347 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All requirements are directly fulfilled: video consultations via Telehealth Service, e-prescriptions via Prescription & Record Service, AI urgency triage via AI Orchestrator & Audit Service, and granular consent management via Consent Management Module in Consent & Identity Service.",
+   "performance_efficiency": "The architecture incorporates concrete performance mechanisms including Bandwidth Adaptation Engine, SFU media gateway, Redis Token Cache, Regional Pub/Sub asynchronous dispatch, and client-side adaptive bitrate scaling to handle constrained networks and high throughput.",
+   "compatibility": "Interoperability is thoroughly handled by the FHIR / National Adapter Engine, connecting out to National E-Prescription Gateways (EU) and US Pharmacy Networks via HL7 FHIR and national standards over mTLS.",
+   "usability": "The Web/Mobile Frontend provides dedicated components for Consent & Triage UI and Video Consultation. However, user-specific interfaces or portals for Clinicians and Compliance Officers/Auditors are not distinctly detailed beyond generic ingress access.",
+   "reliability": "Unstable connections under 300 kbit/s are mitigated using Bandwidth Adaptation Engine and offline-first Hive/SQLite caching. Prescription idempotency is handled via Redis. Detailed multi-region cross-cloud failover or recovery procedures, however, are not explicitly modeled.",
+   "security": "Security is strongly designed: Envoy WASM enforces geo-pinning and JWTs, regional data residency is respected, communications leverage mTLS, local data uses hardware-keystore AES-256, and Audit Service encrypts logs via Cloud KMS for MDR accountability.",
+   "maintainability": "Domain services (Telehealth, Prescription & Record, AI Orchestrator, Consent & Identity) are modularly decomposed with clear separation of concerns. Integration patterns, such as Spring Integration / Camel adapter engines, promote loose coupling and high maintainability.",
+   "portability": "The architecture targets GCP components (Cloud Armor, Pub/Sub, Memorystore, Cloud SQL) cleanly across the specified regions. Packaging services in Go, Spring Boot, FastAPI, and Flutter enables portability, though migration off proprietary GCP services would require adapter reconfiguration."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The Go-based signaling component, Pion SFU media gateway, and Redis token caching support low session-establishment latency under load. However, explicit clustering and autoscaling mechanisms for distributed SFU instances across regional nodes are not fully detailed.",
+    "elements": [
+     "Regional Ingress",
+     "Envoy Edge Proxy",
+     "Telehealth Service",
+     "Signaling Component",
+     "Media Gateway",
+     "Token Cache"
+    ],
+    "sensitivity_points": [
+     "Signaling handshake concurrency and SFU relay connection capacity",
+     "Redis token cache throughput during burst login peaks"
+    ],
+    "tradeoffs": [
+     "SFU media proxying improves stream coordination but increases server compute footprint"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "A throughput of 50,000 requests per hour (~14 requests per second) is easily handled by FastAPI and Envoy. The AI Orchestrator handles requests concurrently and dispatches asynchronous encrypted audit writes, maintaining responses well under 3 seconds.",
+    "elements": [
+     "Regional Ingress",
+     "AI Orchestrator & Audit Service",
+     "AI Orchestrator",
+     "Audit Service",
+     "AI Symptom Checker Engine"
+    ],
+    "sensitivity_points": [
+     "Latency of the external AI symptom checker engine API",
+     "Overhead of asynchronous KMS-encrypted audit logging"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging speeds responses but requires buffering resilience against process failures"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The architecture incorporates a Bandwidth Adaptation Engine in the Telehealth Service and adaptive bitrate scaling in the Flutter client. Client-side offline-first persistence with Hive/SQLite ensures consultation notes and local state are preserved without data loss.",
+    "elements": [
+     "Web/Mobile Frontend",
+     "Video Consultation Component",
+     "Routing & State Component",
+     "Telehealth Service",
+     "Bandwidth Adaptation Engine",
+     "Media Gateway"
+    ],
+    "sensitivity_points": [
+     "Dynamic adaptation thresholding at bandwidths below 300 kbit/s",
+     "Reliability of local SQLite/Hive offline state sync"
+    ],
+    "tradeoffs": [
+     "Degrading video stream quality to audio preserves consultation connectivity over poor links"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Data residency prohibits redirecting US traffic or health data to europe-west3. Because only a single US region (us-central1) is defined without a secondary US disaster recovery region or cold standby, a complete regional outage cannot be restored within 1 hour.",
+    "elements": [
+     "Regional Ingress",
+     "Global External HTTP(S) Load Balancer",
+     "Target Cloud Configuration"
+    ],
+    "sensitivity_points": [
+     "Absence of secondary regional infrastructure within US sovereign boundaries",
+     "Strict enforcement of data residency barring cross-border failover"
+    ],
+    "tradeoffs": [
+     "Strict data residency guarantees compliance but prevents cross-border active-passive failover"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Prescription & Record Service includes a dedicated FHIR / National Adapter Engine using Spring Integration and Camel. New national standards are encapsulated within isolated integration adapters without affecting core prescription business logic or external ingress contracts.",
+    "elements": [
+     "Prescription & Record Service",
+     "FHIR / National Adapter Engine",
+     "Prescription API Controller"
+    ],
+    "sensitivity_points": [
+     "Clean decoupling between generic prescription models and country-specific adapters",
+     "Extensibility of Apache Camel routing definitions"
+    ],
+    "tradeoffs": [
+     "Adapter encapsulation introduces slight translation processing overhead for outbound messages"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The AI Orchestrator and Audit Service record recommendations with audit trails linked via KMS encryption. While linking model versions and inputs is supported by design, deployment mechanisms for model rollback and blue/green traffic splitting on the external engine are not explicitly documented.",
+    "elements": [
+     "AI Orchestrator & Audit Service",
+     "AI Orchestrator",
+     "Audit Service",
+     "AI Symptom Checker Engine"
+    ],
+    "sensitivity_points": [
+     "Inclusion of model version metadata in triage audit log schemas",
+     "Support for side-by-side model deployment routing"
+    ],
+    "tradeoffs": [
+     "Persisting detailed model input/output audit payloads increases storage volume"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Regional Ingress policy enforcers inspect tokens, and the Prescription API Controller queries Keycloak's Consent Management Module over mTLS before granting access. Cross-region requests lacking explicit patient consent are rejected and recorded by the Audit & Compliance Logger.",
+    "elements": [
+     "Envoy WASM Route & Policy Enforcer",
+     "Prescription API Controller",
+     "Consent & Identity Service",
+     "Consent Management Module",
+     "Audit & Compliance Logger"
+    ],
+    "sensitivity_points": [
+     "Mandatory synchronous consent verification on cross-region record lookups",
+     "Immutability of cross-region audit access log generation"
+    ],
+    "tradeoffs": [
+     "Synchronous mTLS consent evaluation adds latency to cross-region Clinician requests"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Consent updates in the Consent Management Module and immediate Redis token revocations halt operational token authorizations. However, downstream data pipelines, analytics, or research exports and their specific cessation or tombstoning workflows within 24 hours are not detailed in the architecture.",
+    "elements": [
+     "Consent & Identity Service",
+     "Consent Management Module",
+     "Identity Database",
+     "Token Cache"
+    ],
+    "sensitivity_points": [
+     "Propagation latency of revoked consent events to external or batch sharing sinks",
+     "Consistency between Keycloak consent records and data access points"
+    ],
+    "tradeoffs": [
+     "Immediate cache invalidation ensures privacy but increases database lookup load"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.9583333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent & Identity Service",
+     "Consent Management Module",
+     "Envoy WASM Route & Policy Enforcer",
+     "Audit & Compliance Logger"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Regional Ingress",
+     "Envoy WASM Route & Policy Enforcer",
+     "Region-Aware API Client",
+     "Regional TURN Relays",
+     "Audit & Compliance Logger"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Engine",
+     "AI Orchestrator & Audit Service",
+     "Audit Service",
+     "Compliance / Regulatory Authorities and Medical Licensing Board Services"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Web/Mobile Frontend",
+     "Routing & State Component",
+     "Bandwidth Adaptation Engine",
+     "Video Consultation Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patients",
+     "Licensed Clinicians",
+     "Telehealth Service",
+     "Video Consultation Component",
+     "Signaling Component",
+     "Media Gateway"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Prescription & Record Service",
+     "Prescription API Controller",
+     "FHIR / National Adapter Engine",
+     "External Gateways",
+     "National E-Prescription Gateways (EU) and US Pharmacy Networks"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Engine",
+     "AI Orchestrator & Audit Service",
+     "AI Orchestrator",
+     "Consent & Triage UI Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Consent & Identity Service",
+     "Consent Management Module",
+     "Consent & Triage UI Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Regional Ingress",
+     "Envoy WASM Route & Policy Enforcer",
+     "Consent & Identity Service",
+     "Consent Management Module",
+     "Audit & Compliance Logger"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Bandwidth Adaptation Engine",
+     "Video Consultation Component",
+     "Telehealth Service"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "AI Orchestrator & Audit Service",
+     "AI Orchestrator",
+     "Audit Service"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Prescription & Record Service",
+     "FHIR / National Adapter Engine",
+     "External Gateways",
+     "National E-Prescription Gateways (EU) and US Pharmacy Networks"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

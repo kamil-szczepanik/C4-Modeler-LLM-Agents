@@ -1,0 +1,21 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(CompliancePortal, "Compliance Portal", "External system used by compliance officers and auditors.")
+
+Container_Boundary(AuditQueryAPI, "Audit Query API") {
+    Component(QueryRouterController, "Query Router / Controller", "Go (HTTPS/REST)", "Go-based entry point handling HTTPS/REST requests, OIDC/JWT authentication, RBAC, input validation, and rate-limiting.")
+    Component(AuditQueryService, "Audit Query Service", "Go", "Go-based business logic layer executing search, filtering, pagination, data masking, and export orchestration.")
+    Component(ExportFormatter, "Export Formatter", "Go", "Go-based streaming component transforming audit records into CSV or JSON formats.")
+    Component(LedgerRepository, "Ledger Repository", "Go and AWS SDK", "Go and AWS SDK data access layer connecting exclusively to an Amazon Aurora read replica.")
+    Component(AmazonAuroraReadReplica, "Amazon Aurora Read Replica", "PostgreSQL", "Dedicated PostgreSQL-compatible database layer storing encrypted, tamper-evident audit ledgers.")
+}
+
+Rel(CompliancePortal, QueryRouterController, "HTTPS with OIDC/JWT authentication", "TLS 1.3")
+Rel(QueryRouterController, AuditQueryService, "In-process function calls with RBAC and rate-limiting")
+Rel(AuditQueryService, ExportFormatter, "Streams raw records for serialization", "In-process function calls")
+Rel(AuditQueryService, LedgerRepository, "Queries historical audit data", "mTLS / PostgreSQL Wire Protocol")
+Rel(LedgerRepository, AmazonAuroraReadReplica, "Executes parameterized SQL read queries", "TCP / KMS encrypted")
+
+@enduml

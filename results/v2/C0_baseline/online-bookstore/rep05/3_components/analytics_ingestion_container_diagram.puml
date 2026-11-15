@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Analytics Ingestion Container container
+
+Person(spa, "Single-Page Application (SPA)", "Client-side application")
+System_Ext(api_gateway, "Amazon API Gateway", "Managed API gateway")
+System_Ext(kinesis, "Amazon Kinesis Data Stream", "Downstream event streaming pipeline")
+System_Ext(sqs_dlq, "Amazon SQS (DLQ)", "Dead-letter queue for backpressure management")
+
+Container_Boundary(analytics_ingestion_container, "Analytics Ingestion Container") {
+    Component(ingestion_api_endpoint, "Ingestion API Endpoint", "Node.js / Fastify REST/WebSocket Server", "Receives incoming real-time telemetry from clients.")
+    Component(consent_pii_sanitizer_middleware, "Consent & PII Sanitizer Middleware", "Node.js Middleware", "Validating cryptographic consent proofs and masking PII.")
+    Component(event_validator_enricher, "Event Validator & Enricher", "Node.js Component", "Schema validation and timestamp appending component.")
+    Component(telemetry_dispatcher, "Telemetry Dispatcher", "Node.js AWS SDK", "Forwards events to streaming storage with SQS DLQ overflow.")
+}
+
+Rel(spa, api_gateway, "Sends telemetry", "HTTPS/WSS")
+Rel(api_gateway, ingestion_api_endpoint, "Forwards authenticated telemetry", "HTTPS/WSS, AWS IAM SigV4")
+Rel(ingestion_api_endpoint, consent_pii_sanitizer_middleware, "Passes raw events", "In-memory")
+Rel(consent_pii_sanitizer_middleware, event_validator_enricher, "Passes sanitized events", "In-memory")
+Rel(event_validator_enricher, telemetry_dispatcher, "Passes validated events", "In-memory")
+Rel(telemetry_dispatcher, kinesis, "Streams sanitized events", "TCP/AWS SDK")
+Rel(telemetry_dispatcher, sqs_dlq, "Offloads failed ingestion events", "TCP/AWS SDK")
+@enduml

@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the E-Prescription Integrator container
+
+Container_Boundary(e_prescription_integrator, "E-Prescription Integrator") {
+    Component(PrescriptionTransformationEngine, "Prescription Transformation Engine", "Node.js / TypeScript", "Transforms prescription data formats for integration.")
+    Component(GatewayAdapterClient, "Gateway Adapter Client", "Node.js / TypeScript", "Transmits e-prescriptions to local pharmacies and EU national networks.")
+    Component(StatusPollingEventHandler, "Status Polling & Event Handler", "Node.js / TypeScript", "Publishes fulfillment events and broadcasts transmission state changes.")
+    Component(ResilienceQueueManager, "Resilience & Queue Manager", "Node.js / TypeScript, BullMQ", "Buffers reference IDs and state metadata to handle transient network failures.")
+}
+
+System_Ext(CloudSQLForPostgreSQL, "Cloud SQL for PostgreSQL", "Stores encrypted clinical data regionally.")
+System_Ext(MemorystoreForRedis, "Memorystore for Redis", "Manages queuing and retries for transient network failures.")
+System_Ext(GoogleCloudPubSub, "Google Cloud Pub/Sub", "Decouples status tracking and event-driven communication.")
+System_Ext(RegionalAPIGateways, "Regional API Gateways", "Google Cloud API Gateway in europe-west3, us-central1.")
+System_Ext(LocalPharmaciesAndEUNationalEPrescriptionNetworks, "Local Pharmacies and EU National E-Prescription Networks", "External pharmacy and national networks.")
+
+Rel(PrescriptionTransformationEngine, CloudSQLForPostgreSQL, "Fetches encrypted payloads on-demand", "PostgreSQL Wire Protocol over TLS")
+Rel(ResilienceQueueManager, MemorystoreForRedis, "Buffers reference IDs and state metadata", "Redis Protocol over TLS")
+Rel(StatusPollingEventHandler, GoogleCloudPubSub, "Publishes fulfillment events", "Cloud Pub/Sub API")
+Rel(StatusPollingEventHandler, RegionalAPIGateways, "Broadcasts transmission state changes", "Server-Sent Events / WebSockets with short-lived JWTs")
+Rel(GatewayAdapterClient, LocalPharmaciesAndEUNationalEPrescriptionNetworks, "Transmits e-prescriptions", "HL7 FHIR / REST / SOAP over HTTPS with mTLS")
+
+@enduml

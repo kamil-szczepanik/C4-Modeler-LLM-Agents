@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Circulation Service container
+
+Component(API_Gateway, "API Gateway", "Gateway", "Forwards authenticated requests via JWT/OAuth 2.0.")
+Component(HashiCorp_Vault, "HashiCorp Vault", "Vault", "Dynamic secrets and encryption key manager.")
+Component(Message_Broker, "Message Broker", "AMQP", "Receives published domain events using the Outbox Pattern.")
+Component(PostgreSQL_Database, "PostgreSQL Database", "PostgreSQL", "Persistent transactional store utilizing read replicas.")
+
+Container_Boundary(Circulation_Service, "Circulation Service") {
+    Component(Loan_API_Controller, "Loan API Controller", "REST/gRPC, Go", "Validates incoming JWTs from the API Gateway and enforces RBAC.")
+    Component(Loan_Domain_Engine, "Loan Domain Engine", "Go", "Core business logic handling checkouts, renewals, returns, and grace periods.")
+    Component(Circulation_Repository_Outbox_Store, "Circulation Repository & Outbox Store", "Go, pgx Driver", "Data access layer managing transactional state and reliable event publishing.")
+    Component(Event_Publisher_Subscriber, "Event Publisher/Subscriber", "Go, AMQP", "Asynchronous message handler interfacing with the message broker.")
+}
+
+Rel(API_Gateway, Loan_API_Controller, "Forwards authenticated requests via JWT/OAuth 2.0.")
+Rel(Loan_Domain_Engine, Circulation_Repository_Outbox_Store, "Executes transactional reads/writes.")
+Rel(Circulation_Repository_Outbox_Store, PostgreSQL_Database, "Persists data securely via TLS 1.3 and mTLS.")
+Rel(Event_Publisher_Subscriber, Message_Broker, "Publishes domain events using AMQP with the Outbox Pattern.")
+Rel(Loan_API_Controller, HashiCorp_Vault, "Fetches dynamic secrets via Kubernetes Service Account token exchange.")
+
+@enduml

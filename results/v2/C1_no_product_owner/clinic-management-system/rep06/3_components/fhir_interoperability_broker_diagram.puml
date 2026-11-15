@@ -1,0 +1,20 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(central_siem_audit_store, "Central SIEM/Audit Store", "External system for storing audit logs")
+System_Ext(external_lab_imaging_systems, "External Lab / Imaging Systems", "External lab and imaging systems")
+
+Container_Boundary(fhri_interoperability_broker, "FHIR Interoperability Broker") {
+    Component(FHIR_API_Route_Controller, "FHIR API Route Controller", "Apache Camel / REST DSL", "Exposes standard RESTful FHIR endpoints, validates incoming payloads, and triggers audit event captures.")
+    Component(Transformation_Engine, "Transformation Engine", "Apache Camel", "Maps internal domain models to HL7 FHIR resources (R4/STU3).")
+    Component(External_Connector_Client, "External Connector Client", "Apache Camel / Resilience4j", "Manages outbound mTLS connections, retries, and circuit-breaking for external dependencies.")
+    Component(Audit_Compliance_Interceptor, "Audit & Compliance Interceptor", "Spring AOP / Apache Camel Interceptor", "Captures immutable audit logs and streams redacted events.")
+}
+
+Rel(FHIR_API_Route_Controller, Transformation_Engine, "Passes raw payloads", "In-memory Java objects")
+Rel(Transformation_Engine, External_Connector_Client, "Sends mapped FHIR bundles", "In-memory")
+Rel(FHIR_API_Route_Controller, Audit_Compliance_Interceptor, "Triggers audit event capture", "In-memory")
+Rel(Audit_Compliance_Interceptor, central_siem_audit_store, "Streams redacted audit logs", "Syslog over TLS / Kafka")
+Rel(External_Connector_Client, external_lab_imaging_systems, "Exchanges lab and imaging data", "HL7 FHIR APIs over HTTPS with mTLS")
+@enduml

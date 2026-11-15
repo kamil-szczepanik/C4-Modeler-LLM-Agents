@@ -1,0 +1,332 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: Patient Registration Container covers R-01, Appointment Scheduling Container handles clash checks via Redis Redlock (R-02), EMR Container manages clinical records with audit trails (R-03), and Billing & Insurance Claim Container processes claims (R-04).",
+   "performance_efficiency": "Sub-second EMR performance is supported by PgBouncer Connection Pooler, asynchronous audit logging, and on-premises execution. However, no read-caching layer (e.g., Redis) is specified for EMR record retrieval to consistently guarantee the < 1 s P95 target.",
+   "compatibility": "HL7 FHIR Interoperability Engine provides dedicated components (FHIR API Router, SMART-on-FHIR, Data Transformation Service, mTLS Communication Handler) to exchange clinical and diagnostic data smoothly with External Lab Systems and External Imaging Systems.",
+   "usability": "All specified human actors interact directly with the Ingress Controller. The architecture omits dedicated user-facing presentation layers (such as a web application, mobile app, or dedicated clinical/patient portal interfaces) to support different user workflows.",
+   "reliability": "High availability is supported by Patroni/Orchestrator Replication Manager, Kafka/Debezium hybrid replication, and Local-Buffering Proxy for network disruptions. However, achieving true active-active across hybrid on-prem and AWS cloud with semi-synchronous relational databases is not fully articulated.",
+   "security": "Strong security mechanisms are integrated, including TLS Termination and Security Policy Enforcer (MFA, OAuth2/OIDC), mTLS service mesh, Encryption Manager (Vault/KMS, AES-256 at rest), and immutable audit logs via WORM-Compliant Log Storage and pgaudit.",
+   "maintainability": "Decomposition into distinct domain microservices (Registration, Scheduling, EMR, Billing, Interoperability) enforces loose coupling and high cohesion. Internal components strictly separate API controllers, business logic engines, and encryption persistence modules.",
+   "portability": "The architecture embraces containerized workloads on Kubernetes and Istio, running identically on-premise and in AWS eu-central-1. Portable standard tools (Patroni, PostgreSQL, Kafka, Envoy) ensure flexibility across hybrid deployment environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 4.0,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "On-premises Kubernetes deployment and PgBouncer connection pooling reduce network and connection overhead. However, the lack of an in-memory caching tier for clinical records forces concurrent read operations through AES-256 decryption at the database, jeopardizing the sub-second P95 target.",
+    "elements": [
+     "On-Premises Kubernetes Cluster",
+     "EMR Container",
+     "EMR API Controller",
+     "Encryption & Persistence Module",
+     "PgBouncer Connection Pooler",
+     "PostgreSQL/MySQL Hybrid Databases"
+    ],
+    "sensitivity_points": [
+     "Database query latency and connection pool saturation under concurrent read spikes",
+     "Cryptographic overhead of on-the-fly AES-256 record decryption"
+    ],
+    "tradeoffs": [
+     "Strict real-time decryption from persistent storage favors confidentiality over sub-second retrieval latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "justification": "The HL7 FHIR Interoperability Engine provides structured parsing and transformation services. However, it lacks an explicit message queue or rate-limiting buffer before persistence, allowing batch ingestion bursts to cause write contention with clinician queries on the primary database.",
+    "elements": [
+     "HL7 FHIR Interoperability Engine",
+     "FHIR API Router",
+     "Data Transformation Service",
+     "PostgreSQL/MySQL Hybrid Databases",
+     "EMR Container"
+    ],
+    "sensitivity_points": [
+     "Ingestion throughput limits of the FHIR parsing and persistence pipeline",
+     "Database lock contention between bulk diagnostic inserts and EMR queries"
+    ],
+    "tradeoffs": [
+     "Immediate processing over queued buffering simplifies architecture but introduces resource contention during spikes"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Primary clinical services run locally on the On-Premises Kubernetes Cluster, and audit events use a Local-Buffering Proxy during WAN partitions. Cloud replication failure does not interrupt local operations, easily satisfying the 1-minute failover window.",
+    "elements": [
+     "On-Premises Kubernetes Cluster",
+     "Cloud Environment",
+     "Local-Buffering Proxy",
+     "WORM-Compliant Log Storage",
+     "Event Bus"
+    ],
+    "sensitivity_points": [
+     "Independence of on-premises operations from cloud management planes",
+     "Buffer capacity of the Local-Buffering Proxy during extended disconnections"
+    ],
+    "tradeoffs": [
+     "Asynchronous replication to eu-central-1 eliminates on-premise latency but risks replica staleness"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Patroni/Orchestrator manages semi-synchronous database replication and automated failover within 30 seconds without data loss. PgBouncer handles connection reconnections, though claim idempotency and application retry logic in the Claim Processing Service are not fully specified.",
+    "elements": [
+     "PostgreSQL/MySQL Hybrid Databases",
+     "Patroni/Orchestrator Replication Manager",
+     "PgBouncer Connection Pooler",
+     "Billing & Insurance Claim Container",
+     "Claim Processing Service"
+    ],
+    "sensitivity_points": [
+     "Patroni leader election and failover convergence time",
+     "Idempotency token handling during in-flight transaction interruption"
+    ],
+    "tradeoffs": [
+     "Semi-synchronous replication ensures zero data loss while introducing slight write latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The architecture isolates billing concerns within the Billing & Insurance Claim Container. Integrating a new insurance clearinghouse only requires modifying the Claim Processing Service and Claim Validation Controller, leaving the EMR Container and clinical microservices completely unaffected.",
+    "elements": [
+     "Billing & Insurance Claim Container",
+     "Claim Processing Service",
+     "Claim Validation Controller",
+     "EMR Container"
+    ],
+    "sensitivity_points": [
+     "Encapsulation of clearinghouse communication protocols within Claim Processing Service",
+     "Independence of billing domain models from clinical EMR schemas"
+    ],
+    "tradeoffs": [
+     "Domain microservice isolation increases operational complexity to minimize maintenance ripple effects"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Patient demographics and admissions are encapsulated within the Patient Registration Container. Adding a new audited field touches only the Registration API Controller, Registration Service, and Metadata Indexing Layer, safely respecting the three-component limit within a single sprint.",
+    "elements": [
+     "Patient Registration Container",
+     "Registration API Controller",
+     "Registration Service",
+     "Audit Logging Client",
+     "Metadata Indexing Layer"
+    ],
+    "sensitivity_points": [
+     "Loose coupling between demographic schemas and downstream clinical containers",
+     "Extensibility of the audit log payload schema"
+    ],
+    "tradeoffs": [
+     "Dedicated registration service isolates schema updates but requires cross-service API synchronization"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The Ingress Controller and TLS Termination component strictly enforce OAuth2/OIDC and MFA at the edge, blocking compromised password logins. However, the architecture specifies no real-time Security Information and Event Management (SIEM) or alerting pipeline to trigger alerts within 1 minute.",
+    "elements": [
+     "Ingress Controller",
+     "API Gateway Router",
+     "TLS Termination and Security Policy Enforcer",
+     "Audit Logging Client",
+     "WORM-Compliant Log Storage"
+    ],
+    "sensitivity_points": [
+     "Edge enforcement of mandatory multi-factor authentication policies",
+     "Propagation delay of failed authentication events to security responders"
+    ],
+    "tradeoffs": [
+     "Asynchronous WORM logging protects log immutability but delays sub-minute active intrusion alerting"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "EMR access events are captured asynchronously and written via pgaudit and dedicated clients into WORM-Compliant Log Storage with tamper-evident metadata indexing. The architecture supports 10-year retention, though granular clinical relationship-based access checking is not explicitly modeled.",
+    "elements": [
+     "EMR Container",
+     "EMR Business Logic Service",
+     "Audit Logger",
+     "WORM-Compliant Log Storage",
+     "Metadata Indexing Layer",
+     "Local-Buffering Proxy"
+    ],
+    "sensitivity_points": [
+     "Guaranteed emission of audit events on read-only EMR access requests",
+     "Immutability enforcement of WORM storage across a 10-year retention horizon"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging preserves clinician screen responsiveness at the expense of non-blocking audit confirmation"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Registration Service",
+     "Encryption & Persistence Module",
+     "PostgreSQL/MySQL Hybrid Databases",
+     "WORM-Compliant Log Storage",
+     "TLS Termination and Security Policy Enforcer"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "On-Premises Kubernetes Cluster",
+     "Cloud Environment",
+     "Patroni/Orchestrator Replication Manager",
+     "PgBouncer Connection Pooler"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Registration Container",
+     "Registration API Controller",
+     "Registration Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Appointment Scheduling Container",
+     "Appointment Controller",
+     "Scheduling Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Container",
+     "EMR API Controller",
+     "EMR Business Logic Service",
+     "Audit Logging Client",
+     "WORM-Compliant Log Storage",
+     "Audit Logger"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Insurance Claim Container",
+     "Claim Validation Controller",
+     "Claim Processing Service"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Ingress Controller",
+     "TLS Termination and Security Policy Enforcer",
+     "Encryption & Persistence Module",
+     "Encryption Manager",
+     "PostgreSQL/MySQL Hybrid Databases"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "On-Premises Kubernetes Cluster",
+     "Cloud Environment",
+     "Patroni/Orchestrator Replication Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "On-Premises Kubernetes Cluster",
+     "PgBouncer Connection Pooler"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "HL7 FHIR Interoperability Engine",
+     "FHIR API Router",
+     "Data Transformation Service",
+     "mTLS Communication Handler"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

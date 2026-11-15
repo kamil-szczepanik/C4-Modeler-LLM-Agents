@@ -1,0 +1,323 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "While 'Admission & Demographics Component', 'EMR Clinical Core Component', and 'Billing & Claims Container' address R-01, R-03, and R-04, R-02 is largely neglected: appointment scheduling with resource clash checking lacks any dedicated engine or component in the architecture.",
+   "performance_efficiency": "EMR screen load (<1s P95) is directly enabled by the 'Redis L2 Cache Layer' caching PHI alongside the 'Nginx Reverse Proxy & Static File Server' static asset caching, Envoy edge routing, and asynchronous event processing via 'Audit Trail Manager'.",
+   "compatibility": "The 'HL7 FHIR Interoperability Container' provides complete interoperability using 'FHIR Validation & Transformation Engine', 'FHIR API Router', and 'SMART-on-FHIR Authorizer' for external lab/imaging systems. 'Claim Processing Service' cleanly abstracts external 'Insurance Claim Gateways'.",
+   "usability": "All brief personas are accounted for: patients use 'Portal UI Component' (WCAG 2.1 AA compliant), clinical and administrative staff interact via the 'Single Page Application (SPA) Runtime', and compliance officers have the dedicated 'Compliance Query Proxy'.",
+   "reliability": "Active-active 99.99% availability is supported by 'Kubernetes Deployment & HPA', Envoy 'Circuit Breaker & Routing Proxy', and the 'Sync/Replication Container' featuring 'Conflict Resolution Engine' and outbox polling across hybrid regions. Concrete cross-region database failover mechanisms are omitted.",
+   "security": "Comprehensive security controls include 'Session & Token Manager Component' (MFA), 'Data Access Layer / Encryption Engine' (AES-256 at rest), 'Vault Agent', and 'Cryptographic Signer' using Merkle trees to guarantee a tamper-proof 10-year audit trail for HIPAA/GDPR.",
+   "maintainability": "Modularity is well achieved through decoupled containers ('Billing & Claims', 'Core Clinical & EMR', 'HL7 FHIR Interoperability'). Interactions rely on standard interfaces (gRPC, mTLS), and concerns like auditing and replication are factored into sidecars and dedicated sync components.",
+   "portability": "Target hybrid environments ('on-prem-k8s' and 'eu-central-1') are addressed via standard 'Kubernetes Deployment & HPA' specifications and the 'Sync/Replication Container' running 'Transactional Outbox Poller' to coordinate data state across hybrid infrastructure without cloud lock-in."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Redis L2 Cache Layer offloads database read pressure for active clinical records, and API Gateway plus SPA ensure fast screen rendering. Cache invalidation during heavy concurrent reads may cause slight P95 latency spikes.",
+    "elements": [
+     "Nginx Web App",
+     "API Gateway",
+     "EMR Clinical Core Component",
+     "Redis L2 Cache Layer",
+     "External PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Redis cache hit ratio directly determines P95 read latency under concurrent access"
+    ],
+    "tradeoffs": [
+     "In-memory Redis caching improves read speed at the cost of cache consistency complexity"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The HL7 FHIR Interoperability Container buffers incoming records asynchronously via Outbox Event Publisher and Kafka, isolating peak lab loads from the Core Clinical EMR read path and preserving P95 latencies.",
+    "elements": [
+     "FHIR API Router",
+     "FHIR Validation & Transformation Engine",
+     "Outbox Event Publisher",
+     "Sync/Replication Container",
+     "EMR Clinical Core Component"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer throughput and batching parameters dictate FHIR ingestion duration"
+    ],
+    "tradeoffs": [
+     "Asynchronous ingestion guarantees core performance but introduces eventual consistency for newly arrived lab results"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "The hybrid active-active setup leverages Kafka and a Conflict Resolution Engine, but asynchronous replication between on-premises and eu-central-1 creates risk of data loss (RPO > 0) upon abrupt cloud site failure.",
+    "elements": [
+     "Sync/Replication Container",
+     "Transactional Outbox Poller",
+     "Conflict Resolution Engine",
+     "Kubernetes Deployment & HPA"
+    ],
+    "sensitivity_points": [
+     "Replication lag between cloud and on-premises Kafka clusters determines data loss window"
+    ],
+    "tradeoffs": [
+     "Asynchronous cross-region replication avoids WAN write latency but risks losing unacknowledged in-flight transactions"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Billing & Claims Container isolates submission logic with queues and circuit breakers. Failed claims can be retried safely, though recovery under 30 seconds requires automated database failover not explicitly detailed.",
+    "elements": [
+     "Billing API Controller",
+     "Claim Processing Service",
+     "Billing Data Access Layer",
+     "Insurance Claim Gateways",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Database failover detection timeout and claim idempotency key persistence mechanism"
+    ],
+    "tradeoffs": [
+     "Strict transactional idempotency ensures zero duplicate claims but adds latency to submission processing"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Claim Processing Service within Billing & Claims Container isolates external insurance communications. Adding a clearinghouse requires modifying only this integration adapter while Core EMR and other containers remain completely unaffected.",
+    "elements": [
+     "Billing & Claims Container",
+     "Claim Processing Service",
+     "Insurance Claim Gateways"
+    ],
+    "sensitivity_points": [
+     "Modularity and abstraction level of the insurance gateway client interface"
+    ],
+    "tradeoffs": [
+     "Dedicated container boundary isolates external provider churn but introduces inter-container network hops"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The change is strictly contained within three components: Single Page Application Runtime (UI), Admission & Demographics Component (business logic), and Data Access Layer / Encryption Engine (schema and encryption).",
+    "elements": [
+     "Single Page Application (SPA) Runtime",
+     "Admission & Demographics Component",
+     "Data Access Layer / Encryption Engine",
+     "Audit Trail Manager"
+    ],
+    "sensitivity_points": [
+     "Coupling between demographic data access types and column-level encryption configurations"
+    ],
+    "tradeoffs": [
+     "Field-level AES-256 encryption protects demographic privacy but requires updating custom Hibernate types"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Authentication & Token Validation Filter validates credentials via Enterprise IdP enforcing MFA, successfully denying access with a stolen single password. Real-time alerting within 1 minute depends on IdP SIEM integration.",
+    "elements": [
+     "Enterprise Identity Provider (IdP)",
+     "Authentication & Token Validation Filter",
+     "Consent & Audit Logging Interceptor",
+     "Audit Sidecar Container"
+    ],
+    "sensitivity_points": [
+     "Delegation of MFA challenge and suspicious login alerting to Enterprise IdP"
+    ],
+    "tradeoffs": [
+     "Offloading auth to enterprise IdP provides centralized MFA but creates external operational dependency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "EMR Clinical Core Component logs every read through the Audit Trail Manager and Consent & Audit Logging Interceptor. Cryptographic Signer uses Merkle trees and streams to immutable storage for guaranteed 10-year retention.",
+    "elements": [
+     "Consent & Audit Logging Interceptor",
+     "EMR Clinical Core Component",
+     "Audit Trail Manager",
+     "Cryptographic Signer",
+     "Central SIEM / Immutable Storage"
+    ],
+    "sensitivity_points": [
+     "Asynchronous Merkle-tree signing throughput and immutable storage retention policy configuration"
+    ],
+    "tradeoffs": [
+     "Cryptographic signing of all read accesses incurs storage overhead to guarantee tamper evidence"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent & Audit Logging Interceptor",
+     "Audit Sidecar Container",
+     "PHI Sanitization Middleware",
+     "Data Access Layer / Encryption Engine",
+     "Cryptographic Signer"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Kubernetes Deployment & HPA",
+     "Sync/Replication Container",
+     "Circuit Breaker & Routing Proxy"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Cryptographic Signer",
+     "Central SIEM / Immutable Storage"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Admission & Demographics Component",
+     "Core Clinical & EMR Container"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Patient Portal Container",
+     "Nginx Web App"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Core Clinical & EMR Container",
+     "EMR Clinical Core Component",
+     "Audit Trail Manager",
+     "Audit Sidecar Container"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Container",
+     "Billing API Controller",
+     "Claim Validation Engine",
+     "Claim Processing Service",
+     "Patient Invoice Generator",
+     "Insurance Claim Gateways"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Session & Token Manager Component",
+     "Enterprise Identity Provider (IdP)",
+     "Data Access Layer / Encryption Engine",
+     "Billing Data Access Layer",
+     "Vault Agent",
+     "Local Disk Buffer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Sync/Replication Container",
+     "Transactional Outbox Poller",
+     "Conflict Resolution Engine",
+     "Kubernetes Deployment & HPA"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Redis L2 Cache Layer",
+     "EMR Clinical Core Component",
+     "Nginx Reverse Proxy & Static File Server"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "HL7 FHIR Interoperability Container",
+     "FHIR API Router",
+     "SMART-on-FHIR Authorizer",
+     "FHIR Validation & Transformation Engine",
+     "External Labs & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

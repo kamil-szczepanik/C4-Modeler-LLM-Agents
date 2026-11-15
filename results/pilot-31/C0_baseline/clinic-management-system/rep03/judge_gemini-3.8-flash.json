@@ -1,0 +1,329 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "While 'Patient Service', 'EMR Service', and 'Billing Service' cover registration, medical records, and billing (R-01, R-03, R-04), requirement R-02 (appointment scheduling with resource clash checks) is completely unrepresented across all containers and components.",
+   "performance_efficiency": "The sub-second P95 target is well-supported by 'Redis' caching, CQRS views in 'Patient Profile Projection', Fastify in 'EMR Service', connection pooling via 'Connection Pooler' (pgBouncer), and asynchronous streaming via 'NATS JetStream'.",
+   "compatibility": "External interoperability (R-08) is thoroughly addressed by 'FHIR Integration Gateway', using 'Transformation Engine' (JOLT) and HAPI FHIR R4 to interface with 'External Diagnostic Systems', alongside standard IdP and Payment Gateway integrations.",
+   "usability": "Patients are served by 'Patient Portal Service' with a responsive Next.js 'UI Orchestrator'. However, Clinical Staff and Administrators lack defined frontend client containers in Level 2, interacting only abstractly through 'API Gateway'.",
+   "reliability": "High availability is supported by 'Patroni' HA orchestration, 'Redis Sentinel', 'NATS JetStream' RAFT consensus, and Istio circuit breaking. However, achieving true active-active multi-region writes across hybrid cloud remains ambiguous with standard 'PostgreSQL Engine'.",
+   "security": "Excellently addressed via MFA in 'Security Proxy Layer', mTLS in 'API Gateway' and Istio, ABAC via 'OPA Sidecar', field-level AES-256 via 'Envelope Encryption Manager', 'pgaudit', and 10-year retention in 'Immutable Event Store'.",
+   "maintainability": "Domain services ('Patient Service', 'Billing Service', 'EMR Service') exhibit high cohesion and loose coupling via 'NATS JetStream' messaging. Continuous deployment is managed by 'ArgoCD' and system observability is handled by 'OpenTelemetry'.",
+   "portability": "The hybrid environment (on-prem k8s and AWS) is well-supported by containerized microservices, 'Istio Service Mesh', 'ArgoCD', and 'Leaf Node Bridge', with minor cloud dependency on S3 APIs for cold storage."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The architecture incorporates Fastify in EMR Service, pgBouncer connection pooling, read-optimized CQRS projections, and Redis caching. However, Redis is scoped primarily to session state and transient data, placing read pressure directly on PostgreSQL, which may require tuned read replicas to reliably sustain sub-second P95 loads.",
+    "elements": [
+     "EMR Service",
+     "Record Processor",
+     "Redis",
+     "Connection Pooler",
+     "PostgreSQL Engine",
+     "Patient Profile Projection"
+    ],
+    "sensitivity_points": [
+     "pgBouncer connection saturation and database query latency under concurrent clinician read traffic",
+     "Effectiveness of read-optimized projections in offloading transactional relational storage"
+    ],
+    "tradeoffs": [
+     "Maintaining transient-only cache policies versus caching EMR read models to guarantee sub-second latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The FHIR Integration Gateway uses NATS JetStream queuing and asynchronous transformation engines to buffer peak ingest (33 records/sec). This decouples write spikes from the EMR transactional core, preventing write lock contention and preserving sub-second read performance on clinical screens.",
+    "elements": [
+     "FHIR Integration Gateway",
+     "Transformation Engine",
+     "Queue Manager",
+     "NATS JetStream",
+     "EMR Service",
+     "Record Processor"
+    ],
+    "sensitivity_points": [
+     "NATS JetStream stream buffer capacity and consumer worker parallelism during ingest bursts"
+    ],
+    "tradeoffs": [
+     "Eventual visibility of lab results in EMR versus immediate transactional consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "While NATS JetStream uses Leaf Nodes and PostgreSQL employs Patroni for clustering, cross-region active-active synchronization across hybrid cloud (on-prem to eu-central-1) without data loss (RPO=0) within 1 minute is inadequately specified. Patroni alone does not provide zero-data-loss multi-region failover across high-latency WAN links.",
+    "elements": [
+     "Data Synchronization Service",
+     "HA Orchestrator",
+     "PostgreSQL Engine",
+     "Leaf Node Bridge",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "WAN latency impact on cross-site database consensus and replication lag",
+     "Automated DNS and ingress traffic shifting mechanisms between on-prem and cloud sites"
+    ],
+    "tradeoffs": [
+     "Enforcing strict zero data loss across hybrid sites versus synchronous replication write latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Patroni HA Orchestrator provides automated leader election and failover within 30 seconds using quorum witnesses. In-flight billing workflows are insulated against loss through NATS JetStream persistent queues and Saga-orchestrated claim processing, allowing safe retries without duplicate claim submissions.",
+    "elements": [
+     "Billing Service",
+     "Claim Processor",
+     "Invoice Orchestrator",
+     "HA Orchestrator",
+     "PostgreSQL Engine",
+     "NATS JetStream"
+    ],
+    "sensitivity_points": [
+     "Patroni lease TTL duration and Raft heartbeat configuration for 30-second failover",
+     "Idempotency token enforcement across claim submission endpoints"
+    ],
+    "tradeoffs": [
+     "Idempotent message retry complexity versus at-most-once claim processing guarantees"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Insurance claim processing is isolated within the Billing Service, decoupled from the EMR Service via asynchronous events and Saga orchestration. Modifying clearinghouse integration logic is confined to the Claim Processor and Payment Gateway Adapter without impacting the EMR Service.",
+    "elements": [
+     "Billing Service",
+     "Claim Processor",
+     "Payment Gateway Adapter",
+     "Invoice Orchestrator",
+     "EMR Service"
+    ],
+    "sensitivity_points": [
+     "Degree of protocol abstraction in Claim Processor when introducing heterogeneous clearinghouse formats"
+    ],
+    "tradeoffs": [
+     "Generic claim interface abstraction complexity versus developing bespoke adapters per clearinghouse"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Modifications are restricted to three distinct components: Demographics Manager (data model/business logic), Audit Logger (audit capture), and UI Orchestrator / Patient Context Provider (presentation). The component boundaries cleanly partition persistence, audit capture, and user interface updates within one sprint.",
+    "elements": [
+     "Demographics Manager",
+     "Audit Logger",
+     "UI Orchestrator",
+     "Patient Context Provider (BFF)",
+     "PostgreSQL Engine"
+    ],
+    "sensitivity_points": [
+     "Coupling between internal demographic models and CQRS profile projections"
+    ],
+    "tradeoffs": [
+     "Propagating schema updates across CQRS projection pipelines versus maintaining separate read/write models"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "MFA is delegated to an external IdP via API Gateway Kong ingress and OIDC. While authentication without the second factor is denied, real-time alerting within 1 minute lacks an explicit SIEM alerting mechanism beyond basic runtime scanning via Falco and Prometheus metrics.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "API Gateway",
+     "Kong Ingress Controller",
+     "Security Proxy Layer",
+     "Falco"
+    ],
+    "sensitivity_points": [
+     "IdP webhook or event latency when exporting failed authentication events to security handlers"
+    ],
+    "tradeoffs": [
+     "Delegating MFA enforcement entirely to external IdP versus embedding native security controls"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The API Gateway Context-Aware Policy Engine and OPA sidecars enforce ABAC before access. Read operations are comprehensively audited via pgaudit and Audit Managers. NATS JetStream and Archival Sidecar stream immutable logs to Object Lock WORM storage, meeting the 10-year retention requirement.",
+    "elements": [
+     "Context-Aware Policy Engine",
+     "OPA Sidecar",
+     "Record Processor",
+     "Audit Manager",
+     "Audit Logger",
+     "Archival Sidecar"
+    ],
+    "sensitivity_points": [
+     "Throughput degradation from mandatory synchronous policy evaluation on every read access",
+     "Compliance enforcement of immutable WORM Object Lock policies over 10-year lifecycle"
+    ],
+    "tradeoffs": [
+     "Comprehensive read-level audit storage overhead versus regulatory compliance assurance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "none",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Security Components",
+     "Compliance Reporter",
+     "Audit Manager",
+     "Audit Logger",
+     "Consent Manager",
+     "Request/Response Transformer",
+     "pgaudit"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "HA Orchestrator",
+     "Redis Sentinel",
+     "RAFT Consensus Engine",
+     "Istio Service Mesh",
+     "Data Synchronization Service"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Immutable Event Store",
+     "Archival Sidecar",
+     "Partition Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Service",
+     "Registration Controller",
+     "Demographics Manager",
+     "Patient Profile Projection"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "none",
+    "elements": []
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "Record Processor",
+     "Audit Manager",
+     "NATS JetStream",
+     "PostgreSQL Engine",
+     "Audit Logger"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service",
+     "Invoice Orchestrator",
+     "Claim Processor",
+     "Payment Gateway Adapter",
+     "Secure Payment Gateway"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Security Proxy Layer",
+     "Security Components",
+     "Envelope Encryption Manager",
+     "Encryption Engine"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Data Synchronization Service",
+     "Leaf Node Bridge",
+     "HA Orchestrator",
+     "Redis Sentinel"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Redis",
+     "Volatile-LRU/TTL Policy Engine",
+     "Patient Context Provider (BFF)",
+     "Patient Profile Projection"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "External Diagnostic Systems",
+     "FHIR Integration Gateway",
+     "Transformation Engine",
+     "FHIR Facade"
+    ]
+   }
+  }
+ }
+}

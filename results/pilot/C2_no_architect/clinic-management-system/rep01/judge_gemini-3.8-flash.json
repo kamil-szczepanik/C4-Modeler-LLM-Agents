@@ -1,0 +1,294 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 2,
+   "portability": 3
+  },
+  "mean": 3.25,
+  "justifications": {
+   "functional_suitability": "Core requirements (registration, scheduling, billing, FHIR) are assigned to dedicated containers like 'Patient Registration' and 'Billing & Claims'. However, 'Appointment Scheduling' lacks explicit resource clash checking logic, and 'EMR' completely omits the required immutable audit trail mechanism.",
+   "performance_efficiency": "'Medical Records Management Engine' specifies NVMe storage, and 'Data Ingestion Service' uses Kafka for queueing. However, there are no caching mechanisms (e.g., Redis) or read-optimization patterns to reliably guarantee the sub-second (< 1s P95) EMR screen load target.",
+   "compatibility": "Compatibility is thoroughly addressed through the dedicated 'HL7 FHIR Interoperability' container, 'FHIR API Gateway', and 'FHIR Integration Client', using HL7 FHIR over mTLS to interface with 'External Lab & Imaging Systems'.",
+   "usability": "All target personas are identified. However, administrative and clinical staff users directly interact with backend service containers over HTTPS/REST without dedicated web frontend containers or distinct presentation tiers, leaving staff user workflows poorly articulated.",
+   "reliability": "'Medical Records Management Engine' mentions active-active multi-master replication and tiered storage for retention. However, hybrid active-active orchestration across 'on-prem-k8s' and 'eu-central-1', health checking, and site failover mechanisms to achieve 99.99% availability are not detailed.",
+   "security": "Strong security baseline with OAuth2/OIDC MFA, TLS 1.3, SPIFFE/SPIRE mTLS, Vault credential rotation, and AES-256 field-level storage encryption. However, mechanisms for regulatory audit logging (HIPAA/GDPR) are absent.",
+   "maintainability": "While service boundaries exist at Level 2, Level 3 decomposition for 'Billing & Claims' is severely compromised by modeling users, external systems, and other containers as internal components, violating component modularity and encapsulation.",
+   "portability": "All major workloads run on Kubernetes, facilitating container portability across on-prem-k8s and AWS eu-central-1. However, hybrid-cloud abstractions, multi-cluster federation, or environment-agnostic storage solutions are not specified."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.625,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 3.5,
+   "Modifiability": 4.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "Medical Records Management Engine uses NVMe and Kubernetes, but lacks an in-memory caching tier and read replicas to guarantee sub-second P95 latency for 500 concurrent clinicians with field-level decryption overhead.",
+    "elements": [
+     "Clinician Access Interface",
+     "Medical Records Management Engine",
+     "EMR"
+    ],
+    "sensitivity_points": [
+     "Cryptographic decryption overhead on EMR query path",
+     "Absence of a dedicated caching layer for clinical charts"
+    ],
+    "tradeoffs": [
+     "Field-level encryption increases data security at the expense of query latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Data Ingestion Service leverages Kafka to buffer and decouple 10,000 incoming HL7 FHIR records from the EMR, preserving read performance while processing payloads well within the 10-minute window.",
+    "elements": [
+     "HL7 FHIR Interoperability",
+     "FHIR API Gateway",
+     "Data Ingestion Service",
+     "Medical Records Management Engine"
+    ],
+    "sensitivity_points": [
+     "Kafka ingestion buffer capacity and consumer throughput to EMR storage"
+    ],
+    "tradeoffs": [
+     "Asynchronous message queuing guarantees availability and throughput over immediate data visibility"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "While EMR includes active-active multi-master replication across hybrid environments, the architecture omits global DNS/GSLB failover mechanisms and state synchronization for scheduling and registration services.",
+    "elements": [
+     "EMR",
+     "Medical Records Management Engine",
+     "Appointment Scheduling",
+     "Patient Registration"
+    ],
+    "sensitivity_points": [
+     "Multi-master conflict resolution and cross-region network latency",
+     "Missing automated GSLB health-check and traffic rerouting mechanism"
+    ],
+    "tradeoffs": [
+     "Active-active multi-master maintains high availability but introduces write conflict complexity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Billing & Claims component integrates Apache Kafka / RabbitMQ to queue claim submissions and decouple processing from database failures, enabling safe message retries and preventing lost transactions.",
+    "elements": [
+     "Billing & Claims",
+     "Billing & Claims Container",
+     "Apache Kafka / RabbitMQ",
+     "External Clearinghouses & Payment Gateways"
+    ],
+    "sensitivity_points": [
+     "Message queue acknowledgment protocols and idempotent consumer logic"
+    ],
+    "tradeoffs": [
+     "Asynchronous queue-based claim dispatching adds architectural complexity to prevent transaction loss"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "External clearinghouse communication is isolated within Billing & Claims through dedicated external gateway interfaces and messaging, leaving core EMR components unaffected by clearinghouse changes.",
+    "elements": [
+     "Billing & Claims",
+     "Billing & Claims Container",
+     "External Clearinghouses & Payment Gateways",
+     "EMR"
+    ],
+    "sensitivity_points": [
+     "Coupling between external clearinghouse schemas and Billing business logic"
+    ],
+    "tradeoffs": [
+     "Encapsulating integration logic inside Billing isolates EMR changes but concentrates clearinghouse churn"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Modifications are restricted to Registration API Controller, Registration Service, and Medical Records Management Engine, fitting well within the three-component limit and standard sprint delivery.",
+    "elements": [
+     "Registration API Controller",
+     "Registration Service",
+     "Medical Records Management Engine"
+    ],
+    "sensitivity_points": [
+     "Contract stability between Registration Service and EMR gRPC interfaces"
+    ],
+    "tradeoffs": [
+     "Separating registration intake from EMR persistence isolates boundaries but requires coordinating two data models"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "OAuth2/OIDC with MFA is enforced at ingress interfaces, blocking password-only intrusions. However, the model lacks an explicit SIEM, IDS, or automated security alert pipeline to notify operators within 1 minute.",
+    "elements": [
+     "Clinician Access Interface",
+     "Authentication & Authorization Service",
+     "Portal API Gateway"
+    ],
+    "sensitivity_points": [
+     "Strict MFA enforcement at identity provider boundary",
+     "Absence of real-time security event streaming to SIEM"
+    ],
+    "tradeoffs": [
+     "Mandatory MFA blocks unauthorized logins but increases user friction during clinical access"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "OAuth2 tokens enforce access control, and tiered object storage handles long-term persistence. However, dedicated tamper-evident audit logging components and guaranteed 100% read-audit capture are not explicitly detailed.",
+    "elements": [
+     "Clinician Access Interface",
+     "Medical Records Management Engine"
+    ],
+    "sensitivity_points": [
+     "Audit log immutability and tamper-evidence on distributed storage",
+     "Performance overhead of synchronously auditing all read operations"
+    ],
+    "tradeoffs": [
+     "Auditing every record read guarantees compliance but adds write amplification to storage"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.6363636363636364,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Clinician Access Interface",
+     "Authentication & Authorization Service",
+     "Medical Records Management Engine",
+     "EMR Data Aggregator"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Medical Records Management Engine"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Registration",
+     "Registration API Controller",
+     "Registration Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Appointment Scheduling",
+     "Appointment Controller",
+     "Appointment Service",
+     "Calendar Integration Engine"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "EMR",
+     "Medical Records Management Engine",
+     "Clinician Access Interface",
+     "Internal Integration Receiver"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims",
+     "Billing & Claims Container",
+     "External Clearinghouses & Payment Gateways",
+     "Apache Kafka / RabbitMQ"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Clinician Access Interface",
+     "Authentication & Authorization Service",
+     "Medical Records Management Engine"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Medical Records Management Engine"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Medical Records Management Engine"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "HL7 FHIR Interoperability",
+     "FHIR API Gateway",
+     "Data Ingestion Service",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ }
+}

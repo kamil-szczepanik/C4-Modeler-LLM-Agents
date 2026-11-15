@@ -1,0 +1,234 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "The architecture provides 'Core Circulation and Transactional Database' and 'Read-optimized Search Index' for basic transactions and searching, but lacks dedicated components for cataloguing physical and digital items (R-01) or managing digital asset workflows beyond general descriptions.",
+   "performance_efficiency": "R-05 (<800ms search) is thoroughly addressed using a dedicated 'Read-optimized Search Index' with Elasticsearch, asynchronous Debezium CDC pipeline from 'Transaction Manager', an EU-hosted CDN, and an 'Observability and RUM Agent' specifically tracking latency against the target.",
+   "compatibility": "The design explicitly defines standard integrations: 'Inter-Library Loan (ILL) Partners' via NCIP/ISO 18626 with mTLS, and 'Payment Gateways & Notification Services' via secure webhooks and payload-filtered egress through 'API Gateway'.",
+   "usability": "'Self-Service Web/Mobile Portal' addresses Patrons and Librarians with accessible frontend assets, while 'Admin/Reporting Container' supports Library Administrators. However, specific workflows for academic vs. public library usability needs remain somewhat generic.",
+   "reliability": "High availability and data consistency are well supported via 'PostgreSQL with Raft/Patroni' and reliable log-based CDC via 'Change Data Capture Publisher'. Detailed disaster recovery and multi-zone failover mechanisms are not fully detailed.",
+   "security": "EU-only data residency is strictly enforced across containers (geo-pinned CDN, EU Kubernetes clusters, EU-hosted Elasticsearch). Authentication Manager (OAuth2/PKCE), Edge Security, mTLS with cert-manager, CSP/SRI, and encrypted CDC payloads provide comprehensive security.",
+   "maintainability": "Decomposition into distinct containers and components exhibits clear modularity. Decoupling reads and writes via Debezium CDC and utilizing an 'API Gateway' promotes modular maintainability, though mixing circulation and transactional data in one container slightly blurs domain boundaries.",
+   "portability": "Containers and components rely on standard technologies (Kubernetes, PostgreSQL, Elasticsearch) that can run across any EU cloud or on-premises environment without proprietary lock-in, fulfilling the EU residency constraint effectively."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 2.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The dedicated Read-optimized Search Index using Elasticsearch separates search traffic from the transactional database, routed via an API Gateway. However, specific search caching and cluster horizontal autoscaling policies are not fully elaborated to guarantee sub-800ms P99 under 2,000 concurrent queries.",
+    "elements": [
+     "API Gateway",
+     "Read-optimized Search Index",
+     "Search Query Processor",
+     "Self-Service Web/Mobile Portal"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster sizing and shard replica configuration under concurrent search loads."
+    ],
+    "tradeoffs": [
+     "Dedicated search indexing increases operational complexity to achieve low query latency."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Transaction Manager writes to PostgreSQL while Change Data Capture via Debezium asynchronously streams WAL updates to the Elasticsearch Data Synchronization Consumer. This ensures writes do not degrade read search latency and easily propagates index updates within five minutes.",
+    "elements": [
+     "Transaction Manager",
+     "Change Data Capture Publisher",
+     "Data Synchronization Consumer",
+     "Search Query Processor",
+     "Read-optimized Search Index"
+    ],
+    "sensitivity_points": [
+     "CDC pipeline throughput and Elasticsearch bulk indexing latency."
+    ],
+    "tradeoffs": [
+     "Eventual consistency between transactional database records and searchable catalog indices."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Elasticsearch natively supports node failover through replica shards, and circulation is completely decoupled into a distinct PostgreSQL cluster with Patroni/Raft. Loan transactions remain unaffected, though automated failover times for the search cluster are not explicitly documented.",
+    "elements": [
+     "Read-optimized Search Index",
+     "Search Query Processor",
+     "Transaction Manager",
+     "Core Circulation and Transactional Database"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch primary shard re-election and replica promotion duration."
+    ],
+    "tradeoffs": [
+     "Maintaining replica shards increases storage and infrastructure costs."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Frontend assets are served via CDN, and the portal runs on Kubernetes behind an API Gateway that distributes traffic across instances. Failure of a single stateless instance is isolated, preventing loan transaction loss, although session stickiness and client reconnection strategies are omitted.",
+    "elements": [
+     "Self-Service Web/Mobile Portal",
+     "Web and Mobile Frontend Assets",
+     "API Gateway",
+     "Traffic Router and mTLS Manager"
+    ],
+    "sensitivity_points": [
+     "Kubernetes readiness probe timings and API Gateway health check intervals."
+    ],
+    "tradeoffs": [
+     "Redundant stateless portal replicas require additional cluster compute overhead."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "The architecture lacks a dedicated digital provider integration component or ingestion pipeline for external e-book partners. Adding a provider requires modifying the core database schemas or transactional logic, as integrations exist only for ILL partners and payment gateways.",
+    "elements": [
+     "Core Circulation and Transactional Database",
+     "Transaction Manager",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Coupling of digital catalog ingestion directly to the core transactional container."
+    ],
+    "tradeoffs": [
+     "Avoiding separate integration adapters simplifies architecture but impedes third-party provider extensibility."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "There is no policy engine, rule management system, or dynamic configuration store specified. Loan policies are buried within the Transaction Manager or Administrative Workload Handler, likely requiring code modifications and redeployment to alter circulation rules between library types.",
+    "elements": [
+     "Core Circulation and Transactional Database",
+     "Transaction Manager",
+     "Admin/Reporting Container",
+     "Administrative Workload Handler"
+    ],
+    "sensitivity_points": [
+     "Hardcoded circulation business logic within core database services."
+    ],
+    "tradeoffs": [
+     "Embedding business logic avoids policy-engine complexity but compromises runtime configurability."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The architecture enforces EU data residency systematically: EU-pinned CDN frontend assets, Kubernetes EU-region clusters, EU-hosted Elasticsearch, and an API Gateway equipped with egress boundary payload filtering to stop outbound data leakage.",
+    "elements": [
+     "Web and Mobile Frontend Assets",
+     "API Gateway",
+     "Core Circulation and Transactional Database",
+     "Read-optimized Search Index",
+     "Administrative Workload Handler"
+    ],
+    "sensitivity_points": [
+     "Strict adherence of egress filtering rules preventing external data exfiltration."
+    ],
+    "tradeoffs": [
+     "Restricting hosting exclusively to EU regions limits multi-region cloud deployment flexibility."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "The Edge Security and Token Validator enforces OAuth2/OIDC RBAC and JWT validation, complemented by query-time JWT filtering in the Search Query Processor. However, centralized security audit logging for unauthorized access attempts is only partially addressed in the Financial Auditing Engine.",
+    "elements": [
+     "API Gateway",
+     "Edge Security and Token Validator",
+     "Search Query Processor",
+     "Financial Auditing Engine"
+    ],
+    "sensitivity_points": [
+     "Granular patron ID claim validation within JWT tokens at the gateway."
+    ],
+    "tradeoffs": [
+     "Fine-grained token scope checking at boundaries adds slight processing latency."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Library Management System",
+     "Core Circulation and Transactional Database",
+     "Read-optimized Search Index",
+     "Web and Mobile Frontend Assets",
+     "Administrative Workload Handler"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Library Management System",
+     "Core Circulation and Transactional Database",
+     "Read-optimized Search Index"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Read-optimized Search Index",
+     "Search Query Processor",
+     "Observability and RUM Agent"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

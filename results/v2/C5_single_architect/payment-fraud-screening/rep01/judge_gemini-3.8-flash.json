@@ -1,0 +1,328 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Fraud Scoring Engine handles scoring decisions (R-01), Case Management Backend and Fraud Analyst UI support reviews (R-02), while Model Ingestion & Hot-Swap Coordinator and Rule Management Panel enable zero-downtime updates (R-03).",
+   "performance_efficiency": "Rust-based Fraud Scoring Engine, In-Memory Feature Cache Client (Redis), lock-free arc-swap reads, and asynchronous dispatch via Event Publisher and AWS SQS ensure sub-50ms latency at 3,000 TPS. Partition Manager and Glacier archival prevent database degradation.",
+   "compatibility": "HTTP/gRPC Router Component and Tokenization Proxy Component properly interface with the Payment Gateway and Vault Provider. However, the chargeback ingestion path from Card Networks noted in Level 1 is omitted from lower container and component levels.",
+   "usability": "Payment Analysts are well served by Fraud Analyst UI with Case Queue Router and Decision Action Form. However, Compliance Auditors defined in the context diagram lack any dedicated interface or query mechanism to access 7-year audit logs.",
+   "reliability": "Scoring Orchestrator Component enforces a 35ms timeout and Dead-Letter Queues handle asynchronous processing failures. However, the architecture lacks an explicit fail-open, bypass, or circuit-breaker mechanism to ensure payments are not blocked if scoring fails (R-07).",
+   "security": "Tokenization Proxy strips PANs via mTLS to external vaults, Tokenization Filter ensures backend redaction, and Audit & Cryptographic Service enforces tamper-evidence using application-level HMAC and Merkle-tree chaining alongside SSE-KMS, satisfying PCI-DSS and R-05/R-06.",
+   "maintainability": "Containers exhibit high cohesion and loose coupling via async queues and gRPC interfaces. However, using three diverse backend languages (Go, Rust, Java/Spring Boot) imposes significant cognitive overhead for an operations team of only three engineers.",
+   "portability": "The architecture aligns with the AWS eu-west-1 target using containerized workloads alongside AWS RDS, S3 Glacier, and SQS/SNS. Abstracted data access layers facilitate portability, though queue and storage components remain tightly coupled to AWS SDKs."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 3.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Rust-based scoring engine with lock-free model reads, Redis-backed feature caching, and a 35ms client timeout in the Go ingestion router ensures sub-50ms P99 latency at 3,000 TPS while offloading audit logging asynchronously.",
+    "elements": [
+     "API Gateway / Ingestion Service",
+     "Scoring Orchestrator Component",
+     "Fraud Scoring Engine",
+     "In-Memory Feature Cache Client",
+     "Rule Execution Engine"
+    ],
+    "sensitivity_points": [
+     "In-memory Redis cache read latency and network round-trip to feature store",
+     "Lock-free hot-swap execution overhead during high concurrency"
+    ],
+    "tradeoffs": [
+     "Using in-memory feature cache favors low latency over strong multi-region consistency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Case reviews run on independent containers (Case Management Backend, UI) isolated from the Rust Scoring Engine. However, both case management and direct audit ingestion interact with PostgreSQL, creating potential database resource contention under peak load.",
+    "elements": [
+     "Fraud Analyst UI",
+     "Case Management Backend",
+     "Audit & Decision Store",
+     "Amazon RDS PostgreSQL",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Database connection pool and IOPS saturation on RDS PostgreSQL during peak analyst queries"
+    ],
+    "tradeoffs": [
+     "Sharing RDS PostgreSQL between audit archiving and case management simplifies deployment but risks contention"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "The Scoring Orchestrator defines a 35ms timeout, but no explicit fallback policy (e.g., static heuristic fallback or default-approve circuit breaker) is specified to handle sustained scoring engine crashes and generate fallback audit records.",
+    "elements": [
+     "API Gateway / Ingestion Service",
+     "Scoring Orchestrator Component",
+     "Event Publisher Component",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Absence of an explicit fallback evaluation strategy when scoring service fails"
+    ],
+    "tradeoffs": [
+     "Failing open vs failing closed when scoring engine times out"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Audit events are decoupled via asynchronous messaging (AWS SQS/SNS and internal async channels), enabling synchronous scoring to proceed under 50ms without data loss even if the downstream RDS store experiences degradation or failure.",
+    "elements": [
+     "Decision Publisher",
+     "AWS SQS / SNS",
+     "Amazon SNS Audit Topic",
+     "Event Publisher Component",
+     "Audit & Decision Store"
+    ],
+    "sensitivity_points": [
+     "Queue retention limits and backpressure handling when database downtime is prolonged"
+    ],
+    "tradeoffs": [
+     "Asynchronous event publishing prioritizes decision throughput and availability over immediate audit read consistency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Model Ingestion & Hot-Swap Coordinator in the Rust engine uses arc-swap and ONNX Runtime to swap models in memory without downtime, ensuring version tracking in decisions and enabling rapid rollback.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Model Ingestion & Hot-Swap Coordinator",
+     "Rule Execution Engine",
+     "Decision Publisher"
+    ],
+    "sensitivity_points": [
+     "Memory footprint during concurrent loading of active and candidate ONNX models"
+    ],
+    "tradeoffs": [
+     "In-process model evaluation minimizes latency at the cost of higher per-node memory usage"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The UI provides a rule panel and the engine has a compiled evaluation component, but there is no communication path defined between the Case Management Backend and the Fraud Scoring Engine to dynamically distribute or update rules.",
+    "elements": [
+     "Rule Management Panel Component",
+     "Case Management Backend",
+     "Fraud Scoring Engine",
+     "Rule Execution Engine"
+    ],
+    "sensitivity_points": [
+     "Missing propagation channel to distribute rules from analyst backend to scoring engine",
+     "Compiled rule execution mechanism requiring binary redeployment"
+    ],
+    "tradeoffs": [
+     "Native compiled rules maximize execution speed but hinder runtime dynamic updates"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "PANs are stripped at ingestion and redacted in the backend before reaching analysts. However, the architecture completely lacks an anomaly detection, SIEM, or alerting mechanism to identify compromised analyst accounts within 15 minutes.",
+    "elements": [
+     "Tokenization Proxy Component",
+     "Tokenization / Vault Provider",
+     "Tokenization Filter / Redaction Component",
+     "Audit Logger Component"
+    ],
+    "sensitivity_points": [
+     "Absence of behavioral monitoring or automated intrusion alerting on analyst audit trails"
+    ],
+    "tradeoffs": [
+     "Tokenization externalization offloads PCI scope but introduces external network latency at ingestion"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Audit & Cryptographic Service secures records via HMAC and Merkle-tree chaining, while the Retention & Archival Worker partitions and moves historic data to Amazon S3 Glacier, ensuring compliant, cost-effective 7-year tamper-evident retrieval.",
+    "elements": [
+     "Audit & Decision Store",
+     "Audit & Cryptographic Service",
+     "Retention & Archival Worker",
+     "Amazon S3 Glacier",
+     "Partition Manager"
+    ],
+    "sensitivity_points": [
+     "S3 Glacier retrieval latency and cryptographic verification overhead for archived Merkle proofs"
+    ],
+    "tradeoffs": [
+     "Cold Glacier archival optimizes infrastructure budget while accepting hours of retrieval latency"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Tokenization / Vault Provider",
+     "Tokenization Proxy Component",
+     "Tokenization Filter / Redaction Component",
+     "Tokenization Masking Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Audit & Decision Store",
+     "Audit & Cryptographic Service",
+     "Partition Manager",
+     "Retention & Archival Worker",
+     "Amazon S3 Glacier"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Amazon S3 Glacier",
+     "AWS SQS / SNS",
+     "Fraud Analyst UI"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Amazon RDS PostgreSQL",
+     "AWS SQS / SNS",
+     "Fraud Analyst UI"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "API Gateway / Ingestion Service",
+     "Scoring Orchestrator Component",
+     "Fraud Scoring Engine",
+     "Scoring API Controller",
+     "Rule Execution Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Backend",
+     "Fraud Analyst UI",
+     "Case API Controller",
+     "Workflow Orchestrator",
+     "Case Queue Router Component",
+     "Decision Action Form Component",
+     "Amazon SQS Case Routing Queue"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model Ingestion & Hot-Swap Coordinator",
+     "Rule Execution Engine",
+     "Rule Management Panel Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scoring Orchestrator Component",
+     "Fraud Scoring Engine",
+     "Feature Assembler",
+     "In-Memory Feature Cache Client",
+     "Model Ingestion & Hot-Swap Coordinator"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Tokenization Proxy Component",
+     "Tokenization / Vault Provider",
+     "Tokenization Filter / Redaction Component",
+     "Tokenization Masking Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit & Decision Store",
+     "Audit & Cryptographic Service",
+     "Decision Publisher",
+     "Amazon SNS Audit Topic"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Scoring Orchestrator Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

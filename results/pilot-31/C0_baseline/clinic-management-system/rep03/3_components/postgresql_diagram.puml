@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+Person_Ext(EMR, "EMR/Billing Services", "External services requesting database operations")
+Person_Ext(App, "Application Services", "Core application services interacting with the DB")
+Person_Ext(Reporting, "Reporting/Billing Services", "Services performing read-heavy analytical tasks")
+System_Ext(S3, "AWS S3", "WORM storage for WAL archiving and audit logs")
+
+Container_Boundary(PostgreSQL, "PostgreSQL") {
+    Component(Engine, "PostgreSQL Engine", "PostgreSQL 15+", "Relational database engine providing ACID compliance for patient records and billing data.")
+    Component(Pooler, "Connection Pooler", "pgBouncer", "Manages connection pooling for EMR and Billing services.")
+    Component(Orchestrator, "HA Orchestrator", "Patroni", "Manages high-availability cluster state, failover, and quorum-based witness nodes.")
+    Component(Partitioner, "Partition Manager", "pg_partman", "Automates time-based table partitioning for performance and archival.")
+    Component(Audit, "Audit Logger", "pgaudit", "Provides detailed session and object auditing for HIPAA compliance.")
+    Component(Encryption, "Encryption Engine", "pgcrypto", "Enables field-level encryption for PHI and PII data.")
+    Component(Metrics, "Metrics Exporter", "pg_exporter", "Exposes database metrics for monitoring and alerting.")
+}
+
+Rel(EMR, Pooler, "Connects via TCP", "TCP")
+Rel(App, Engine, "Connects via mTLS-encrypted SCRAM-SHA-256", "mTLS/SCRAM-SHA-256")
+Rel(Engine, Orchestrator, "Managed by", "API")
+Rel(Engine, Audit, "Logs session/object activity to", "Internal")
+Rel(Engine, S3, "Archives WAL files and logical decoding logs", "HTTPS")
+Rel(Reporting, Engine, "Accesses via Foreign Data Wrapper (FDW) on read-only replica", "FDW")
+
+@enduml

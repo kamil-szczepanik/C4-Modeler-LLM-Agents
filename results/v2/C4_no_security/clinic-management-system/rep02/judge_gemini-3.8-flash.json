@@ -1,0 +1,336 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled via dedicated elements: Patient Registration (R-01), Scheduling (R-02), EMR Management with CDC Outreach Publisher and SIEM for audits (R-03), and Claim Processing Component with Eligibility Engine in Billing Services (R-04).",
+   "performance_efficiency": "Sub-second EMR target is directly supported by Redis caching in Clinical Services, local caching in Auth & Session Manager, PgBouncer pooling, Partition Manager in PostgreSQL, and Kafka asynchronous decoupling.",
+   "compatibility": "HAPI FHIR Interoperability (with FHIR REST Facade and Data Transformation Engine) natively integrates with External Lab & Imaging Systems via HL7 FHIR REST, while standard REST/OAuth2 integrates IdP and Payment Gateways.",
+   "usability": "All user groups are served through distinct interfaces: React SPA Feature Modules for clinical, administrative, and billing staff, and Node.js Mobile BFF alongside Patient Mobile App for patients, backed by Notification Worker.",
+   "reliability": "While Strimzi Operator, DLQ & Audit Router, and Outbox Pattern Worker provide resilience, the architecture lacks concrete active-active cross-site replication mechanisms between on-prem-k8s and eu-central-1 for PostgreSQL to achieve 99.99% availability.",
+   "security": "Addresses mandates with Identity Provider MFA/OIDC, Istio mTLS zero-trust mesh, AWS KMS key integration, AES-256 PostgreSQL storage, Row-Level Security Enforcer, Consent Enforcement Interceptor, and SIEM immutable audit streaming.",
+   "maintainability": "Clean separation of concerns across Clinical Services, Billing Services, HAPI FHIR, and Compliance Worker. Event schemas are governed by Confluent Schema Registry with asynchronous decoupling via Apache Kafka.",
+   "portability": "Containerized workloads run smoothly on Kubernetes via Strimzi and Istio across environments, though specific hardcoded dependencies on AWS CloudFront and AWS KMS/HSM slightly hinder uniform on-prem-k8s execution."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 3.0,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture incorporates Redis caching in Clinical Services, client-side session caching, API Gateway prioritization for clinical traffic, and PgBouncer connection pooling in PostgreSQL to comfortably sustain sub-second EMR screen rendering under concurrent clinician loads.",
+    "elements": [
+     "React SPA",
+     "API Gateway",
+     "Clinical Services",
+     "Redis",
+     "PgBouncer",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Redis cache hit ratio for clinical views",
+     "PgBouncer connection pool sizing under concurrent clinical access"
+    ],
+    "tradeoffs": [
+     "In-memory caching improves read latency but requires strict invalidation mechanisms"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "HAPI FHIR Interoperability handles validation and transformation while buffering inbound payloads through Kafka. API Gateway policy plugins prioritize interactive clinical traffic over background ingest, preserving sub-second EMR responsiveness during high-volume lab result imports.",
+    "elements": [
+     "API Gateway",
+     "HAPI FHIR Interoperability",
+     "Apache Kafka",
+     "Clinical Services"
+    ],
+    "sensitivity_points": [
+     "Kafka partition throughput during high-frequency ingestion bursts",
+     "API Gateway traffic prioritization ensuring clinical read traffic is unaffected"
+    ],
+    "tradeoffs": [
+     "Asynchronous Kafka buffering shields clinical queries but creates brief lag before results appear"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "Although Kafka supports hybrid deployment via Strimzi, the operational PostgreSQL database lacks cross-region active-active replication, automatic failover mechanisms, and global traffic routing between on-prem and eu-central-1, making sub-minute RTO without data loss unattainable.",
+    "elements": [
+     "PostgreSQL",
+     "Apache Kafka",
+     "Service Mesh",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Cross-region replication latency and synchronization consistency",
+     "Automated failover detection and traffic rerouting across hybrid regions"
+    ],
+    "tradeoffs": [
+     "Multi-region active-active database topologies avoid single-point failure but require complex distributed replication"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Claim processing is decoupled from external clearinghouses via Kafka and PgBouncer connection management, allowing requests to be queued safely. However, specific PostgreSQL multi-node HA cluster failover mechanisms are not fully detailed to guarantee the 30-second window.",
+    "elements": [
+     "Billing Services",
+     "Apache Kafka",
+     "PgBouncer",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "PgBouncer reconnect latency and failover detection time",
+     "Kafka consumer idempotency and claim deduplication logic"
+    ],
+    "tradeoffs": [
+     "Queuing claim submissions via Kafka ensures fault tolerance but prevents immediate synchronous confirmation"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Billing Services is completely decoupled from Clinical Services and EMR management via container and component boundaries. Adding a clearinghouse requires modifications solely within the Claim Processing and Eligibility Engine components in Billing Services.",
+    "elements": [
+     "Billing Services",
+     "Claim Processing Component",
+     "Eligibility Engine Component"
+    ],
+    "sensitivity_points": [
+     "Clearinghouse protocol abstraction within the Eligibility Engine",
+     "Clean separation between billing domain models and clinical workflows"
+    ],
+    "tradeoffs": [
+     "Separating billing microservices limits changes to one domain but increases operational integration complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Updating an audited demographic field impacts exactly three components: the React SPA Feature Modules (UI), Clinical Services Patient Registration, and PostgreSQL schema. Audit trail updates occur automatically through the CDC Outreach Publisher (Debezium) without extra component code.",
+    "elements": [
+     "React SPA",
+     "Clinical Services",
+     "PostgreSQL",
+     "CDC Outreach Publisher"
+    ],
+    "sensitivity_points": [
+     "Database schema evolution and migration compatibility",
+     "Debezium CDC schema synchronization with downstream consumers"
+    ],
+    "tradeoffs": [
+     "Automating audit logging via database CDC minimizes code modifications but tightly couples audit schemas"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Authentication delegates to an external Identity Provider supporting MFA and OIDC. The API Gateway validates tokens with its JWT/OAuth2 Validator, and unauthorized or anomalous access attempts are captured and streamed to the SIEM via the Audit Logging Interceptor.",
+    "elements": [
+     "Identity Provider",
+     "API Gateway",
+     "JWT/OAuth2 Validator",
+     "Audit Logging Interceptor",
+     "SIEM"
+    ],
+    "sensitivity_points": [
+     "Strict MFA enforcement rules at the Identity Provider",
+     "Real-time log streaming latency from API Gateway to the SIEM"
+    ],
+    "tradeoffs": [
+     "Offloading authentication to an external IdP guarantees robust MFA but introduces an external dependency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "PostgreSQL Row-Level Security Enforcer and Service Mesh Authorization verify access against relationship policies. All read operations generate audit logs via Debezium CDC and API Gateway interceptors, which Compliance Worker ingests and stores immutably in Tiered Storage with WORM retention.",
+    "elements": [
+     "PostgreSQL",
+     "Row-Level Security (RLS) Enforcer",
+     "CDC Outreach Publisher",
+     "Compliance Worker",
+     "Tiered Storage"
+    ],
+    "sensitivity_points": [
+     "Performance overhead of row-level security checks on high-throughput queries",
+     "Enforcement of S3 Object Lock and WORM retention rules"
+    ],
+    "tradeoffs": [
+     "Auditing 100% of read operations provides full compliance but significantly increases storage overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit Logging Interceptor",
+     "Authorization Policy Engine",
+     "Consent Enforcement Interceptor",
+     "Row-Level Security (RLS) Enforcer",
+     "Compliance Worker",
+     "Audit & Compliance SIEM"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Strimzi Operator",
+     "KRaft Controller Quorum",
+     "Telemetry & RUM Agent",
+     "PgBouncer"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Tiered Storage",
+     "Compliance Worker",
+     "Retention Policy Engine",
+     "Tiered Storage Archiver",
+     "Lifecycle Policy Engine",
+     "Partition Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Registration",
+     "Feature Modules"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Scheduling",
+     "Feature Modules"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Management",
+     "Feature Modules",
+     "Audit Logging Interceptor",
+     "Audit & Compliance SIEM",
+     "CDC Outreach Publisher"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Services",
+     "Claim Processing Component",
+     "Eligibility Engine Component",
+     "Ledger & Invoicing Component",
+     "Third-Party Payment Gateway & Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "PostgreSQL",
+     "Encryption & Masking Module",
+     "AWS KMS/HSM",
+     "Archive Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Strimzi Operator",
+     "KRaft Controller Quorum",
+     "PgBouncer"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Auth & Session Manager",
+     "Caching",
+     "Telemetry & RUM Agent",
+     "PgBouncer"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "HAPI FHIR Interoperability",
+     "FHIR REST Facade",
+     "Validation Engine",
+     "Data Transformation Engine",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

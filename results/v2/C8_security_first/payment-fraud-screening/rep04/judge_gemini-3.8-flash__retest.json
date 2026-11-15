@@ -1,0 +1,328 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 5,
+   "security": 4,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "All requirements are met: real-time decisions via Scoring Engine Container (R-01), analyst review workflows via Case Management API Container (R-02), and zero-downtime model updates via Model Loader & Verifier Component using atomic pointer swapping (R-03).",
+   "performance_efficiency": "Sub-50ms P99 at 3,000 rps is achieved through in-memory evaluation in Model Evaluator Component, sub-millisecond lookups via Amazon ElastiCache Serverless, and asynchronous decoupling of audit ingestion through Amazon SQS & DLQ.",
+   "compatibility": "The architecture integrates cleanly with external systems using standard protocols: mTLS/gRPC for Payment Gateway, OIDC/SAML for Corporate IdP, and standard APIs for Card Networks / Tokenization Service and AWS KMS.",
+   "usability": "While Fraud Analysts and Compliance Officers are served by Case Management API Controller and Compliance API Controller, the architecture lacks any web UI or user-facing frontend container for conducting manual case reviews.",
+   "reliability": "R-07 availability is addressed through Circuit Breaker Controller in Envoy Proxy, in-memory Local Heuristic Fallback Component during timeouts or errors, and dead-letter queue resilience in Amazon SQS & DLQ.",
+   "security": "Strong security is established via TLS 1.3, IdP integration, and tamper-evident logging in AWS QLDB. However, explicit data masking or redaction mechanisms within Case Management API Container preventing analysts from viewing PAN are missing.",
+   "maintainability": "The system features modular microservices (Scoring Engine Container, Case Management API Container, Audit & Compliance Ledger Container) with clear boundaries, asynchronous decoupling, and minimal operational complexity suitable for a three-engineer team.",
+   "portability": "Although compute workloads run in portable containers, the architecture has tight architectural coupling to proprietary AWS-managed services, specifically AWS QLDB, Amazon Aurora PostgreSQL, and Amazon SQS."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "In-memory Go model execution, sub-millisecond Redis feature caching, and asynchronous SQS audit publishing keep the evaluation path well under the 50 ms P99 latency threshold.",
+    "elements": [
+     "Envoy Proxy",
+     "Scoring Engine Container",
+     "Model Evaluator Component",
+     "Amazon ElastiCache Serverless",
+     "Amazon SQS & DLQ"
+    ],
+    "sensitivity_points": [
+     "In-memory model execution latency",
+     "ElastiCache network lookup time"
+    ],
+    "tradeoffs": [
+     "In-memory models reduce latency but consume more host RAM"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Scoring and case review are decoupled across separate containers and data stores. Analyst workloads query PostgreSQL read replicas, completely isolating operational DB traffic from real-time scoring.",
+    "elements": [
+     "Case Management API Container",
+     "Case Management API Controller",
+     "Amazon Aurora PostgreSQL",
+     "Read Replica Database Instance",
+     "Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Aurora replication lag for newly created review cases"
+    ],
+    "tradeoffs": [
+     "Read replicas increase AWS monthly cost to guarantee scoring isolation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Envoy circuit breakers and the local heuristic fallback component provide rapid degraded scoring without blocking requests. However, behavior during a total scoring container crash requires explicit fail-open upstream configuration.",
+    "elements": [
+     "Envoy Proxy",
+     "Circuit Breaker Controller",
+     "Scoring Engine Container",
+     "Local Heuristic Fallback Component",
+     "Amazon SQS & DLQ"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker trip thresholds and timeout sensitivities"
+    ],
+    "tradeoffs": [
+     "Heuristic fallback maintains availability but slightly increases false approval risk"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The scoring engine publishes audit events asynchronously to SQS with DLQ backing. QLDB slowdowns or outages do not backpressure real-time scoring or cause audit data loss.",
+    "elements": [
+     "Scoring Engine Container",
+     "Amazon ElastiCache / SQS",
+     "Amazon SQS & DLQ",
+     "Audit & Compliance Ledger Container",
+     "AWS QLDB"
+    ],
+    "sensitivity_points": [
+     "SQS retention limits during prolonged ledger outages"
+    ],
+    "tradeoffs": [
+     "Asynchronous buffering guarantees low scoring latency but delays ledger write consistency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Model Loader & Verifier background worker verifies artifacts and performs zero-downtime atomic pointer swaps in memory, tagging every output decision with the active model version.",
+    "elements": [
+     "Scoring Engine Container",
+     "Model Loader & Verifier Component",
+     "Model Evaluator Component",
+     "Audit & Compliance Ledger Container"
+    ],
+    "sensitivity_points": [
+     "Atomic memory pointer updates across Go runtime routines"
+    ],
+    "tradeoffs": [
+     "Holding previous and new models concurrently in memory increases memory footprint"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Dynamic rule loading and Redis velocity lookups support updating rule evaluation without downtime. However, the exact publishing pipeline between Case Management and Scoring Engine is partially unmodeled.",
+    "elements": [
+     "Scoring Engine Container",
+     "Model Loader & Verifier Component",
+     "Amazon ElastiCache Serverless",
+     "Case Management API Container"
+    ],
+    "sensitivity_points": [
+     "Cache propagation delay across distributed Redis nodes"
+    ],
+    "tradeoffs": [
+     "Dynamic rule injection adds runtime parsing overhead compared to static compilation"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "External tokenization and IdP access controls prevent analysts from seeing clear-text card data. However, the architecture defines no SIEM, IDS, or anomalous access alerting mechanism for 15-minute response.",
+    "elements": [
+     "Corporate IdP",
+     "Case Management API Container",
+     "Card Networks / Tokenization Service",
+     "AWS KMS & Secrets Manager"
+    ],
+    "sensitivity_points": [
+     "Absence of dedicated security log monitoring and alert tooling"
+    ],
+    "tradeoffs": [
+     "Omitting a dedicated SIEM service saves budget but impedes automated breach alerting"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "AWS QLDB provides an append-only, cryptographically verifiable ledger retaining Ion document revisions. The Compliance API and Tamper-Evident Journal Manager allow rapid retrieval of historical inputs and model versions.",
+    "elements": [
+     "Audit & Compliance Ledger Container",
+     "Tamper-Evident Journal Manager",
+     "Compliance API Controller",
+     "AWS QLDB",
+     "Ledger Journal Storage Component"
+    ],
+    "sensitivity_points": [
+     "Retention policy enforcement in QLDB journal storage"
+    ],
+    "tradeoffs": [
+     "Immutable ledger storage increases long-term storage costs over 7 years"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Card Networks / Tokenization Service",
+     "AWS KMS & Secrets Manager",
+     "TLS Termination Filter",
+     "Audit & Compliance Ledger Container"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Audit & Compliance Ledger Container",
+     "Tamper-Evident Journal Manager",
+     "AWS QLDB",
+     "Ledger Journal Storage Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Amazon ElastiCache Serverless",
+     "Amazon SQS & DLQ",
+     "Primary Writer Database Instance",
+     "Read Replica Database Instance"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Amazon ElastiCache Serverless",
+     "Amazon SQS & DLQ",
+     "AWS QLDB"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Scoring Engine Container",
+     "API Router Component",
+     "Model Evaluator Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Fraud Analysts",
+     "Case Management API Container",
+     "Case Management API Controller",
+     "Case Workflow Service",
+     "Amazon Aurora PostgreSQL"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model Loader & Verifier Component",
+     "Model Evaluator Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Envoy Proxy",
+     "Scoring Engine Container",
+     "Model Evaluator Component",
+     "Amazon ElastiCache Serverless",
+     "Amazon SQS & DLQ"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Card Networks / Tokenization Service",
+     "AWS KMS & Secrets Manager",
+     "TLS Termination Filter"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Ledger Container",
+     "Ledger Ingestion Service",
+     "Tamper-Evident Journal Manager",
+     "AWS QLDB",
+     "Ledger Journal Storage Component",
+     "Ion Document Storage Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Circuit Breaker Controller",
+     "API Router Component",
+     "Local Heuristic Fallback Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ },
+ "tag": "retest"
+}

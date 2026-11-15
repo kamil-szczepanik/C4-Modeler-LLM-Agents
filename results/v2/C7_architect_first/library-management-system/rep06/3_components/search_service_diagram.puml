@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Search Service container
+
+System_Ext(api_gateway, "API Gateway", "Kong or Spring Cloud Gateway", "Forwarding requests via gRPC with mTLS.")
+System_Ext(rabbitmq_message_broker, "RabbitMQ Message Broker", "RabbitMQ", "Message broker with AMQP protocol, TLS/SASL, and a dead-letter queue (DLQ).")
+System_Ext(elasticsearch_cluster, "Elasticsearch Cluster", "Elasticsearch", "Dedicated data nodes with NVMe storage in an EU-only Kubernetes cluster.")
+
+Container_Boundary(search_service, "Search Service") {
+    Component(search_api_controller, "Search API Controller", "FastAPI endpoint", "Validating JWT claims from gRPC metadata.")
+    Component(query_pipeline_processor, "Query Pipeline Processor", "Python / FastAPI", "Combines query parsing, facet/filter processing, and the relevance/ranking engine.")
+    Component(search_repository, "Search Repository", "elasticsearch-py", "Executing queries against Elasticsearch.")
+    Component(index_synchronizer, "Index Synchronizer", "Python / FastAPI", "Consumes domain events from RabbitMQ to maintain index freshness.")
+    Component(caching_layer, "Caching Layer", "Redis", "In-memory Redis cache with role-based cache key segregation.")
+}
+
+Rel(api_gateway, search_api_controller, "gRPC with mTLS")
+Rel(search_api_controller, query_pipeline_processor, "In-process")
+Rel(query_pipeline_processor, search_repository, "In-process / AsyncIO")
+Rel(index_synchronizer, search_repository, "In-process / AsyncIO")
+Rel(rabbitmq_message_broker, index_synchronizer, "AMQP with TLS/SASL")
+Rel(search_repository, elasticsearch_cluster, "Transport Layer Security with RBAC")
+@enduml

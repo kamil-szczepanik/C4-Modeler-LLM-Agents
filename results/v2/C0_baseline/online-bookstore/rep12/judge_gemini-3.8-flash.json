@@ -1,0 +1,315 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "R-01 (Catalog & Search Service, OpenSearch), R-02 (Order & Checkout Service), and R-04 (Recommendation Service) are thoroughly addressed. However, R-03 (Reviews & Ratings) is only present as a Storefront UI module with no backend persistence or API handling.",
+   "performance_efficiency": "Performance and 1M MAU scalability are well-supported via Amazon CloudFront CDN, OpenSearch, DynamoDB, Redis caching in Pricing & Currency Service, and Kafka-based event streaming. Sub-2s 3G load is aided by CDN edge caching, though mobile asset optimizations are not explicitly detailed.",
+   "compatibility": "Integrates explicitly with required third parties: External Payment Gateway (Stripe/PayPal), External Shipping Provider (FedEx/UPS), External Identity Provider (OIDC/OAuth2), and External Notification Service via standard REST/TLS, mTLS, and OpenFeign interfaces.",
+   "usability": "Both Customer and Store Administrator are represented. Customers get responsive React modules including Abandoned Cart Recovery and multi-currency support. However, administrative management interfaces for content and catalog management are barely detailed beyond hitting the Storefront.",
+   "reliability": "Targets 99.95% uptime using multi-region AWS primitives, DynamoDB global replication, and asynchronous DLQ/BullMQ retries in Customer Privacy Service. Cross-region failover and database replication mechanisms for Aurora/PostgreSQL are not deeply elaborated.",
+   "security": "Thoroughly addressed via AWS WAF, mTLS inter-service communication, JWT validation via Cognito/Auth0, OAuth 2.0 PKCE, Redis-backed idempotency, zero-cardholder-data PCI compliance, isolated private VPCs, AWS Secrets Manager, and dedicated Customer Privacy Service for GDPR/CCPA.",
+   "maintainability": "High maintainability achieved through domain-driven microservice boundaries (Catalog, Order, Pricing, Privacy, Recommendation), polyglot stacks tailored to tasks (Go, Node.js, Spring Boot, Python), clear separation of concerns, and modular Storefront UI components.",
+   "portability": "The architecture explicitly leverages the target cloud (AWS us-east-1, eu-west-1, ap-southeast-1) using managed services (S3, CloudFront, MSK, Aurora, DynamoDB). However, tight coupling to proprietary AWS primitives limits portability outside AWS."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront CDN caches UI assets and OpenSearch with Redis caching absorbs query surges. However, dynamic catalog queries lack explicit edge caching strategies for high-latency 3G networks.",
+    "elements": [
+     "Storefront",
+     "API Gateway",
+     "Catalog & Search Service",
+     "Pricing & Currency Service"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios on CloudFront and Redis under high concurrency."
+    ],
+    "tradeoffs": [
+     "Aggressive caching ensures low latency but risks brief catalog price staleness."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendation computation runs asynchronously via Kafka and background workers, writing precomputed vectors to DynamoDB, completely isolating catalog browsing from analytical workloads.",
+    "elements": [
+     "Recommendation Service",
+     "Catalog & Search Service",
+     "Storefront"
+    ],
+    "sensitivity_points": [
+     "Asynchronous decoupling between clickstream processing and recommendation serving datastore."
+    ],
+    "tradeoffs": [
+     "Using precomputed affinity models reduces compute overhead but introduces recommendation lag."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Checkout separates synchronous payment authorization from shipping; the Fulfillment Adapter asynchronously queues dispatches to third-party providers, ensuring shipping outages do not block checkout.",
+    "elements": [
+     "Order & Checkout Service",
+     "External Shipping Provider"
+    ],
+    "sensitivity_points": [
+     "Reliability of asynchronous queueing for deferred order fulfillment handoffs."
+    ],
+    "tradeoffs": [
+     "Asynchronous fulfillment improves checkout availability but delays shipping confirmation notifications."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "While three regions are targeted and DynamoDB replicates globally, the Order Repository relies on standard RDS PostgreSQL without defined multi-region replication or failover strategies, risking order loss during regional failure.",
+    "elements": [
+     "Order & Checkout Service",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Multi-region database synchronization and automated failover capabilities for transactional order state."
+    ],
+    "tradeoffs": [
+     "Synchronous cross-region database replication guarantees zero data loss but increases checkout latency."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Pricing & Currency Service isolates conversion logic and rate syncing. Minor updates may be needed in Storefront localization and payment adapter mapping, but changes remain strictly localized.",
+    "elements": [
+     "Pricing & Currency Service",
+     "Order & Checkout Service",
+     "Storefront"
+    ],
+    "sensitivity_points": [
+     "Decoupled currency conversion logic and support in payment gateway integrations."
+    ],
+    "tradeoffs": [
+     "Dedicated pricing microservice simplifies currency additions but introduces network hops during checkout."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Recommendation Service encapsulates all algorithmic inference within the Inference Engine and behind stable REST/mTLS interfaces, enabling algorithm replacement without impacting external components.",
+    "elements": [
+     "Recommendation Service"
+    ],
+    "sensitivity_points": [
+     "Encapsulation of model inference behind stable REST and gRPC API contracts."
+    ],
+    "tradeoffs": [
+     "Abstract API boundaries hide model complexity but restrict client-specific inference optimizations."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "AWS WAF at the API Gateway inspects payloads for XSS and injection attacks. Search queries target OpenSearch rather than raw SQL, providing defense in depth.",
+    "elements": [
+     "API Gateway",
+     "Catalog & Search Service",
+     "Storefront"
+    ],
+    "sensitivity_points": [
+     "Strictness of WAF inspection rules and input sanitization across microservice boundaries."
+    ],
+    "tradeoffs": [
+     "Comprehensive WAF payload inspection adds slight latency to incoming HTTP requests."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "The Customer Privacy Service orchestrates workflows internally, but lacks documented integrations or event broadcasts to purge customer PII across Order, Catalog, or Recommendation datastores.",
+    "elements": [
+     "Customer Privacy Service",
+     "Order & Checkout Service",
+     "Recommendation Service"
+    ],
+    "sensitivity_points": [
+     "Coverage of distributed data erasure workflows across independent microservice datastores."
+    ],
+    "tradeoffs": [
+     "Cascading distributed deletions guarantees regulatory compliance but adds distributed transaction complexity."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Customer Privacy Service",
+     "Privacy API Controller",
+     "GDPR/CCPA Workflow Engine",
+     "Data Exporter Worker",
+     "Audit & Retention Logger"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Storefront",
+     "Localization & Currency Module",
+     "Pricing & Currency Service",
+     "Pricing Controller",
+     "Currency Conversion Engine",
+     "Rate Cache Manager",
+     "Rate Syncer Worker",
+     "Pricing Aggregator Client"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "External Shipping Provider",
+     "Order & Checkout Service",
+     "Fulfillment Adapter"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Storefront",
+     "Catalog UI Module",
+     "Catalog & Search Service",
+     "Search API Controller",
+     "Search Engine Client"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Storefront",
+     "Checkout & Cart Module",
+     "Order & Checkout Service",
+     "Checkout Orchestrator",
+     "Payment Integration Adapter",
+     "Idempotency & Token Manager",
+     "Order Repository",
+     "External Payment Gateway"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Review & Rating UI Module"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Service",
+     "API Handler",
+     "Inference Engine",
+     "Clickstream Consumer",
+     "Recommendation Datastore"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Storefront",
+     "API Gateway",
+     "Recommendation Datastore",
+     "Rate Cache Manager",
+     "Idempotency & Token Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Storefront",
+     "Rate Cache Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Recommendation Datastore"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "Rate Limiting & Throttling Component",
+     "Authentication & Authorization Component",
+     "Authentication & Session Manager",
+     "Idempotency & Token Manager"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

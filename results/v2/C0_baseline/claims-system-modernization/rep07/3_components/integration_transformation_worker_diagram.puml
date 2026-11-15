@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Integration & Transformation Worker container
+
+System_Ext(Mainframe_ACL, "Mainframe Anti-Corruption Layer (ACL)", "Mainframe Anti-Corruption Layer")
+System_Ext(Idempotency_State_Manager, "Idempotency & State Manager", "Azure Cache for Redis")
+System_Ext(Operational_Observability, "Operational Observability & Dead-Letter Container", "Operational Observability")
+System_Ext(Azure_Key_Vault, "Azure Key Vault", "Azure Key Vault")
+
+Container_Boundary(Integration_Transformation_Worker, "Integration & Transformation Worker") {
+    Component(Kafka_Event_Consumer, "Kafka Event Consumer", "Apache Kafka / AMQP (SASL/SCRAM or mTLS)", "Reads events from the Mainframe Anti-Corruption Layer.")
+    Component(Schema_Policy_Mapper, "Schema & Policy Mapper", "gRPC/HTTPS, OpenTelemetry SDK", "Maps schemas and policies, queries state, dispatches protocols, and emits telemetry.")
+    Component(Idempotency_State_Manager_Comp, "Idempotency & State Manager", "TLS-encrypted TCP (port 6380), Azure Cache for Redis", "Provides high-performance state storage for idempotency and duplicate prevention.")
+    Component(Mainframe_Protocol_Dispatcher, "Mainframe Protocol Dispatcher", "gRPC/HTTPS, Polly (Circuit Breaker)", "Sends payloads to the mainframe integration with circuit breaking protection.")
+    Component(Reconciliation_Audit_Publisher, "Reconciliation & Audit Publisher", "OpenTelemetry SDK, HTTPS", "Exports metrics and audit data to operational observability.")
+}
+
+Rel(Kafka_Event_Consumer, Mainframe_ACL, "Reads from", "Apache Kafka / AMQP")
+Rel(Schema_Policy_Mapper, Idempotency_State_Manager_Comp, "Queries", "TLS-encrypted TCP")
+Rel(Schema_Policy_Mapper, Mainframe_Protocol_Dispatcher, "Sends payloads", "gRPC/HTTPS")
+Rel(Schema_Policy_Mapper, Reconciliation_Audit_Publisher, "Emits telemetry", "OpenTelemetry SDK")
+Rel(Reconciliation_Audit_Publisher, Operational_Observability, "Exports metrics", "HTTPS")
+Rel(Integration_Transformation_Worker, Azure_Key_Vault, "Retrieves secrets", "Managed Identities (HTTPS)")
+
+@enduml

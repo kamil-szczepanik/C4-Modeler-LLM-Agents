@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Order & Checkout Service container
+
+System_Ext(api_gateway, "Amazon API Gateway", "Forwards requests to microservices")
+System_Ext(third_party_payment, "Third-Party Payment Gateway", "Processes credit card and digital payments")
+System_Ext(third_party_shipping, "Third-Party Shipping Provider", "Handles physical goods delivery")
+System_Ext(aws_eventbridge, "AWS EventBridge", "Serverless event bus")
+System_Ext(order_repo_db, "Amazon Aurora PostgreSQL", "Relational database for orders")
+
+Container_Boundary(order_checkout_service, "Order & Checkout Service") {
+    Component(checkout_controller, "Checkout Controller / Facade", "Java, Spring Boot", "Handles incoming checkout requests and exposes endpoints for order processing.")
+    Component(order_management_engine, "Order Management Engine", "Java, Spring Boot", "Core business logic engine managing the lifecycle and processing of orders.")
+    Component(payment_gateway_client, "Payment & Currency Gateway Client", "Java, Spring Boot", "Client responsible for communicating with third-party payment gateways and currency services.")
+    Component(fulfillment_coordinator, "Fulfillment Coordinator", "Java, Spring Boot", "Coordinates order fulfillment with third-party shipping providers.")
+    Component(order_repository, "Order Repository", "JDBC, Spring Data", "Manages persistence of order and transactional data to Amazon Aurora PostgreSQL.")
+    Component(transactional_outbox_processor, "Transactional Outbox Processor", "Java, Spring Boot", "Processes the outbox pattern to reliably publish domain events to AWS EventBridge.")
+}
+
+Rel(api_gateway, checkout_controller, "Forwards order/checkout requests", "HTTPS via AWS App Mesh")
+Rel(checkout_controller, order_management_engine, "Delegates order processing", "In-process")
+Rel(order_management_engine, order_repository, "Manages persistence", "JDBC over TLS/IAM")
+Rel(order_management_engine, payment_gateway_client, "Requests payment processing", "In-process")
+Rel(order_management_engine, fulfillment_coordinator, "Requests fulfillment coordination", "In-process")
+Rel(order_management_engine, transactional_outbox_processor, "Saves domain events to outbox", "In-process")
+Rel(payment_gateway_client, third_party_payment, "Processes payments", "HTTPS/REST")
+Rel(fulfillment_coordinator, third_party_shipping, "Coordinates fulfillment", "HTTPS/REST")
+Rel(transactional_outbox_processor, aws_eventbridge, "Publishes domain events", "HTTPS/AWS SDK")
+Rel(order_repository, order_repo_db, "Reads/Writes data", "JDBC over TLS/IAM")
+
+@enduml

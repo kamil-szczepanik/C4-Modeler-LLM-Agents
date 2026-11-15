@@ -1,0 +1,306 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 3,
+   "compatibility": 4,
+   "usability": 2,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 3.5,
+  "justifications": {
+   "functional_suitability": "Patient Registration, Appointment Scheduling, EMR and Billing components cover R-01 to R-04, and the Audit Trail Manager supports the EMR audit trail. Gaps: no explicit resource clash checking, no insurance claim submission element, and billing has no external payer link.",
+   "performance_efficiency": "Mechanisms include the Asynchronous Event Bus, Cache Lookup Manager (Redis), Claims Check Store, stateless Kubernetes microservices and rate limiting. But no EMR caching, read replicas, autoscaling or explicit sub-second P95 mechanism; caching is only in the integration engine.",
+   "compatibility": "The Integration Engine Container with HL7 FHIR Translator exposes FHIR to External Lab and Imaging Systems over TLS. Schema Registry, AsyncAPI and RFC 7807 add standardization. Gaps: the integration engine is not shown connected to the core domains, and the Claims Check Store handles imaging payloads only loosely.",
+   "usability": "Users reach the system via the API Gateway over HTTPS/MFA, and RFC 7807 Error Standardization Component gives consistent errors. But there are no UI containers, no portals or channels tailored to patients, practitioners or billing staff, and all three groups are lumped together.",
+   "reliability": "Circuit breaking (Schema Validation & Security Component, Resilience4j), durable Event Bus, dead letter queues and stateless Kubernetes pods help. But no active-active deployment, replication, failover, backup or disaster recovery is shown for 99.99% availability and 10-year retention.",
+   "security": "Centralized Identity and Access Management provides MFA, RBAC and zero trust; TLS termination; AES-256 in the Storage Management Layer; Vault secrets; Audit Trail Manager; schema validation; Fluentbit scrubbing. Gaps: IAM is absent from the container level, and key rotation and retention enforcement are thin.",
+   "maintainability": "Clear modular decomposition: separate microservices (Core Domain Containers), Integration Engine, Data Access & Governance Layer, Event Bus with Schema Registry, and observability stack with Prometheus, OpenTelemetry. Low coupling via events. Minor gaps: direct HTTPS coupling between domain services and a single shared storage layer.",
+   "portability": "Kubernetes microservices, Kafka/RabbitMQ, PostgreSQL, Vault and open observability tooling suit the hybrid on-prem-k8s and eu-central-1 targets, with the event bus spanning the hybrid boundary. Gaps: no explicit deployment views, infrastructure-as-code or container packaging detail."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 2,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.34375,
+  "by_quality_attribute": {
+   "Performance": 2.5,
+   "Availability": 2.0,
+   "Modifiability": 2.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "elements": [
+     "EMR Component",
+     "API Gateway / Reverse Proxy Container",
+     "Data Access & Governance Container Layer"
+    ],
+    "sensitivity_points": [
+     "All reads pass through governance layer and audit logging",
+     "No caching on EMR read path"
+    ],
+    "tradeoffs": [
+     "Audit and encryption overhead versus sub-second latency"
+    ],
+    "justification": "EMR is claimed to be sub-second, but no read cache, replicas, scaling or load mechanism is shown. Every read goes through the governance layer with audit. The P95 target is unsupported."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Integration Engine Container",
+     "HL7 FHIR Translator",
+     "Translation Event Router",
+     "Asynchronous Event Bus Container",
+     "Cache Lookup Manager"
+    ],
+    "sensitivity_points": [
+     "Event bus throughput and consumer scaling",
+     "Shared database contention between ingestion and EMR reads"
+    ],
+    "tradeoffs": [
+     "Async decoupling gives throughput but eventual visibility in EMR"
+    ],
+    "justification": "Stateless translator, Kafka, DLQ and cache support bursty ingestion and decoupling. But the path from bus to EMR storage is undefined, with no autoscaling or read isolation, so keeping EMR P95 below 1 s is unproven."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "Core Domain Containers",
+     "Data Access & Governance Container Layer",
+     "Asynchronous Event Bus Container",
+     "API Gateway / Reverse Proxy Container"
+    ],
+    "sensitivity_points": [
+     "Cross-site data replication and RPO",
+     "Failover routing and global traffic management"
+    ],
+    "tradeoffs": [
+     "Active-active consistency versus latency and cost across hybrid sites"
+    ],
+    "justification": "Hybrid on-prem and cloud is named, and the event bus spans the boundary. But there is no global load balancing, database replication, or failover mechanism. Zero data loss and 1-minute recovery are not demonstrated."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Billing Component",
+     "Storage Management Layer",
+     "Asynchronous Event Bus Container"
+    ],
+    "sensitivity_points": [
+     "Database replication and failover mechanism",
+     "Idempotency of claim submission"
+    ],
+    "tradeoffs": [
+     "Retry safety versus duplicate risk without idempotency keys"
+    ],
+    "justification": "Distributed SQL is mentioned and durable events help retries. There is no billing claim workflow, outbox, idempotency or explicit HA database design, so lost or duplicate claims and 30 s recovery are not assured."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "elements": [
+     "Billing Component",
+     "Integration Engine Container",
+     "Core Domain Containers"
+    ],
+    "sensitivity_points": [
+     "No claims or clearinghouse integration component exists",
+     "Billing tied to EMR through events"
+    ],
+    "tradeoffs": [
+     "Reusing the FHIR engine versus separating a claims adapter"
+    ],
+    "justification": "The integration engine covers only HL7 FHIR for lab and imaging. There is no clearinghouse adapter in Billing, so a new integration would likely change Billing or the engine. Microservice separation helps keep EMR unchanged."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "elements": [
+     "Patient Registration Component",
+     "Storage Management Layer",
+     "Audit Trail Manager",
+     "API Gateway / Reverse Proxy Container"
+    ],
+    "sensitivity_points": [
+     "Schema changes in storage",
+     "Schema validation at the gateway",
+     "UI is not modeled"
+    ],
+    "tradeoffs": [
+     "Centralized governance eases audit but concentrates change"
+    ],
+    "justification": "Registration, storage and audit are separate, so a change is plausible in about three components. But the UI is absent, the schema and migration approach is unclear, and the gateway validation may also change. Sprint delivery is uncertain."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "API Gateway / Reverse Proxy Container",
+     "Centralized Identity and Access Management",
+     "Shared Observability & Telemetry Container"
+    ],
+    "sensitivity_points": [
+     "MFA enforcement location, since IAM is only at context level",
+     "No alerting mechanism for failed MFA"
+    ],
+    "tradeoffs": [
+     "Zero-trust checks add latency at the edge"
+    ],
+    "justification": "MFA, IdP and zero-trust policies are declared at the gateway and context levels. But the IAM is not decomposed in the container model, and there is no alerting or anomaly detection. The 1-minute security alert is unaddressed."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Audit Trail Manager",
+     "Storage Management Layer",
+     "Centralized Identity and Access Management",
+     "Shared Observability & Telemetry Container"
+    ],
+    "sensitivity_points": [
+     "Audit is applied in the data layer, so it captures all reads",
+     "Tamper-evidence and 10-year retention are not explicit",
+     "No patient-relationship policy check"
+    ],
+    "tradeoffs": [
+     "Auditing every read costs latency and storage"
+    ],
+    "justification": "The Audit Trail Manager logs all data access, the data layer retains 10 years, and immutable audit logs are mentioned. But the treating-relationship policy check is not modeled, and tamper-evidence is only implied."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "none",
+   "C-03": "partial",
+   "R-01": "partial",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "none",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.5454545454545454,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Data Access & Governance Container Layer",
+     "Storage Management Layer",
+     "Audit Trail Manager",
+     "Centralized Identity and Access Management",
+     "Configuration and Secrets Management Container / Sidecar"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Storage Management Layer"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Patient Registration Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Appointment Scheduling Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Component",
+     "Audit Trail Manager",
+     "Storage Management Layer",
+     "Shared Observability & Telemetry Container"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Billing Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Centralized Identity and Access Management",
+     "API Gateway / Reverse Proxy Container",
+     "Storage Management Layer",
+     "Data Access & Governance Container Layer",
+     "Configuration and Secrets Management Container / Sidecar"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "none",
+    "elements": []
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "EMR Component",
+     "Cache Lookup Manager"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Engine Container",
+     "HL7 FHIR Translator",
+     "External Lab and Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Node.js Scheduling Service container
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway routing requests.")
+System_Ext(postgresql_cluster, "PostgreSQL Cluster", "Relational data store for durable bookings.")
+System_Ext(apache_kafka, "Apache Kafka Event Bus", "Event bus for reliable, decoupled asynchronous messaging.")
+
+Container_Boundary(node_js_scheduling_service, "Node.js Scheduling Service") {
+    Component(rest_api_controller, "REST API Controller", "Express.js, JWT, Zod", "Handles incoming HTTP routes, JWT validation, Zod schema validation, and rate limiting.")
+    Component(scheduling_engine, "Scheduling Engine", "Node.js", "Encapsulates slot-allocation business logic, resource metadata, sanitation windows, and constraint calculations.")
+    Component(resource_clash_detector, "Resource Clash Detector", "Redis, ioredis", "Utilizes Redis distributed locks via ioredis to prevent double-booking.")
+    Component(persistence_repository, "Persistence Repository", "PostgreSQL, PgBouncer, pg", "Manages transactional writes, PgBouncer connection pooling, and the transactional outbox pattern to the PostgreSQL Cluster.")
+    Component(kafka_event_publisher, "Kafka Event Publisher", "Apache Kafka, kafkajs", "Emits AppointmentScheduled domain events asynchronously using kafkajs to Apache Kafka.")
+}
+
+Rel(api_gateway, rest_api_controller, "Routes authenticated HTTP/REST requests", "mTLS")
+Rel(rest_api_controller, scheduling_engine, "Delegates validated booking requests")
+Rel(scheduling_engine, resource_clash_detector, "Acquires locks", "ioredis / TLS 1.3")
+Rel(scheduling_engine, persistence_repository, "Requests transactional persistence for bookings")
+Rel(persistence_repository, postgresql_cluster, "Executes SQL transactions", "pg client / TLS 1.3")
+Rel(persistence_repository, kafka_event_publisher, "Triggers asynchronous event publishing", "outbox pattern")
+Rel(kafka_event_publisher, apache_kafka, "Publishes domain events", "TLS")
+
+@enduml

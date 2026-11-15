@@ -1,0 +1,32 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Integration Service container
+
+Container_Boundary(integration_service, "Integration Service") {
+    Component(fhir_engine, "FHIR Translation Engine", "Java / Apache Camel, Resilience4j", "Performs HL7 FHIR transformation and integrates with external labs, imaging, and insurance clearinghouses using circuit breakers.")
+    Component(persistence_manager, "Integration Persistence Manager", "Spring Data JPA", "Manages persistence with field-level envelope encryption.")
+    Component(admin_api, "Admin Integration API & Dashboard Controller", "Spring MVC", "Provides administration interface with RBAC and data masking.")
+    Component(retry_worker, "Retry & DLQ Worker", "Spring Batch / RabbitMQ", "Handles automated backoff and dead-letter queues.")
+}
+
+System_Ext(external_labs, "External Laboratory & Imaging System", "External medical labs and imaging systems")
+System_Ext(external_insurance, "External Insurance/Clearinghouse System", "External insurance clearinghouses")
+Container(emr_service, "EMR Service", "Node.js / Go", "Manages Electronic Medical Records and patient consent")
+ContainerDb(postgresql, "PostgreSQL", "PostgreSQL", "Primary relational storage with AES-256")
+ContainerDb(rabbitmq, "RabbitMQ Message Broker", "RabbitMQ", "Asynchronous message broker for retries, DLQ, and event decoupling")
+System_Ext(vault, "HashiCorp Vault", "HashiCorp Vault", "Secure secret management and envelope encryption keys")
+
+Rel(fhir_engine, persistence_manager, "Persists translated medical data and audit logs")
+Rel(fhir_engine, retry_worker, "Sends failed communication events for retry processing")
+Rel(admin_api, persistence_manager, "Queries integration logs and audit trails")
+
+Rel(fhir_engine, external_labs, "Exchanges medical data", "HL7 FHIR over mTLS")
+Rel(fhir_engine, external_insurance, "Performs claim adjudication", "HL7 FHIR over mTLS")
+Rel(fhir_engine, emr_service, "Validates patient consent", "REST / HTTPS")
+Rel(integration_service, vault, "Fetches envelope encryption keys and secrets", "API / TLS / AppRole")
+Rel(persistence_manager, postgresql, "Persists payloads and audit logs", "JDBC / AES-256")
+Rel(retry_worker, rabbitmq, "Streams audit and retry events", "AMQP / TLS")
+
+@enduml

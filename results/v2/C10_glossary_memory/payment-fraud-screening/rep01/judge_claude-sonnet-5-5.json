@@ -1,0 +1,338 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 3,
+   "security": 3,
+   "maintainability": 3,
+   "portability": 2
+  },
+  "mean": 2.875,
+  "justifications": {
+   "functional_suitability": "Decision API Container, Scoring Engine Container and Case Management Portal Container cover scoring and case management. Model Registry Sync Agent hints at zero-downtime model updates, but there is no rule engine or rule update mechanism, and the approve/decline/review routing to cases is not shown.",
+   "performance_efficiency": "Go Decision API, in-memory Feature Extraction Component, ONNX Runtime and asynchronous Explanation Generation Component support low latency. However, there is no cache, no autoscaling for 3,000 TPS, and the Aurora hop sits in the hot path. Capacity and budget are not addressed.",
+   "compatibility": "gRPC/HTTPS from Merchant / Payment Gateway, mTLS with Payment Processing Core / Acquirer, OIDC with Identity Provider and S3 API for the Audit Store are standard interfaces. The Acquirer is missing from the container view, and the Notification and CloudWatch integrations are unclear.",
+   "usability": "Fraud Analysts get a React UI Presentation Component with card masking and IdP login. The Risk & Compliance Officer has no interface or audit-review element. There is no explanation view for analysts and no case queue detail.",
+   "reliability": "Circuit Breaker & Fallback Manager targets the 1-minute non-blocking requirement R-07, and Aurora has read replicas and RDS Proxy. Missing are multi-AZ and Fargate scaling detail, recovery and DR, and defined fallback decision logic. Synchronous Aurora dependency adds risk.",
+   "security": "Mechanisms include mTLS, TLS 1.3, IdP with MFA/RBAC, client-side masking, KMS, pgAudit and a WORM Audit & Compliance Store. Gaps: no tokenization or vault component for PCI scope, no network segmentation or WAF, and the tamper-evidence and model-version capture are vague. Audit Logging Component is misdescribed.",
+   "maintainability": "Clear container and component decomposition separates API, scoring, case management and data, and Model Registry Sync Agent decouples model updates. However, Aurora is shared by all containers, the Audit Logging Component is unclear, and a three-engineer team faces polyglot Go, Python and Node.js stacks.",
+   "portability": "Fargate containers are portable, but the design relies on AWS-specific services (Aurora, KMS, S3, RDS Proxy, CloudWatch) with no abstraction layers. It targets eu-west-1 only, and no IaC or multi-region deployment view is given."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 2,
+   "MOD-01": 3,
+   "MOD-02": 1,
+   "PERF-01": 3,
+   "PERF-02": 2,
+   "SEC-01": 2,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.34375,
+  "by_quality_attribute": {
+   "Performance": 2.5,
+   "Availability": 2.5,
+   "Modifiability": 2.0,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Decision API Container",
+     "Scoring Engine Container",
+     "Model Execution Engine",
+     "Feature Extraction Component",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Synchronous Aurora access from API Handler in hot path",
+     "Python/FastAPI hop adds network latency",
+     "No cache or autoscaling described"
+    ],
+    "tradeoffs": [
+     "In-memory features and ONNX favour latency but risk staleness",
+     "Separate scoring container adds a hop for isolation"
+    ],
+    "justification": "Go API, ONNX in-memory inference and Fargate suit 50 ms, but synchronous DB calls, the extra gRPC hop, and no feature cache, scaling or load evidence leave unaddressed P99 risk."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "elements": [
+     "Case Management Portal Container",
+     "Amazon Aurora PostgreSQL",
+     "Decision API Container",
+     "Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Single shared Aurora used by scoring and cases",
+     "Read replicas not explicitly routed for analyst queries",
+     "Scoring reads feature store from same DB"
+    ],
+    "tradeoffs": [
+     "Shared database is simple and cheap but couples workloads",
+     "Read replicas help but add replication lag"
+    ],
+    "justification": "Analysts and scoring share one Aurora cluster; replicas are mentioned but analyst reads are not explicitly routed to them. There is no isolation or queue caching, so contention could breach the P99 target."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "elements": [
+     "Circuit Breaker & Fallback Manager",
+     "API Handler Component",
+     "Scoring Engine Container",
+     "Audit Dispatcher Component"
+    ],
+    "sensitivity_points": [
+     "Fallback decision logic undefined (rules, default approve)",
+     "Fallback depends on Aurora/audit availability",
+     "Timeout thresholds unspecified"
+    ],
+    "tradeoffs": [
+     "Fallback keeps payments flowing but may raise fraud risk",
+     "Auditing fallback decisions adds latency or complexity"
+    ],
+    "justification": "A circuit breaker and fallback manager exist, so the architecture can avoid blocking payments. The fallback policy, timeouts, and a durable audit path for fallback decisions are unspecified, and the fallback is untested."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Audit Dispatcher Component",
+     "AWS Audit & Compliance Store",
+     "Scoring Engine Container",
+     "Decision API Container"
+    ],
+    "sensitivity_points": [
+     "Audit written directly via S3 API, with no queue",
+     "No durable local buffer in the Decision path",
+     "Scoring Engine writes audit synchronously"
+    ],
+    "tradeoffs": [
+     "Direct writes are simple but couple decisions to audit latency",
+     "Buffering protects audit records but adds components"
+    ],
+    "justification": "There is an Audit Dispatcher, but no queue, outbox or retry for the Decision API; only the portal mentions a local buffer. A slow audit store risks lost records or latency, so the scenario is unmet."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Model Registry Sync Agent",
+     "CI/CD & Model Registry Pipeline",
+     "Model Execution Engine",
+     "Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Hot-swap or canary mechanism not described",
+     "Rollback procedure and the 5-minute limit unspecified",
+     "Model version propagation into decision records"
+    ],
+    "tradeoffs": [
+     "Syncing models in-process is fast but risks inconsistency between instances",
+     "Rolling Fargate deploys avoid downtime but slow rollback"
+    ],
+    "justification": "A registry sync agent and a model registry enable updates without redeploying, but traffic shifting, rollback and recording the version in decisions are not defined, so the scenario is only partly supported."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 1,
+    "elements": [
+     "Scoring Engine Container",
+     "Case Management Portal Container",
+     "Feature Extraction Component"
+    ],
+    "sensitivity_points": [
+     "No rules engine component exists",
+     "No rule authoring or deployment path",
+     "Decisions do not record applied rules"
+    ],
+    "tradeoffs": [
+     "ML-only scoring is simple but not analyst-configurable",
+     "Adding rules costs latency and operational complexity"
+    ],
+    "justification": "The model has no rule engine, rule store, authoring UI, or rule versioning. Analysts cannot add rules at runtime, and decisions cannot name applied rules. A major component is missing."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "elements": [
+     "Case Management Portal Container",
+     "Identity Provider (IdP)",
+     "UI Presentation Component",
+     "AWS CloudWatch / Observability Platform",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Masking is client-side only",
+     "No tokenization or vault component shown",
+     "No anomaly detection or alerting from analyst access"
+    ],
+    "tradeoffs": [
+     "Client-side masking is cheap but bypassable by the API",
+     "MFA reduces compromise risk but not post-compromise access"
+    ],
+    "justification": "The IdP with MFA and RBAC helps and KMS is mentioned, but masking is client-side and no tokenization service or server-side restriction is shown. Anomalous-access detection within 15 minutes is not defined; CloudWatch is only connected to the portal."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "AWS Audit & Compliance Store",
+     "Explanation Generation Component",
+     "Audit Dispatcher Component",
+     "Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Explanations generated asynchronously with no durable handoff",
+     "Stored decision inputs and model version unspecified",
+     "No retrieval or query path for auditors"
+    ],
+    "tradeoffs": [
+     "WORM storage ensures integrity but makes retrieval and queries slower",
+     "Asynchronous explanations save latency but risk gaps"
+    ],
+    "justification": "A WORM audit store with 7-year retention and explanation generation supports the scenario. But it is unclear that inputs, model version and explanation are stored together, and there is no auditor retrieval path or model archive."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "full"
+  },
+  "coverage": 0.5909090909090909,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Case Management Portal Container",
+     "Identity Provider (IdP)",
+     "Decision API Container",
+     "Amazon Aurora PostgreSQL"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "AWS Audit & Compliance Store",
+     "Explanation Generation Component",
+     "Audit Dispatcher Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Decision API Container",
+     "Scoring Engine Container",
+     "Case Management Portal Container"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Decision API Container",
+     "API Handler Component",
+     "Scoring Engine Container",
+     "Inference API Controller",
+     "Model Execution Engine",
+     "Feature Extraction Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Portal Container",
+     "Case Management API Component",
+     "UI Presentation Component",
+     "Amazon Aurora PostgreSQL",
+     "Identity Provider (IdP)"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Model Registry Sync Agent",
+     "CI/CD & Model Registry Pipeline"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Decision API Container",
+     "Model Execution Engine",
+     "Feature Extraction Component",
+     "Circuit Breaker & Fallback Manager"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "UI Presentation Component",
+     "Audit Logging Component",
+     "Amazon Aurora PostgreSQL"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "AWS Audit & Compliance Store",
+     "Audit Dispatcher Component",
+     "Explanation Generation Component",
+     "Scoring Engine Container"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Circuit Breaker & Fallback Manager",
+     "API Handler Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

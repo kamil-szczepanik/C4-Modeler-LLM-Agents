@@ -1,0 +1,338 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "Patient registration (Patient Self-Service Container), scheduling with clash checks (Resource Conflict Validator, Distributed Lock Manager), and EMR with audit trails (EMR Backend, Audit & Compliance Daemon) are covered. Billing is handled via Integration Broker, but a dedicated internal billing service is referenced inconsistently (e.g., Billing Container).",
+   "performance_efficiency": "The sub-1s P95 target is directly enabled by Clinical Summary Aggregator caching in Redis Cluster, PgBouncer read replicas, Kafka asynchronous offloading, and Next.js SPA with CDN/Edge WAF caching.",
+   "compatibility": "Integration Broker Container explicitly implements Apache Camel with HL7 FHIR RESTful APIs and mTLS to integrate External Lab / Imaging Systems and Pharmacy Management System, along with EDI-X12/REST for Insurance Clearinghouse.",
+   "usability": "Patient self-service is comprehensively detailed via Next.js SPA with TanStack Query. However, dedicated UI container interfaces for Clinical Staff, Administrative Staff, and Compliance Officers are not explicitly modeled, routing generically through API Gateway.",
+   "reliability": "99.99% availability is supported by PostgreSQL synchronous streaming replication, Redis Master/Replica failover, Kafka clustering, and Camel DLQ/retries. However, concrete active-active cross-region synchronization between on-prem-k8s and eu-central-1 is not explicitly defined.",
+   "security": "HIPAA/GDPR needs are thoroughly addressed: OAuth2/OIDC MFA at API Gateway, mTLS/TLS 1.3 throughout, AES-256 TDE and dynamic credentials via HashiCorp Vault, PostgreSQL Row-Level Security, and tamper-evident Merkle hash-chain ledgers in Audit & Compliance Daemon.",
+   "maintainability": "Clear separation of concerns across specialized microservices and daemons. Event-driven decoupling via Apache Kafka and schema enforcement with Confluent Schema Registry guarantee loose coupling, modular evolution, and maintainability.",
+   "portability": "The architecture uses containerized workloads (Kubernetes, Go, Spring Boot) portable across on-prem-k8s and cloud. Cold Storage abstracts S3 Glacier and on-prem Ceph Object Storage, though active-active multi-cloud orchestration specifics remain partially abstract."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture incorporates a Clinical Summary Aggregator paired with a Redis Cluster to serve cached summaries under one second P95, complemented by PgBouncer routing read traffic to PostgreSQL replicas.",
+    "elements": [
+     "API Gateway",
+     "EMR Backend Container",
+     "Clinical Summary Aggregator",
+     "Redis Cluster",
+     "Connection Pooler & Read Scaler",
+     "EMR Database"
+    ],
+    "sensitivity_points": [
+     "Redis cache hit ratio for clinical summaries",
+     "PostgreSQL read replica replication lag"
+    ],
+    "tradeoffs": [
+     "Memory cost for caching summaries versus sub-second EMR screen load times"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "The Integration Broker and Apache Kafka buffer burst FHIR traffic without degrading synchronous EMR read operations, though the precise ingestion pipeline from broker to EMR database is not fully detailed.",
+    "elements": [
+     "Integration Broker Container",
+     "Route Orchestrator",
+     "Data Transformer Engine",
+     "Apache Kafka",
+     "EMR Database",
+     "Redis Cluster"
+    ],
+    "sensitivity_points": [
+     "Kafka partition capacity for FHIR result ingestion",
+     "Database write IOPS during high-throughput lab ingestion"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of lab results versus maintaining low EMR query latency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Synchronous database replication ensures zero data loss, but cross-region hybrid active-active coordination between on-premises Kubernetes and AWS lacks explicit traffic management and automated global failover definitions.",
+    "elements": [
+     "EMR Database",
+     "Relational Storage Engine",
+     "API Gateway",
+     "CDN / Edge WAF",
+     "Redis Cluster"
+    ],
+    "sensitivity_points": [
+     "Inter-site network latency with synchronous replication",
+     "Automated DNS and ingress failover convergence speed"
+    ],
+    "tradeoffs": [
+     "Zero data loss via synchronous replication increases cross-site write latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Kafka decouples claim submissions and the Integration Broker provides retry management, while PostgreSQL synchronous replication and PgBouncer handle database failover; explicit idempotency keys are assumed but not detailed.",
+    "elements": [
+     "Integration Broker Container",
+     "DLQ & Retry Manager",
+     "Apache Kafka",
+     "Connection Pooler & Read Scaler",
+     "EMR Database"
+    ],
+    "sensitivity_points": [
+     "PostgreSQL primary failover election and detection time",
+     "Message deduplication and idempotent processing mechanisms"
+    ],
+    "tradeoffs": [
+     "Automatic failover aggressiveness versus risk of split-brain in network partitions"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Apache Camel Integration Broker isolates external communication protocols, allowing new clearinghouse integrations to be implemented solely via route configurations and data transformations without modifying the core EMR.",
+    "elements": [
+     "Integration Broker Container",
+     "Route Orchestrator",
+     "Data Transformer Engine",
+     "Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Apache Camel route configuration modularity",
+     "Mapping complexity between internal formats and EDI-X12"
+    ],
+    "tradeoffs": [
+     "Centralized broker routing logic versus autonomous point-to-point service integrations"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Modifications are restricted to three components: Patient Self-Service UI, EMR Backend domain entities, and PostgreSQL schema, while existing pgAudit and Audit Interceptor mechanisms automatically record changes.",
+    "elements": [
+     "Patient Self-Service Container",
+     "EMR Backend Container",
+     "Clinical Record Service",
+     "EMR Database",
+     "Schema Registry"
+    ],
+    "sensitivity_points": [
+     "PostgreSQL schema migration procedures",
+     "Schema Registry schema evolution compatibility"
+    ],
+    "tradeoffs": [
+     "Rigid multi-tier data modeling versus rapid dynamic field prototyping"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The API Gateway Auth Filter enforces mandatory multi-factor authentication at the perimeter, blocking password-only access while the Analytics Forwarder forwards failed security events to Kafka and the Audit Daemon.",
+    "elements": [
+     "API Gateway",
+     "Auth Filter",
+     "Analytics Forwarder",
+     "Audit & Compliance Daemon Container",
+     "Apache Kafka"
+    ],
+    "sensitivity_points": [
+     "MFA enforcement consistency at API Gateway ingress",
+     "Latency of security event forwarding to audit daemon"
+    ],
+    "tradeoffs": [
+     "Strict MFA enforcement increases login friction during emergency clinical interventions"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "PostgreSQL Row-Level Security validates access boundaries, Audit Interceptor and pgAudit log 100% of read operations, and the Hash-Chain Ledger Engine commits immutable logs to 10-year WORM cold storage.",
+    "elements": [
+     "EMR Database",
+     "Audit Logging Subsystem",
+     "EMR Backend Container",
+     "Audit Interceptor",
+     "Audit & Compliance Daemon Container",
+     "Hash-Chain Ledger Engine",
+     "Cold Storage"
+    ],
+    "sensitivity_points": [
+     "pgAudit and Hash-Chain Ledger throughput under continuous read audits",
+     "WORM storage retention policy configuration"
+    ],
+    "tradeoffs": [
+     "Comprehensive read-audit logging overhead versus non-repudiation and strict compliance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Daemon Container",
+     "EMR Database",
+     "Compliance Report Generator",
+     "Hash-Chain Ledger Engine"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "CDN / Edge WAF",
+     "Replica / Failover Nodes",
+     "Relational Storage Engine"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Cold Storage",
+     "Storage Engine",
+     "Audit Logging Subsystem",
+     "Kafka Connect"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Self-Service Container",
+     "Appointment & Demographics Client Service",
+     "EMR Backend Container"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling & Resource Engine Container",
+     "Resource Conflict Validator",
+     "Distributed Lock Manager",
+     "Resource Calendar Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Backend Container",
+     "EMR Database",
+     "Clinical Record Service",
+     "Audit Interceptor",
+     "Audit & Compliance Daemon Container",
+     "Audit Logging Subsystem"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Integration Broker Container",
+     "Payment Gateway",
+     "Insurance Clearinghouse",
+     "Billing & Payment Widget Integration"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Auth Filter",
+     "Encryption & Key Manager Integration",
+     "API Gateway",
+     "EMR Database"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "CDN / Edge WAF",
+     "Replica / Failover Nodes",
+     "Relational Storage Engine"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Clinical Summary Aggregator",
+     "Redis Cluster"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Broker Container",
+     "External Lab / Imaging Systems",
+     "Route Orchestrator",
+     "Data Transformer Engine"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

@@ -1,0 +1,327 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 2,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.5,
+  "justifications": {
+   "functional_suitability": "All requirements (R-01 to R-04) are addressed by dedicated containers like Browse & Search Container, Shopping Cart & Checkout Container, and Reviews & Ratings Container. Multi-currency and shipping APIs are covered, though specific mechanisms for electronic book delivery and dedicated search indexing engines are omitted.",
+   "performance_efficiency": "Page load on 3G and 1M MAU scalability are supported by Amazon CloudFront edge caching, Amazon ElastiCache Redis clusters, and asynchronous queueing via Amazon SQS and Kinesis. However, dedicated search indexing (e.g., OpenSearch) to accelerate catalog queries is missing.",
+   "compatibility": "The architecture explicitly defines integration points with external systems, including Third-Party Payment Gateway via tokenized HTTPS, Shipping Provider for fulfillment, and an External Recommendation Engine. API protocols are clearly stated, though specific data exchange schemas remain unspecified.",
+   "usability": "While Customers, Catalog Administrators, and Authors are identified, there are no frontend containers (e.g., SPA, mobile apps, or admin portals) modeled. Users connect directly through CloudFront to the API Gateway Container without defined presentation interfaces.",
+   "reliability": "Resilience is partially addressed using Resilience4j circuit breakers, Amazon SQS buffering, and Aurora Read Replicas. However, mechanisms to coordinate multi-region failover across us-east-1, eu-west-1, and ap-southeast-1 to achieve the 99.95% uptime target are not detailed.",
+   "security": "Strong mechanisms include TLS 1.3, mTLS via AWS App Mesh, OAuth2/JWT validation, AWS IAM Identity Center, tokenized payment flows, and AWS KMS encryption at rest. GDPR/CCPA is supported via anonymized identifiers, though WAF mitigations for OWASP Top-10 are not explicitly modeled.",
+   "maintainability": "The domain is decomposed into modular microservices with clear domain responsibilities and sidecar-driven mesh integration (AWS App Mesh Envoy Sidecar). Component boundaries are generally sound, though some component diagrams blur architectural boundaries by listing external managed services as components.",
+   "portability": "Workloads are containerized using AWS ECS/EKS, facilitating container mobility. However, the system exhibits heavy architectural lock-in to AWS proprietary services (Amazon Aurora, App Mesh, ElastiCache, SQS, Kinesis, IAM Identity Center), impeding migration outside AWS."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.59375,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 2.0,
+   "Modifiability": 5.0,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "CloudFront edge caching and ECS auto-scaling mitigate load, but Browse & Search lacks explicit database, search index, and caching tiers in Level 3.",
+    "elements": [
+     "Amazon CloudFront",
+     "API Gateway Container",
+     "Browse & Search Container",
+     "Search Controller",
+     "Catalog Search Service"
+    ],
+    "sensitivity_points": [
+     "CloudFront edge caching TTL configurations",
+     "Backend catalog search database throughput under load"
+    ],
+    "tradeoffs": [
+     "Aggressive edge caching improves response time but increases catalog data staleness"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendations are isolated in a separate container utilizing Kinesis, an external engine, and Redis caching, entirely decoupling recommendation workloads from catalog browsing.",
+    "elements": [
+     "Recommendations Container",
+     "Amazon ElastiCache (Redis)",
+     "Amazon Kinesis Data Streams",
+     "Browse & Search Container",
+     "External Recommendation Engine"
+    ],
+    "sensitivity_points": [
+     "Resource isolation across ECS task definitions",
+     "Asynchronous stream processing throughput in Kinesis"
+    ],
+    "tradeoffs": [
+     "Decoupled asynchronous recommendation processing preserves browsing speed at the cost of eventual recommendation updates"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "Shopping Cart & Checkout interacts synchronously with the Shipping Provider via HTTPS without a messaging queue or retry buffer to defer failed shipping calls.",
+    "elements": [
+     "Shopping Cart & Checkout Container",
+     "Cart & Checkout Controller",
+     "Shipping Provider"
+    ],
+    "sensitivity_points": [
+     "Synchronous coupling to external third-party shipping APIs",
+     "Absence of transactional outbox or retry queues"
+    ],
+    "tradeoffs": [
+     "Direct synchronous API calls simplify flow but directly propagate external service downtime to checkout"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Route 53 and CloudFront provide global ingress, but cross-region database replication and state synchronization across us-east-1, eu-west-1, and ap-southeast-1 are omitted.",
+    "elements": [
+     "Amazon Route 53",
+     "Amazon CloudFront",
+     "Shopping Cart & Checkout Container",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Cross-region database replication latency and consistency",
+     "Automated Route 53 DNS failover configuration"
+    ],
+    "tradeoffs": [
+     "Multi-region active-active architectures prevent downtime but significantly increase replication complexity and data conflicts"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The dedicated Currency & Promotion Manager inside the Shopping Cart & Checkout Container isolates multi-currency conversions and promotional logic cleanly.",
+    "elements": [
+     "Shopping Cart & Checkout Container",
+     "Currency & Promotion Manager",
+     "Cart & Checkout Controller",
+     "Third-Party Payment Gateway"
+    ],
+    "sensitivity_points": [
+     "Encapsulation of exchange rates within Currency & Promotion Manager",
+     "Payment gateway multi-currency tokenization support"
+    ],
+    "tradeoffs": [
+     "Centralizing currency handling in one module simplifies updates but requires currency transformation on all order interactions"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The recommendation service is encapsulated within its own container, using Resilience4j circuit breakers and an external engine, leaving other services unaffected by algorithm changes.",
+    "elements": [
+     "Recommendations Container",
+     "External Recommendation Engine",
+     "Recommendations Container (AWS ECS / EKS)",
+     "API Gateway Container"
+    ],
+    "sensitivity_points": [
+     "Stability of the external recommendation interface contract",
+     "Resilience4j fallback circuit breaker handling"
+    ],
+    "tradeoffs": [
+     "Externalizing the recommendation engine allows seamless algorithmic evolution but incurs network latency"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Authentication and Security Filter and CloudWatch logging are present, but AWS WAF, input validation routines, and parameterization defenses are not explicitly detailed for search.",
+    "elements": [
+     "API Gateway Container",
+     "Authentication and Security Filter",
+     "Browse & Search Container",
+     "Reviews & Ratings Microservice",
+     "AWS CloudWatch"
+    ],
+    "sensitivity_points": [
+     "API Gateway payload inspection and WAF rule coverage",
+     "Parameterized query enforcement in Aurora PostgreSQL"
+    ],
+    "tradeoffs": [
+     "Deep payload inspection protects against injection attacks but adds request processing latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "The architecture lacks a centralized data deletion workflow or event orchestration across microservices, Aurora, Redis, Kinesis, and third-party partners to satisfy CCPA/GDPR mandates.",
+    "elements": [
+     "Reviews & Ratings Container",
+     "Amazon Aurora PostgreSQL",
+     "Amazon ElastiCache Redis",
+     "Amazon Kinesis Data Streams",
+     "Shopping Cart & Checkout Container"
+    ],
+    "sensitivity_points": [
+     "Distributed data store traversal for customer PII removal",
+     "Handling customer data deletion in asynchronous event logs"
+    ],
+    "tradeoffs": [
+     "Decoupled microservice persistence increases domain independence but complicates unified data subject deletion requests"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "partial"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Recommendation Engine",
+     "Third-Party Payment Gateway"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Currency & Promotion Manager"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Provider",
+     "Shopping Cart & Checkout Container"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Browse & Search Container",
+     "Search Controller",
+     "Catalog Search Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Shopping Cart & Checkout Container",
+     "Cart & Checkout Controller",
+     "Third-Party Payment Gateway"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Reviews & Ratings Container",
+     "Reviews & Ratings Microservice",
+     "Amazon Aurora PostgreSQL",
+     "Amazon ElastiCache Redis",
+     "Amazon SQS"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendations Container",
+     "Recommendations Container (AWS ECS / EKS)",
+     "Recommendation Engine",
+     "External Recommendation Engine",
+     "Amazon ElastiCache (Redis)"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Amazon CloudFront",
+     "Amazon ElastiCache Redis",
+     "Amazon ElastiCache (Redis)",
+     "Amazon Aurora PostgreSQL",
+     "Amazon SQS",
+     "Amazon Kinesis Data Streams"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Amazon CloudFront",
+     "Amazon ElastiCache Redis",
+     "Amazon ElastiCache (Redis)"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Amazon Route 53",
+     "Amazon CloudFront",
+     "Amazon Aurora PostgreSQL",
+     "External Recommendation Engine",
+     "AWS CloudWatch / OpenTelemetry"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "partial",
+    "elements": [
+     "Authentication and Security Filter",
+     "Service Mesh Proxy Integration",
+     "AWS IAM Identity Center"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

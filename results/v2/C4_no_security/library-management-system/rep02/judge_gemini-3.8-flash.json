@@ -1,0 +1,249 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies all functional requirements: 'Catalog Management Component' and 'Digital Content Vendor APIs' cover physical and digital cataloguing (R-01), while 'Circulation Engine Component' and 'Self-Service Check-In/Out Kiosk' fully support circulation and self-service portals.",
+   "performance_efficiency": "The sub-800ms search target (R-05) is directly addressed by a dedicated 'Search Engine' (Elasticsearch), decoupled via 'Async Message Broker', direct routing from 'API Gateway', and active tracking via 'Synthetic Monitoring Agent'.",
+   "compatibility": "The system cleanly interfaces with external services including 'Digital Content Vendor APIs', 'EU Payment Gateway', and 'EU Notification Service' using standard HTTPS/REST, TLS, and Kafka Avro protocols with 'Schema Registry'.",
+   "usability": "All required personas are served via tailored interfaces: 'Patron Web/Mobile App' with explicit accessibility, 'Staff Dashboard' for branch workflows, and 'Self-Service Check-In/Out Kiosk' equipped with assisted fallback and error recovery.",
+   "reliability": "Fault tolerance and recoverability are thoroughly engineered using 'Patroni' for PostgreSQL failover, 'Local Sync & Cache Store' for offline kiosk operation, read-replicas, and asynchronous decoupling via 'Async Message Broker'.",
+   "security": "EU data residency constraints are strictly enforced via 'EU Policy Enforcement Interceptor', 'EU-Resident Log & Audit Sink', and LUKS-encrypted storage. Authentication and encryption are handled by 'Kong OAuth2 Plugin', mTLS, and PII scrubbing via 'Fluentbit Sidecar'.",
+   "maintainability": "High maintainability is achieved through modular C4 decomposition, decoupling domain logic in 'Core Domain Services', enforcing contracts via 'Schema Registry', and routing telemetry through 'OpenTelemetry Collector'.",
+   "portability": "Standard technology stacks (Spring Boot, Node.js, PostgreSQL, Kafka) allow straightforward deployment across EU cloud infrastructure, though specific container orchestration or cloud-agnostic deployment manifests are not explicitly specified."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.0,
+   "Modifiability": 2.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Search queries route directly from the API Gateway to the dedicated Elasticsearch container, utilizing optimized Lucene DSL query parsing, sharding, and in-memory faceted aggregations, bypassing relational transactional bottlenecks to consistently achieve sub-800ms latencies under heavy concurrent load.",
+    "elements": [
+     "API Gateway",
+     "Kong / Nginx Edge Proxy",
+     "Search Engine",
+     "Query Parser Component",
+     "Data Storage Nodes Component",
+     "Faceted Aggregation Engine Component"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch index sharding configuration and query complexity directly impact response latency"
+    ],
+    "tradeoffs": [
+     "Decoupled search engine requires eventual consistency synchronization overhead"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalog mutations are persisted to PostgreSQL and asynchronously emitted through Kafka to Kafka Connect and Elasticsearch with a 1-second bulk refresh interval. This completely isolates search queries from write contention while making updates searchable within seconds, well under the 5-minute threshold.",
+    "elements": [
+     "Catalog Management Component",
+     "Domain Event Publisher",
+     "Async Message Broker",
+     "Search Sync Synchronizer Component",
+     "Search Engine",
+     "Indexing & Synchronization Component"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer lag and Elasticsearch bulk flush intervals dictate ingestion speed"
+    ],
+    "tradeoffs": [
+     "Asynchronous indexing trades immediate read-after-write consistency for high query throughput"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Circulation workflows execute entirely within Core Domain Services and PostgreSQL backed by Patroni failover and PgBouncer, remaining unaffected by search index node failures. While search index shards provide resilience, explicit replication topology is not fully detailed.",
+    "elements": [
+     "Core Domain Services",
+     "Circulation Engine Component",
+     "Data Storage",
+     "PostgreSQL 16 Primary",
+     "Patroni",
+     "Search Engine",
+     "Data Storage Nodes Component"
+    ],
+    "sensitivity_points": [
+     "Patroni automated leader election time determines relational database failover duration"
+    ],
+    "tradeoffs": [
+     "Isolating search and circulation services increases operational complexity of multiple clusters"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Kiosks operate as standalone Electron clients equipped with encrypted SQLite/IndexedDB stores for offline resilience, preventing single points of failure. The central API Gateway load balances remaining clients, ensuring transactions are preserved locally and synced when connectivity is restored.",
+    "elements": [
+     "Self-Service Check-In/Out Kiosk",
+     "Local Sync & Cache Store",
+     "Kiosk Core Logic Controller",
+     "API Gateway",
+     "Kong / Nginx Edge Proxy"
+    ],
+    "sensitivity_points": [
+     "Local cache conflict resolution policies determine consistency when reconnecting after node failures"
+    ],
+    "tradeoffs": [
+     "Client-side caching enhances resilience but requires offline data conflict management"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "Although Digital Content Vendor APIs are represented as external dependencies at Level 1 and Level 2, the Core Domain Services container lacks an explicit integration adapter or vendor abstraction layer, requiring structural code modifications to add new e-book providers.",
+    "elements": [
+     "Digital Content Vendor APIs",
+     "Core Domain Services",
+     "Catalog Management Component"
+    ],
+    "sensitivity_points": [
+     "Absence of a pluggable external vendor adapter interface tightly couples catalog services"
+    ],
+    "tradeoffs": [
+     "Direct domain integration reduces preliminary boilerplate but hinders extensibility for new providers"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "Circulation policies are implemented via Spring State Machine inside the Circulation Engine without an externalized business rules engine or dynamic configuration mechanism. Modifying loan rules between academic and public library tenants requires recompilation and redeployment of domain services.",
+    "elements": [
+     "Core Domain Services",
+     "Circulation Engine Component"
+    ],
+    "sensitivity_points": [
+     "Hardcoded state machine transitions limit dynamic runtime loan policy adjustments"
+    ],
+    "tradeoffs": [
+     "Compiling workflows into code ensures type safety but sacrifices runtime configurability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Data residency is enforced using a Spring AOP EU Policy Enforcement Interceptor, EU-hosted PostgreSQL, EU-localized Kafka volumes with LUKS encryption, and regional log sinks. However, application-level interceptors cannot fully replace infrastructure-level egress filtering to guarantee non-EU data flow prevention.",
+    "elements": [
+     "EU Policy Enforcement Interceptor",
+     "Data Storage",
+     "EU-Resident Object Storage",
+     "Async Message Broker",
+     "Event Log Storage Engine",
+     "EU-Resident Log & Audit Sink"
+    ],
+    "sensitivity_points": [
+     "Comprehensive coverage of interceptor pointcuts across all persistence and outbound network operations"
+    ],
+    "tradeoffs": [
+     "Restricting hosting and egress to EU regions limits global vendor service selections"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Kong OAuth2 plugin validates tokens at the edge while Core Domain Services handle domain permissions. Unauthorized access attempts are captured by Fluentbit sidecars and forwarded to the EU-Resident Log & Audit Sink. Explicit object-level authorization attributes are not described in detail.",
+    "elements": [
+     "API Gateway",
+     "Kong OAuth2 Plugin",
+     "Fluentbit Sidecar",
+     "Core Domain Services",
+     "Observability Stack",
+     "EU-Resident Log & Audit Sink"
+    ],
+    "sensitivity_points": [
+     "Fine-grained token scope validation at the gateway and domain boundary"
+    ],
+    "tradeoffs": [
+     "Detailed audit logging of all rejected access requests introduces logging I/O overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "EU-Resident Log & Audit Sink",
+     "Data Storage",
+     "EU Policy Enforcement Interceptor",
+     "Data Storage Nodes Component",
+     "EU-Resident Object Storage",
+     "EU-Region Object Storage",
+     "Local Sync & Cache Store",
+     "Fluentbit Sidecar"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Digital Content Vendor APIs",
+     "Staff Dashboard",
+     "Core Domain Services",
+     "Cataloging & Inventory Module",
+     "Catalog Management Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Engine",
+     "Catalogue Search UI component",
+     "Query Parser Component",
+     "Faceted Aggregation Engine Component",
+     "Synthetic Monitoring Agent"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

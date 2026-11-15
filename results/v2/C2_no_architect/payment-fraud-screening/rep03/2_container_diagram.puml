@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(Cardholders, "Cardholders", "End-users initiating card-not-present payment transactions.")
+Person(FraudAnalysts, "Fraud Analysts", "Internal users reviewing flagged transactions and case management queues.")
+Person(RiskManagersDataScientists, "Risk Managers / Data Scientists", "Internal users updating rules and deploying machine learning models.")
+Person(ComplianceAuditOfficers, "Compliance & Audit Officers", "Internal users auditing tamper-evident transaction logs and WORM storage.")
+
+System_Ext(PaymentGatewayProcessingEngine, "Payment Gateway / Processing Engine", "External payment system submitting payment authorization requests.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(AmazonAPIGatewayandALB, "Amazon API Gateway and ALB", "AWS API Gateway, Application Load Balancer (ALB)", "Ingress point handling TLS 1.3, mTLS, and routing traffic to internal containers within private subnets.")
+    Container(ScoringEngine, "Scoring Engine", "AWS ECS Fargate", "Core container evaluating payment authorization requests in real-time using ML models and heuristic fallbacks.")
+    Container(CaseManagementUIBackend, "Case Management UI & Backend", "AWS ECS Fargate", "Interface and backend supporting fraud analysts with tokenized, masked PAN data for case reviews.")
+    Container(ServerlessTasks, "Serverless Tasks", "AWS Lambda", "Performs asynchronous tasks and backend processing operations.")
+    ContainerDb(ModelArtifacts, "Model Artifacts and Audit Logs Storage", "Amazon S3", "Stores cryptographically verified ML model artifacts and WORM audit logs with Object Lock.")
+    ContainerDb(LedgerDatabase, "Ledger Database", "AWS QLDB", "Maintains tamper-evident, immutable transaction decision logs and feature weights.")
+    Container(SecurityandManagementServices, "Security and Management Services", "AWS IAM, AWS Secrets Manager, AWS KMS, AWS CodePipeline, AWS CloudWatch & X-Ray", "Manages access control, secrets, encryption keys, CI/CD pipelines, and observability.")
+}
+
+Rel(PaymentGatewayProcessingEngine, AmazonAPIGatewayandALB, "Forwards payment authorization requests", "HTTPS / TLS 1.3 and mTLS")
+Rel(AmazonAPIGatewayandALB, ScoringEngine, "Routes traffic over mTLS to internal containers", "Internal VPC protocols, mTLS")
+Rel(ScoringEngine, ModelArtifacts, "Downloads cryptographically verified ML model artifacts", "TLS 1.3")
+Rel(ScoringEngine, LedgerDatabase, "Persists tamper-evident decision logs and feature weights", "AWS KMS Encryption")
+Rel(ScoringEngine, ModelArtifacts, "Persists decision logs and inputs into WORM storage", "AWS KMS Encryption")
+Rel(FraudAnalysts, CaseManagementUIBackend, "Interacts with case management for reviews", "HTTPS (OIDC/MFA authenticated)")
+Rel(RiskManagersDataScientists, ModelArtifacts, "Deploys and updates model artifacts", "AWS CodePipeline")
+Rel(SecurityandManagementServices, ScoringEngine, "Deploys zero-downtime model updates and container rollouts", "AWS ECS Deployment")
+
+@enduml

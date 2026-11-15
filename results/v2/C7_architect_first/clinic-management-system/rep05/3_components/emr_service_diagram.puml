@@ -1,0 +1,34 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component Diagram for the EMR Service
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway routing traffic.")
+System_Ext(external_systems, "External Systems", "External healthcare systems and partners.")
+
+Container_Boundary(emr_service, "EMR Service") {
+    Component(emr_api_controller, "EMR API Controller", "Spring MVC / WebFlux", "Handles incoming HTTP/gRPC requests, routes them, and initiates patient consent validation.")
+    Component(clinical_record_manager, "Clinical Record Manager", "Java / Spring Boot Core Domain", "Manages clinical workflows, core domain logic, and the Clinical Summary Generator.")
+    Component(audit_trail_service, "Audit Trail Service & Compliance Dashboard Feed", "Spring Boot / Spring Kafka", "Streams signed audit events to the event broker for compliance monitoring.")
+    Component(consent_handler, "Consent & Preference Handler", "Java / Spring Boot", "Pre-processes and validates patient consent via internal calls.")
+    Component(fhir_adapter, "FHIR Interoperability Adapter", "HL7 FHIR / OAuth2 / OIDC", "Communicates with external systems via HL7 FHIR APIs using mutual TLS.")
+    Component(vault_transit_client, "Vault Transit Client", "HashiCorp Vault", "Manages encryption keys and envelope encryption for secure data handling.")
+    Component(postgresql, "PostgreSQL Databases", "PostgreSQL with HikariCP & Redis", "Primary transactional persistence with automated table-partitioning and caching layer.")
+    Component(redis, "Redis", "Redis Caching Layer", "Caches encrypted PHI summaries over TCP / TLS with Resilience4j.")
+    Component(kafka, "Apache Kafka Event Broker", "Apache Kafka", "Asynchronous event broker for tamper-evident audit streaming.")
+    Component(vault, "HashiCorp Vault", "HashiCorp Vault", "Provides envelope encryption and dynamic key rotation.")
+}
+
+Rel(api_gateway, emr_api_controller, "Routes requests", "gRPC / Internal Mesh with mTLS")
+Rel(emr_api_controller, consent_handler, "Pre-processes patient consent validation", "Internal calls")
+Rel(clinical_record_manager, postgresql, "JDBC over TCP / TLS with HikariCP pooling", "JDBC / TCP / TLS")
+Rel(clinical_record_manager, redis, "Caches encrypted PHI summaries", "TCP / TLS with Resilience4j")
+Rel(audit_trail_service, kafka, "Streams signed events", "Spring Kafka over TCP / TLS")
+Rel(emr_api_controller, vault_transit_client, "Uses for encryption", "Internal")
+Rel(clinical_record_manager, vault_transit_client, "Uses for encryption", "Internal")
+Rel(audit_trail_service, vault_transit_client, "Uses for encryption", "Internal")
+Rel(vault_transit_client, vault, "Manages encryption keys and envelope encryption", "API")
+Rel(fhir_adapter, external_systems, "Communicates via HL7 FHIR APIs", "OAuth2/OIDC mutual TLS")
+
+@enduml

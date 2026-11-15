@@ -1,0 +1,338 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 4,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Catalogue Service and Search Engine provide browsing, Shopping Cart & Checkout Service manages orders, Review Service handles ratings, and DynamoDB Streams integrates with Recommendation Engine. Localization & Currency Service and Shipping Provider APIs satisfy multi-currency and logistics constraints.",
+   "performance_efficiency": "The design uses Amazon CloudFront for SPA asset delivery, Amazon ElastiCache for fast currency lookups, and Amazon DynamoDB for low-latency catalogue reads. Asynchronous offloading via Amazon SQS and EventBridge ensures high throughput to easily handle 1M MAU and meet page load targets.",
+   "compatibility": "The architecture integrates cleanly with external systems via defined interfaces: Payment Gateway via tokenized HTTPS, Shipping Provider APIs via mTLS, Recommendation Engine (AWS Personalize) via DynamoDB Streams, and Third-Party Financial APIs via Exchange Rate Sync Worker.",
+   "usability": "Shopper/Reviewer journeys are supported by dedicated React components (Catalogue & Search View, Cart & Checkout Flow, Review & Rating Widget). However, Store Administrator interactions rely solely on the generic SPA shell without specialized administrative components or views detailed.",
+   "reliability": "The 99.95% uptime target is supported through multi-AZ Aurora Distributed Storage (6-way replication), DynamoDB Global Tables across the three target regions, ElastiCache Global Datastores, SQS asynchronous buffering, and circuit breakers in the Currency Conversion Component.",
+   "security": "Security is addressed with AWS WAF for OWASP Top-10 defenses, Lambda Authorizer for JWT/RBAC, mTLS between internal gRPC services, and AWS Secrets Manager. Explicit mechanisms for CCPA/GDPR compliance are referenced, though detailed audit logging mechanisms are omitted.",
+   "maintainability": "High maintainability is achieved through microservice modularity (Catalogue, Review, Cart/Checkout, Localization), separation of concerns in SPA components, loose coupling via Amazon EventBridge, and well-defined component responsibilities like Currency & Tax Adapter and Moderation & Sanitization Engine.",
+   "portability": "The system achieves multi-region adaptability across us-east-1, eu-west-1, and ap-southeast-1. However, replaceability is low due to tight coupling with proprietary AWS services, including Aurora Serverless v2, DynamoDB Global Tables, EventBridge, API Gateway, and AWS Personalize."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.0,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront CDN, S3, DynamoDB, and ElastiCache absorb read spikes effectively. ECS Fargate autoscales stateless backend services. However, lacking a dedicated search cluster like OpenSearch may strain Redis and DynamoDB under 10x complex keyword querying.",
+    "elements": [
+     "Single Page Application",
+     "API Gateway & Security",
+     "Catalogue Service",
+     "Amazon DynamoDB",
+     "Amazon ElastiCache"
+    ],
+    "sensitivity_points": [
+     "CloudFront cache hit ratios on catalogue pages",
+     "DynamoDB read capacity autoscaling thresholds"
+    ],
+    "tradeoffs": [
+     "Aggressive read caching reduces latency but introduces temporary catalogue data staleness"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendation workloads are fully offloaded to external AWS Personalize via asynchronous DynamoDB Streams. Background CDC processing completely isolates recommendation recomputations from synchronous catalogue browsing and read paths.",
+    "elements": [
+     "Recommendation Engine",
+     "Amazon DynamoDB",
+     "Stream Publisher Component",
+     "Catalogue Service"
+    ],
+    "sensitivity_points": [
+     "Asynchronous stream processing rate from DynamoDB Streams",
+     "Decoupled execution boundaries between recommendation ML and read models"
+    ],
+    "tradeoffs": [
+     "Asynchronous batch recommendation decoupling risks serving slightly outdated personalized suggestions"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Checkout Orchestrator decouples transactional checkout by persisting orders to Aurora and queuing fulfillment asynchronously to Amazon SQS. However, real-time shipping rate lookup failures during checkout are not explicitly mitigated with fallback rate strategies.",
+    "elements": [
+     "Shopping Cart & Checkout Service",
+     "Checkout Orchestrator Component",
+     "Payment & Shipping Integration Component",
+     "Amazon SQS",
+     "Shipping Provider APIs"
+    ],
+    "sensitivity_points": [
+     "SQS queue durability and asynchronous fulfillment worker retry policies",
+     "Fallback pricing mechanisms when shipping estimation endpoints fail"
+    ],
+    "tradeoffs": [
+     "Asynchronous fulfillment prevents order dropouts but may cause shipping cost discrepancies"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "While DynamoDB Global Tables and ElastiCache Global Datastore span multi-region deployments, Amazon Aurora PostgreSQL is architected solely with multi-AZ replication within a single region. If us-east-1 experiences an outage, transactional checkout data cannot fail over.",
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Aurora Serverless v2 Engine",
+     "Aurora Distributed Storage",
+     "Amazon DynamoDB",
+     "Global Tables"
+    ],
+    "sensitivity_points": [
+     "Cross-region replication mechanisms for transactional relational databases",
+     "RPO and RTO thresholds during regional cloud failure"
+    ],
+    "tradeoffs": [
+     "Multi-region database replication maintains cross-region availability at the cost of write latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The dedicated Localization & Currency Service encapsulates exchange rate lookups, sync workers, and caching. Adding JPY requires updating rates via financial APIs and currency adapter configuration, leaving catalogue and core services unaffected.",
+    "elements": [
+     "Localization & Currency Service",
+     "Currency Conversion Component",
+     "Currency & Tax Adapter Component",
+     "Amazon ElastiCache"
+    ],
+    "sensitivity_points": [
+     "Extensible currency enumeration in conversion configuration",
+     "Isolation of currency conversion logic behind internal gRPC boundaries"
+    ],
+    "tradeoffs": [
+     "Centralized currency service enhances modularity but introduces network hops during checkout"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The recommendation system is fully encapsulated as an external engine fed via DynamoDB Streams change data capture. Swapping or tuning the algorithm requires no architectural or code modifications across the bookstore services.",
+    "elements": [
+     "Recommendation Engine",
+     "Stream Publisher Component",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "Standardized event schema delivered via DynamoDB Streams",
+     "Clean separation between ML recommendation generation and catalogue APIs"
+    ],
+    "tradeoffs": [
+     "Decoupled ML interfaces reduce deployment dependencies but restrict custom real-time transactional features"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "AWS WAF filters malicious payloads at ingress. Search uses DynamoDB key lookups, and Review Service implements a Moderation & Sanitization Engine alongside TypeORM parameterized queries, comprehensively mitigating OWASP Top-10 SQLi and XSS risks.",
+    "elements": [
+     "Perimeter Defense Filter",
+     "API Gateway & Security",
+     "Moderation & Sanitization Engine",
+     "Review Repository",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Comprehensive WAF rule sets covering OWASP Top-10 signatures",
+     "Strict query parameterization within ORM data access layers"
+    ],
+    "tradeoffs": [
+     "Deep payload inspection and sanitization increase ingress processing latency slightly"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "User identity and profile management services are entirely missing from the architecture. While localization has zero-persistence, personal data persisted across Aurora (orders, reviews) and DynamoDB (carts) lacks any automated deletion orchestration or auditing pipeline.",
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Amazon DynamoDB",
+     "Review Service",
+     "Shopping Cart & Checkout Service"
+    ],
+    "sensitivity_points": [
+     "Absence of a centralized identity service managing user records",
+     "Coordinated deletion orchestration across polyglot persistent datastores"
+    ],
+    "tradeoffs": [
+     "Decentralized data storage isolates bounded contexts but drastically complicates unified CCPA/GDPR erasure"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Localization Mapping Component",
+     "API Client"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Localization & Currency Service",
+     "Currency Conversion Component",
+     "Exchange Rate Sync Worker",
+     "Currency & Tax Adapter Component",
+     "Amazon ElastiCache",
+     "Third-Party Financial APIs"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Provider APIs",
+     "Payment & Shipping Integration Component",
+     "Shopping Cart & Checkout Service"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalogue Service",
+     "Catalogue & Search View",
+     "Catalogue API Controller",
+     "Search and Query Engine",
+     "Amazon DynamoDB"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Shopping Cart & Checkout Service",
+     "Cart & Checkout Flow",
+     "Cart Management Component",
+     "Checkout Orchestrator Component",
+     "Payment Gateway",
+     "Amazon Aurora PostgreSQL"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Review Service",
+     "Review & Rating Widget",
+     "Review Controller",
+     "Moderation & Sanitization Engine",
+     "Review Repository",
+     "Rating Aggregator"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Recommendation Engine",
+     "Stream Publisher Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Single Page Application",
+     "Catalogue Service",
+     "Shopping Cart & Checkout Service",
+     "Amazon Aurora PostgreSQL",
+     "Aurora Serverless v2 Engine",
+     "Amazon DynamoDB"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Single Page Application",
+     "Routing & Shell Component",
+     "Search and Query Engine",
+     "Amazon DynamoDB",
+     "Amazon ElastiCache"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Aurora Distributed Storage",
+     "Global Tables",
+     "Amazon ElastiCache"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "API Gateway & Security",
+     "Perimeter Defense Filter",
+     "Authorizer",
+     "API Client",
+     "Moderation & Sanitization Engine"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

@@ -1,0 +1,339 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "Patient & Scheduling Service (PatientDomainService, SchedulingEngine clash checks), EMR Core Service with AuditInterceptor, Billing Service (Claims Processor) and FHIR service cover R-01 to R-04. Gaps: the EMR audit trail is not clearly modeled and Patient & Scheduling Service has no persistence relation to the Data Storage Layer at container level.",
+   "performance_efficiency": "AvailabilityCacheManager (Redis), PgBouncer read/write separation, Distributed Policy Cache, Kafka and NATS async, Celery claims processing and rate limiting support the targets. Gaps: no EMR-specific cache or explicit autoscaling, and no concrete P95 <1s mechanism for EMR screens.",
+   "compatibility": "FHIR Interoperability Service with HAPI FHIR, FHIR REST Controller (R4/R5, SMART scopes), Resource Mapping Engine and External Integration Client address R-08 with lab/imaging systems. Gaps: mixed brokers (Kafka and NATS), and the IdP OIDC integration is not detailed at component level.",
+   "usability": "Web and mobile access via API Gateway serves clinical staff and patients, the Billing Patient Billing Portal API serves patients, and administrators use ArgoCD/GitOps. Gaps: no explicit web or mobile UI containers, and no accessibility or UX mechanisms.",
+   "reliability": "Relational Database Engine uses Citus/Patroni active-active, Backup and Disaster Recovery uses Velero and WAL archiving, with Idempotency State Store, transactional outbox, queues and Secrets & Key Replication Manager. Gaps: no explicit multi-region failover topology or gateway/service redundancy, and the custom replication engine is a risk.",
+   "security": "External IdP provides OIDC and MFA, Istio mTLS, Vault/KMS with FIPS HSM and AES-256, RLS, OPA ABAC and consent, AuditInterceptor, PgAudit, PHI-scrubbed observability, break-glass interceptor, and WORM object lock. These match HIPAA/GDPR and R-05.",
+   "maintainability": "Clear service decomposition with component layering (controller, domain, repository), event-driven decoupling and GitOps. Gaps: inconsistent component diagrams that list external elements as components, a shared Data Storage Layer, polyglot stacks (Node, Java, Python), and custom replication.",
+   "portability": "Kubernetes, ArgoCD GitOps, MinIO/S3 dual object storage, Vault/KMS, Istio across hybrid clusters and Velero fit on-prem-k8s plus eu-central-1. Gaps: some AWS-specific dependencies (KMS, S3 Object Lock) and a custom replication engine."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.59375,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 3.0,
+   "Modifiability": 3.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "API Gateway / Edge Proxy",
+     "EMR Core Service",
+     "Data Storage Layer",
+     "Connection Pooling & Load Balancing",
+     "Distributed Policy Cache"
+    ],
+    "sensitivity_points": [
+     "No EMR read cache; every screen hits PostgreSQL with RLS",
+     "OPA check and Vault key fetch add latency"
+    ],
+    "tradeoffs": [
+     "Encryption, RLS and audit improve security but add read latency"
+    ],
+    "justification": "PgBouncer read/write split, policy caching and key caching support the target, but no EMR read cache, load-test evidence or latency budget exists for the 1 s P95. Plausible but unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "FHIR Interoperability Service",
+     "FHIR Message Queue Broker",
+     "FHIR REST Controller",
+     "EMR Core Service",
+     "Data Storage Layer"
+    ],
+    "sensitivity_points": [
+     "Queue consumer throughput and the ingestion path into the EMR are undefined",
+     "Shared PostgreSQL contention between ingestion and EMR reads"
+    ],
+    "tradeoffs": [
+     "Async buffering smooths bursts but delays visibility in the EMR"
+    ],
+    "justification": "The NATS JetStream buffer absorbs bursts, but the path from the queue to EMR persistence is unclear (the queue feeds outbound only). No isolation of ingestion from EMR reads, so the P95 guarantee is a risk."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "elements": [
+     "Data Storage Layer",
+     "Relational Database Engine",
+     "Secrets & Key Replication Manager",
+     "Infrastructure & Security",
+     "GitOps Deployment Engine"
+    ],
+    "sensitivity_points": [
+     "Cross-site replication mode (sync or async) determines data loss",
+     "No global traffic routing or failover detection is modeled"
+    ],
+    "tradeoffs": [
+     "Synchronous cross-site replication gives zero data loss but adds write latency"
+    ],
+    "justification": "Hybrid active-active Postgres (Citus/Patroni), key replication and S3 Object Lock are present. But no global load balancer or DNS failover, and no sync replication guarantee for 1-minute recovery with zero data loss."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Billing Service",
+     "Claims Processor & Insurance Reconciliation Engine",
+     "Idempotency State Store",
+     "Billing Data Repository",
+     "Relational Database Engine"
+    ],
+    "sensitivity_points": [
+     "Idempotency in Redis may be lost; Redis HA is unspecified",
+     "Failover time must be within 30 s"
+    ],
+    "tradeoffs": [
+     "Async Celery processing improves resilience but delays claim confirmation"
+    ],
+    "justification": "Celery async processing, an idempotency store and Patroni failover address retry without duplicates. But the Billing DB is not shown as HA, retry and outbox mechanics are unspecified, and the idempotency store is a separate failure point."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "elements": [
+     "Billing Service",
+     "Payment Integrator",
+     "Claims Processor & Insurance Reconciliation Engine",
+     "EMR Core Service"
+    ],
+    "sensitivity_points": [
+     "No explicit clearinghouse adapter abstraction inside Billing",
+     "Claims Processor and Payment Integrator both call the clearinghouse directly"
+    ],
+    "tradeoffs": [
+     "Integration in Billing isolates change but may duplicate logic across two components"
+    ],
+    "justification": "Clearinghouse integration is confined to the Billing Service, so EMR is unaffected. Changes might touch both Payment Integrator and Claims Processor, and no adapter or port pattern exists, but the scope stays small."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "elements": [
+     "PatientDomainService",
+     "DataRepository",
+     "AuditInterceptor",
+     "Patient & Scheduling Service",
+     "FHIR Interoperability Service",
+     "Resource Mapping Engine"
+    ],
+    "sensitivity_points": [
+     "No UI container is modeled",
+     "Schema migration and FHIR mapping also change"
+    ],
+    "tradeoffs": [
+     "Strong audit and encryption coupling raises the number of touched components"
+    ],
+    "justification": "The Patient service components (controller, domain, repository, audit) can be changed, but no web UI container is modeled and the FHIR mapping and DB migration add more. The three-component limit is likely exceeded or at risk."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "elements": [
+     "External Identity Provider (IdP)",
+     "API Gateway / Edge Proxy",
+     "Envoy Edge Router",
+     "Observability & Distributed Tracing Pipeline"
+    ],
+    "sensitivity_points": [
+     "Dependence on IdP availability",
+     "No alerting component on failed MFA within 1 minute"
+    ],
+    "tradeoffs": [
+     "External IdP offloads MFA but adds a dependency and a failure point"
+    ],
+    "justification": "The IdP enforces MFA over OIDC and the gateway validates tokens, which blocks access without a second factor. Failed-attempt recording is plausible via the IdP and observability, but security alerting within 1 minute is not explicitly modeled."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "elements": [
+     "Policy & Identity Enforcement Engine",
+     "AuditInterceptor",
+     "Persistence & Audit Repository Component",
+     "Relational Database Engine",
+     "Object Storage Repository",
+     "Break-Glass Interceptor Sub-component"
+    ],
+    "sensitivity_points": [
+     "Audit coverage of 100% of EMR reads is not explicit in EMR Core",
+     "Tamper-evidence of audit logs is not demonstrated"
+    ],
+    "tradeoffs": [
+     "Fine-grained ABAC and audit on every read add latency"
+    ],
+    "justification": "OPA ABAC with consent, RLS, PgAudit, a persistence and audit repository, and WORM storage with 10-year retention fit well. Weaknesses: the AuditInterceptor is modeled only in the Patient service, and hash-chain tamper evidence for EMR reads is unspecified."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Policy & Identity Enforcement Engine",
+     "AuditInterceptor",
+     "Audit & Compliance Interceptor",
+     "PatientDomainService",
+     "Secrets & Key Management Service",
+     "Observability & Distributed Tracing Pipeline",
+     "Database Audit & Encryption Proxy"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Relational Database Engine",
+     "Backup and Disaster Recovery",
+     "Secrets & Key Replication Manager",
+     "Service Mesh Control Plane & Envoys"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Object Storage Repository",
+     "Backup and Disaster Recovery"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Service",
+     "PatientDomainService",
+     "PatientController & SchedulingController"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "SchedulingEngine",
+     "AvailabilityCacheManager",
+     "Patient & Scheduling Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Core Service",
+     "Persistence & Audit Repository Component",
+     "Clinical Data Processing Component",
+     "Relational Database Engine",
+     "Database Audit & Encryption Proxy"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service",
+     "Claims Processor & Insurance Reconciliation Engine",
+     "Payment Integrator",
+     "Invoice & Ledger Engine",
+     "Billing Data Repository"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "External Identity Provider (IdP)",
+     "Secrets & Key Management Service",
+     "Break-Glass Interceptor Sub-component",
+     "DataRepository",
+     "Database Audit & Encryption Proxy"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Relational Database Engine",
+     "Backup and Disaster Recovery",
+     "Secrets & Key Replication Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Connection Pooling & Load Balancing",
+     "Distributed Policy Cache",
+     "AvailabilityCacheManager"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Interoperability Service",
+     "FHIR REST Controller",
+     "Resource Mapping Engine",
+     "External Integration Client",
+     "FHIR Message Queue Broker"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Recommendation Microservice container
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway routing traffic.")
+System_Ext(aws_eventbridge_sqs, "AWS EventBridge/SQS", "Event bus for asynchronous order events.")
+
+Container_Boundary(recommendation_microservice, "Recommendation Microservice") {
+    Component(api_router_layer, "API Router Layer", "FastAPI, Pydantic", "FastAPI application managing incoming gRPC requests and input validation via Pydantic.")
+    Component(inference_engine_component, "Inference Engine Component", "Python", "Executes collaborative filtering and incorporates a Cold-Start Handling Component for fallback trending logic.")
+    Component(recommendation_cache, "Recommendation Cache", "AWS ElastiCache Redis", "AWS ElastiCache Redis cluster for sub-10ms cached retrieval of precomputed suggestions.")
+    Component(data_sync_worker, "Data Sync Worker", "Python, AWS SDK", "Asynchronous background worker processing order events.")
+    Component(database, "Database", "AWS DynamoDB, AWS KMS", "AWS DynamoDB storing vector embeddings and model weights encrypted with AWS KMS.")
+}
+
+Rel(api_gateway, api_router_layer, "Routes recommendation requests", "gRPC over mTLS, AWS App Mesh")
+Rel(api_router_layer, inference_engine_component, "Delegates request handling", "In-memory Python function calls")
+Rel(inference_engine_component, recommendation_cache, "Fetches precomputed recommendations", "TCP/Redis Protocol, TLS-in-transit")
+Rel(inference_engine_component, database, "Executes fallback reads for sparse user profiles", "HTTPS, AWS SDK")
+Rel(data_sync_worker, database, "Persists updated model weights and embeddings", "HTTPS, AWS SDK")
+Rel(aws_eventbridge_sqs, data_sync_worker, "Consumes order events asynchronously", "Async")
+
+@enduml

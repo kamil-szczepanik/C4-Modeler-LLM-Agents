@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Audit Logging container
+
+Person(LibraryAdministratorsComplianceOfficers, "Library Administrators & Compliance Officers", "Users who access compliance reports and audit logs.")
+Person(SystemAuditorsSecurityAnalysts, "System Auditors & Security Analysts", "Analysts who review audit trails in the SIEM and compliance dashboard.")
+System_Ext(EUhostedSIEM, "EU-hosted SIEM", "Receives encrypted syslog feeds for centralized security monitoring.")
+
+Container_Boundary(AuditLogging, "Audit Logging") {
+    Component(APIGatewayKongEnvoyBackendServices, "API Gateway (Kong/Envoy) & Backend Services", "Kong/Envoy, Go", "Capture and emit audit events asynchronously.")
+    Component(AuditAgentFluentbitsidecar, "Audit Agent (Fluentbit sidecar)", "Fluentbit", "Lightweight log shipping and payload sanitization/masking agent.")
+    Component(EventBroker, "Event Broker", "Managed Apache Kafka / EU-hosted", "Durable event broker with cross-AZ replication and disk-buffering.")
+    Component(AuditConsumerWorker, "Audit Consumer Worker", "Go", "Processes and consumes events from the Event Broker.")
+    Component(AuditStorage, "Audit Storage", "PostgreSQL with TimescaleDB WORM storage", "PostgreSQL-based immutable storage supporting automated retention, tiering, and cryptographic hash-chaining with AES-256 encryption at rest.")
+    Component(ComplianceQueryService, "Compliance Query Service", "Go/REST", "High-performance service for querying audit data.")
+    Component(ComplianceReportingDashboard, "Compliance Reporting Dashboard", "React", "Lightweight UI for the Compliance Reporting Dashboard.")
+}
+
+Rel(APIGatewayKongEnvoyBackendServices, EventBroker, "gRPC/TCP, async event ingestion, mTLS")
+Rel(EventBroker, AuditConsumerWorker, "Kafka Protocol, mTLS")
+Rel(AuditConsumerWorker, AuditStorage, "SQL/TLS, AES-256 encryption at rest, EU KMS")
+Rel(ComplianceReportingDashboard, ComplianceQueryService, "HTTPS/REST, mTLS")
+Rel(ComplianceQueryService, AuditStorage, "SQL/TLS, read-only restricted role, strict query guardrails")
+Rel(AuditStorage, EUhostedSIEM, "Encrypted syslog/TLS")
+Rel(LibraryAdministratorsComplianceOfficers, ComplianceReportingDashboard, "Uses")
+Rel(SystemAuditorsSecurityAnalysts, EUhostedSIEM, "Reviews audit trails")
+@enduml

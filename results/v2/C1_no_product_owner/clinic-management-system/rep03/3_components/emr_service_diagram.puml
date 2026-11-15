@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the EMR Service container
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway routing requests.")
+System_Ext(fhir_service, "FHIR Interoperability Service", "External service exchanging standardized resources.")
+
+Container_Boundary(emr_service, "EMR Service") {
+    Component(emr_api_controller, "EMR API Controller", "Fastify Routing/Validation", "Routes and validates internal API requests.")
+    Component(medical_record_manager, "Medical Record Manager", "Domain Service", "Manages core business logic for medical records and patient admissions.")
+    Component(audit_logger_interceptor, "Audit Logger Interceptor", "Middleware", "Triggers and handles audit events for HIPAA and GDPR compliance.")
+    Component(data_access_repository, "Data Access Repository", "Prisma ORM / Node.js", "Persists and retrieves encrypted patient data.")
+    Component(fhir_mapping_adapter, "FHIR Mapping Adapter", "Translation Layer", "Transforms internal schemas to standardized FHIR resources.")
+    Component(redis_cache_sidecar, "Redis Cache Sidecar", "Redis", "Caches FHIR resources and demographics to maintain performance SLAs.")
+    Component(cockroachdb, "CockroachDB", "CockroachDB", "Stores encrypted patient data with high availability.")
+    Component(rabbitmq_local_buffer, "RabbitMQ / Local Buffer", "RabbitMQ", "Audit queue for asynchronous event emission.")
+    Component(hashicorp_vault, "HashiCorp Vault", "HashiCorp Vault", "Manages secrets, dynamic column-level encryption keys, and cryptographic signing secrets.")
+}
+
+Rel(api_gateway, emr_api_controller, "Routes internal API requests", "gRPC over mTLS")
+Rel(emr_api_controller, medical_record_manager, "Invokes business logic", "In-memory function calls")
+Rel(medical_record_manager, data_access_repository, "Persists and retrieves records", "SQL via TLS")
+Rel(medical_record_manager, audit_logger_interceptor, "Triggers audit events", "Async Event Emission via Durable Audit Queue")
+Rel(medical_record_manager, fhir_mapping_adapter, "Transforms internal schemas", "In-memory mapping")
+Rel(fhir_service, fhir_mapping_adapter, "Exchanges standardized resources", "gRPC with Circuit Breakers")
+Rel(data_access_repository, cockroachdb, "Stores encrypted patient data", "Encrypted SQL")
+
+@enduml

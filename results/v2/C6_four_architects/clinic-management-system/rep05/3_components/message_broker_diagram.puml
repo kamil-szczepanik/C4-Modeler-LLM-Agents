@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Message Broker container
+
+System_Ext(services, "Services (Patient, EMR, Billing, FHIR)", "External services interacting with the message broker")
+System_Ext(audit_store, "Audit & Archival Store", "Long-term storage for event logs")
+System_Ext(cache, "Distributed Cache", "Redis cache for materialized views")
+System_Ext(keycloak, "Keycloak Container", "Identity and access management provider")
+
+Container_Boundary(message_broker, "Message Broker") {
+    Component(event_ingestion, "Event Ingestion & Routing Engine", "Apache Kafka brokers", "Handles high-throughput client connections and partition leader balancing.")
+    Component(schema_registry, "Schema Registry", "Confluent Schema Registry", "Enforces strict Avro/Protobuf schema evolution and validation.")
+    Component(cluster_controller, "Cluster Controller (KRaft)", "KRaft", "ZooKeeper-free metadata manager reducing operational complexity.")
+    Component(mirroring_agent, "Event Mirroring & Replication Agent", "Kafka MirrorMaker 2", "Manages cross-datacenter replication between on-prem-k8s and eu-central-1.")
+    Component(stream_processing, "Stream Processing & State Store", "Apache Kafka Streams with local RocksDB", "Executes real-time appointment scheduling resource clash checks.")
+    Component(security_manager, "Broker Security & Authorization Manager", "Apache Ranger / Kafka ACLs", "Integrated with Keycloak for topic-level access control and HIPAA compliance.")
+}
+
+Rel(services, schema_registry, "Validates event schemas", "HTTPS/REST")
+Rel(services, event_ingestion, "Publishes and consumes encrypted domain events", "SASL/SCRAM over TLS, TCP/9094")
+Rel(event_ingestion, mirroring_agent, "Replicates encrypted topics across hybrid boundaries", "TLS, TCP/9094")
+Rel(event_ingestion, audit_store, "Streams long-term event logs for 10-year retention", "Kafka Connect / HTTPS")
+Rel(event_ingestion, stream_processing, "Processes event streams", "In-memory / Local RocksDB")
+Rel(stream_processing, cache, "Synchronizes materialized views", "Redis Protocol over TLS")
+Rel(keycloak, security_manager, "Synchronizes OAuth2/OIDC tokens for authorization", "HTTPS/REST")
+
+@enduml

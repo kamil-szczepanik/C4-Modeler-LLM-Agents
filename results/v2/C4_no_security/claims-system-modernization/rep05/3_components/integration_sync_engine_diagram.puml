@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Integration & Sync Engine container
+
+System_Ext(Legacy Mainframe, "Legacy Mainframe", "External legacy system")
+System_Ext(Observability Platform, "Observability Platform", "External observability system")
+
+Container_Boundary(integration_sync_engine, "Integration & Sync Engine") {
+    Component(IngestionRouter, "Ingestion Router", ".NET 8 Worker on AKS", "Consumes events and persists payloads.")
+    ComponentDb(MainframeBatchStagingStore, "Mainframe Batch Staging Store", "Azure SQL Database Ledger", "Tamper-evident, 90-day immutable audit staging.")
+    Component(SFTPSyncAgent, "SFTP Sync Agent", "AKS container", "Queries pending batches and transfers bulk files.")
+    Component(DeadLetterReconciliationMonitor, "Dead-Letter & Reconciliation Monitor", "Azure Monitor", "Operational observability and alerting.")
+    Component(AzureServiceBus, "Azure Service Bus", "Asynchronous event ingestion", "Asynchronous event ingestion and message buffering.")
+}
+
+Rel(IngestionRouter, AzureServiceBus, "Consumes events", "AMQP")
+Rel(IngestionRouter, MainframeBatchStagingStore, "Persists payloads", "ADO.NET / SQL")
+Rel(SFTPSyncAgent, MainframeBatchStagingStore, "Queries pending batches", "ADO.NET / SQL")
+Rel(SFTPSyncAgent, "Legacy Mainframe", "Transfers bulk files", "SFTP")
+Rel(DeadLetterReconciliationMonitor, Observability Platform, "Exports metrics", "OpenTelemetry / HTTPS")
+
+@enduml

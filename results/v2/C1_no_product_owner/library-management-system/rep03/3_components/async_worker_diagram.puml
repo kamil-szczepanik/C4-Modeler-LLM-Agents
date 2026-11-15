@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Async Worker container
+
+Container_Boundary(async_worker, "Async Worker") {
+    Component(TaskRouter, "Task Router", "Python / Celery App", "Consumes background jobs and routes tasks.")
+    Component(TaskValidationInterceptor, "Task Validation Interceptor", "Celery Pipeline", "Validates raw messages before execution.")
+    Component(PaymentProcessorTask, "Payment Processor Task", "Python", "Executes financial transactions and interacts with secure services.")
+    Component(NotificationDispatcherTask, "Notification Dispatcher Task", "Python", "Dispatches alerts and notifications to external services.")
+    Component(MessageBroker, "Message Broker", "RabbitMQ with DLQs", "Handles fault-tolerant task routing and metric-based autoscaling.")
+    Component(ConnectionPooler, "Connection Pooler", "PgBouncer", "Manages database connection limits.")
+    Component(Database, "Database", "PostgreSQL / SQLAlchemy / AsyncPG", "Persists state and idempotency keys.")
+    Component(ExternalServices, "External Services", "Payment Gateway, Notification Service", "External systems for payment execution and notification dispatch.")
+    Component(SecureVault, "Secure Vault", "HashiCorp Vault", "Provides secret management for dynamic credentials and AppRole authentication.")
+}
+
+Rel(TaskRouter, MessageBroker, "Consumes background jobs", "AMQPS with mTLS")
+Rel(TaskRouter, TaskValidationInterceptor, "Passes raw messages", "In-memory")
+Rel(PaymentProcessorTask, SecureVault, "Fetches API credentials", "HTTPS (REST)")
+Rel(PaymentProcessorTask, ExternalServices, "Executes transactions", "HTTPS (TLS 1.3)")
+Rel(NotificationDispatcherTask, ExternalServices, "Dispatches alerts", "gRPC with TLS 1.3")
+Rel(PaymentProcessorTask, ConnectionPooler, "Persists state/idempotency keys", "TCP via TLS")
+Rel(NotificationDispatcherTask, ConnectionPooler, "Persists state/idempotency keys", "TCP via TLS")
+Rel(ConnectionPooler, Database, "Forwards database queries", "TCP")
+
+@enduml

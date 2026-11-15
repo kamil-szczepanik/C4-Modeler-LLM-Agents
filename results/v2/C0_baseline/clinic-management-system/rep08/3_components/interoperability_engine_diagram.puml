@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(AdministrativeStaff, "Administrative Staff", "Reviews and re-queues payloads using HTTPS with MFA and RBAC.")
+System_Ext(ExternalLabSystems, "External Lab Systems", "Submits lab results via HTTP/REST with mTLS and SMART-on-FHIR OAuth2.")
+System_Ext(ClinicalCoreService, "Clinical Core Service", "Receives internal EMR sync via gRPC over TLS 1.3.")
+System_Ext(SIEMImmutableColdStorage, "SIEM & Immutable Cold Storage", "Receives audit log exports via TLS/Encrypted Stream.")
+
+Container_Boundary(InteroperabilityEngine, "Interoperability Engine") {
+    Component(FHIRAPIGatewayValidator, "FHIR API Gateway & Validator", "HAPI FHIR JPA Server", "Standards-compliant HL7 FHIR resource validation and processing for external data ingestion.")
+    Component(IntegrationRouterMessageProcessor, "Integration Router & Message Processor", "Apache Camel", "Flexible enterprise routing, message transformation, and dead-letter queue management.")
+    Component(AuditExportDispatcher, "Audit & Export Dispatcher", "Camel ActiveMQ/Kafka sink", "Handles audit log exports and event dispatching to SIEM and immutable cold storage.")
+    Component(ExceptionManagementController, "Exception Management Controller", "Spring Boot", "Manages robust exception handling and administrative management endpoints with role-based access control.")
+    Component(PersistentDeadLetterQueue, "Persistent Dead-Letter Queue", "Apache Kafka / ActiveMQ with AES-256", "Provides high-throughput event messaging and persistent DLQ storage with encryption.")
+}
+
+Rel(ExternalLabSystems, FHIRAPIGatewayValidator, "Submit Lab Results", "HTTP/REST (mTLS, SMART-on-FHIR OAuth2)")
+Rel(IntegrationRouterMessageProcessor, ClinicalCoreService, "Internal EMR Sync", "gRPC (TLS 1.3)")
+Rel(ExceptionManagementController, IntegrationRouterMessageProcessor, "Re-inject Corrected Payload", "AMQP/Kafka")
+Rel(AuditExportDispatcher, SIEMImmutableColdStorage, "Audit Log Export", "TLS/Encrypted Stream")
+Rel(AdministrativeStaff, ExceptionManagementController, "Review and Re-queue Payloads", "HTTPS (MFA, RBAC)")
+
+@enduml

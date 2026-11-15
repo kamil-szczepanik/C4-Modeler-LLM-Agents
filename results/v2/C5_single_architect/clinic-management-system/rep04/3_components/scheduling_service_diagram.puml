@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Scheduling Service container
+
+Component(NginxEnvoyAPIGateway, "Nginx / Envoy API Gateway", "Nginx / Envoy", "External API Gateway routing requests to the service.")
+Component(RedisEnterprise, "Redis Enterprise", "Redis", "Provides distributed caching for real-time availability checks.")
+Component(ApacheKafka, "Apache Kafka", "Kafka", "Asynchronous event broker for cross-service integration.")
+Component(PostgreSQLPrimaryDatabase, "PostgreSQL Primary Database", "PostgreSQL with AES-256", "Ensures ACID compliance and durable storage with AES-256 encryption.")
+
+Container_Boundary(SchedulingService, "Scheduling Service") {
+    Component(APIHandlerController, "API Handler / Controller", "Go standard library / gRPC-go", "Routes requests and handles inbound HTTPS/REST and gRPC traffic.")
+    Component(AppointmentManager, "Appointment Manager", "Go domain logic", "Manages high-concurrency patient appointment scheduling domain logic.")
+    Component(ResourceConflictDetector, "Resource Conflict Detector", "Go with in-memory locks", "Performs resource clash checks using in-memory synchronization.")
+    Component(CacheRepository, "Cache Repository", "Go Redis Client", "Interacts with distributed caching for real-time availability checks.")
+    Component(DatabaseRepository, "Database Repository", "Go pgx driver", "Persists appointment state to the primary database.")
+    Component(EventPublisher, "Event Publisher", "Segmentio Kafka-go", "Dispatches domain events asynchronously.")
+}
+
+Rel(NginxEnvoyAPIGateway, APIHandlerController, "Routes requests", "HTTPS/REST and gRPC")
+Rel(APIHandlerController, AppointmentManager, "Delegates requests", "In-process Go interfaces")
+Rel(AppointmentManager, ResourceConflictDetector, "Validates availability", "In-process")
+Rel(ResourceConflictDetector, CacheRepository, "Checks availability", "TCP / Redis Protocol")
+Rel(CacheRepository, RedisEnterprise, "Connects to distributed cache")
+Rel(AppointmentManager, DatabaseRepository, "Persists state", "In-process Go interfaces")
+Rel(DatabaseRepository, PostgreSQLPrimaryDatabase, "Stores appointments", "TCP / PostgreSQL Wire Protocol with AES-256")
+Rel(AppointmentManager, EventPublisher, "Dispatches events", "In-process")
+Rel(EventPublisher, ApacheKafka, "Publishes domain events", "TCP / Kafka Protocol")
+
+@enduml

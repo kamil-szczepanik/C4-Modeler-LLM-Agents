@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(Real_Time_Scoring_Engine, "Real-Time Scoring Engine", "External system")
+System_Ext(Case_Management_Backend, "Case Management Backend", "External system")
+System_Ext(Amazon_S3, "Amazon S3", "External storage")
+System_Ext(Amazon_CloudWatch_SIEM, "Amazon CloudWatch / SIEM", "External monitoring and logging")
+
+Container_Boundary(aws_aurora_postgresql, "AWS Aurora PostgreSQL") {
+    Component(Transaction_Case_Repository, "Transaction & Case Repository", "PostgreSQL relational tables", "Stores relational data for real-time transactions and high-performance case management.")
+    Component(Audit_Ledger, "Audit Ledger", "Append-only WORM tables with pg_audit", "Provides tamper-evident audit logging and strict PCI-DSS Level 1 compliance.")
+    Component(Partition_Manager, "Partition Manager", "pg_partman extension", "Automates time-based partitioning and offloads historical audit partitions older than 90 days to Amazon S3.")
+    Component(Connection_Pooler, "Connection Pooler", "PgBouncer / Aurora Proxy", "Manages connection spikes and prevents connection exhaustion from ECS Fargate tasks.")
+    Component(Aurora_Read_Replica, "Aurora Read Replica", "Amazon Aurora PostgreSQL Read Replica", "Dedicated for case management and analytical queries to protect P99 scoring latency.")
+}
+
+Rel(Real_Time_Scoring_Engine, Connection_Pooler, "Persists decision metrics and audit logs", "IAM-authenticated TLS 1.3")
+Rel(Connection_Pooler, Transaction_Case_Repository, "Routes pooled database connections for transaction writes", "")
+Rel(Case_Management_Backend, Aurora_Read_Replica, "Queries active fraud cases and analyst workloads", "SQL/JDBC over TLS 1.3")
+Rel(Partition_Manager, Amazon_S3, "Offloads historical audit partitions older than 90 days", "AWS KMS encrypted S3 API")
+Rel(Audit_Ledger, Amazon_CloudWatch_SIEM, "Streams pgaudit activity logs", "Encrypted CloudWatch Log Stream")
+
+@enduml

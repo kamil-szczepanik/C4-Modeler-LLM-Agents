@@ -1,0 +1,329 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively met: 'Claim Submission Feature Component' handles customer and broker submissions (R-01), 'Adjuster Workspace Component' serves claims adjusters (R-02), and 'Claim Type Adapter' paired with 'Feature Routing & Orchestration Component' enables phased, claim-type-by-claim-type migration (R-03).",
+   "performance_efficiency": "The 2-second target (R-05) is achieved despite mainframe latency via 'Adjuster Workspace Component' utilizing TanStack Query caching, local reads from 'Claims Database', and decoupling mainframe interactions asynchronously via 'Integration & Anti-Corruption Layer' and Azure Service Bus.",
+   "compatibility": "Interoperability is well handled: 'Mainframe Translation Adapter' and 'Batch Window Throttler' interface cleanly with the legacy COBOL/DB2 system over ExpressRoute without violating batch constraints, while 'Token Validator Component' cleanly integrates with Corporate Active Directory via OIDC/OAuth2 (R-07).",
+   "usability": "All target user groups have dedicated frontend elements within the 'Claims Web Application'. 'Routing & Shell Component' enforces WCAG 2.1 AA accessibility standards, 'Claim Submission Feature Component' handles multi-step broker/customer input, and 'Adjuster Workspace Component' optimizes adjuster workflows.",
+   "reliability": "Zero claim loss and exactly-once processing (R-04) are ensured by the 'Idempotency & Outbox Processor' and 'Dual-Write Router'. Mainframe operational limits are protected by the 'Batch Window Throttler' and Polly resilience in 'Rate Limiting & Resilience Component'.",
+   "security": "Active Directory SSO (R-07) is implemented using MSAL.js and 'Token Validator Component'. Data confidentiality and auditability are enforced via 'Audit Logging Component' with Azure SQL Ledger, Azure Key Vault, mTLS communication, and TDE with Dynamic Data Masking in 'Claim Core Store'.",
+   "maintainability": "Rapid fallback within one day (R-06) is explicitly enabled by 'Feature Flag Manager', 'Break-Glass Workflow', and 'Claim Type Adapter'. However, introducing multiple disparate cloud services (Cosmos DB, Container Apps, Functions, Ledger) presents high operational cognitive load for a cloud-inexperienced team.",
+   "portability": "The hybrid requirement across Azure West Europe and on-premise mainframe is cleanly realized using ExpressRoute and containerized workloads. However, the architecture is tightly coupled to proprietary Azure managed services (App Configuration, Azure SQL Ledger, Service Bus), reducing future portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.90625,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The frontend uses TanStack Query caching and the modern database stores synchronized claim state, avoiding synchronous 5-second mainframe hops. However, first-time cache misses on unsynchronized mainframe fields could still risk breaching the 2-second threshold if read-through is triggered.",
+    "elements": [
+     "Adjuster Workspace Component",
+     "API Gateway / BFF",
+     "Claims Processing Service",
+     "Claims Database",
+     "Integration & Anti-Corruption Layer"
+    ],
+    "sensitivity_points": [
+     "Data pre-fetching and synchronization freshness before adjuster access",
+     "Aggressive client and BFF caching strategies for claims data"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of cached adjuster views versus mainframe synchronization latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Customer submissions are accepted into scalable Container Apps and stored locally, while the Batch Window Throttler on Azure Service Bus buffers and rate-limits downstream synchronization, insulating the mainframe batch window from volume spikes.",
+    "elements": [
+     "Claim Submission Feature Component",
+     "Claims Processing Service",
+     "Batch Window Throttler",
+     "Integration & Anti-Corruption Layer"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue buffering capacity during peak submission spikes",
+     "Throttling rate limits matched to mainframe throughput capacity"
+    ],
+    "tradeoffs": [
+     "Immediate customer submission acceptance versus deferred mainframe batch synchronization"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The architecture decouples submission intake from mainframe availability using the Idempotency & Outbox Processor and Azure Service Bus Batch Window Throttler, safely queuing messages until the nightly window finishes.",
+    "elements": [
+     "Idempotency & Outbox Processor",
+     "Batch Window Throttler",
+     "Dual-Write Router",
+     "Claims Database"
+    ],
+    "sensitivity_points": [
+     "Outbox message durability during extended mainframe offline windows",
+     "Accurate scheduling of queue release following batch window completion"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission delivery versus immediate legacy system confirmation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Durable Functions in the Dual-Write Router coordinate state transition, the Idempotency & Outbox Processor deduplicates requests, and Azure SQL Ledger plus Claim Provenance Registry provide complete audit and reconciliation capabilities.",
+    "elements": [
+     "Idempotency & Outbox Processor",
+     "Dual-Write Router",
+     "Claim Provenance & Audit Registry",
+     "Audit Logging Component"
+    ],
+    "sensitivity_points": [
+     "Deduplication key persistence across retry cycles in outbox tables",
+     "Reliability of compensation transactions during partial dual-write failures"
+    ],
+    "tradeoffs": [
+     "Transaction complexity and storage overhead versus guaranteed exactly-once processing"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Phased migration and rapid fallback are achieved via Claim Type Adapter strategy patterns, Dynamic Routing Store, and automated Break-Glass Workflows in Azure App Configuration, allowing rollbacks within minutes without mainframe redevelopment.",
+    "elements": [
+     "Claim Type Adapter",
+     "Feature Routing & Orchestration Component",
+     "Feature Flag Manager",
+     "Dynamic Routing Store",
+     "Break-Glass Workflow"
+    ],
+    "sensitivity_points": [
+     "Granularity of feature toggles per claim type in dynamic configuration",
+     "Automated deployment validation via schema-checked GitOps pipelines"
+    ],
+    "tradeoffs": [
+     "Runtime routing complexity versus zero-downtime rollback capability"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "UI clients communicate solely with the API Gateway / BFF and Claims Processing Service. Retiring the mainframe merely requires removing the Anti-Corruption Layer without impacting client applications or frontend contracts.",
+    "elements": [
+     "Claims Web Application",
+     "API Gateway / BFF",
+     "Claims Processing Service",
+     "Integration & Anti-Corruption Layer",
+     "Claims Database"
+    ],
+    "sensitivity_points": [
+     "Strict boundary isolation maintained by the Anti-Corruption Layer",
+     "Completeness of claim domain model within modern Claims Database"
+    ],
+    "tradeoffs": [
+     "Maintaining anti-corruption translation during migration versus simple direct endpoint retirement"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Authentication middleware validates tokens, and Claim Core Store employs Row-Level Security to prevent cross-tenant access. While modern access is strictly filtered and audited via SQL Ledger, authorization enforcement on direct mainframe fallback pathways lacks explicit detail.",
+    "elements": [
+     "Authentication & Authorization Middleware",
+     "Token Validator Component",
+     "Claim Core Store",
+     "Audit Logging Component"
+    ],
+    "sensitivity_points": [
+     "Row-Level Security policy definitions partitioning broker tenant identifiers",
+     "Context header propagation of caller identity through BFF to database"
+    ],
+    "tradeoffs": [
+     "Fine-grained database row-level security checks versus query execution performance"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "OIDC integration with Active Directory combined with memory-only token storage ensures the modern platform terminates sessions within token expiry. However, propagation of revocation to legacy mainframe RACF/DB2 sessions is not explicitly specified.",
+    "elements": [
+     "Corporate Active Directory",
+     "Authentication Client Component",
+     "Authentication & Authorization Middleware",
+     "Token Validator Component"
+    ],
+    "sensitivity_points": [
+     "JWT token lifetime and Continuous Access Evaluation implementation",
+     "Synchronization latency between Corporate AD and mainframe security"
+    ],
+    "tradeoffs": [
+     "Short token lifetimes increasing authentication refresh traffic versus rapid revocation"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Mainframe Claims System",
+     "Integration & Anti-Corruption Layer",
+     "Dual-Write Router",
+     "Mainframe Translation Adapter"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Batch Window Throttler",
+     "Idempotency & Outbox Processor"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Integration & Anti-Corruption Layer",
+     "Mainframe Translation Adapter"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer",
+     "Broker",
+     "Claims Web Application",
+     "Claim Submission Feature Component",
+     "API Gateway / BFF",
+     "Claims Processing Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjuster",
+     "Claims Web Application",
+     "Adjuster Workspace Component",
+     "API Gateway / BFF",
+     "Claims Processing Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Claim Type Adapter",
+     "Feature Routing & Orchestration Component",
+     "Feature Flag Manager",
+     "Dynamic Routing Store",
+     "Routing & Proxy Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Idempotency & Outbox Processor",
+     "Dual-Write Router",
+     "Claim Provenance & Audit Registry",
+     "Audit Logging Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Adjuster Workspace Component",
+     "Claims Processing Service",
+     "Claims Database"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Break-Glass Workflow",
+     "Dynamic Routing Store",
+     "Feature Flag Manager",
+     "Claim Type Adapter",
+     "Feature Routing & Orchestration Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Corporate Active Directory",
+     "Authentication Client Component",
+     "Authentication & Authorization Middleware",
+     "Token Validator Component",
+     "Security & Observability"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

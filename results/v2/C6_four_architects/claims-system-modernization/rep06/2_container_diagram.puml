@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Modern Claims Platform
+
+Person(CustomersAndBrokers, "Customers and Brokers", "External actors who submit online claims and interact with the platform.")
+Person(ClaimsAdjusters, "Claims Adjusters", "Internal actors who manage and process claims within the adjuster workbench.")
+
+System_Ext(OnPremisesCOBOLDB2Mainframe, "On-Premises COBOL/DB2 Mainframe", "Legacy System of Record built on COBOL/DB2, hosted on-premise.")
+System_Ext(AzureActiveDirectory, "Azure Active Directory", "External Identity Provider used for SSO and OIDC validation.")
+
+System_Boundary(ModernClaimsPlatform, "Modern Claims Platform") {
+    Container(CustomerPortalandAdjusterWorkspaceSPAs, "Customer Portal and Adjuster Workspace SPAs", "React, Azure Static Web Apps", "Provides online claim submission and modern adjuster workflows.")
+    Container(AzureAPIManagement, "Azure API Management", "Azure API Management", "Acts as the API Gateway handling native OIDC validation and token propagation.")
+    Container(ClaimsCoreService, "Claims Core Service", ".NET 8, Azure Container Apps", "Domain microservice managing core claims processing and business logic.")
+    Container(MainframeIntegrationAdapter, "Mainframe Integration Adapter", ".NET 8, Azure Container Apps", "Isolates expensive mainframe interactions and bridges hybrid network requests.")
+    Container(AuditComplianceWorker, "Audit & Compliance Worker", ".NET 8, Azure Container Apps", "Background worker handling audit and compliance tasks.")
+    Container(AzureServiceBus, "Azure Service Bus", "Azure Service Bus", "Integration bus and message broker for asynchronous event processing.")
+    ContainerDb(AzureSQLDatabase, "Azure SQL Database", "Azure SQL Database, Entity Framework Core", "ACID-compliant transactional store guaranteeing zero data loss.")
+    Container(AzureDataFactory, "Azure Data Factory", "Azure Data Factory with Self-Hosted Integration Runtime", "Handles ETL and data replication during strict nightly batch windows.")
+}
+
+Rel(CustomersAndBrokers, CustomerPortalandAdjusterWorkspaceSPAs, "Submit online claims and interact with the portal", "HTTPS")
+Rel(ClaimsAdjusters, CustomerPortalandAdjusterWorkspaceSPAs, "Manage and process claims via adjuster workspace", "HTTPS")
+Rel(CustomerPortalandAdjusterWorkspaceSPAs, AzureAPIManagement, "Send API requests with OIDC/OAuth2 authentication", "HTTPS (OIDC/OAuth2)")
+Rel(AzureAPIManagement, ClaimsCoreService, "Forward API requests with propagated JWT bearer tokens", "HTTP/2")
+Rel(AzureAPIManagement, MainframeIntegrationAdapter, "Forward integration requests", "HTTP/2")
+Rel(ClaimsCoreService, AzureServiceBus, "Publish and consume asynchronous messages", "AMQP")
+Rel(ClaimsCoreService, AzureSQLDatabase, "Perform transactional persistence operations", "TDS (Entity Framework Core)")
+Rel(MainframeIntegrationAdapter, OnPremisesCOBOLDB2Mainframe, "Communicate with legacy mainframe backend", "IBM MQ / CICS (TCP)")
+Rel(AzureDataFactory, OnPremisesCOBOLDB2Mainframe, "Synchronize data and execute batch replication during nightly window", "JDBC/ODBC via Self-Hosted Integration Runtime")
+Rel(CustomerPortalandAdjusterWorkspaceSPAs, AzureActiveDirectory, "Authenticate users and validate identity", "OIDC/OAuth2")
+
+@enduml

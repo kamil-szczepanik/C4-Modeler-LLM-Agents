@@ -1,0 +1,49 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Library Management System
+
+Person(Patrons, "Library Patrons & Staff", "Users who interact with the system for circulation, cataloging, and self-service portals.")
+Person(Admins, "Library Administrators", "Users who manage and administer the platform with elevated privileges.")
+
+System_Ext(PaymentGateways, "External Payment Gateways", "External services used to process financial transactions.")
+System_Ext(OverDrive, "OverDrive", "External digital content provider supplying books and media.")
+System_Ext(JSTOR, "JSTOR", "External digital content provider supplying academic articles and media.")
+System_Ext(SSO, "Institutional SSO Providers", "External identity providers used for authentication.")
+System_Ext(Elasticsearch, "Elasticsearch / OpenSearch Cluster", "Cluster providing high-performance catalogue search indexing.")
+
+System_Boundary(LMS, "Library Management System") {
+    Container(WebFrontend, "Web Application Frontend", "React/TypeScript", "Provides the user interface for patrons, staff, and administrators.")
+    Container(MobileGateway, "Mobile API Gateway", "Node.js/Express", "Manages and routes API requests from mobile and client applications.")
+    Container(SearchAggregator, "Search Aggregator", "Node.js/GraphQL", "Aggregates and serves search queries with sub-800ms latency requirements.")
+    Container(CoreService, "Core Circulation & Catalog Service", "Java/Spring Boot", "Handles core business logic for item cataloging and circulation workflows.")
+    Container(IntegrationService, "Integration Service", "Python/Celery", "Synchronizes data and handles integrations with external providers.")
+    Container(AuthService, "Authentication & Session Service", "Node.js", "Manages user authentication, sessions, and security validation.")
+    Container(NotificationWorker, "Asynchronous Notification Worker", "Python", "Processes and dispatches asynchronous notifications.")
+    ContainerDb(Postgres, "PostgreSQL Database Cluster", "PostgreSQL", "Stores stateful transactional data within EU cloud regions.")
+    ContainerDb(Redis, "Redis Cache Tier", "Redis", "Provides caching for high-speed data retrieval within EU cloud regions.")
+}
+
+Rel(Patrons, WebFrontend, "Interact via HTTPS/REST and WebSockets", "HTTPS, WebSockets")
+Rel(Patrons, MobileGateway, "Interact via HTTPS/REST and WebSockets", "HTTPS, WebSockets")
+Rel(Admins, WebFrontend, "Manage system via HTTPS/REST", "HTTPS, REST")
+
+Rel(WebFrontend, MobileGateway, "Sends API requests", "HTTPS/REST")
+Rel(MobileGateway, SearchAggregator, "Communicates via gRPC over TLS", "gRPC over TLS")
+Rel(MobileGateway, CoreService, "Communicates via gRPC over TLS", "gRPC over TLS")
+Rel(SearchAggregator, CoreService, "Communicates via gRPC over TLS", "gRPC over TLS")
+Rel(CoreService, AuthService, "Validates sessions via mTLS", "gRPC over TLS, mTLS")
+Rel(IntegrationService, CoreService, "Synchronizes data via mTLS", "gRPC over TLS, mTLS")
+Rel(NotificationWorker, CoreService, "Communicates internally via mTLS", "gRPC over TLS, mTLS")
+
+Rel(IntegrationService, PaymentGateways, "Integrates via webhooks and outbound egress filtering", "Webhooks, HTTPS")
+Rel(IntegrationService, OverDrive, "Synchronizes via webhooks and outbound egress filtering", "Webhooks, HTTPS")
+Rel(IntegrationService, JSTOR, "Synchronizes via webhooks and outbound egress filtering", "Webhooks, HTTPS")
+Rel(AuthService, SSO, "Authenticates via SSO protocols", "SAML 2.0, OIDC")
+
+Rel(CoreService, Postgres, "Queries stateful transactional data", "PostgreSQL Protocol")
+Rel(CoreService, Redis, "Queries cache tier", "Redis Protocol")
+Rel(SearchAggregator, Elasticsearch, "Queries catalog search index", "REST APIs, HTTPS")
+
+@enduml

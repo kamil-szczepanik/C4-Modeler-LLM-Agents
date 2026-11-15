@@ -1,0 +1,363 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 3,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.625,
+  "justifications": {
+   "functional_suitability": "Consultation Service (signaling, Media Relay Proxy), Prescription & Interoperability Service, AI Symptom Orchestrator and Consent Controller cover R-01 to R-04. Gaps: the symptom checker is modeled as an external system, and the clinician-patient scheduling and pharmacy-country routing logic is not explicit.",
+   "performance_efficiency": "Memorystore Ephemeral Session Cache, SFU Media Relay Proxy, pgBouncer, asynchronous Audit Logger event publishing and the GraphQL Complexity Analyzer help. Gaps: no autoscaling, no explicit capacity or latency targets, and the synchronous consent check sits on the AI request path.",
+   "compatibility": "FHIR Adapter Component (HAPI FHIR) covers the US, and EU E-Prescription Gateway Component (Apache Camel) covers national standards, both over mTLS. Circuit Breaker / Resilience Interceptor isolates pharmacy failures. Gap: no per-country EU adapters are shown.",
+   "usability": "Patient Web App, Patient Mobile App and Clinician Portal serve both user groups. The Local State Manager gives offline-first support and WebRTC Media Engine handles low-bandwidth video. Gaps: no consent-management UI, no accessibility or localization, and no pharmacist interface.",
+   "reliability": "Degraded Mode Fallback Controller in Media Relay Proxy addresses R-06, and the Circuit Breaker, DLQs in Pub/Sub, the audit WAL buffer and the Local State Manager add resilience. Gaps: no multi-zone or failover/DR design, no backups, no RTO/RPO, and the fail-closed consent path hurts availability.",
+   "security": "Strong mechanisms: Istio mTLS with SPIFFE, IAP, OAuth2/OIDC Auth & Scope Middleware, Consent Token Issuer, OPA Compliance Enforcement Engine, regional CMEK in GCP KMS, WORM Medical Document Store, INSERT-only audit logging, and KMS-signed AI logs with model version pinning.",
+   "maintainability": "Clear service decomposition with separate responsibilities (Consent & Audit Service, AI Symptom Orchestrator, Prescription adapters). Interfaces are gRPC with GitOps via ArgoCD, and adapters are replaceable. Gaps: the shared Data & Cache Stores container couples services, the component models are inconsistent, and a polyglot stack adds overhead.",
+   "portability": "Kubernetes, Istio, ArgoCD, OPA and External Secrets Operator are portable and per-region ArgoCD planes are provided. However, the design is strongly tied to GCP services (Cloud SQL, Memorystore, KMS, IAP, GCS, Pub/Sub) with no abstraction layer, and no IaC or multi-cloud strategy is shown."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 2,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.5625,
+  "by_quality_attribute": {
+   "Performance": 2.5,
+   "Availability": 2.5,
+   "Modifiability": 4.5,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Consultation Service",
+     "Media Relay Proxy",
+     "Signaling Manager",
+     "Google Memorystore (Redis)",
+     "API Gateway / BFF"
+    ],
+    "sensitivity_points": [
+     "SFU capacity per node",
+     "Redis session-state latency",
+     "No autoscaling described"
+    ],
+    "tradeoffs": [
+     "SFU scalability vs media encryption and recording overhead"
+    ],
+    "justification": "SFU relay, Redis session state and Istio exist, but no autoscaling, capacity sizing or regional deployment of media nodes is described. The 5,000 concurrent sessions and 10 s join time are plausible but unaddressed."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "elements": [
+     "AI Symptom Orchestrator",
+     "Model Invocation & Adaptor Component",
+     "Consent Proxy & Policy Enforcer Component",
+     "AI Symptom Checker Engine",
+     "Audit & Traceability Logger Component with KMS Signing Interceptor"
+    ],
+    "sensitivity_points": [
+     "Synchronous consent check on every request",
+     "External engine latency",
+     "KMS signing latency"
+    ],
+    "tradeoffs": [
+     "Fail-closed consent and signed audit vs latency",
+     "Traceability vs throughput"
+    ],
+    "justification": "The synchronous consent call, KMS signing and an external engine sit in the request path. The audit is asynchronous with a WAL, but there is no caching, autoscaling or capacity design for about 14 requests/s, and no latency budget is given."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "elements": [
+     "Media Relay Proxy",
+     "Degraded Mode Fallback Controller",
+     "Local State Manager",
+     "WebRTC Media Engine",
+     "Patient Mobile App"
+    ],
+    "sensitivity_points": [
+     "Fallback trigger thresholds",
+     "Sync of offline notes after reconnect",
+     "Reconnect handling"
+    ],
+    "tradeoffs": [
+     "Degraded video quality vs continuity",
+     "Offline caching vs device data security"
+    ],
+    "justification": "A Degraded Mode Fallback Controller and an encrypted offline-first local store address the need. But no adaptive bitrate, audio-only fallback, reconnect or note-sync mechanism is specified, so no-loss of notes is unproven."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "ArgoCD",
+     "GCP KMS & Secret Manager",
+     "Data & Cache Stores",
+     "Regional Routing & Istio Context Injector",
+     "Cloud SQL"
+    ],
+    "sensitivity_points": [
+     "Single US region only",
+     "Backup and restore location",
+     "RTO of 1 hour"
+    ],
+    "tradeoffs": [
+     "Strict residency vs multi-region failover",
+     "Cost vs standby capacity"
+    ],
+    "justification": "Regional isolation preserves residency, but no multi-zone or standby US design, backup/restore or DR runbook is described. The brief gives only one region per jurisdiction, so recovery within 1 hour is unsupported; ArgoCD redeploy is the only path."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "elements": [
+     "Prescription & Interoperability Service",
+     "EU E-Prescription Gateway Component",
+     "FHIR Adapter Component",
+     "Prescription Domain Controller",
+     "Circuit Breaker / Resilience Interceptor"
+    ],
+    "sensitivity_points": [
+     "Single EU gateway for all countries",
+     "Domain model common to all standards"
+    ],
+    "tradeoffs": [
+     "Adapter isolation vs duplicated per-country mapping logic"
+    ],
+    "justification": "Standards are isolated in adapter components behind the domain controller and resilience interceptor. A new country means a new adapter, though the EU gateway is one component and may need an internal split."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "elements": [
+     "AI Symptom Orchestrator",
+     "Model Invocation & Adaptor Component",
+     "Audit & Traceability Logger Component with KMS Signing Interceptor",
+     "Medical Document Store",
+     "AI Symptom Checker Engine"
+    ],
+    "sensitivity_points": [
+     "Version pinning mechanism",
+     "Model version recorded per log entry",
+     "Rollback procedure"
+    ],
+    "tradeoffs": [
+     "Immutable pinning vs rollout speed"
+    ],
+    "justification": "Immutable version pinning, signed logs with inputs and WORM storage support traceability. Rollback and runtime version switching are not explicitly described, but pinning makes them feasible."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "elements": [
+     "Consent & Audit Service",
+     "Compliance Enforcement Engine",
+     "Consent Token Issuer",
+     "Auth & Scope Middleware",
+     "Regional Routing & Istio Context Injector",
+     "Policy Enforcement Engine"
+    ],
+    "sensitivity_points": [
+     "Cross-region call path to the US data",
+     "Consent token validation at every service",
+     "Audit logging of denied requests"
+    ],
+    "tradeoffs": [
+     "Strict regional isolation vs clinician cross-border workflows"
+    ],
+    "justification": "A compliance engine with OPA, consent tokens, scope middleware, regional routing and Gatekeeper residency checks deny access without consent, and an append-only audit exists. The cross-region request flow is not fully explicit."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Consent Controller",
+     "Compliance Enforcement Engine",
+     "Consent Token Issuer",
+     "Data Retention Manager",
+     "Audit Logger"
+    ],
+    "sensitivity_points": [
+     "Token lifetime bounds propagation delay",
+     "Revocation propagation to data recipients",
+     "Verification of stopped sharing"
+    ],
+    "tradeoffs": [
+     "Short-lived tokens vs token issuance load"
+    ],
+    "justification": "Short-lived consent tokens and per-purpose consent management naturally limit sharing, and audit supports verification. But no explicit revocation propagation, research-data sharing flow or downstream cutoff is shown."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Consent & Audit Service",
+     "Security & Infrastructure",
+     "GCP KMS",
+     "Compliance Enforcement Engine",
+     "Data Retention Manager"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Regional Routing & Istio Context Injector",
+     "Policy Enforcement Engine",
+     "Data & Cache Stores",
+     "GCP KMS",
+     "Compliance Enforcement Engine"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Orchestrator",
+     "Audit & Traceability Logger Component with KMS Signing Interceptor",
+     "AI Symptom Checker Engine",
+     "Audit Logger"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Media Relay Proxy",
+     "Local State Manager",
+     "Patient Mobile App",
+     "WebRTC Media Engine"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Consultation Service",
+     "Signaling Manager",
+     "Media Relay Proxy",
+     "WebRTC Media Engine",
+     "Clinician Portal",
+     "Patient Web App"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Prescription & Interoperability Service",
+     "FHIR Adapter Component",
+     "EU E-Prescription Gateway Component",
+     "National Pharmacies (EU) & US Pharmacies"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Orchestrator",
+     "AI Symptom Checker Engine",
+     "Model Invocation & Adaptor Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Consent & Audit Service",
+     "Consent Controller",
+     "Consent Token Issuer",
+     "Auth & Scope Middleware"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Compliance Enforcement Engine",
+     "Regional Routing & Istio Context Injector",
+     "Policy Enforcement Engine",
+     "Consent Proxy & Policy Enforcer Component",
+     "Consent Token Issuer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Media Relay Proxy",
+     "Local State Manager",
+     "WebRTC Media Engine"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Audit & Traceability Logger Component with KMS Signing Interceptor",
+     "AI Symptom Orchestrator",
+     "Audit Logger",
+     "Medical Document Store",
+     "AI Symptom Checker Engine"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Adapter Component",
+     "EU E-Prescription Gateway Component",
+     "Prescription & Interoperability Service"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

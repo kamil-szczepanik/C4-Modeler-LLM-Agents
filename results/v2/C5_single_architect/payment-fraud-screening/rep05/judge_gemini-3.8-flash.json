@@ -1,0 +1,324 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 via 'Fraud Scoring Engine', R-02 via 'Case Management Backend' and 'Amazon Aurora PostgreSQL', and R-03 through the 'Rule & Model Loader Component' with atomic swap mechanisms.",
+   "performance_efficiency": "AWS NLB, Go/Rust components, in-memory caching via 'Redis' with Lua scripts, and asynchronous logging in 'Audit Logger Component' target the 50 ms P99 at 3,000 TPS. However, synchronously writing to Aurora from the scoring core risks latency spikes.",
+   "compatibility": "Clear integration with 'Payment Gateway / Acquirer' over HTTPS/gRPC and TCP. However, interaction mechanisms with the context element 'Card Networks & Fraud Intelligence Feeds' are not detailed at the container or component levels.",
+   "usability": "'Fraud Analyst' is supported via 'Case Management Backend' over HTTPS, but no explicit frontend/UI container or interface presentation mechanism is modeled for analysts to conduct case reviews.",
+   "reliability": "High availability is supported via 'Redis Replica Node' and ECS Fargate. However, R-07's requirement to avoid blocking payments for over 1 minute during scoring downtime (e.g., fallback/fail-open mechanisms) is not explicitly addressed.",
+   "security": "Addresses R-05 and R-06 via 'Data Masking & Tokenization Engine', 'Masking & Sanitization Middleware', 'Row-Level Security (RLS) Enforcer', and 'Amazon S3 with Object Lock and AWS KMS' for tamper-evident 7-year storage.",
+   "maintainability": "Modular design separates real-time scoring and case management into distinct containers. The 'Rule & Model Loader Component' supports zero-downtime updates, fitting operational constraints for a small engineering team.",
+   "portability": "Well-targeted to AWS eu-west-1 using Amazon ECS Fargate, S3, KMS, and Aurora PostgreSQL. Containerized Go/Rust services maintain application portability, though deep reliance on AWS-specific managed services ties infrastructure to AWS."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 2.5,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "L4 NLB, compiled Go/Rust runtimes, in-memory Redis feature lookups, and asynchronous audit streaming enable low latency. However, synchronous TCP queries from the scoring core to Aurora PostgreSQL under 3,000 TPS present a potential latency bottleneck at P99.",
+    "elements": [
+     "AWS Network Load Balancer",
+     "TCP Ingress Router",
+     "Fraud Scoring Engine",
+     "API Handler Component",
+     "Feature Aggregator Component",
+     "Scoring Engine Core",
+     "Redis Primary Node"
+    ],
+    "sensitivity_points": [
+     "Database read/write latency on synchronous paths during peak transaction throughput",
+     "Redis response latency during multi-feature aggregations"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging improves request latency at the risk of transient buffer overflow"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Scoring and case management are decoupled into separate ECS containers with isolated ingress points. However, both containers share Amazon Aurora PostgreSQL, meaning heavy analyst queries could cause resource contention on the database without dedicated read replicas.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Case Management Backend",
+     "Amazon Aurora PostgreSQL",
+     "Case Management Schema"
+    ],
+    "sensitivity_points": [
+     "Aurora CPU and I/O saturation from complex analyst search queries"
+    ],
+    "tradeoffs": [
+     "Sharing a single database reduces infrastructure cost but risks query contention between workloads"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "While ECS provides container restartability, the architecture lacks an explicit fallback scoring path, circuit breaker, or fail-open mechanism at the ingress to decide payments within 1 minute if the Fraud Scoring Engine becomes unavailable.",
+    "elements": [
+     "AWS Network Load Balancer",
+     "TCP Ingress Router",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Absence of fail-open routing or static fallback rule evaluation during container outages"
+    ],
+    "tradeoffs": [
+     "Failing closed prevents fraudulent transactions but risks violating availability SLA during complete service crashes"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "The Scoring Engine Core decouples audit logging through an in-process async channel to the Audit Logger Component. However, prolonged S3 degradation risks in-memory queue exhaustion and message loss without a persistent local spool or dead-letter mechanism.",
+    "elements": [
+     "Scoring Engine Core",
+     "Audit Logger Component",
+     "Amazon S3 with Object Lock and AWS KMS",
+     "S3 Bucket (Compliance Audit Store)"
+    ],
+    "sensitivity_points": [
+     "In-memory queue buffer limits during downstream storage downtime"
+    ],
+    "tradeoffs": [
+     "Non-blocking in-memory buffering preserves <50ms scoring latency but risks audit log drop under backpressure"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Rule & Model Loader Component uses shared memory and atomic pointer swapping in Rust, enabling instant zero-downtime model hot-swapping and sub-second rollbacks while preserving model version tagging in decision outputs.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Rule & Model Loader Component",
+     "Scoring Engine Core",
+     "Audit Logger Component"
+    ],
+    "sensitivity_points": [
+     "Thread-safe atomic swapping mechanism in Rust without locking evaluation threads"
+    ],
+    "tradeoffs": [
+     "In-memory model swapping eliminates deployment downtime but increases per-instance memory footprints"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Dynamic rule loading via the Rule & Model Loader and atomic state swapping allows new velocity checks and logic to activate within minutes. Redis sliding windows support velocity tracking, and decision engines output rule execution traces to audit logs.",
+    "elements": [
+     "Rule & Model Loader Component",
+     "Scoring Engine Core",
+     "Feature Aggregator Component",
+     "Redis Primary Node"
+    ],
+    "sensitivity_points": [
+     "Dynamic rule parsing and validation latency prior to atomic loading"
+    ],
+    "tradeoffs": [
+     "Extensible runtime rule evaluation slightly increases feature lookup complexity in Redis"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "PAN exposure is prevented through database-level dynamic masking, pgcrypto tokenization, and backend sanitization middleware. However, the architecture does not specify automated SIEM, behavioral monitoring, or alerting mechanisms to detect anomalous analyst account access within 15 minutes.",
+    "elements": [
+     "Case Management Backend",
+     "Masking & Sanitization Middleware",
+     "Amazon Aurora PostgreSQL",
+     "Data Masking & Tokenization Engine",
+     "Row-Level Security (RLS) Enforcer"
+    ],
+    "sensitivity_points": [
+     "Absence of real-time intrusion and anomalous access detection pipelines"
+    ],
+    "tradeoffs": [
+     "Database-level masking guarantees PCI compliance across all views but incurs query execution overhead"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Decision traces, inputs, and model metadata are written to Amazon S3 with Object Lock in compliance mode, guaranteeing 7-year tamper evidence. S3 Lifecycle transitions older data to Glacier, allowing retrieval well within the one working day requirement.",
+    "elements": [
+     "Amazon S3 with Object Lock and AWS KMS",
+     "S3 Bucket (Compliance Audit Store)",
+     "Key Management Service (Audit Encryption Key)",
+     "S3 Lifecycle Component"
+    ],
+    "sensitivity_points": [
+     "Glacier archive retrieval times and query indexing strategy for historical records"
+    ],
+    "tradeoffs": [
+     "Transitioning immutable logs to Glacier minimizes long-term storage costs while requiring asynchronous batch retrieval"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "none"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Row-Level Security (RLS) Enforcer",
+     "Data Masking & Tokenization Engine",
+     "Masking & Sanitization Middleware",
+     "Key Management Service (Audit Encryption Key)",
+     "Amazon S3 with Object Lock and AWS KMS"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Audit Logger Component",
+     "Audit Log Vault",
+     "S3 Bucket (Compliance Audit Store)",
+     "S3 Lifecycle Component",
+     "Amazon S3 with Object Lock and AWS KMS"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "S3 Lifecycle Component",
+     "Fraud Scoring Engine",
+     "Case Management Backend"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Case Management Backend",
+     "Amazon Aurora PostgreSQL",
+     "Redis Primary Node"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Scoring Engine Core",
+     "API Handler Component",
+     "AWS Network Load Balancer"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Fraud Analyst",
+     "Case Management Backend",
+     "Case Service",
+     "Case Management Schema",
+     "Amazon Aurora PostgreSQL"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Rule & Model Loader Component",
+     "Scoring Engine Core"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "AWS Network Load Balancer",
+     "TCP Ingress Router",
+     "API Handler Component",
+     "Feature Aggregator Component",
+     "Scoring Engine Core",
+     "Redis Primary Node",
+     "In-Memory Feature Cache Store"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Masking & Sanitization Middleware",
+     "Data Masking & Tokenization Engine",
+     "Key Management Service (Audit Encryption Key)"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Logger Component",
+     "Audit Log Vault",
+     "S3 Bucket (Compliance Audit Store)",
+     "Amazon S3 with Object Lock and AWS KMS",
+     "Bucket Policy & Access Controller"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

@@ -1,0 +1,42 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System (CMS)
+
+Person(Patients_Doctors_Nurses_and_Administrative_Staff, "Patients, Doctors, Nurses, and Administrative Staff", "Users who interact with the clinic management system for healthcare delivery, records, scheduling, and administration.")
+
+System_Ext(External_Laboratory_Imaging_Systems, "External Laboratory & Imaging Systems", "External clinical systems used for medical testing and imaging.")
+System_Ext(Payment_Gateway_and_Insurance_Clearinghouse, "Payment Gateway and Insurance Clearinghouse", "External financial systems for processing payments and insurance claims.")
+System_Ext(Identity_Provider_IdP, "Identity Provider (IdP)", "Provides authentication services with OIDC/SAML and Multi-Factor Authentication.")
+System_Ext(SIEM_Audit_Platform, "SIEM & Audit Platform", "Platform for security information, event management, and auditing.")
+System_Ext(Enterprise_KMS, "Enterprise KMS", "Key Management Service backed by HSM for data encryption.")
+System_Ext(Global_Traffic_Manager_WAF, "Global Traffic Manager / WAF", "Edge routing, active-active traffic management, and DDoS protection.")
+
+System_Boundary(cms, "Clinic Management System (CMS)") {
+    Container(API_Gateway, "API Gateway", "Traefik/Envoy", "Handles secure ingress routing, rate limiting, and TLS termination.")
+    Container(Identity_Access_Management, "Identity & Access Management", "Keycloak", "Manages multi-factor authentication, OAuth2/OIDC token validation, and authorization.")
+    Container(Core_Services, "Core Services", "Node.js / Spring Boot", "Domain microservices managing patient admissions, EMRs, scheduling, and billing.")
+    Container(FHIR_Interoperability_Engine, "FHIR Interoperability Engine", "HAPI FHIR / Apache Camel", "Handles HL7 and FHIR transformations and external system interoperability.")
+    ContainerDb(Regional_Databases, "Regional Databases", "PostgreSQL / CockroachDB", "Regional instances with asynchronous encrypted replication for data residency and latency compliance.")
+    Container(Encrypted_Object_Storage, "Encrypted Object Storage", "MinIO / S3", "Stores encrypted files, documents, and medical imaging objects.")
+    Container(Message_Brokers, "Message Brokers", "Kafka / NATS", "Enables cross-site synchronization and asynchronous event-driven messaging.")
+}
+
+Rel(Patients_Doctors_Nurses_and_Administrative_Staff, API_Gateway, "Accesses clinical workflows, EMRs, scheduling, and billing", "HTTPS / TLS / OAuth2/OIDC")
+Rel(Global_Traffic_Manager_WAF, API_Gateway, "Routes external traffic and protects against threats", "HTTPS")
+Rel(API_Gateway, Identity_Access_Management, "Validates tokens and authenticates requests", "OAuth2/OIDC")
+Rel(API_Gateway, Core_Services, "Routes ingress traffic to domain microservices", "gRPC over mTLS")
+Rel(Core_Services, Identity_Access_Management, "Verifies user permissions and security contexts", "gRPC over mTLS")
+Rel(Core_Services, FHIR_Interoperability_Engine, "Requests HL7/FHIR clinical data translations", "gRPC over mTLS")
+Rel(Core_Services, Regional_Databases, "Reads and writes relational domain data", "Encrypted SQL over TLS")
+Rel(Core_Services, Encrypted_Object_Storage, "Stores and retrieves encrypted documents and images", "HTTPS / S3 API")
+Rel(Core_Services, Message_Brokers, "Publishes and consumes asynchronous events", "Encrypted Message Broker Protocol")
+Rel(FHIR_Interoperability_Engine, External_Laboratory_Imaging_Systems, "Exchanges clinical data and medical imaging results", "HL7 FHIR APIs over HTTPS")
+Rel(Core_Services, Payment_Gateway_and_Insurance_Clearinghouse, "Processes billing, payments, and insurance claims", "Secure API over HTTPS")
+Rel(Identity_Access_Management, Identity_Provider_IdP, "Federates authentication and identity management", "OIDC / SAML")
+Rel(Core_Services, SIEM_Audit_Platform, "Ships immutable audit logs instantly", "Encrypted Syslog / HTTPS")
+Rel(Core_Services, Enterprise_KMS, "Manages encryption keys for data security", "PKCS#11 / Cloud KMS API over TLS 1.3")
+Rel(Message_Brokers, Message_Brokers, "Cross-site synchronization via secure tunnels", "Encrypted Message Broker Protocol over Secure Tunnels")
+
+@enduml

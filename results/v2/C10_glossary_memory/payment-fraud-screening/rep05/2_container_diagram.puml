@@ -1,0 +1,38 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(PaymentMerchantsEndConsumers, "Payment Merchants / End Consumers", "External users initiating transactions.")
+Person(FraudAnalystsRiskComplianceOfficers, "Fraud Analysts & Risk/Compliance Officers", "Internal personnel reviewing flagged cases and ensuring regulatory compliance.")
+Person(RiskDataScientists, "Risk / Data Scientists", "Internal users updating fraud rules and ML models.")
+
+System_Ext(PaymentGatewayAcquirer, "Payment Gateway / Acquirer", "External system submitting authorization requests.")
+System_Ext(CardNetworksTokenizationVault, "Card Networks / Tokenization Vault", "External provider supplying tokenized card data.")
+System_Ext(IdentityProvideIdP, "Identity Provider (IdP)", "External system managing OAuth2/SAML authentication.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(APIGatewayIngressContainer, "API Gateway / Ingress Container", "AWS API Gateway or Envoy", "Handles incoming HTTP/gRPC requests and ingress routing.")
+    Container(FraudScoringEngineContainer, "Fraud Scoring Engine Container", "Go or Rust", "Evaluates transactions and delivers sub-50ms fraud decisions.")
+    Container(CaseManagementContainer, "Case Management Container", "Node.js/Python + React SPA on Amazon S3 / CloudFront", "Provides a secure case management interface for fraud analysts.")
+    Container(ModelRegistryContainer, "Model Registry Container", "MLflow on Amazon ECS", "Manages zero-downtime model and rule updates.")
+    ContainerDb(DatabaseStorage, "Database & Storage", "Amazon Aurora Serverless v2", "Stores transactional and audit data with append-only tables and immutable cryptographic triggers.")
+    Container(CachingLayer, "Caching Layer", "Amazon ElastiCache with Redis OSS", "Provides low-latency feature lookups and rate limiting.")
+}
+
+Rel(PaymentGatewayAcquirer, APIGatewayIngressContainer, "Submits real-time authorization requests", "HTTPS / gRPC")
+Rel(FraudAnalystsRiskComplianceOfficers, CaseManagementContainer, "Reviews flagged cases via the Case Management UI", "HTTPS via TLS 1.3")
+Rel(APIGatewayIngressContainer, CardNetworksTokenizationVault, "Performs token resolution", "HTTPS via mTLS")
+Rel(APIGatewayIngressContainer, IdentityProvideIdP, "Handles authentication", "HTTPS via mTLS / OAuth2/SAML")
+Rel(FraudScoringEngineContainer, IdentityProvideIdP, "Handles authentication", "HTTPS via mTLS / OAuth2/SAML")
+Rel(CaseManagementContainer, IdentityProvideIdP, "Handles authentication", "HTTPS via mTLS / OAuth2/SAML")
+Rel(ModelRegistryContainer, IdentityProvideIdP, "Handles authentication", "HTTPS via mTLS / OAuth2/SAML")
+Rel(APIGatewayIngressContainer, FraudScoringEngineContainer, "Routes requests for fraud evaluation", "gRPC over AWS VPC internal networks via mTLS")
+Rel(FraudScoringEngineContainer, CachingLayer, "Performs low-latency feature lookups", "Redis OSS Protocol")
+Rel(FraudScoringEngineContainer, DatabaseStorage, "Persists transaction and audit data", "PostgreSQL Wire Protocol")
+Rel(CaseManagementContainer, DatabaseStorage, "Reads and updates case data", "PostgreSQL Wire Protocol")
+Rel(ModelRegistryContainer, FraudScoringEngineContainer, "Provides zero-downtime model and rule updates", "S3 memory caching")
+Rel(RiskDataScientists, ModelRegistryContainer, "Updates fraud rules and ML models", "HTTPS / AWS IAM")
+
+@enduml

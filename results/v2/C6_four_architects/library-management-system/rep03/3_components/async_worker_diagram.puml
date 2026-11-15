@@ -1,0 +1,37 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Async Worker container
+
+System_Ext(NotificationEventBus, "Notification & Event Bus", "Apache Kafka", "External event streaming platform.")
+System_Ext(PaymentGateway, "Payment Gateway", "HTTPS API", "External payment processing service.")
+System_Ext(NotificationService, "Notification Service", "HTTPS API", "External notification delivery service.")
+System_Ext(NationalLibraryRegistry, "National Library Registry", "HTTPS API", "External registry system.")
+System_Ext(PostgreSQLDatabase, "PostgreSQL Database", "PostgreSQL", "Relational database for data storage and persistence.")
+
+Container_Boundary(AsyncWorker, "Async Worker") {
+    Component(KafkaEventConsumer, "Kafka Event Consumer", "confluent-kafka", "Consumes events from the Notification & Event Bus.")
+    Component(TaskRouterDispatcher, "Task Router / Dispatcher", "Celery Beat", "Routes and dispatches asynchronous tasks.")
+    Component(PaymentProcessorHandler, "Payment Processor Handler", "requests / httpx", "Handles external payment processing communications.")
+    Component(NotificationDispatcher, "Notification Dispatcher", "httpx", "Dispatches notifications to external services.")
+    Component(RegistrySyncHandler, "Registry Sync Handler", "httpx", "Synchronizes data with the National Library Registry.")
+    Component(DataSyncMaintenanceProcessor, "Data Sync & Maintenance Processor", "SQLAlchemy", "Performs database batch cleanups and data synchronization.")
+    Component(DeadLetterQueueDLQManager, "Dead Letter Queue (DLQ) Manager", "Celery Error Handling", "Manages failed tasks and routes them to the event bus.")
+    Component(ConfigSecretsManager, "Config & Secrets Manager", "pydantic-settings", "Manages secure configuration and secrets for EU compliance.")
+}
+
+Rel(NotificationEventBus, KafkaEventConsumer, "Sends events", "TCP")
+Rel(KafkaEventConsumer, TaskRouterDispatcher, "Dispatches events", "In-memory Python function call")
+Rel(TaskRouterDispatcher, PaymentProcessorHandler, "Triggers payment handling", "In-memory Python function call")
+Rel(TaskRouterDispatcher, NotificationDispatcher, "Triggers notifications", "In-memory Python function call")
+Rel(PaymentProcessorHandler, PaymentGateway, "Processes payments", "HTTPS")
+Rel(NotificationDispatcher, NotificationService, "Sends notifications", "HTTPS")
+Rel(RegistrySyncHandler, NationalLibraryRegistry, "Syncs registry data", "HTTPS")
+Rel(DataSyncMaintenanceProcessor, PostgreSQLDatabase, "Executes batch operations and maintenance", "TCP/SQL")
+Rel(TaskRouterDispatcher, DeadLetterQueueDLQManager, "Handles task failures", "In-memory Python exception handler")
+Rel(DeadLetterQueueDLQManager, NotificationEventBus, "Publishes failed messages", "TCP")
+Rel(ConfigSecretsManager, PaymentProcessorHandler, "Injects configuration", "In-memory injection")
+Rel(ConfigSecretsManager, RegistrySyncHandler, "Injects configuration", "In-memory injection")
+
+@enduml

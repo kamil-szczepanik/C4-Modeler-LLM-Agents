@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Scoring Engine container
+
+Person(API_Gateway, "API Gateway", "External API Gateway routing traffic.")
+System_Ext(AWS_KMS, "AWS KMS", "Key Management Service for cryptographic operations.")
+System_Ext(AWS_SQS, "AWS SQS", "Simple Queue Service for async batching.")
+System_Ext(AWS_Firehose, "AWS Firehose", "Kinesis Data Firehose for streaming data.")
+System_Ext(Amazon_S3, "Amazon S3", "Immutable storage with Object Lock.")
+
+Container_Boundary(scoring_engine, "Scoring Engine") {
+    Component(API_Handler, "API Handler", "Go, gRPC", "Inbound validation, correlation ID injection, and PAN data stripping for scoring requests.")
+    Component(Rule_Evaluator, "Rule Evaluator", "Go, In-Memory Bytecodes", "Executes in-memory deterministic fraud rules.")
+    Component(Model_Runner, "Model Runner", "Go, ONNX Runtime, AWS KMS", "Evaluates lightweight probabilistic models with cryptographically signed artifact verification.")
+    Component(Audit_Logger, "Audit Logger", "Go Channels, AWS SDK for Go", "Asynchronously batches and sends tamper-evident JSON audit payloads.")
+    Component(Infrastructure_Services, "Infrastructure Services", "AWS ECS Fargate, Graviton2, Amazon SQS, AWS Firehose, Amazon S3", "Container orchestration, queueing, and immutable storage services.")
+}
+
+Rel(API_Gateway, API_Handler, "Communicates scoring requests securely using gRPC with mTLS.", "gRPC / mTLS")
+Rel(Model_Runner, AWS_KMS, "Verifies cryptographic signatures of model artifacts retrieved from S3 prior to execution.", "HTTPS / AWS API")
+Rel(Audit_Logger, AWS_SQS, "Asynchronously dispatches audit payloads using the AWS SDK for Go.", "AWS SDK")
+Rel(AWS_SQS, AWS_Firehose, "Transports audit payloads for archiving.", "Queue Stream")
+Rel(AWS_Firehose, Amazon_S3, "Archives immutable audit logs with S3 Object Lock compliance mode.", "S3 API")
+
+@enduml

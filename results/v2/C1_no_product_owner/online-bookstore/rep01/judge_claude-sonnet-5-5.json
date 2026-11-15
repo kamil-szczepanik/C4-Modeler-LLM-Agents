@@ -1,0 +1,334 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 3,
+   "usability": 2,
+   "reliability": 4,
+   "security": 3,
+   "maintainability": 3,
+   "portability": 3
+  },
+  "mean": 3.125,
+  "justifications": {
+   "functional_suitability": "Catalog Service (Search Indexer / Query Engine) covers browse and search, and Order & Checkout Service covers cart and checkout. Recommendation Service covers recommendations. Reviews and ratings (R-03) have no service or component. Multi-currency and GDPR/CCPA handling are absent.",
+   "performance_efficiency": "Strong mechanisms: CloudFront SPA, API Gateway caching, Cache Manager read-through with ElastiCache, pre-computed recommendations, RDS Proxy, Aurora Reader, Fargate services, async Event Bus. Gaps: no explicit autoscaling policies, and no multi-region data or CDN strategy for 3G.",
+   "compatibility": "Payment Client, Fulfillment Adapter and the Identity Provider use standard REST, OAuth2/OIDC and HTTPS, with SQS buffering for shipping. Gaps: the Identity Provider is not wired into the containers, there are no currency-conversion integrations, and the shipping adapter has no abstraction across multiple carriers.",
+   "usability": "Single Page Application with UI Router and Views serves customers and admins via CloudFront. However, no separate admin interface, mobile client, or accessibility and localization mechanisms exist, and the persona is merged into one 'Customer & Admin Staff'.",
+   "reliability": "Aurora Distributed Storage Volume across 3 AZs with Writer/Reader instances, multi-AZ Redis Cluster, SQS Dead Letter Queue, Idempotency Store, and Step Functions sagas support 99.95%. Gaps: no explicit multi-region failover, backup or RTO/RPO, and no circuit breakers.",
+   "security": "Edge Router & WAF for OWASP, mTLS via App Mesh, TLS 1.3, KMS, Secrets Manager, and an OIDC Identity Provider are present. Gaps: no authorization component, no audit logging, no GDPR/CCPA mechanisms such as consent or erasure, and no explicit token validation in the gateway.",
+   "maintainability": "Clear microservice decomposition (Catalog, Order & Checkout, Recommendation), an event bus, and layered components such as Data Access Repository. Weaknesses: shared Aurora database, inconsistent models with self-referencing relationships and misplaced container elements, and mixed technologies (Go, Node, Python).",
+   "portability": "Containerised ECS Fargate services and standard PostgreSQL, Redis and gRPC aid portability. Strongly tied to AWS managed services (App Mesh, Step Functions, Aurora, SQS/SNS). The three target regions are only implied, with no IaC or multi-region deployment model shown."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 2,
+   "MOD-01": 2,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 1
+  },
+  "responsiveness_index": 0.46875,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 3.0,
+   "Modifiability": 3.0,
+   "Security": 2.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Single Page Application",
+     "AWS API Gateway & ALB",
+     "Catalog Service",
+     "Amazon ElastiCache",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio for catalogue reads",
+     "Fargate autoscaling is not specified",
+     "Single writer Aurora instance"
+    ],
+    "tradeoffs": [
+     "Caching speeds reads but risks stale data",
+     "Extra gateway/mesh hops add latency"
+    ],
+    "justification": "CloudFront, API caching, Redis read-through and Fargate help, but autoscaling, a CDN strategy for 3G and multi-region read paths are not explicit. Search runs in-process in Go. Reaching 10x load under 2s is plausible but unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "elements": [
+     "Recommendation Service",
+     "Event Consumer",
+     "Amazon ElastiCache",
+     "Async Event Bus",
+     "Catalog Service"
+    ],
+    "sensitivity_points": [
+     "Shared Redis cluster between recommendations and caching",
+     "Recomputation CPU on shared service tasks"
+    ],
+    "tradeoffs": [
+     "Precomputed recommendations favor read latency over freshness",
+     "Shared cache risks resource contention"
+    ],
+    "justification": "Recommendations are precomputed and served from Redis, with an async event consumer decoupling recomputation from browsing. Separate Fargate service isolates compute. Shared ElastiCache with catalog is a minor contention risk; batch job isolation is not explicit."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "elements": [
+     "Order & Checkout Service",
+     "Checkout Orchestrator",
+     "Fulfillment Adapter",
+     "Async Event Bus",
+     "Shipping Provider APIs"
+    ],
+    "sensitivity_points": [
+     "Fulfillment call is a synchronous HTTPS/REST in orchestrator",
+     "Retry and DLQ configuration"
+    ],
+    "tradeoffs": [
+     "Async shipping gives resilience but delayed label confirmation"
+    ],
+    "justification": "Context level states asynchronous fulfillment via SQS, and Step Functions sagas with DLQ support retry. However the container view shows direct REST from Order to Shipping, creating ambiguity; the decoupling is not wired explicitly at the component level."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Amazon ElastiCache",
+     "AWS API Gateway & ALB",
+     "Single Page Application"
+    ],
+    "sensitivity_points": [
+     "No cross-region failover or DNS routing (Route 53) defined",
+     "Aurora Global Database replication not shown"
+    ],
+    "tradeoffs": [
+     "Multi-region adds cost and consistency complexity for orders"
+    ],
+    "justification": "Only Multi-AZ resilience is shown (6 copies over 3 AZs, multi-AZ Redis). Region failover, Route 53, Global Database and cross-region SQS/SNS are not modeled. Aurora is described as multi-region once but no mechanism exists; lost orders risk remains."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "elements": [
+     "Order & Checkout Service",
+     "Payment Client",
+     "Catalog Service",
+     "Single Page Application"
+    ],
+    "sensitivity_points": [
+     "No pricing or currency component exists",
+     "Price storage in Aurora lacks currency model"
+    ],
+    "tradeoffs": [
+     "Embedding currency in services is simple but spreads change"
+    ],
+    "justification": "Multi-currency is a brief constraint but no pricing, currency or FX component is modeled. Changes would touch catalog, order, payment client and the UI. Payment Gateway is isolated by a client component, which helps only partly."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Engine",
+     "API Router",
+     "Model Loader",
+     "Amazon ElastiCache"
+    ],
+    "sensitivity_points": [
+     "Cache data format contract with API Router",
+     "Event schema consumed by Event Consumer"
+    ],
+    "tradeoffs": [
+     "Service isolation eases change but requires stable contracts"
+    ],
+    "justification": "Recommendation logic is encapsulated in its own service with a Recommendation Engine component, Model Loader and a Redis output contract, so replacement stays inside. Missing relationships to the engine and shared event schemas leave small risks."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "Edge Router & WAF",
+     "Request Transformation & Caching",
+     "API Controller",
+     "Data Access Repository",
+     "Order Repository"
+    ],
+    "sensitivity_points": [
+     "WAF rule tuning",
+     "No reviews service or XSS output encoding defined",
+     "Logging and alerting not modeled"
+    ],
+    "tradeoffs": [
+     "Edge filtering adds latency but blocks attacks early"
+    ],
+    "justification": "WAF, schema validation, input validation and parameterized drivers (pgx, Prisma) mitigate SQLi. XSS handling in the SPA is absent, and there is no reviews component. Attack logging and monitoring for security events is not shown."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 1,
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Amazon ElastiCache",
+     "Async Event Bus",
+     "Recommendation Service",
+     "Order & Checkout Service"
+    ],
+    "sensitivity_points": [
+     "No data-deletion or privacy service",
+     "Personal data duplicated in caches, events and models"
+    ],
+    "tradeoffs": [
+     "Distributed data stores improve scale but complicate erasure"
+    ],
+    "justification": "No mechanism for GDPR/CCPA deletion, consent, data inventory or audit exists. Personal data is spread across Aurora, Redis, SQS events, clickstream and model artifacts, and the Identity Provider. Verifiable deletion would need significant new design."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "none",
+   "C-02": "none",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "none",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.5909090909090909,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "none",
+    "elements": []
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Provider APIs",
+     "Fulfillment Adapter",
+     "Order & Checkout Service",
+     "Async Event Bus"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog Service",
+     "Search Indexer / Query Engine",
+     "Cache Manager Component",
+     "Single Page Application"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Order & Checkout Service",
+     "Checkout Orchestrator",
+     "Payment Client",
+     "Payment Gateway",
+     "Session & Token Cache",
+     "Single Page Application"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "none",
+    "elements": []
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Engine",
+     "Event Consumer",
+     "In-Memory Recommendation Store",
+     "Amazon ElastiCache"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "AWS ECS Fargate",
+     "Amazon Aurora PostgreSQL",
+     "AWS RDS Proxy",
+     "Amazon ElastiCache",
+     "Async Event Bus",
+     "Database Engine Instance - Reader",
+     "Cache Router / Cluster Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Single Page Application",
+     "Request Transformation & Caching",
+     "Cache Manager Component",
+     "Amazon ElastiCache"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Distributed Storage Volume",
+     "Cache Router / Cluster Manager",
+     "Dead Letter Queue",
+     "Amazon Aurora PostgreSQL",
+     "AWS ECS Fargate"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Edge Router & WAF",
+     "Service Mesh Proxy",
+     "AWS Secrets Manager",
+     "KMS",
+     "Identity Provider",
+     "Request Transformation & Caching"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

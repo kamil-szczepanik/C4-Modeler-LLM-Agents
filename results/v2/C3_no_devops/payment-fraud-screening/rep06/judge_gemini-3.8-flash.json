@@ -1,0 +1,344 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "The Scoring Engine handles R-01 (approve/decline/review decisions), the Case Management API and Fraud Analyst SPA satisfy R-02 (case management), and the Rule & Model Distribution Service handles R-03 (zero-downtime rule and model updates).",
+   "performance_efficiency": "The sub-50ms P99 target at 3k TPS is supported by in-memory Go evaluation, ElastiCache Redis feature lookups, ALB termination, and asynchronous EventBridge dispatch. However, EventBridge PutEvents throughput default limits and single-event calls at 3,000 TPS may introduce latency overhead unless batched.",
+   "compatibility": "The Payment Gateway connects over HTTPS/gRPC via Payment Ingress Router, while Card Networks/Tokenization Service and external ML providers are represented. Explicit token exchange flows with external tokenization services are slightly abstract at lower levels.",
+   "usability": "Fraud Analysts are thoroughly supported by Fraud Analyst SPA, featuring dedicated components like Case Review Workspace Module, Explainability Renderer, and Analytics Dashboard Module to review payments and inspect explainability metrics.",
+   "reliability": "Circuit breaking in Scoring API Controller and DLQs in Asynchronous Event Bus handle failures. However, an explicit fallback mechanism ensuring payments are not blocked for over 1 minute during complete scoring failure (R-07) lacks clear architectural specification.",
+   "security": "Strong PCI-DSS alignment: PAN token stripping in Scoring API Controller, mTLS, AWS Cognito with JWT, KMS Ed25519 bundle signing, Row-Level Security, SHA-256 cryptographic chaining in Audit Ledger Writer, and S3 Glacier Object Lock for WORM storage.",
+   "maintainability": "Clean domain separation across containers and components (Rule Syntax Linter, Feature Aggregator, Audit Dispatcher). However, supporting three distinct runtimes (Go, Python/FastAPI, Java/Spring) may place high operational burden on a 3-engineer team.",
+   "portability": "Effectively targets AWS eu-west-1 using ECS Fargate, Aurora, and ElastiCache. Heavy reliance on proprietary AWS managed primitives (Cognito, EventBridge, S3 Glacier WORM) slightly impairs portability, but matches target cloud constraints well."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "In-memory rule execution and asynchronous event-driven audit dispatching avoid blocking the critical path, but synchronous AWS KMS signing and EventBridge PutEvents at 3,000 TPS risk tail-latency spikes without explicit local batching.",
+    "elements": [
+     "Payment Ingress Router",
+     "Scoring API Controller",
+     "Feature Aggregator Component",
+     "Evaluation Engine Component",
+     "Audit Dispatcher Component",
+     "Low-Latency Read Component"
+    ],
+    "sensitivity_points": [
+     "AWS KMS signing latency in the synchronous scoring path",
+     "ElastiCache Redis read latency under 3,000 TPS concurrent load"
+    ],
+    "tradeoffs": [
+     "Synchronous cryptographic signing ensures non-repudiation at the expense of tail latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Scoring and case management are completely decoupled across separate ingress routes, independent Fargate containers, and distinct data tiers with read replicas and caching, ensuring analyst queries cannot degrade scoring throughput.",
+    "elements": [
+     "Payment Ingress Router",
+     "Management API Gateway",
+     "Scoring Engine",
+     "Case Workflow Controller",
+     "Audit Query & Retrieval Gateway",
+     "Transaction & Case Repository"
+    ],
+    "sensitivity_points": [
+     "Aurora read-replica replication lag during high write volume",
+     "Network isolation between scoring ALB and management API Gateway"
+    ],
+    "tradeoffs": [
+     "Using read replicas improves analyst query latency while introducing brief data staleness"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "While the Scoring API Controller includes circuit breaking, there is no defined standalone fallback decider or gateway stand-in mechanism to render and audit fallback decisions when the Scoring Engine container itself crashes.",
+    "elements": [
+     "Payment Ingress Router",
+     "Scoring API Controller",
+     "Payment Gateway"
+    ],
+    "sensitivity_points": [
+     "Absence of edge-level stand-in processing when scoring service is unavailable",
+     "Health-check reaction time and failover routing at the ALB"
+    ],
+    "tradeoffs": [
+     "Failing fast protects downstream resources but leaves payment approval fallback unhandled"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The scoring path streams audit records asynchronously to Amazon EventBridge, backed by SQS dead-letter queues and event archiving, buffering records without impacting scoring latency or risking data loss if Aurora degrades.",
+    "elements": [
+     "Scoring Engine",
+     "Audit Dispatcher Component",
+     "Event Router",
+     "Dead-Letter Queue (DLQ)",
+     "Event Archive",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "SQS dead-letter queue retention limits during prolonged database downtime",
+     "EventBridge asynchronous ingestion capacity"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit decoupling guarantees scoring availability but creates eventual consistency for audit persistence"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The distribution service delivers cryptographically signed bundles to S3, and the Scoring Engine uses atomic in-memory pointer swaps to hot-reload models instantly with zero downtime and fast rollback, while recording model versions in payloads.",
+    "elements": [
+     "Rule & Model Distribution Service",
+     "Storage Sync Agent",
+     "Rule Synchronizer Sub-Component",
+     "Evaluation Engine Component",
+     "Audit Dispatcher Component"
+    ],
+    "sensitivity_points": [
+     "Memory footprint of maintaining dual model versions during pointer swap",
+     "Background polling intervals for rule/model bundle updates"
+    ],
+    "tradeoffs": [
+     "Atomic pointer swapping enables zero-downtime hot reloading at the cost of transient memory overhead"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The architecture incorporates automated rule linting, KMS bundle signing, and hot-reload synchronization without downtime well within the one-hour window, with decision outputs capturing rule IDs for explainability.",
+    "elements": [
+     "Admin API Controller",
+     "Rule Syntax Linter",
+     "Bundle Signer & Validator",
+     "Rule Synchronizer Sub-Component",
+     "Evaluation Engine Component",
+     "Explainability Renderer"
+    ],
+    "sensitivity_points": [
+     "Correctness of rule AST validation before cryptographic signing",
+     "Propagation latency of new rule bundles from S3 to engine instances"
+    ],
+    "tradeoffs": [
+     "Strict rule pre-compilation and validation delays deployment slightly but eliminates runtime evaluation crashes"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Card data is tokenized externally and stripped before reaching analyst applications, fulfilling the zero clear-text PAN requirement. However, the architecture lacks explicit intrusion detection or anomaly monitoring mechanisms to alert on compromised analyst behavior within 15 minutes.",
+    "elements": [
+     "Management API Gateway",
+     "Case Workflow Controller",
+     "Fraud Analyst SPA",
+     "Scoring API Controller"
+    ],
+    "sensitivity_points": [
+     "Tokenization boundary enforcement prior to case database ingestion",
+     "Absence of real-time behavioral anomaly alerting for analyst accounts"
+    ],
+    "tradeoffs": [
+     "Tokenization drastically shrinks PCI scope but shifts identity security entirely to IAM/Cognito controls"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Audit payloads with inputs, model IDs, and explanations are cryptographically chained with SHA-256 in Aurora and archived to AWS S3 Glacier with WORM Object Lock for 7 years, retrievable within hours via the Audit Query Gateway.",
+    "elements": [
+     "Audit Ledger Writer",
+     "Data Retention Manager",
+     "AWS S3 Glacier Flexible Retrieval",
+     "Audit Query & Retrieval Gateway",
+     "Event Archive"
+    ],
+    "sensitivity_points": [
+     "Integrity verification of SHA-256 cryptographic chain across archived partitions",
+     "S3 Glacier Flexible Retrieval retrieval job latency"
+    ],
+    "tradeoffs": [
+     "Tiering historical audit logs to Glacier reduces costs but introduces hours-long retrieval latency"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Payment Ingress Router",
+     "Scoring API Controller",
+     "Card Networks / Tokenization Service",
+     "Bundle Signer & Validator",
+     "Event Archive",
+     "Audit Ledger Writer"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Audit & Persistence Store",
+     "Audit Ledger Writer",
+     "AWS S3 Glacier Flexible Retrieval",
+     "Event Archive",
+     "Data Retention Manager",
+     "Explainability Renderer"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Low-Latency Read Component",
+     "State & Metadata Registry",
+     "Scoring Engine"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Scoring Engine",
+     "Case Management API",
+     "Feature Store",
+     "Asynchronous Event Bus"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Payment Ingress Router",
+     "Scoring Engine",
+     "Scoring API Controller",
+     "Evaluation Engine Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Fraud Analyst SPA",
+     "Case Management API",
+     "Case Review Workspace Module",
+     "Case Workflow Controller",
+     "Transaction & Case Repository"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Rule & Model Distribution Service",
+     "Admin API Controller",
+     "Bundle Signer & Validator",
+     "Rule Synchronizer Sub-Component",
+     "Evaluation Engine Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Payment Ingress Router",
+     "Scoring Engine",
+     "Evaluation Engine Component",
+     "Feature Aggregator Component",
+     "Low-Latency Read Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Card Networks / Tokenization Service",
+     "Scoring API Controller",
+     "Case Management API",
+     "Fraud Analyst SPA"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Dispatcher Component",
+     "Audit Ledger Writer",
+     "Amazon Aurora PostgreSQL",
+     "Event Archive",
+     "AWS S3 Glacier Flexible Retrieval"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Scoring API Controller",
+     "Payment Ingress Router"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

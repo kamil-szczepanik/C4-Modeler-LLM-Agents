@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the FHIR Interoperability Service container
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway")
+System_Ext(external_lab, "External Lab & Imaging Systems", "External clinical lab and imaging systems")
+System_Ext(rabbitmq, "RabbitMQ", "Message broker for dead letter queue")
+System_Ext(otel_collector, "OpenTelemetry Collector", "Centralized observability collector")
+
+Container_Boundary(fhir_service, "FHIR Interoperability Service") {
+    Component(security_middleware, "Security Enforcement Middleware", "ASP.NET Core Middleware", "Enforces security policies, zero-trust patterns, and micro-segmentation.")
+    Component(fhir_controller, "FHIR API Controller", "ASP.NET Core", "Handles FHIR API requests for clinical data exchange.")
+    Component(resource_transformer, "Resource Transformer Engine", ".NET", "Transforms resource payloads for clinical interoperability.")
+    Component(hl7_adapter, "HL7 Client Adapter", "HttpClient / Polly", "Manages resilient outbound calls to external lab and imaging systems.")
+    Component(audit_interceptor, "Audit & Compliance Interceptor", ".NET Interceptor", "Intercepts requests for auditing and ensures compliance with PHI masking.")
+}
+
+Rel(api_gateway, security_middleware, "gRPC over mTLS [SPIFFE/SPIRE]")
+Rel(security_middleware, fhir_controller, "Method calls", "In-process")
+Rel(fhir_controller, resource_transformer, "Method calls", "In-process")
+Rel(resource_transformer, hl7_adapter, "Method calls", "In-process")
+Rel(hl7_adapter, external_lab, "HL7 FHIR over HTTPS", "REST/JSON")
+Rel(hl7_adapter, rabbitmq, "Failed payload streaming", "AMQP")
+Rel(audit_interceptor, otel_collector, "Telemetry with PHI masking", "OTLP over gRPC")
+
+@enduml

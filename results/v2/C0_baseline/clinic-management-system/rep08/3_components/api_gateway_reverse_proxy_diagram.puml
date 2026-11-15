@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container_Boundary(api_gateway, "API Gateway / Reverse Proxy") {
+    Component(Edge_Listener, "Edge Listener", "Envoy / NGINX", "Handles incoming network traffic and manages TLS termination.")
+    Component(Authentication, "Authentication", "Envoy / NGINX Filter", "Validates incoming tokens and introspects sessions with the Identity Provider.")
+    Component(Rate_Limiting, "Rate Limiting", "Envoy / Redis", "Enforces edge rate limits using edge caching and rate limit storage.")
+    Component(Routing, "Routing", "Envoy Configuration", "Routes internal traffic to appropriate microservices like Clinical Core and Billing.")
+    Component(Token_Transformation, "Token Transformation", "Envoy Filter", "Transforms security tokens before forwarding requests internally.")
+    Component(Error_Formatting, "Error Formatting", "Envoy / NGINX", "Standardizes error responses returned to client applications.")
+    Component(WAF, "WAF", "Web Application Firewall Module", "Protects against common web exploits and malicious traffic.")
+}
+
+System_Ext(Clinical_Core_Service, "Clinical Core Service", "Go/Spring Boot backend service")
+System_Ext(Billing_Claims_Service, "Billing & Claims Service", "Spring Boot backend service")
+System_Ext(Identity_Provider, "Identity Provider", "External IdP")
+System_Ext(SIEM_Immutable_Cold_Storage, "SIEM & Immutable Cold Storage", "External security and logging system")
+System_Ext(Administrative_Dashboard, "Administrative Dashboard", "Monitoring dashboard")
+
+Rel(Edge_Listener, Authentication, "Passes incoming requests for session validation", "HTTPS / OIDC")
+Rel(Authentication, Rate_Limiting, "Checks rate limits for authenticated requests", "Redis")
+Rel(Rate_Limiting, Routing, "Forwards validated traffic to routing logic")
+Rel(Routing, Token_Transformation, "Transforms tokens before dispatching to backend services")
+Rel(Token_Transformation, Clinical_Core_Service, "Routes internal traffic and enforces schema validation", "gRPC over mTLS")
+Rel(Routing, Billing_Claims_Service, "Routes billing traffic", "gRPC over mTLS")
+Rel(Authentication, Identity_Provider, "Validates tokens and introspects sessions", "HTTPS / OIDC")
+Rel(Routing, SIEM_Immutable_Cold_Storage, "Exports sanitized access logs", "OTLP / gRPC")
+Rel(Routing, Administrative_Dashboard, "Serves telemetry metrics", "Prometheus / HTTPS")
+@enduml

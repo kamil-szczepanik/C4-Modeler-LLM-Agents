@@ -1,0 +1,308 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are met: R-01 via 'Customer Portal', R-02 via 'Adjuster Workspace', and R-03 via 'Claim Routing & Feature Service' utilizing 'Feature Flag Manager Component' and 'Azure App Configuration' to migrate claim types incrementally.",
+   "performance_efficiency": "The sub-2s target (R-05) is supported by caching via 'Azure Redis Cache' and asynchronous decoupling via 'Azure Service Bus'. However, explicit mechanisms to respect and protect the unextendable 23:00-05:00 mainframe batch window are not fully detailed.",
+   "compatibility": "Interoperability is thoroughly addressed: 'Mainframe Adapter Component' integrates with 'Legacy Mainframe' via MQ/SFTP over ExpressRoute/VPN, and enterprise 'Active Directory' integrates via OAuth2/OIDC and Azure AD Connect.",
+   "usability": "Distinct, tailored user interfaces are provided: 'Customer Portal' (React SPA with multi-step forms and tracking) for customers/brokers, 'Adjuster Workspace' for claim adjusters, and dedicated query APIs for compliance officers.",
+   "reliability": "R-04 consistency targets are satisfied using 'Azure Service Bus', 'Synchronization & State Worker', and 'State & Outbox Store' implementing a transactional outbox pattern alongside 'Polly Circuit Breaker' on the 'Mainframe Adapter Component'.",
+   "security": "R-07 SSO is realized via 'Authentication Wrapper' with MSAL.js and Azure AD. Integrity and accountability are enforced through mTLS, 'Azure Key Vault', and immutable audit trails in 'Audit & Compliance Data Store'.",
+   "maintainability": "R-06 is directly addressed by 'Feature Flag Manager Component' and 'Azure App Configuration', enabling instant rollback of claim types. Clear container boundaries and adapter patterns minimize blast radius and isolate mainframe changes.",
+   "portability": "The hybrid topology (on-prem and Azure West Europe) is correctly realized. However, heavy coupling to proprietary Azure PaaS services (Cosmos DB, App Configuration, Service Bus) may challenge an inexperienced cloud team and limits environment portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "While Redis Cache caches UI metadata, the architecture lacks an explicit read-model cache for mainframe data. If adjuster queries require synchronous fetches from the mainframe, the 5-second response time will violate the 2-second sub-second threshold.",
+    "elements": [
+     "Adjuster Workspace",
+     "Claim Presentation Service",
+     "Azure Redis Cache",
+     "Claim Routing & Feature Service",
+     "Claims Integration Service"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios for mainframe claim data directly dictate adjuster UI response times."
+    ],
+    "tradeoffs": [
+     "Data freshness from legacy mainframe traded off against sub-2-second presentation latency."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Customer submissions are asynchronously buffered via Azure Service Bus and staged in the State & Outbox Store before throttled transmission to the mainframe, fully protecting the mainframe nightly batch window from peak submission spikes.",
+    "elements": [
+     "Customer Portal",
+     "Claim Routing & Feature Service",
+     "Azure Service Bus",
+     "Claims Integration Service",
+     "State & Outbox Store"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue throttling and batch dispatch rates to mainframe."
+    ],
+    "tradeoffs": [
+     "Eventual consistency in mainframe updates traded off against high submission throughput."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The integration path uses Azure Service Bus and a Polly Circuit Breaker on the Mainframe Adapter alongside an Outbox Store, buffering submissions when the mainframe is offline during batch windows without losing data.",
+    "elements": [
+     "Claim Routing & Feature Service",
+     "Azure Service Bus",
+     "Claims Integration Service",
+     "Mainframe Adapter Component",
+     "State & Outbox Store"
+    ],
+    "sensitivity_points": [
+     "Buffer queue capacity and circuit breaker recovery timeout configuration."
+    ],
+    "tradeoffs": [
+     "Extended message buffering latency traded off against 24/7 ingestion availability."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The transactional outbox pattern in PostgreSQL combined with Azure Service Bus provides reliable at-least-once delivery. However, explicit deduplication keys and compensation workflows for mid-flight failures on the mainframe side require careful implementation.",
+    "elements": [
+     "State & Outbox Store",
+     "Synchronization & State Worker",
+     "Mainframe Adapter Component",
+     "Audit & Compliance Data Store"
+    ],
+    "sensitivity_points": [
+     "Idempotency mechanisms and transaction boundary management across the hybrid boundary."
+    ],
+    "tradeoffs": [
+     "Complexity of idempotent retry mechanisms traded off against consistency guarantees."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Claim type routing is managed dynamically using Feature Flag Manager via Azure App Configuration and JSON-based routing rules in the Claims Integration Service, enabling zero-downtime cutover and rapid rollback without mainframe redesign.",
+    "elements": [
+     "Claim Routing & Feature Service",
+     "Feature Flag Manager Component",
+     "Configuration Store",
+     "Routing & Translation Component"
+    ],
+    "sensitivity_points": [
+     "Centralized feature flag propagation latency across Container App instances."
+    ],
+    "tradeoffs": [
+     "Dynamic routing rule management overhead traded off against near-instantaneous rollback capability."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The UI clients decouple entirely from the mainframe through the Claim Routing & Feature Service and Claims Integration Service adapters. Decommissioning the legacy mainframe requires only retiring backend integration workers without touching client applications.",
+    "elements": [
+     "Customer Portal",
+     "Adjuster Workspace",
+     "Claim Routing & Feature Service",
+     "Claims Integration Service"
+    ],
+    "sensitivity_points": [
+     "Clean boundary separation of frontend APIs from mainframe-specific data models."
+    ],
+    "tradeoffs": [
+     "Upfront translation layer maintenance traded off against seamless eventual decommissioning."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Context & Auth Validator verifies authentication, and audit logs are recorded into Cosmos DB. However, explicit resource-based access control (RBAC) ensuring tenant/broker isolation between distinct brokers' customers is not detailed in the architecture definitions.",
+    "elements": [
+     "Context & Auth Validator Component",
+     "Claim Routing & Feature Service",
+     "Dynamic Workflow Engine",
+     "Audit & Compliance Data Store"
+    ],
+    "sensitivity_points": [
+     "Enforcement of fine-grained multi-tenant relationship checks in the API routing layer."
+    ],
+    "tradeoffs": [
+     "Strict per-request authorization checks traded off against query processing overhead."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Adjuster Workspace relies on Active Directory / Entra ID authentication with JWT validation. Revocation in AD terminates the enterprise session, though immediate mid-session revocation depends on short token lifespans or Continuous Access Evaluation.",
+    "elements": [
+     "Adjuster Workspace",
+     "Workspace UI Controller",
+     "Claim Presentation Service",
+     "Active Directory"
+    ],
+    "sensitivity_points": [
+     "JWT token lifetimes and support for continuous access evaluation across hybrid directory."
+    ],
+    "tradeoffs": [
+     "Short-lived access token renewal frequency traded off against identity provider load."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Claims Integration Service",
+     "Mainframe Adapter Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none"
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Mainframe Adapter Component",
+     "Routing & Translation Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none"
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer Portal",
+     "Claim Submission Form",
+     "Document Uploader",
+     "Claim Tracker View"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Workspace",
+     "Workspace UI Controller",
+     "Claim Presentation Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Claim Routing & Feature Service",
+     "Feature Flag Manager Component",
+     "Routing Engine Component",
+     "Azure App Configuration"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Azure Service Bus",
+     "State & Outbox Store",
+     "Synchronization & State Worker"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Claim Presentation Service",
+     "Azure Redis Cache",
+     "Azure Service Bus",
+     "Claims Integration Service"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Feature Flag Manager Component",
+     "Azure App Configuration",
+     "Configuration Store",
+     "Routing & Translation Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Active Directory",
+     "Authentication Wrapper",
+     "Context & Auth Validator Component",
+     "Adjuster Workspace"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

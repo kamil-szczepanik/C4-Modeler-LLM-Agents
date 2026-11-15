@@ -1,0 +1,54 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Online Bookstore System
+
+Person(Shopper, "Shopper", "End-user browsing, purchasing, and reviewing books globally.")
+Person(CustomerSupportAgent, "Customer Support Agent", "Internal user managing GDPR data erasure and fulfillment.")
+Person(CatalogManagerAdministrator, "Catalog Manager / Administrator", "Internal user managing book catalog and system administration.")
+Person(ComplianceOfficer, "Compliance Officer", "Internal user overseeing GDPR and CCPA regulatory compliance.")
+
+System_Ext(PaymentGateway, "Payment Gateway", "External PCI-compliant checkout service.")
+System_Ext(ShippingProviderAPIs, "Shipping Provider APIs", "External fulfillment and tracking service.")
+System_Ext(IdentityProvider, "Identity Provider", "External OIDC/OAuth2 authentication service.")
+System_Ext(ThirdPartyRecommendationEngine, "Third-Party Recommendation Engine", "External SaaS for advanced product recommendations.")
+
+System_Boundary(OnlineBookstoreSystem, "Online Bookstore System") {
+    Container(AWSRoute53, "AWS Route 53", "AWS Route 53", "Global DNS and routing layer.")
+    Container(AWSCloudFrontAmazonS3, "AWS CloudFront & Amazon S3", "AWS CloudFront, Amazon S3", "Global Content Delivery Network and static hosting for the Single Page Application.")
+    Container(SinglePageApplicationSPA, "Single Page Application (SPA)", "React, TypeScript", "User interface enabling global book discovery, secure checkout, and multi-currency purchasing.")
+    Container(AWSAPIGateway, "AWS API Gateway", "AWS API Gateway", "API gateway routing requests to backend microservices.")
+    Container(CatalogService, "Catalog Service", "Spring Boot / Node.js on Amazon ECS/Fargate", "Microservice responsible for managing book catalog data.")
+    Container(OrderCheckoutService, "Order & Checkout Service", "Spring Boot / Node.js on Amazon ECS/Fargate", "Microservice managing orders, payments, and checkout workflows.")
+    Container(UserComplianceService, "User & Compliance Service", "Spring Boot / Node.js on Amazon ECS/Fargate", "Microservice handling user profiles and GDPR/CCPA compliance.")
+    Container(NotificationService, "Notification Service", "Spring Boot / Node.js on Amazon ECS/Fargate", "Microservice responsible for sending notifications asynchronously.")
+    Container(RecommendationWorker, "Recommendation Worker", "Spring Boot / Node.js on Amazon ECS/Fargate", "Worker service handling asynchronous event ingestion and recommendation processing.")
+    ContainerDb(AmazonRDSPostgreSQL, "Amazon RDS PostgreSQL", "Amazon RDS PostgreSQL", "Primary relational database with cross-region read replicas and geo-partitioning.")
+    ContainerDb(AmazonDynamoDB, "Amazon DynamoDB", "Amazon DynamoDB", "NoSQL database for low-latency promotional data.")
+    ContainerDb(AmazonElastiCacheRedis, "Amazon ElastiCache (Redis)", "Amazon ElastiCache (Redis)", "In-memory caching layer to absorb read spikes.")
+    Container(AWSSQSNSwithDLQs, "AWS SQS/SNS with DLQs", "AWS SQS, AWS SNS", "Messaging system for asynchronous processing and event decoupling.")
+}
+
+Rel(Shopper, AWSRoute53, "Resolves domain and routes globally", "DNS")
+Rel(Shopper, AWSCloudFrontAmazonS3, "Accesses the React SPA via HTTPS", "HTTPS")
+Rel(CatalogManagerAdministrator, AWSCloudFrontAmazonS3, "Accesses admin interfaces via HTTPS", "HTTPS")
+Rel(SinglePageApplicationSPA, AWSAPIGateway, "Communicates with API Gateway", "HTTPS, REST/GraphQL")
+Rel(AWSAPIGateway, CatalogService, "Routes requests via private VPC subnets", "gRPC over TLS")
+Rel(AWSAPIGateway, OrderCheckoutService, "Routes requests via private VPC subnets", "gRPC over TLS")
+Rel(AWSAPIGateway, UserComplianceService, "Routes requests via private VPC subnets", "gRPC over TLS")
+Rel(OrderCheckoutService, PaymentGateway, "Integrates for payment processing", "HTTPS/REST")
+Rel(OrderCheckoutService, ShippingProviderAPIs, "Integrates for order fulfillment", "HTTPS/REST")
+Rel(UserComplianceService, IdentityProvider, "Authenticates users", "OIDC/OAuth2")
+Rel(CatalogService, AmazonRDSPostgreSQL, "Persists and queries catalog data", "SQL")
+Rel(OrderCheckoutService, AmazonRDSPostgreSQL, "Persists order data", "SQL")
+Rel(UserComplianceService, AmazonRDSPostgreSQL, "Persists user and compliance data", "SQL")
+Rel(CatalogService, AmazonDynamoDB, "Reads/writes promotional data", "NoSQL")
+Rel(CatalogService, AmazonElastiCacheRedis, "Caches catalog data", "Redis Protocol")
+Rel(OrderCheckoutService, AmazonElastiCacheRedis, "Caches session and order state", "Redis Protocol")
+Rel(OrderCheckoutService, AWSSQSNSwithDLQs, "Publishes order events", "AWS SQS/SNS")
+Rel(NotificationService, AWSSQSNSwithDLQs, "Consumes notification events", "AWS SQS")
+Rel(RecommendationWorker, AWSSQSNSwithDLQs, "Consumes recommendation events", "AWS SQS")
+Rel(RecommendationWorker, ThirdPartyRecommendationEngine, "Ingests recommendation data", "HTTPS/REST")
+
+@enduml

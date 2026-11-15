@@ -1,0 +1,40 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Cross-Border Telehealth Platform
+
+Person(Patients_EU_US, "Patients (EU/US)", "Patients located in the EU or US accessing video consultations, e-prescriptions, and the AI symptom checker.")
+Person(Licensed_Clinicians, "Licensed Clinicians", "Licensed medical professionals providing video consultations and issuing e-prescriptions.")
+Person(Compliance_Authorities, "Compliance Authorities", "Regulatory and audit authorities reviewing system compliance and audit logs.")
+
+System_Ext(EU_National_E_Prescription_Gateways, "EU National E-Prescription Gateways", "External national gateways in the EU for processing e-prescriptions.")
+System_Ext(US_Pharmacy_Systems, "US Pharmacy Systems", "External US pharmacy systems for integrating and fulfilling prescriptions.")
+System_Ext(OAuth2_OIDC_Identity_Providers, "OAuth2/OIDC Identity Providers", "External identity providers handling user authentication.")
+
+System_Boundary(Cross_Border_Telehealth_Platform, "Cross-Border Telehealth Platform") {
+    Container(API_Gateway, "API Gateway", "Cloud Run / Envoy", "Manages incoming traffic, security, and routing to regional backend services.")
+    Container(Core_Telehealth_Backend, "Core Telehealth Backend", "Node.js / NestJS", "Handles core business logic, user management, and validates consent.")
+    Container(AI_Symptom_Service, "AI Symptom Service", "Python / FastAPI", "Provides AI symptom checking and logs inputs/outputs for EU MDR traceability.")
+    Container(Video_Media_Server, "Video Media Server", "LiveKit / WebRTC", "Handles low-bandwidth resilient video and audio consultations.")
+    Container(Interoperability_Worker, "Interoperability Worker", "Go", "Processes e-prescriptions asynchronously to external national gateways.")
+    ContainerDb(Cloud_SQL, "Cloud SQL", "PostgreSQL", "Regionalized database storage for core application data.")
+    ContainerDb(BigQuery, "BigQuery", "Google Cloud BigQuery", "Stores compliance logs and AI telemetry for traceability.")
+    Container(Cloud_Pub_Sub, "Cloud Pub/Sub", "Google Cloud Pub/Sub with DLQs", "Provides asynchronous messaging with Dead Letter Queues for robust e-prescription delivery.")
+}
+
+Rel(Patients_EU_US, API_Gateway, "Accesses consultations, e-prescriptions, and AI symptom checker", "HTTPS/REST, WebRTC")
+Rel(Licensed_Clinicians, API_Gateway, "Accesses platform to manage consultations and prescriptions", "HTTPS/REST, WebRTC")
+Rel(Compliance_Authorities, API_Gateway, "Reviews audit logs and compliance metrics", "HTTPS")
+Rel(API_Gateway, Core_Telehealth_Backend, "Routes regional core requests", "gRPC over VPC")
+Rel(API_Gateway, AI_Symptom_Service, "Routes AI symptom check requests", "gRPC over VPC")
+Rel(API_Gateway, Video_Media_Server, "Initiates video/audio sessions", "WebRTC")
+Rel(API_Gateway, OAuth2_OIDC_Identity_Providers, "Authenticates users", "OAuth2/OIDC")
+Rel(Core_Telehealth_Backend, Cloud_SQL, "Reads and writes application data and validates consent", "PostgreSQL Protocol")
+Rel(Core_Telehealth_Backend, Cloud_Pub_Sub, "Publishes e-prescription tasks asynchronously", "Cloud Pub/Sub API")
+Rel(AI_Symptom_Service, BigQuery, "Logs AI inputs and outputs for EU MDR traceability", "BigQuery API")
+Rel(Interoperability_Worker, Cloud_Pub_Sub, "Consumes e-prescription tasks", "Cloud Pub/Sub API")
+Rel(Interoperability_Worker, EU_National_E_Prescription_Gateways, "Sends e-prescriptions to EU national gateways", "REST/SOAP")
+Rel(Interoperability_Worker, US_Pharmacy_Systems, "Sends e-prescriptions to US pharmacy systems", "HL7 FHIR, NCPDP")
+
+@enduml

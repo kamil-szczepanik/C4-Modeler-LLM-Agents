@@ -1,0 +1,352 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 2
+  },
+  "mean": 3.125,
+  "justifications": {
+   "functional_suitability": "Video Media Server, Prescription Integration Service, AI Inference & Audit Service cover R-01 to R-03. Consent has only Consent & Policy Engine and JWT & Consent Validation Filter, with no patient consent management UI or service (R-04). Several flows are missing, and the Core to AI Service relationship is undefined.",
+   "performance_efficiency": "Adaptive Bitrate (ABR) Controller, LiveKit SFU, Regional Rate Limiter (Redis), BullMQ queues and Pub/Sub asynchronous processing are concrete mechanisms. No autoscaling, caching of data reads or explicit scalability strategy is shown. The sub-300 kbit/s target is only partly addressed.",
+   "compatibility": "Translation & Mapping Engine, HL7 FHIR/national standards labels on Prescription Integration Service, and Pharmacies integration address R-08. However, there are no per-country EU adapters, and the external LLM API and billing integrations are loosely defined. FHIR is not used beyond pharmacy links.",
+   "usability": "Patient Portal UI, Clinician Portal UI and Caregivers are served via Web & Mobile Apps with offline-first Local Storage Manager. Auditors have a Report Generation & Dashboard API. No consent management UI, no accessibility or localization, and no degraded-mode UX are described.",
+   "reliability": "Circuit Breaker & Fallback Filter, the AI Circuit Breaker & Fallback Policy Engine, BullMQ retries, Regional Dead-Letter Queue, and offline Local Storage Manager provide fault tolerance. No multi-zone redundancy, backup or disaster recovery is shown. Degraded video mode relies on ABR only.",
+   "security": "mTLS via Istio, SPIFFE/SPIRE identities, JWT & Consent Validation Filter, CMEK, WORM BigQuery Compliance Data Store, signed audit payloads in Audit Log Formatter & Writer, and PHI-stripped logs are strong. Gaps include the external LLM API receiving potentially regional PHI and an undefined 'Regional Local Vault / Buffer'.",
+   "maintainability": "Clear containers and components with distinct responsibilities, an API Gateway filter chain, and a separate Audit & Compliance Reporting Service. Weaknesses include the combined AI Inference & Audit Service, duplicated circuit-breaker logic, inconsistent models (Cloud SQL vs Spanner), and some undefined elements.",
+   "portability": "The architecture is GCP-bound (Cloud Spanner/SQL, BigQuery, Pub/Sub, Cloud Endpoints, KMS). Portable pieces include Envoy/Istio, LiveKit, OPA, and containerized services. No abstraction for infrastructure replacement is explicit, though two regions are supported via Regional Databases."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 2,
+   "MOD-01": 3,
+   "MOD-02": 3,
+   "PERF-01": 3,
+   "PERF-02": 2,
+   "SEC-01": 3,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.40625,
+  "by_quality_attribute": {
+   "Performance": 2.5,
+   "Availability": 2.5,
+   "Modifiability": 3.0,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Video Media Server",
+     "SFU Core Router",
+     "Room & Session Manager",
+     "Core Telehealth Service",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "SFU capacity per region",
+     "Session token validation round trip to Core service"
+    ],
+    "tradeoffs": [
+     "Central Core validation adds join latency versus security"
+    ],
+    "justification": "LiveKit SFU suits scale, but no autoscaling, capacity sizing or join-time mechanism is described. The token check calls Core Telehealth Service synchronously. Plausible but unproven for 5,000 sessions under 10 s."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "elements": [
+     "AI Inference & Audit Service",
+     "Inference Orchestrator",
+     "External AI Inference Provider / LLM API",
+     "Circuit Breaker & Fallback Policy Engine",
+     "Audit Log Formatter & Writer"
+    ],
+    "sensitivity_points": [
+     "External LLM latency",
+     "Synchronous signed audit writes",
+     "No scaling or caching described"
+    ],
+    "tradeoffs": [
+     "External LLM brings flexibility but latency and residency risk"
+    ],
+    "justification": "Depends on an external LLM with no stated capacity, autoscaling or queueing for about 14 requests per second. A fallback exists, but a 3 s p95 is unsubstantiated and the audit write is in-line."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "elements": [
+     "Web & Mobile Apps",
+     "Local Storage Manager",
+     "Adaptive Bitrate (ABR) Controller",
+     "Session Manager",
+     "Circuit Breaker & Fallback Filter"
+    ],
+    "sensitivity_points": [
+     "Offline sync and conflict handling not defined",
+     "ABR minimum bitrate below 300 kbit/s"
+    ],
+    "tradeoffs": [
+     "Offline PHI storage helps resilience but widens the data-exposure surface"
+    ],
+    "justification": "ABR and offline-first encrypted local storage address degraded mode and note retention. However, there is no audio-only fallback, reconnection or sync mechanism, and no evidence of note-loss prevention."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Regional Databases",
+     "US Regional Database",
+     "API Gateway",
+     "Envoy Lua/Wasm Regional Routing Filter"
+    ],
+    "sensitivity_points": [
+     "Single-region US database with no in-region HA or backup",
+     "No recovery procedure"
+    ],
+    "tradeoffs": [
+     "Strict isolation prevents cross-region failover, reducing availability"
+    ],
+    "justification": "Residency is preserved through isolation, but no multi-zone HA, backup, restore or DR design exists for us-central1. Meeting a 1-hour restoration is unsupported. The Cloud SQL zonal option is unspecified."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Translation & Mapping Engine",
+     "Outbound Dispatcher & Adapter Worker",
+     "Prescription API Controller"
+    ],
+    "sensitivity_points": [
+     "Single mapping engine may become a change hotspot",
+     "No explicit per-country adapter interface"
+    ],
+    "tradeoffs": [
+     "Central translation simplifies reuse but couples country standards"
+    ],
+    "justification": "A dedicated Prescription Integration Service isolates the changes, but there is no pluggable per-country adapter. Changes would likely touch the shared mapping engine and the dispatcher, so confinement to one adapter is not guaranteed."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "elements": [
+     "Model Version & Metadata Manager",
+     "Audit Log Formatter & Writer",
+     "Inference Orchestrator",
+     "External AI Inference Provider / LLM API"
+    ],
+    "sensitivity_points": [
+     "External provider may change model silently",
+     "No rollout or rollback mechanism shown"
+    ],
+    "tradeoffs": [
+     "Strong traceability adds overhead on the inference path"
+    ],
+    "justification": "Version tracking and signed audit logs support traceability of recommendations. No release, canary or rollback mechanism is described, and the external LLM may not pin versions. Rollback is unaddressed."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "Consent & Policy Engine",
+     "JWT & Consent Validation Filter",
+     "Envoy Lua/Wasm Regional Routing Filter",
+     "Audit & Compliance Reporting Service",
+     "Regional Databases"
+    ],
+    "sensitivity_points": [
+     "Cross-region access path undefined",
+     "Consent store location unspecified"
+    ],
+    "tradeoffs": [
+     "Strict isolation blocks legitimate cross-border care without a consent flow"
+    ],
+    "justification": "Policy checks and consent validation at the gateway and core service support denial, and the audit service logs requests. However, no consent store or defined cross-region access path exists, and there is no explicit logging of denials."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "elements": [
+     "Consent & Policy Engine",
+     "JWT & Consent Validation Filter",
+     "Audit & Compliance Reporting Service",
+     "Compliance Data Store Component"
+    ],
+    "sensitivity_points": [
+     "Consent propagation to downstream sharing",
+     "No consent store or revocation mechanism modeled"
+    ],
+    "tradeoffs": [
+     "Embedded policy engine is fast but needs consent state synchronized"
+    ],
+    "justification": "Consent is checked at runtime, which could stop sharing, but no per-purpose consent management, research-sharing pipeline or revocation propagation is shown. Verification relies on generic audit logs only."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "partial"
+  },
+  "coverage": 0.5833333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Regional Databases",
+     "EU Regional Database",
+     "US Regional Database",
+     "API Gateway",
+     "Access Log Exporter",
+     "Audit & Compliance Reporting Service",
+     "Compliance Data Store Component",
+     "Identity Providers (IDPs)"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Regional Databases",
+     "EU Regional Database",
+     "US Regional Database",
+     "Envoy Lua/Wasm Regional Routing Filter",
+     "Compliance Data Store Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "AI Inference & Audit Service",
+     "Model Version & Metadata Manager",
+     "Audit Log Formatter & Writer",
+     "Audit & Compliance Reporting Service"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Web & Mobile Apps",
+     "Local Storage Manager",
+     "Adaptive Bitrate (ABR) Controller",
+     "Circuit Breaker & Fallback Filter"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Video Media Server",
+     "SFU Core Router",
+     "Room & Session Manager",
+     "Session Manager",
+     "Clinician Portal UI",
+     "Patient Portal UI"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Prescription Integration Service",
+     "Translation & Mapping Engine",
+     "Outbound Dispatcher & Adapter Worker",
+     "Pharmacies (EU & US)"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "AI Inference & Audit Service",
+     "Inference Orchestrator",
+     "External AI Inference Provider / LLM API",
+     "Circuit Breaker & Fallback Policy Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Consent & Policy Engine",
+     "JWT & Consent Validation Filter"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Regional Databases",
+     "EU Regional Database",
+     "US Regional Database",
+     "Envoy Lua/Wasm Regional Routing Filter",
+     "Consent & Policy Engine",
+     "JWT & Consent Validation Filter"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Adaptive Bitrate (ABR) Controller",
+     "Local Storage Manager",
+     "Session Manager",
+     "Circuit Breaker & Fallback Filter"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Model Version & Metadata Manager",
+     "Audit Log Formatter & Writer",
+     "Audit & Compliance Reporting Service",
+     "Audit Event Collector Component",
+     "Compliance Data Store Component"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "partial",
+    "elements": [
+     "Prescription Integration Service",
+     "Translation & Mapping Engine",
+     "Outbound Dispatcher & Adapter Worker"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Audit Data Store container
+
+System_Ext(LogShipper, "Audit & Compliance Log Shipper", "External log shipper")
+System_Ext(AuditAuthority, "Regulatory/Audit Authority", "External regulatory or audit authority")
+
+Container_Boundary(AuditDataStore, "Audit Data Store") {
+    Component(ObjectStorageEngine, "Object Storage Engine", "AWS S3 / MinIO Object Lock", "Enforces WORM immutability for >= 10-year retention and stores encrypted audit payloads.")
+    Component(KeyManagementService, "Key Management Service", "AWS KMS / HashiCorp Vault", "Provides AES-256 encryption at rest with annual key rotation.")
+    Component(AccessControlPolicyEnforcer, "Access Control Policy Enforcer", "Access Control Policy Engine", "Enforces strict access control policies for audit data.")
+    Component(LifecycleManagementPolicyEngine, "Lifecycle Management Policy Engine", "S3 Lifecycle API", "Applies retention and tiering rules to the object storage engine.")
+    Component(IntegrityVerificationMonitor, "Integrity Verification Monitor", "S3 API", "Reads and validates block checksums to ensure data integrity.")
+    Component(AuditQueryExportGateway, "Audit Query & Export Gateway", "HTTPS / S3 API", "Handles requests for compliance reports and log exports, retrieving verified audit objects.")
+    Component(AuditEventIndexerMetadataCatalog, "Audit Event Indexer / Metadata Catalog", "OpenSearch", "Enables sub-second metadata indexing and searches without exposing raw PII.")
+}
+
+Rel(LogShipper, ObjectStorageEngine, "Writes encrypted audit payloads", "HTTPS [S3 API]")
+Rel(ObjectStorageEngine, KeyManagementService, "Requests envelope encryption keys", "gRPC/HTTPS")
+Rel(LifecycleManagementPolicyEngine, ObjectStorageEngine, "Applies retention and tiering rules", "S3 Lifecycle API")
+Rel(IntegrityVerificationMonitor, ObjectStorageEngine, "Reads and validates block checksums", "S3 API")
+Rel(AuditAuthority, AuditQueryExportGateway, "Requests compliance reports and log exports", "HTTPS")
+Rel(AuditQueryExportGateway, ObjectStorageEngine, "Retrieves verified audit objects", "HTTPS/S3 API")
+Rel(ObjectStorageEngine, AuditEventIndexerMetadataCatalog, "Streams new object creation events for indexing", "Kafka/Webhook")
+
+@enduml

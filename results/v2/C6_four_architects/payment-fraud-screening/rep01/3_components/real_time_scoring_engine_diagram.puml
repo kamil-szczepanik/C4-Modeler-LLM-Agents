@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(aws_api_gateway, "AWS API Gateway", "External API Gateway")
+System_Ext(amazon_elasticache, "Amazon ElastiCache", "Redis caching layer for fast feature lookups")
+System_Ext(ml_inference_service, "ML Inference Service", "Python with ONNX Runtime on AWS ECS Fargate")
+System_Ext(amazon_dynamodb, "Amazon DynamoDB", "Operational database for transaction and authorization data")
+System_Ext(amazon_s3_object_lock, "Amazon S3 Object Lock", "Tamper-evident storage for 7-year audit compliance")
+
+Container_Boundary(real_time_scoring_engine, "Real-Time Scoring Engine") {
+    Component(api_router_token_handler, "API Router & Token Handler", "Go", "Terminating gRPC and sanitizing card data.")
+    Component(feature_aggregator, "Feature Aggregator", "Go", "Fetching data using Redis pipelining (errgroup).")
+    Component(decision_orchestrator, "Decision Orchestrator", "Go", "Coordinating ML inference and zero-downtime rules.")
+    Component(audit_logger_cryptographic_signer, "Audit Logger & Cryptographic Signer", "Go", "Signing decisions via AWS KMS.")
+    Component(metrics_tracing_interceptor, "Metrics & Tracing Interceptor", "Go middleware", "Using zerolog for zero-allocation telemetry.")
+}
+
+Rel(aws_api_gateway, api_router_token_handler, "Routes authorization requests", "gRPC")
+Rel(api_router_token_handler, feature_aggregator, "Invokes feature lookup", "In-memory Go calls")
+Rel(feature_aggregator, amazon_elasticache, "Fetches user and card features", "TCP (RESP)")
+Rel(decision_orchestrator, ml_inference_service, "Requests model scoring", "Internal gRPC over HTTP/2")
+Rel(audit_logger_cryptographic_signer, amazon_dynamodb, "Persists audit records", "HTTPS (AWS SDK v2)")
+Rel(audit_logger_cryptographic_signer, amazon_s3_object_lock, "Archives signed payloads", "HTTPS (AWS SDK v2)")
+
+@enduml

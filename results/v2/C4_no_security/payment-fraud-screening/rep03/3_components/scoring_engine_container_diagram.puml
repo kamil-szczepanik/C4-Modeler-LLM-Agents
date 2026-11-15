@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Scoring Engine Container container
+
+Container_Boundary("Scoring Engine Container", "Scoring Engine Container") {
+    Component("API Handler Component", "API Handler Component", "Go / Rust", "Terminates incoming HTTP/gRPC traffic from the AWS ALB.")
+    Component("Feature Assembler Component", "Feature Assembler Component", "Go / Rust", "Enriches requests using ElastiCache Redis and the Tokenization/Vault Service.")
+    Component("Execution Core Component", "Execution Core Component", "Go / Rust (In-memory)", "Evaluates rules and lightweight compiled scoring models in-memory.")
+    Component("Audit Dispatcher Component", "Audit Dispatcher Component", "Go / Rust", "Asynchronously serializes tamper-evident audit payloads to Amazon SQS / Kinesis Data Firehose.")
+}
+
+System_Ext("AWS ALB", "AWS ALB", "External load balancer")
+System_Ext("ElastiCache Redis", "ElastiCache Redis", "In-memory data store")
+System_Ext("Tokenization / Vault Service", "Tokenization / Vault Service", "Vault Service")
+System_Ext("Amazon SQS / Kinesis Data Firehose", "Amazon SQS / Kinesis Data Firehose", "AWS Queues and Streams")
+
+Rel("AWS ALB", "API Handler Component", "Forwards payment authorization requests", "HTTP/gRPC")
+Rel("API Handler Component", "Feature Assembler Component", "Passes parsed payment authorization requests", "In-memory")
+Rel("Feature Assembler Component", "Execution Core Component", "Supplies enriched request data and features", "In-memory")
+Rel("Feature Assembler Component", "ElastiCache Redis", "Fetches cached rules and velocity checks", "Redis Protocol")
+Rel("Feature Assembler Component", "Tokenization / Vault Service", "Requests tokenized card references", "Secure APIs")
+Rel("Execution Core Component", "Audit Dispatcher Component", "Passes audit payloads asynchronously", "In-memory Go channels / crossbeam")
+Rel("Audit Dispatcher Component", "Amazon SQS / Kinesis Data Firehose", "Streams decision inputs and explanations", "HTTP")
+
+@enduml

@@ -1,0 +1,21 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(Core_Microservices, "Core Microservices", "External upstream systems publishing domain events.")
+System_Ext(Third_Party_Shipping_API, "Third-Party Shipping API", "External fulfillment service.")
+
+Container_Boundary(Async_Event_Bus, "Async Event Bus") {
+    Component(Event_Router_Bus, "Event Router & Bus", "Amazon EventBridge / SNS", "Handles high-throughput event routing and pub/sub messaging.")
+    Component(Message_Queues, "Message Queues", "Amazon SQS", "Buffers decoupled workloads to absorb traffic spikes and guarantee delivery.")
+    Component(DLQ_Handler, "DLQ Handler", "Amazon SQS + AWS Lambda", "Runs serverless DLQ scrubbing and alerting logic to capture and scrub poisoned messages.")
+    Component(Event_Schema_Registry, "Event Schema Registry", "Amazon EventBridge Schema Registry", "Validates JSON event payloads and prevents malformed data propagation.")
+}
+
+Rel(Core_Microservices, Event_Router_Bus, "Publish domain events", "AWS SigV4 [HTTPS]")
+Rel(Event_Router_Bus, Event_Schema_Registry, "Validate event payload structure", "Internal AWS API")
+Rel(Event_Router_Bus, Message_Queues, "Fan-out valid events to subscriber queues", "SQS Protocol")
+Rel(Message_Queues, Third_Party_Shipping_API, "Trigger fulfillment", "HTTPS/REST")
+Rel(Message_Queues, DLQ_Handler, "Capture and scrub poisoned messages", "SQS/Lambda")
+
+@enduml

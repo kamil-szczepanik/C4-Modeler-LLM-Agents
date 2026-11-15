@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Audit Logging Sidecar container
+
+System_Ext(Application_Containers, "Application Containers", "Application containers co-located in the Kubernetes pod.")
+System_Ext(EU_Cloud_Providers_HSM, "EU Cloud Provider's HSM", "Hardware Security Module providing keys for at-rest encryption.")
+System_Ext(Audit_Log_Stream, "Audit Log Stream", "External storage receiving encrypted, signed log batches.")
+
+Container_Boundary(Audit_Logging_Sidecar, "Audit Logging Sidecar") {
+    Component(Log_Collector_Component, "Log Collector Component", "Unix Domain Sockets", "Ingests raw logs via local Unix domain sockets.")
+    Component(Processor_Redaction_Engine, "Processor & Redaction Engine", "HMAC-SHA256", "Strips PII and applies HMAC-SHA256 pseudonymization.")
+    Component(Buffer_Encryption_Manager, "Buffer & Encryption Manager", "AES-256 / LUKS", "Handles local disk buffering with AES-256 encryption.")
+    Component(Log_Egress_Client, "Log Egress Client", "gRPC / TLS with SPIFFE/SPIRE", "Streams signed log batches to external storage.")
+}
+
+Rel(Application_Containers, Log_Collector_Component, "Streams raw logs locally", "Unix Domain Sockets")
+Rel(Log_Collector_Component, Processor_Redaction_Engine, "Passes raw logs", "In-memory IPC")
+Rel(Processor_Redaction_Engine, Buffer_Encryption_Manager, "Passes redacted logs", "In-memory IPC")
+Rel(Buffer_Encryption_Manager, Log_Egress_Client, "Provides buffered logs", "In-memory IPC")
+Rel(Buffer_Encryption_Manager, EU_Cloud_Providers_HSM, "Retrieves keys for at-rest encryption", "HTTPS/TLS")
+Rel(Log_Egress_Client, Audit_Log_Stream, "Streams encrypted, signed payloads", "gRPC/TLS with SPIFFE/SPIRE mTLS")
+@enduml

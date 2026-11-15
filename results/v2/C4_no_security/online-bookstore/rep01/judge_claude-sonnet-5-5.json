@@ -1,0 +1,363 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 3,
+   "usability": 2,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 2
+  },
+  "mean": 3.25,
+  "justifications": {
+   "functional_suitability": "Catalog & Search, Checkout & Order, Cart Manager and Recommendation cover R-01, R-02 and R-04. But no reviews/ratings service or store exists; only the Catalog & Search UI Module displays them. Multi-currency handling is vague, and admin and support have no backend elements.",
+   "performance_efficiency": "CloudFront/S3 SPA, OpenSearch, Model Cache (ElastiCache Redis), SQS/EventBridge decoupling, Kinesis ingestion, PgBouncer pooling and API Gateway throttling match the targets. Gaps: no explicit autoscaling, no read replicas, and no catalog caching or 3G optimization.",
+   "compatibility": "Shipping via EventBridge API Destinations, Payment Gateway over REST with mTLS, and Tax/Compliance via SQS/EventBridge are concrete. Gaps: no adapter for multiple shipping carriers, no currency conversion component, and inconsistent definitions (Amazon SES/SNS undefined, 'Notification & Logging Container').",
+   "usability": "Frontend Container is a React SPA serving all four personas, with UI modules for catalog, checkout and recommendations. But no Admin Portal or support interface exists as a distinct element, and there are no accessibility, localization or mobile channel mechanisms beyond the Template Engine.",
+   "reliability": "Resilience4j Circuit Breaker & Fallback Manager, SQS DLQs, FIFO queues, Buffer & Retry Manager with backoff, Multi-AZ RDS, Route 53 health checks and the ElastiCache Global Datastore support 99.95%. Gaps: no explicit multi-region failover for RDS, and no idempotency component in Checkout & Order.",
+   "security": "API Management provides a Lambda Authorizer for JWT, rate limiting, TLS 1.3, mTLS Payment Gateway Client, TLS JDBC, Consent Auditor, Sanitization & Validation Middleware and Preference & Audit Repository. Gaps: no WAF for OWASP Top-10, no secrets management or encryption at rest, and no RBAC for admins.",
+   "maintainability": "Decomposition into Catalog & Search, Checkout & Order, Recommendation, Analytics Ingestion and Notification containers with component-level layering (controller, repository, publisher) and event-driven decoupling is clear. Gaps: shared RDS across services, inconsistent naming, and some dangling relationships.",
+   "portability": "The design is tied to AWS-managed services (API Gateway, Lambda Authorizer, Kinesis, DynamoDB, EventBridge), and replaceability is not addressed. Route 53 latency routing and the Global Datastore touch multi-region, but there are no containerization, IaC or abstraction layers."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 2,
+   "MOD-01": 3,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 2,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.5,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 3.0,
+   "Modifiability": 3.5,
+   "Security": 2.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Frontend Container",
+     "API Management",
+     "Catalog & Search",
+     "Amazon OpenSearch",
+     "Recommendation",
+     "Model Cache"
+    ],
+    "sensitivity_points": [
+     "Autoscaling of compute not specified",
+     "RDS single write path under load",
+     "No CDN caching of API responses"
+    ],
+    "tradeoffs": [
+     "CloudFront SPA speeds load but dynamic API caching is absent",
+     "Circuit breaker gives degradation over consistency"
+    ],
+    "justification": "CloudFront/S3, OpenSearch, Redis cache and throttling help, but no explicit autoscaling, compute platform, or API caching is defined, and RDS is a shared bottleneck. The 10x load target is plausible but unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "elements": [
+     "Recommendation",
+     "Model Cache",
+     "Event Consumer",
+     "AWS SQS",
+     "Catalog & Search",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "Recompute job location unspecified",
+     "Cache invalidation storms after recompute",
+     "DynamoDB fallback capacity"
+    ],
+    "tradeoffs": [
+     "Precomputed cache favors speed over freshness",
+     "Async events decouple at cost of staleness"
+    ],
+    "justification": "Recommendation is a separate container with a precomputed Redis cache and async event updates, isolating batch work from browsing. The batch recompute mechanism is not shown, and cache invalidation could cause load spikes."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "elements": [
+     "Checkout & Order",
+     "Fulfillment Publisher",
+     "AWS SQS",
+     "AWS EventBridge",
+     "API Destinations",
+     "Shipping Provider API",
+     "Dead-Letter Queues"
+    ],
+    "sensitivity_points": [
+     "Retry and DLQ policy for shipping events",
+     "Order must be persisted before publish"
+    ],
+    "tradeoffs": [
+     "Async shipping gives availability but delayed shipment status"
+    ],
+    "justification": "Shipping is dispatched asynchronously via SQS/EventBridge with DLQs and API Destinations throttling, so checkout does not depend on the shipping API. Transactional outbox and explicit retry policy are not stated."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Route 53",
+     "Amazon RDS (PostgreSQL)",
+     "Amazon DynamoDB",
+     "Model Cache",
+     "Checkout & Order",
+     "AWS SQS"
+    ],
+    "sensitivity_points": [
+     "RDS is Multi-AZ only, no cross-region replica",
+     "DynamoDB global tables not specified",
+     "Queues are regional"
+    ],
+    "tradeoffs": [
+     "Multi-region adds cost and consistency complexity not addressed"
+    ],
+    "justification": "Route 53 latency routing and health checks exist, and Redis Global Datastore is used, but RDS is Multi-AZ only with no cross-region replication, and queues and DynamoDB are not replicated. Order loss on a regional failure is a major risk."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Checkout & Cart UI Module",
+     "Checkout & Order",
+     "Payment Gateway Client",
+     "Order Orchestrator",
+     "Tax/Compliance Service"
+    ],
+    "sensitivity_points": [
+     "No dedicated pricing or currency component",
+     "Currency logic spread across UI, orders, and payments"
+    ],
+    "tradeoffs": [
+     "Delegating compliance externally reduces local control"
+    ],
+    "justification": "Multi-currency is mentioned but there is no pricing or currency conversion component or configuration mechanism. Changes would touch the UI, order, and payment adapter, and likely catalog prices, so the scope is not clearly limited."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "elements": [
+     "Recommendation",
+     "Algorithm Engine",
+     "Recommendation API Controller",
+     "Model Cache",
+     "Recommendation Module"
+    ],
+    "sensitivity_points": [
+     "Cache score schema shared with the event consumer",
+     "API contract stability with the frontend"
+    ],
+    "tradeoffs": [
+     "Encapsulation helps, but the cache schema couples to the engine"
+    ],
+    "justification": "The Algorithm Engine is encapsulated behind a controller within the Recommendation container, with a stable API through API Management. Changes stay inside the container if the API contract holds, but the cache and event schemas must be maintained."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "elements": [
+     "API Management",
+     "Authentication & Authorization Component",
+     "Search Controller & Facade",
+     "Catalog & Search",
+     "Telemetry & Analytics Proxy Component",
+     "Sanitization & Validation Middleware"
+    ],
+    "sensitivity_points": [
+     "No WAF defined",
+     "No input validation in catalog or review services",
+     "No reviews service exists"
+    ],
+    "tradeoffs": [
+     "Rate limiting protects availability but doesn't stop injection"
+    ],
+    "justification": "JWT validation, throttling, TLS, and monitoring exist, but no WAF or input validation/output encoding for search and reviews is defined. A reviews component is absent entirely. Blocking and logging injection attacks is not demonstrated."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "elements": [
+     "Consent Auditor",
+     "Preference & Audit Repository Component",
+     "Amazon RDS (PostgreSQL)",
+     "Amazon DynamoDB",
+     "Analytics Ingestion",
+     "Tax/Compliance Service"
+    ],
+    "sensitivity_points": [
+     "No deletion workflow or orchestration",
+     "Data scattered across RDS, DynamoDB, Kinesis, and logs",
+     "No customer data service"
+    ],
+    "tradeoffs": [
+     "Event-driven decoupling complicates coordinated erasure"
+    ],
+    "justification": "Consent logging and PII sanitization exist, but no data-subject deletion workflow, data inventory, or verification mechanism spans the stores. Order retention versus deletion is unaddressed. Significant work is needed."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "partial"
+  },
+  "coverage": 0.6818181818181818,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Auth & Compliance Module",
+     "Consent Auditor",
+     "Sanitization & Validation Middleware",
+     "Preference & Audit Repository Component",
+     "Tax/Compliance Service"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Checkout & Cart UI Module",
+     "Tax/Compliance Service"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Provider API",
+     "Fulfillment Publisher",
+     "API Destinations",
+     "AWS EventBridge",
+     "AWS SQS",
+     "Checkout & Order"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search",
+     "Catalog & Search UI Module",
+     "Search Controller & Facade",
+     "OpenSearch Client Repository",
+     "Amazon OpenSearch",
+     "Index Synchronization Worker"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Checkout & Order",
+     "Checkout & Cart UI Module",
+     "Cart Manager",
+     "Order Orchestrator",
+     "Payment Gateway Client",
+     "Payment Gateway",
+     "Amazon DynamoDB",
+     "Order Repository"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Catalog & Search UI Module"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation",
+     "Recommendation Module",
+     "Algorithm Engine",
+     "Model Cache",
+     "Event Consumer"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Amazon API Gateway",
+     "API Management",
+     "AWS SQS",
+     "AWS EventBridge",
+     "Model Cache",
+     "Amazon OpenSearch",
+     "PgBouncer Connection Pooler",
+     "Analytics Ingestion"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Frontend Container",
+     "Model Cache",
+     "Amazon OpenSearch",
+     "AWS Route 53"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "AWS Route 53",
+     "PostgreSQL Database Engine",
+     "Circuit Breaker & Fallback Manager",
+     "Amazon SQS Dead-Letter Queues (DLQs)",
+     "Payment Gateway Client"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "partial",
+    "elements": [
+     "API Management",
+     "Authentication & Authorization Component",
+     "Rate Limiting & Usage Metering Component",
+     "Payment Gateway Client",
+     "Sanitization & Validation Middleware"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

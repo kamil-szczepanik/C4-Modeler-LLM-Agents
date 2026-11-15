@@ -1,0 +1,341 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 3,
+   "usability": 2,
+   "reliability": 2,
+   "security": 4,
+   "maintainability": 3,
+   "portability": 3
+  },
+  "mean": 2.875,
+  "justifications": {
+   "functional_suitability": "Catalog & Search Container, Order & Checkout Container, Recommendation Container and Localization Container cover R-01, R-02, R-04. Reviews/ratings (R-03) only have a Review & Rating Aggregator, with no submission path or storage. Also inconsistent: the Recommendation Engine/ML Service is unconnected, and the shipping/tax flows are duplicated.",
+   "performance_efficiency": "CloudFront SPA, OpenSearch, Session Cache (Redis), SQS asynchronous decoupling, Kinesis buffering and Debezium/MSK sync support the targets. Gaps: no catalog caching, no autoscaling or database read replicas, no explicit 3G optimization, and the SQLite local buffer limits scale.",
+   "compatibility": "Payment Gateway, Third-Party Shipping API and Tax Calculation Service are integrated via HTTPS/REST and SQS, and Localization Container handles currency. Inconsistencies remain: shipping is async at L1 but HTTPS/REST at L2, and no adapter or anti-corruption layer exists for the shipping APIs.",
+   "usability": "The SPA serves buyers, admins and support through CloudFront, and Localization Context Provider and Compliance & Consent Banner help buyers. Support reps and admins have no dedicated functions or interfaces, Content Provider uses only API Gateway, and no accessibility or UX mechanisms are present.",
+   "reliability": "Mechanisms exist: Route 53 latency routing, SQS decoupling, the Outbox Pattern, Debezium CDC and ElastiCache HA. But there is no multi-AZ/region failover, database replication, health checks, circuit breakers or backup/DR for 99.95%. The single API Gateway and the SQLite local buffer are weak points.",
+   "security": "Strong: Cognito OAuth2/JWT, Auth & Token Validator, AWS WAF OWASP mitigations, rate limiting, mTLS via App Mesh, TLS 1.3, tokenized payments, encrypted PII, BOLA authorization, and PII Scrubber. Gaps: no audit logging, no key management, no explicit GDPR data-subject-rights handling.",
+   "maintainability": "Clear decomposition into containers (Catalog & Search, Order & Checkout, Recommendation, Localization) with mesh-based routing and CDC decoupling. Weaknesses: the polyglot stack (Spring, Node, Python, Go), shared or ambiguous component definitions (Book Buyer as a component), a vague API Gateway, and no shared observability.",
+   "portability": "Targets AWS with multi-region routing (Route 53, CloudFront). Containerized services and open technologies (PostgreSQL, Kafka, Envoy, OpenSearch) help. But heavy AWS lock-in (Cognito, SQS, Kinesis, App Mesh), and there is no IaC, container orchestration or data-residency per-region deployment definition."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 2,
+   "MOD-01": 3,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 4,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.53125,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 3.0,
+   "Modifiability": 3.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Single Page Application (SPA)",
+     "CloudFront",
+     "Catalog & Search Container",
+     "Amazon OpenSearch",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "No caching layer for catalog responses",
+     "Single PostgreSQL with no replicas shown",
+     "Autoscaling not specified"
+    ],
+    "tradeoffs": [
+     "mTLS gRPC hops add latency versus security",
+     "CDN speeds static assets, not dynamic API"
+    ],
+    "justification": "CloudFront, OpenSearch and throttling help, but no API caching, autoscaling or read replicas are shown. A 10x peak meeting 2 s on 3G is plausible but unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Recommendation Container",
+     "Personalization Engine",
+     "Data Access Layer",
+     "Catalog & Search Container"
+    ],
+    "sensitivity_points": [
+     "Batch recompute is not separated from the online serving path",
+     "Shared data store for recommendation reads is unspecified"
+    ],
+    "tradeoffs": [
+     "Separate containers isolate compute but share unnamed storage"
+    ],
+    "justification": "Recommendations live in a separate container, which isolates CPU from catalog. But no offline batch pipeline, precomputed store or cache is described, and the ML service is vaguely external."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "elements": [
+     "Order & Checkout Container",
+     "Fulfillment & Tax Broker",
+     "AWS SQS",
+     "Cart & Checkout Orchestrator",
+     "Third-Party Shipping API"
+    ],
+    "sensitivity_points": [
+     "Inconsistent sync HTTPS versus async SQS shipping dispatch",
+     "Retry and DLQ policy unspecified"
+    ],
+    "tradeoffs": [
+     "Async shipping gives eventual consistency of shipment status"
+    ],
+    "justification": "SQS decoupling and the outbox pattern let checkout complete while shipping is deferred. The container diagram also shows a direct HTTPS call to shipping, and retry/DLQ details are missing."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Route 53 latency-based routing",
+     "CloudFront",
+     "Order Database",
+     "Session Cache",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "No cross-region database replication described",
+     "Single PostgreSQL per service with no Multi-AZ stated",
+     "Failover health checks not defined"
+    ],
+    "tradeoffs": [
+     "Multi-region data replication costs versus GDPR data residency"
+    ],
+    "justification": "Route 53 and three regions are mentioned, but there is no data replication, multi-region deployment or failover design. Order loss on a us-east-1 failure is a real risk and 99.95% is not demonstrated."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Localization Container",
+     "Currency Conversion Engine",
+     "Payment Processor Client",
+     "Tax Calculation Service",
+     "Localization Context Provider"
+    ],
+    "sensitivity_points": [
+     "Whether currencies are configuration-driven is unspecified",
+     "Payment gateway and tax currency support",
+     "Price storage model per currency"
+    ],
+    "tradeoffs": [
+     "Centralised localization eases change but couples checkout to it"
+    ],
+    "justification": "A dedicated Localization Container and currency engine localize the change. But there is no price or config model, and Order, SPA and payment adapters may all need edits. Feasible with some risk."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "elements": [
+     "Recommendation Container",
+     "Personalization Engine",
+     "Recommendation API Router",
+     "Cold-Start & Fallback Engine"
+    ],
+    "sensitivity_points": [
+     "Stable gRPC contract at the API Gateway",
+     "Data Access Layer coupling to data schema"
+    ],
+    "tradeoffs": [
+     "Encapsulation gives easy swap but may limit data-model evolution"
+    ],
+    "justification": "Algorithm is isolated in the Personalization Engine behind a router and gRPC interface, so replacement stays in the container. A new algorithm needing different data or the external ML service could leak changes."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "elements": [
+     "Traffic Policy & Throttling Component",
+     "AWS WAF",
+     "Request Transformer",
+     "Auth & Token Validator",
+     "Catalog & Search Container"
+    ],
+    "sensitivity_points": [
+     "Review input sanitisation and output encoding in the SPA not described",
+     "Logging and alerting of blocked attacks not explicit"
+    ],
+    "tradeoffs": [
+     "WAF rules may cause false positives that hurt usability"
+    ],
+    "justification": "WAF, JSON schema validation, JPA parameterised access and OWASP mitigations are named at the edge. But XSS output encoding for reviews and explicit attack logging or monitoring are not shown."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "elements": [
+     "Order Database",
+     "Product Metadata Repository",
+     "Analytics & Event Ingestion Container",
+     "PII Scrubber and Processor",
+     "Compliance & Consent Banner"
+    ],
+    "sensitivity_points": [
+     "No deletion orchestration across services",
+     "Verifiability and audit trail absent",
+     "PII in Order DB, Kinesis and logs"
+    ],
+    "tradeoffs": [
+     "Order retention obligations versus erasure requests"
+    ],
+    "justification": "PII scrubbing and a consent banner exist, but no deletion workflow, data inventory or audit mechanism spans the Order DB, caches, recommendations and the external email provider. Erasure would need significant new design."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Compliance & Consent Banner",
+     "PII Scrubber and Processor",
+     "Cold-Start & Fallback Engine",
+     "Order Database"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Localization Container",
+     "Localization Context Provider",
+     "Currency Conversion Engine",
+     "Tax Calculation Service"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Third-Party Shipping API",
+     "Fulfillment & Tax Broker",
+     "Order & Checkout Container",
+     "AWS SQS"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Container",
+     "Catalog & Search Module",
+     "Search Engine Service",
+     "Catalog API Controller",
+     "Product Metadata Repository"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Order & Checkout Container",
+     "Cart & Checkout Orchestrator",
+     "Checkout & Cart Module",
+     "Payment Processor Client",
+     "Payment Gateway",
+     "Guest Session Manager"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Review & Rating Aggregator"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Container",
+     "Personalization Engine",
+     "Recommendation API Router"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Single Page Application (SPA)",
+     "Amazon OpenSearch",
+     "Analytics & Event Ingestion Container",
+     "Session Cache",
+     "Sync & Resilience Pipeline"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Single Page Application (SPA)",
+     "Search Engine Service",
+     "Session Cache"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Session Cache",
+     "Sync & Resilience Pipeline",
+     "AWS SQS",
+     "Edge Router & TLS Termination"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Traffic Policy & Throttling Component",
+     "Auth & Token Validator",
+     "Request Transformer",
+     "Internal Routing & mTLS Dispatcher",
+     "API Gateway"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

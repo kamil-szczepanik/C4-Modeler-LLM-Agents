@@ -1,0 +1,342 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 4,
+   "security": 3,
+   "maintainability": 4,
+   "portability": 2
+  },
+  "mean": 3.125,
+  "justifications": {
+   "functional_suitability": "Customer Portal, Web Frontend (Claims Adjuster Dashboard), and Feature Routing Dispatcher with Mainframe Adapter cover R-01 to R-03. Gaps: there is no explicit per-claim-type migration mechanism, the Routing Service is missing at L2, and the Claim Command Processor has no database write path.",
+   "performance_efficiency": "Azure Cache for Redis, the Claim Query Handler, Service Bus asynchronous decoupling and WebSocket push help the R-05 target. Gaps: no cache of mainframe responses, no scaling or timeout mechanism, and no explicit 2 s design. The decoupling protects the batch window only implicitly.",
+   "compatibility": "Integration & Sync Worker uses MQ/SFTP, a Transformation & Mapping Engine and an Anti-Corruption Layer for COBOL/DB2; OIDC integrates with Entra ID. Gaps: the mainframe interface change limit is unaddressed, and the batch-window coordination, the SFTP/MQ choice, and the direct Claims Core to mainframe adapter path are unclear.",
+   "usability": "Customer Portal and Web Frontend (Claims Adjuster Dashboard, Broker Portal UI) serve all groups, with WebSocket real-time updates via Adjuster BFF and a TanStack Query client cache. Gaps: no mobile or accessibility detail, and the portal UI components are duplicated across containers.",
+   "reliability": "Idempotency Validator (Redis SETNX), Dead-Letter Handler, Replay Manager, Polly retry/circuit breaker, Durable Functions, Reconciliation & Audit Logger and temporal tables support R-04 and R-06 rollback via feature flags. Gaps: no HA/DR or multi-region and no outbox pattern; Redis is a single point of failure.",
+   "security": "Entra ID OIDC SSO in Customer Portal, Web Frontend and API Gateway token validation, TLS everywhere, Service Bus RBAC/SAS, Key Vault references and Audit & Temporal History. Gaps: no explicit authorization model, no WAF or network segmentation, and unclear secrets handling for the mainframe link.",
+   "maintainability": "Clear component decomposition: Feature Routing Dispatcher, Anti-Corruption Layer, CQRS split with MediatR, separate BFFs and a Configuration & Feature Store. Gaps: inconsistent L1/L2 naming, duplicated Mainframe Adapters, a Claims Database listed as a component of Claims Core, and mixed Node/.NET/Python technologies against a team with little cloud experience.",
+   "portability": "Hybrid Azure plus on-prem is addressed via Service Bus and an integration worker, but the design is tightly bound to Azure services (App Configuration, SQL MI, Durable Functions, Redis). There are no containers, IaC or abstraction layers, and it largely ignores the team's cloud inexperience."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 2,
+   "PERF-02": 4,
+   "SEC-01": 2,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.59375,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 4.0,
+   "Modifiability": 4.0,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "elements": [
+     "Claim Query Handler",
+     "Claims Database",
+     "Distributed Cache / State Store",
+     "Feature Routing Dispatcher",
+     "Mainframe Adapter Component"
+    ],
+    "sensitivity_points": [
+     "No read cache or replica for mainframe-resident claim data",
+     "Synchronous mainframe fallback can take 5 s"
+    ],
+    "tradeoffs": [
+     "Redis cache speeds reads but adds staleness versus the system of record"
+    ],
+    "justification": "Migrated data is read from Azure SQL, but no mechanism explicitly caches or prefetches mainframe-resident data. The cache is for sessions and idempotency. The synchronous legacy fallback would exceed 2 s."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "elements": [
+     "Integration Event Broker",
+     "Claim Ingestion Topic",
+     "Mainframe Outbox Queue",
+     "Integration & Sync Worker",
+     "Claims Core Service"
+    ],
+    "sensitivity_points": [
+     "Worker drain rate must be throttled and kept out of 23:00-05:00",
+     "Service Bus throughput and quota limits"
+    ],
+    "tradeoffs": [
+     "Async buffering protects batch window but delays mainframe visibility"
+    ],
+    "justification": "Service Bus decouples submissions from the mainframe, and the Azure SQL store absorbs peaks. Throttling or scheduling the drain outside the batch window is not explicit, but the structure supports it."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "elements": [
+     "Integration Event Broker",
+     "Mainframe Outbox Queue",
+     "Dead-Letter Handler",
+     "Integration & Sync Worker",
+     "Resiliency & Retry Policy",
+     "Claims Database"
+    ],
+    "sensitivity_points": [
+     "Retry and drain timing relative to batch window end",
+     "Submissions must be persisted before publish (no outbox pattern shown)"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of mainframe state versus continuous online intake"
+    ],
+    "justification": "Durable queues, dead-lettering, Polly retries and sessions ordering allow submissions to continue and be forwarded later. A transactional outbox between the DB write and the publish is not shown."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "elements": [
+     "Reconciliation & Audit Logger",
+     "Idempotency Validator",
+     "Idempotency State Manager",
+     "Sync Orchestrator",
+     "Sync Staging Tables",
+     "Dead-Letter Handler"
+    ],
+    "sensitivity_points": [
+     "Redis idempotency key TTL and eviction may allow duplicate processing",
+     "Mainframe side must also deduplicate"
+    ],
+    "tradeoffs": [
+     "Durable Functions orchestration adds complexity for the cloud-inexperienced team"
+    ],
+    "justification": "Durable orchestration, idempotency keys, reconciliation logging, staging tables, replay and DLQ directly address half-way failures. Volatile Redis keys and missing mainframe-side dedupe leave some risk."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "elements": [
+     "Feature Routing Dispatcher",
+     "Configuration & Feature Store",
+     "Migration Routing & Fallback Cache",
+     "Mainframe Adapter Component",
+     "Anti-Corruption Layer (ACL)",
+     "Audit & Temporal History"
+    ],
+    "sensitivity_points": [
+     "Data must be synchronised back to the mainframe for switch-back",
+     "Flag state consistency between App Configuration and Redis"
+    ],
+    "tradeoffs": [
+     "Dual-write or sync keeps rollback possible but costs complexity"
+    ],
+    "justification": "Per-claim-type feature flags, a routing dispatcher, an ACL and a mainframe adapter enable incremental migration and quick switch-back. Reliance on existing MQ/SFTP interfaces keeps mainframe changes small. The reverse data sync is not detailed."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "elements": [
+     "API Gateway / BFF",
+     "Customer Portal",
+     "Web Frontend",
+     "Anti-Corruption Layer (ACL)",
+     "Mainframe Adapter Component",
+     "Claims Database"
+    ],
+    "sensitivity_points": [
+     "Remaining mainframe-specific logic in the Claims Core Service",
+     "Data migration of historic claims to Azure SQL"
+    ],
+    "tradeoffs": [
+     "Abstraction layers cost extra indirection now but isolate the UIs later"
+    ],
+    "justification": "UIs talk only to the BFF/gateway, and the ACL and adapters isolate the mainframe, so removing the legacy touches the backend only. Azure SQL already holds migrated claims. A final cutover plan is not shown."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "elements": [
+     "API Gateway / BFF",
+     "Azure AD / Entra ID",
+     "Claims Core Service",
+     "Access Control & Namespace Authorization",
+     "Audit & Temporal History"
+    ],
+    "sensitivity_points": [
+     "No explicit per-broker data-level authorization component",
+     "No security audit trail for denied access",
+     "Mainframe-side authorization not addressed"
+    ],
+    "tradeoffs": [
+     "Token validation at the gateway is simple but lacks ownership checks"
+    ],
+    "justification": "Entra ID and token validation provide authentication only. There is no explicit authorization model for broker-customer ownership, no recording of denied attempts, and nothing covering the mainframe."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Azure AD / Entra ID",
+     "API Gateway / BFF",
+     "Distributed Session Provider",
+     "Mainframe Adapter Component",
+     "Integration & Sync Worker"
+    ],
+    "sensitivity_points": [
+     "Token and session lifetime versus the 15 min revocation limit",
+     "Mainframe access path and credentials not tied to AD"
+    ],
+    "tradeoffs": [
+     "Cached sessions improve performance but delay revocation"
+    ],
+    "justification": "OIDC SSO with Entra ID and gateway token validation covers the new platform. Session caching in Redis may delay revocation, and the mainframe's own access (e.g. RACF) is not linked to AD, so the 15 min measure is unproven."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Legacy Mainframe",
+     "Integration & Sync Worker",
+     "Claims Database"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Integration Event Broker",
+     "Mainframe Outbox Queue"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Anti-Corruption Layer (ACL)",
+     "Mainframe Adapter",
+     "Transformation & Mapping Engine"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Azure Service Bus",
+     "Azure App Configuration",
+     "Azure SQL Database Managed Instance"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer Portal",
+     "API Gateway / BFF",
+     "Customer BFF",
+     "Claims Core Service",
+     "Claim Ingestion Topic"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Web Frontend",
+     "Claims Adjuster Dashboard",
+     "Adjuster BFF",
+     "Claims Core Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Feature Routing Dispatcher",
+     "Configuration & Feature Store",
+     "Migration Routing & Fallback Cache",
+     "Mainframe Adapter Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Idempotency Validator",
+     "Idempotency State Manager",
+     "Reconciliation & Audit Logger",
+     "Dead-Letter Handler",
+     "Claims Database",
+     "Mainframe Outbox Queue"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Distributed Cache / State Store",
+     "Claims Database",
+     "Adjuster BFF",
+     "Claim Query Handler"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Configuration & Feature Store",
+     "Feature Routing Dispatcher",
+     "Migration Routing & Fallback Cache",
+     "Audit & Temporal History",
+     "Reconciliation & Rollback Views"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Azure AD / Entra ID",
+     "API Gateway / BFF",
+     "Customer Portal",
+     "Web Frontend"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

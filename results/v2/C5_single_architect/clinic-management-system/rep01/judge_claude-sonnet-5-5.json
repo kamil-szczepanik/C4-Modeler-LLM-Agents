@@ -1,0 +1,359 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.625,
+  "justifications": {
+   "functional_suitability": "Patient & Scheduling Service (SchedulingEngine clash checks), EMR Service with Audit Logger, and Billing & Claims Service (Claims Processor) cover R-01 to R-04. Gaps: no explicit registration/demographic component, no insurance claim submission to payers/clearinghouse, no admissions element.",
+   "performance_efficiency": "Redis cache (CacheManager, Clinical Cache Component), PgBouncer pooling, Kafka asynchronous events and gRPC internal calls target the EMR P95 <1 s. Gaps: no horizontal scaling or autoscaling, no load targets, and the cache invalidation strategy is unspecified.",
+   "compatibility": "Interoperability Service with Data Transformer (camel-fhir), FHIR Outbound Connector (mTLS), Schema Registry and Kafka decouple HL7 FHIR exchange with Lab & Imaging Systems. Gaps: outbound push only, no inbound FHIR API or lab results ingestion, and no FHIR server.",
+   "usability": "Patient BFF and Staff BFF give persona-specific interfaces, and Notification Service sends reminders. Gaps: no web or mobile UI containers are modeled, there is no accessibility or localization mechanism, and Patients and Medical Staff have only generic HTTPS interfaces.",
+   "reliability": "Patroni & etcd failover, Redis Sentinel, Kafka KRaft quorum, Circuit Breaker, Dead Letter Channel, transactional outbox and Barman backups are concrete. Gaps: no active-active multi-region deployment, API Gateway/service redundancy is unspecified, and the single PostgreSQL primary conflicts with the 99.99% active-active target.",
+   "security": "External IdP provides MFA via OIDC/SAML, Auth Enforcement Filter validates tokens, and pgcrypto/pgaudit provide AES-256 at rest. mTLS, Redis ACL Manager, the Audit & Compliance Interceptor, AuditLogger (signed immutable logs) and tokenized Payment Integration support HIPAA/GDPR accountability.",
+   "maintainability": "Services are separated by domain (Patient & Scheduling, EMR, Billing, Interoperability) with BFFs, an event bus and layered components (controller, repository, audit aspects). Gaps: shared PostgreSQL couples services, and polyglot stacks (Java, .NET, Python) add overhead.",
+   "portability": "Open-source, container-friendly technologies (PostgreSQL, Kafka, Redis, Kong) and S3-compatible tiered storage suit hybrid deployment. Gaps: no deployment model for on-prem-k8s versus eu-central-1, no infrastructure-as-code, and no explicit cloud abstraction or Kubernetes elements."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.4375,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 2.5,
+   "Modifiability": 2.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Clinical Cache Component",
+     "Redis",
+     "PgBouncer",
+     "EMR Service",
+     "API Gateway / BFF"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio for EMR reads",
+     "Cache invalidation for current data",
+     "Redis is wired only to Patient & Scheduling in L2"
+    ],
+    "tradeoffs": [
+     "Caching speeds loads but risks stale clinical data",
+     "Gateway audit hook adds latency"
+    ],
+    "justification": "Cache component, PgBouncer and Redis HA support sub-second loads. But no EMR-to-Redis relationship at L2, no invalidation strategy and no load evidence. Plausible, with unaddressed risks."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Interoperability Service",
+     "Apache Kafka",
+     "Dead Letter Channel Component",
+     "EMR Service",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Inbound FHIR path absent",
+     "Consumer throughput and partitioning",
+     "Write contention on PostgreSQL"
+    ],
+    "tradeoffs": [
+     "Async decoupling protects EMR but delays visibility",
+     "Shared PostgreSQL couples ingestion and EMR reads"
+    ],
+    "justification": "Interoperability only pushes outbound to lab systems; no inbound FHIR ingestion into EMR is modelled. Kafka decoupling and a dead-letter channel help, but the ingest path must be added."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "PostgreSQL",
+     "Patroni & etcd",
+     "Apache Kafka",
+     "Redis",
+     "API Gateway / BFF"
+    ],
+    "sensitivity_points": [
+     "No cross-site active-active or global traffic routing",
+     "Replication lag at failover",
+     "Failover time versus 1 minute"
+    ],
+    "tradeoffs": [
+     "Synchronous replication prevents data loss but adds latency",
+     "Hybrid sites increase operational complexity"
+    ],
+    "justification": "Patroni and Sentinel give local HA, but no deployment view shows active-active across on-prem and eu-central-1. There is no global load balancing, cross-site replication or failover design to meet zero data loss and 1-minute restoration."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Billing & Claims Service",
+     "PostgreSQL",
+     "Patroni & etcd",
+     "PgBouncer",
+     "Apache Kafka"
+    ],
+    "sensitivity_points": [
+     "Claim idempotency keys not shown",
+     "Patroni failover within 30 s",
+     "Billing has no outbox"
+    ],
+    "tradeoffs": [
+     "Retries ensure completion but risk duplicate claims",
+     "Synchronous replication reduces data loss but raises write latency"
+    ],
+    "justification": "Patroni gives automated DB failover and ACID transactions. But Billing has no outbox, idempotency or retry mechanism, so duplicate or lost claims are unaddressed. Needs significant additions."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Claims Processor Component",
+     "Billing API Facade Component",
+     "Billing & Claims Service",
+     "EMR Service"
+    ],
+    "sensitivity_points": [
+     "Clearinghouse formatting sits inside Claims Processor",
+     "No clearinghouse adapter or port abstraction"
+    ],
+    "tradeoffs": [
+     "Single billing service is simple but couples integrations",
+     "Kafka decoupling isolates EMR but not claim logic"
+    ],
+    "justification": "Billing is separate from EMR, so EMR stays unchanged. But clearinghouse formatting is embedded in Claims Processor with no adapter interface, so changes may touch multiple billing components."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "elements": [
+     "Patient & Scheduling Service",
+     "PatientRepository",
+     "AuditLogger",
+     "Staff BFF",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "No UI container or component modelled",
+     "Schema migration process undefined",
+     "Shared PostgreSQL schema"
+    ],
+    "tradeoffs": [
+     "Aspect-based audit reduces change but may miss new fields",
+     "Shared database eases consistency but couples services"
+    ],
+    "justification": "Controller, repository, audit logger and BFF would change, likely exceeding three components. No UI component is modelled and no schema-evolution mechanism exists. Audit via AOP helps somewhat, but the change is doubtful within one sprint."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "External IdP",
+     "Auth Enforcement Filter",
+     "Ingress Router",
+     "Audit & Compliance Interceptor"
+    ],
+    "sensitivity_points": [
+     "MFA enforced by IdP policy",
+     "No security alerting component",
+     "Failed logins may not reach audit"
+    ],
+    "tradeoffs": [
+     "External IdP reduces effort but adds dependency",
+     "Gateway enforcement is central but a single point of failure"
+    ],
+    "justification": "External IdP with MFA and token validation at the gateway block access without a second factor. However, nothing monitors failed attempts or raises alerts within 1 minute, so recording and alerting are unaddressed."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "EMR Service",
+     "Audit Logger Component",
+     "Security Modules",
+     "Kafka Tiered Storage",
+     "Barman",
+     "Audit & Compliance Interceptor"
+    ],
+    "sensitivity_points": [
+     "No policy-based authorization (treating relationship) component",
+     "EMR audit not stated as tamper-evident",
+     "Audit coverage of all reads"
+    ],
+    "tradeoffs": [
+     "AOP audit gives coverage but adds read latency",
+     "Long retention raises storage cost and GDPR erasure conflict"
+    ],
+    "justification": "Audit logging via AOP, pgaudit, gateway interceptor and Barman retention are present. But no policy check for unrelated patient access, and only Patient service logs are signed. Authorization and tamper-evidence in EMR are missing."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Interceptor",
+     "AuditLogger",
+     "Audit Logger Component",
+     "Financial Audit & Archive Component",
+     "Security Modules",
+     "PostgreSQL",
+     "External IdP"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Patroni & etcd",
+     "Redis Sentinel",
+     "KRaft Controller Quorum",
+     "Redis Master-Replica Cluster"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Barman",
+     "Kafka Tiered Storage",
+     "Financial Audit & Archive Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Patient & Scheduling Service",
+     "PatientController",
+     "PatientRepository",
+     "Patient BFF"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "SchedulingEngine",
+     "Patient & Scheduling Service",
+     "CacheManager",
+     "PatientRepository"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "Clinical Record Manager",
+     "Audit Logger Component",
+     "EMR Data Access Repository",
+     "Security Modules"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Service",
+     "Claims Processor Component",
+     "Payment Integration Component",
+     "Billing API Facade Component",
+     "Payment Gateway"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "External IdP",
+     "Auth Enforcement Filter",
+     "API Gateway / BFF",
+     "PostgreSQL",
+     "Security Modules"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Patroni & etcd",
+     "Redis Sentinel",
+     "Redis Master-Replica Cluster",
+     "KRaft Controller Quorum"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Clinical Cache Component",
+     "Redis",
+     "PgBouncer",
+     "EMR Service"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Interoperability Service",
+     "Data Transformer Component",
+     "FHIR Outbound Connector Component",
+     "Circuit Breaker Component",
+     "Dead Letter Channel Component",
+     "Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

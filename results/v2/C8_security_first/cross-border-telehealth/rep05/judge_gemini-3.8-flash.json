@@ -1,0 +1,333 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively supported: Video Consultation Service handles consultations, E-Prescription Integration Service dispatches prescriptions, AI Symptom Checker Container performs triage, and Consent & Policy Engine enables granular patient consent management per purpose.",
+   "performance_efficiency": "Performance is thoroughly addressed using SFU Media Router with Simulcast/SVC, Cloud Memorystore (Redis) for session caching, Cloud Bigtable for high-throughput audit streams, and Cloud Pub/Sub for asynchronous event processing.",
+   "compatibility": "Interoperability targets are handled well through the Regional Adapter Engine interfacing with EU National Gateways and US Pharmacy Networks via HL7 FHIR and mTLS, though specific national EU format translations are abstracted.",
+   "usability": "All user personas (patients, clinicians, compliance officers) are accommodated via Flutter Client Application across web and mobile. Usability under constrained connectivity is directly sustained through SFU Media Router's adaptive streaming.",
+   "reliability": "SFU Media Router guarantees degraded operation under 300 kbit/s. Resiliency and error recovery are explicitly reinforced by DLQ Management & Retry Worker and buffering in Cloud Memorystore.",
+   "security": "Security and compliance are extensively enforced via Consent & Policy Engine, Cloud SQL Row-Level Security, Cloud KMS encryption, mTLS via Envoy/Anthos, certificate pinning in Flutter, and immutable trace logging in Cloud Bigtable.",
+   "maintainability": "Clear modular decomposition separates consultation, policy enforcement, triage, and prescription domains. Decoupling via Envoy API Gateway, gRPC, and modular components like the Regional Adapter Engine facilitates independent maintenance.",
+   "portability": "Flutter ensures high client portability across iOS, Android, and web. The backend effectively targets the specified GCP multi-region environment, though tight integration with proprietary GCP services (Bigtable, KMS) limits multi-cloud portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Mediasoup SFU provides Simulcast/SVC adaptive routing, and Envoy manages geo-distributed ingress traffic. While capable of handling concurrent streams, the architecture does not explicitly detail horizontal scaling orchestration or session-affinity clustering for SFU nodes under peak regional loads.",
+    "elements": [
+     "Video Consultation Service",
+     "SFU Media Router",
+     "Signaling Component",
+     "API Gateway / BFF",
+     "Envoy Router & Geo-Routing Filter"
+    ],
+    "sensitivity_points": [
+     "SFU node horizontal autoscaling and bandwidth limits during peak regional demand"
+    ],
+    "tradeoffs": [
+     "Selective forwarding improves throughput but increases client-side decoding overhead"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "FastAPI async handlers combined with low-latency gRPC to the AI Diagnostic Service easily process ~14 to 50 requests/sec. Asynchronous audit logging prevents I/O bottlenecks, comfortably meeting the 3-second latency threshold at 95th percentile.",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Symptom Analysis API Handler",
+     "Policy Validation Middleware",
+     "Diagnostic Integration Service",
+     "AI Diagnostic Service"
+    ],
+    "sensitivity_points": [
+     "External AI Diagnostic Service response latency under concurrent gRPC requests"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging improves throughput but requires reliable local buffering"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Mediasoup SFU explicitly incorporates Simulcast and Scalable Video Coding (SVC) to step down video resolution or switch to audio-only below 300 kbit/s. Local caching in Redis and the Flutter client ensures clinical notes are preserved without dropouts.",
+    "elements": [
+     "Video Consultation Service",
+     "SFU Media Router",
+     "Frontend Client Apps",
+     "Flutter Client Application",
+     "Cloud Memorystore / Redis"
+    ],
+    "sensitivity_points": [
+     "Accurate bandwidth estimation algorithms for rapid codec bitrate adaptation"
+    ],
+    "tradeoffs": [
+     "Dropping video tracks preserves call connectivity at the expense of visual examination"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The system only defines two cloud regions (europe-west3 and us-central1). Because US patient data cannot be moved to the EU due to residency constraints, complete failure of us-central1 leaves no secondary US failover region defined to restore service within 1 hour.",
+    "elements": [
+     "Data Layer",
+     "Google Cloud SQL / PostgreSQL",
+     "API Gateway / BFF",
+     "Envoy Router & Geo-Routing Filter"
+    ],
+    "sensitivity_points": [
+     "Absence of a multi-region deployment within the United States"
+    ],
+    "tradeoffs": [
+     "Restricting deployment to a single US region lowers cost but sacrifices disaster recovery"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Regional Adapter Engine and Prescription API Controller encapsulate regional fulfillment formats. Adding a new EU national gateway is localized entirely within a specific adapter implementation without modifying core consultation or API gateway components.",
+    "elements": [
+     "E-Prescription Integration Service",
+     "Regional Adapter Engine",
+     "Prescription API Controller",
+     "EU National e-Prescription Gateways & US Pharmacy Networks"
+    ],
+    "sensitivity_points": [
+     "Clear interface abstraction within the Regional Adapter Engine"
+    ],
+    "tradeoffs": [
+     "Adapter encapsulation increases internal code abstractions but isolates national regulatory churn"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Containerized AI Diagnostic Service and Audit Log Writer support append-only provenance logging. However, explicit mechanisms for blue/green model traffic shifting, dynamic rollback, and automated model version schema stamping are not explicitly detailed in the component definitions.",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Symptom Analysis API Handler",
+     "Audit Log Writer",
+     "AI Diagnostic Service",
+     "Cloud Bigtable"
+    ],
+    "sensitivity_points": [
+     "Strict metadata tagging of model identifiers in audit log entries"
+    ],
+    "tradeoffs": [
+     "Decoupled external AI diagnostic services ease updates but require strict API contract versioning"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The Consent & Policy Engine (using OPA) and Policy Validation Middleware intercept requests and evaluate cross-border access rules against active patient consent records before querying PostgreSQL instances protected by Row-Level Security.",
+    "elements": [
+     "Consent & Policy Engine",
+     "Policy Evaluation Service",
+     "Consent Management API",
+     "Policy Validation Middleware",
+     "Google Cloud SQL / PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Real-time policy evaluation overhead on cross-region clinician read requests"
+    ],
+    "tradeoffs": [
+     "Synchronous policy checks on data access add latency but guarantee regulatory compliance"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Consent updates are processed via the Consent Management API and dynamically applied via OPA policies. Downstream research data pipelines are synchronized via Cloud Pub/Sub CDC streaming, and immutable revocation events are recorded in Cloud Bigtable.",
+    "elements": [
+     "Consent & Policy Engine",
+     "Consent Management API",
+     "Policy Evaluation Service",
+     "Cloud Pub/Sub",
+     "Cloud Bigtable",
+     "Google Cloud SQL / PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Propagation delay of CDC revocation events across downstream analytical stores"
+    ],
+    "tradeoffs": [
+     "Event-driven consent propagation introduces eventual consistency but avoids distributed locking"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.875,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent & Policy Engine",
+     "Policy Evaluation Service",
+     "Google Cloud SQL / PostgreSQL",
+     "Cloud KMS"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Envoy Router & Geo-Routing Filter",
+     "Data Layer",
+     "Google Cloud SQL / PostgreSQL"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Audit Log Writer",
+     "Cloud Bigtable"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Video Consultation Service",
+     "SFU Media Router",
+     "Cloud Memorystore / Redis"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Frontend Client Apps",
+     "Flutter Client Application",
+     "Video Consultation Service",
+     "Signaling Component",
+     "SFU Media Router"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "E-Prescription Integration Service",
+     "Prescription API Controller",
+     "Regional Adapter Engine",
+     "EU National e-Prescription Gateways & US Pharmacy Networks"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Symptom Analysis API Handler",
+     "AI Diagnostic Service"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Consent & Policy Engine",
+     "Consent Management API",
+     "Policy Evaluation Service"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Envoy Router & Geo-Routing Filter",
+     "Consent & Policy Engine",
+     "Policy Evaluation Service",
+     "Data Layer",
+     "Google Cloud SQL / PostgreSQL"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Video Consultation Service",
+     "SFU Media Router"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Audit Log Writer",
+     "Cloud Bigtable"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "E-Prescription Integration Service",
+     "Regional Adapter Engine",
+     "EU National e-Prescription Gateways & US Pharmacy Networks"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

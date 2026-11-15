@@ -1,0 +1,340 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Real-Time Scoring Engine scores transactions (R-01), Case Management Backend and UI handle reviews (R-02), and WASM models in In-Memory Scoring Engine alongside Rule Management enable zero-downtime updates (R-03).",
+   "performance_efficiency": "Achieves 3,000 TPS under 50 ms via Go/Rust implementation, Payment Ingress ALB, sub-millisecond Redis Cache lookups, WASM in-memory scoring, and asynchronous audit streaming via Messaging Bus (Amazon SQS).",
+   "compatibility": "Integrates cleanly with Payment Gateway/Acquirer using standard HTTPS/gRPC over TLS 1.3 mTLS, Core Banking/Card Network Systems, and external Identity Provider using standard OAuth2/OIDC protocols.",
+   "usability": "Case Management UI directly addresses Fraud Analysts via Case Queue & Investigation Component and Risk Managers via Rule Management & Audit Component. However, explicit mechanisms for analyst workflow efficiency (e.g. keyboard shortcuts) are unspecified.",
+   "reliability": "The Circuit Breaker Fallback Controller ensures scoring failures never block payments over 1 minute (R-07). High availability is reinforced by RDS Read Replicas, SQS DLQs, and managed ElastiCache persistence.",
+   "security": "Meets PCI-DSS Level 1: Masking & Sanitization Middleware hides full card numbers, S3 Object Lock and KMS guarantee tamper-evident audit storage, while mTLS, PostgreSQL RLS, and OIDC secure transport and data layers.",
+   "maintainability": "Clear container and component boundaries separate scoring, case management, and ingestion. Small-team maintainability is enabled by managed cloud services (ALB, SQS, S3, RDS) and decoupled pluggable WASM scoring modules.",
+   "portability": "Tailored for AWS eu-west-1 using standard Docker/container technologies (Go, Node.js, React). Moderate coupling exists to AWS-specific proprietary services (S3 Object Lock, DynamoDB, SQS), but core microservices remain portable."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 3,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 4.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "In-memory WASM scoring, sub-millisecond Redis caching, compiled Go/Rust engine, and asynchronous messaging offload ensure P99 latency remains well under 50 ms at 3,000 TPS.",
+    "elements": [
+     "Payment Ingress ALB",
+     "Real-Time Scoring Engine",
+     "Feature Aggregator Component",
+     "In-Memory Scoring Engine Component",
+     "Redis Cache",
+     "Messaging Bus"
+    ],
+    "sensitivity_points": [
+     "Sub-millisecond latency of Redis feature lookups under heavy concurrency",
+     "In-memory execution overhead of WASM scoring modules"
+    ],
+    "tradeoffs": [
+     "Using in-memory caching increases RAM costs to achieve ultra-low latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Architectural separation between ingress paths (ALB vs API Gateway) and persistence tiers (Redis for scoring, RDS primary/read replica for cases) prevents analyst workload interference.",
+    "elements": [
+     "Payment Ingress ALB",
+     "Management API Gateway",
+     "Real-Time Scoring Engine",
+     "Case Management Backend",
+     "PostgreSQL Database",
+     "Read Replica"
+    ],
+    "sensitivity_points": [
+     "Independent autoscaling of ingress and compute tiers",
+     "Read replica isolation for heavy analyst search queries"
+    ],
+    "tradeoffs": [
+     "Maintaining distinct compute and database stacks increases infrastructure complexity"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Circuit breaker mechanisms at both ALB and scoring engine levels enable rapid fallback, though auditing fallback decisions when the engine completely crashes lacks explicit wiring.",
+    "elements": [
+     "Payment Ingress ALB",
+     "Real-Time Scoring Engine",
+     "Circuit Breaker Fallback Controller",
+     "Audit Publisher Component"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker timeout threshold and failure detection responsiveness",
+     "Persistence mechanism for decisions generated during total scoring engine failure"
+    ],
+    "tradeoffs": [
+     "Failing open preserves payment flow availability at the cost of fraud risk"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Asynchronous decoupling via SQS messaging buffers audit records when Audit Storage is slow or down, ensuring zero audit loss and shielding scoring latency from backend storage stalls.",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Audit Publisher Component",
+     "Messaging Bus",
+     "SQS Standard Queue",
+     "Audit Storage"
+    ],
+    "sensitivity_points": [
+     "SQS retention limits and dead-letter queue monitoring during prolonged outages",
+     "Asynchronous decoupling between real-time scoring and persistent storage"
+    ],
+    "tradeoffs": [
+     "Asynchronous buffering guarantees availability and audit durability over immediate consistency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "WASM-based in-memory execution allows dynamic reloading of model binaries without process downtime, while metadata tagging ensures model versions are captured in decision events.",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "In-Memory Scoring Engine Component",
+     "Audit Publisher Component"
+    ],
+    "sensitivity_points": [
+     "Hot-swapping WASM bytecode in runtime memory without request drops",
+     "Deterministic model version tagging on all generated scoring decisions"
+    ],
+    "tradeoffs": [
+     "WASM sandboxing facilitates dynamic reloading at the expense of marginal compute overhead"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "UI and backend provide rule management components, but the architecture lacks an explicit mechanism or communication channel to propagate updated rules to the scoring engine at runtime.",
+    "elements": [
+     "Rule Management & Audit Component",
+     "Case Management Backend",
+     "Real-Time Scoring Engine",
+     "Redis Cache"
+    ],
+    "sensitivity_points": [
+     "Absence of an event distribution or cache propagation path for rule updates",
+     "Consistency of active rules across all scoring engine instances"
+    ],
+    "tradeoffs": [
+     "Decoupled service boundaries reduce scoring surface area but complicate runtime configuration distribution"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Card masking and tokenization middleware prevent analysts from viewing clear-text PANs, but the architecture lacks intrusion detection or anomaly monitoring components to alert within 15 minutes.",
+    "elements": [
+     "Masking & Sanitization Middleware",
+     "Case Management Backend",
+     "Case Queue & Investigation Component",
+     "Identity Provider (IdP)"
+    ],
+    "sensitivity_points": [
+     "Enforcement of masking middleware across all analyst API endpoints",
+     "Absence of automated threat detection and security alert mechanisms"
+    ],
+    "tradeoffs": [
+     "Strict payload masking protects sensitive data but limits contextual information during manual reviews"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "S3 Object Lock with KMS guarantees 7-year tamper resistance, while dedicated DynamoDB query APIs and Report Generator Lambda components enable rapid retrieval and export of decision records.",
+    "elements": [
+     "Audit Storage",
+     "Audit Writer",
+     "Audit Query API",
+     "Report Generator",
+     "Amazon S3 with Object Lock"
+    ],
+    "sensitivity_points": [
+     "Immutability policies configured via S3 Object Lock compliance mode",
+     "Indexing efficiency of historic decision identifiers in DynamoDB"
+    ],
+    "tradeoffs": [
+     "Dual-tier storage using S3 and DynamoDB balances fast query retrieval with long-term retention costs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Masking & Sanitization Middleware",
+     "Database Security Manager",
+     "Case Queue & Investigation Component",
+     "In-Memory Data Store"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "In-Memory Scoring Engine Component",
+     "Audit Publisher Component",
+     "Audit Storage",
+     "Audit Writer",
+     "Audit & Compliance Logger"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Redis Cache",
+     "PostgreSQL Database",
+     "Audit Storage"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "AWS API Gateway / ALB",
+     "Case Management Backend",
+     "Audit Storage",
+     "Messaging Bus",
+     "Redis Cache",
+     "PostgreSQL Database"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Payment Ingress ALB",
+     "API Handler Component",
+     "In-Memory Scoring Engine Component",
+     "Real-Time Scoring Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management UI",
+     "Case Management Backend",
+     "Case Workflow Service",
+     "Case Queue & Investigation Component",
+     "Case Repository Component",
+     "PostgreSQL Database"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Rule Management & Audit Component",
+     "In-Memory Scoring Engine Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Payment Ingress ALB",
+     "Real-Time Scoring Engine",
+     "Feature Aggregator Component",
+     "Redis Cache",
+     "In-Memory Data Store",
+     "In-Memory Scoring Engine Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Masking & Sanitization Middleware",
+     "Case Queue & Investigation Component",
+     "Database Security Manager",
+     "PostgreSQL Database"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "In-Memory Scoring Engine Component",
+     "Audit Publisher Component",
+     "Audit Writer",
+     "Audit Storage",
+     "Messaging Bus"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Circuit Breaker Fallback Controller",
+     "Payment Ingress ALB",
+     "API Handler Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

@@ -1,0 +1,323 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Real-Time Scoring Engine evaluates transactions (R-01), Case Management Backend and Web App serve analysts (R-02), and Model & Rule Registry enables continuous updates without downtime (R-03).",
+   "performance_efficiency": "The sub-50ms target at 3,000 TPS is achieved using Rust/ONNX for the Real-Time Scoring Engine, Redis Feature Cache Component for features, and Amazon SQS for asynchronous audit and explainability dispatch.",
+   "compatibility": "Standard protocols (gRPC, REST over TLS 1.3) integrate cleanly with the external Payment Gateway, while Audit & Compliance Exporter and S3 Object Lock support external regulatory and network interfaces.",
+   "usability": "Fraud Analysts & Risk Managers are directly served by Case Management Web App, which provides tailored interfaces through Case Queue & Review Dashboard Component and Audit & Reporting Portal Component.",
+   "reliability": "Decision Logic Coordinator incorporates circuit-breaker fallback logic to prevent transaction blocking if scoring degrades (R-07), though detailed multi-AZ failover and recovery procedures are not explicitly defined.",
+   "security": "Data Masking Interceptor enforces PAN protection, Authentication & Identity Component provides MFA via AWS Cognito, and S3 Object Lock guarantees audit integrity. However, a dedicated tokenization service mechanism is not detailed.",
+   "maintainability": "Modular boundaries cleanly separate concerns across scoring, explainability, and cases. However, maintaining four disparate languages (Rust, Go, Python, TypeScript) poses operational overhead for a three-engineer team.",
+   "portability": "The solution deploys appropriately into AWS eu-west-1, but tightly couples key capabilities to proprietary services like AWS Cognito, S3 Object Lock, and AWS Secrets Manager, limiting infrastructure replaceability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 4.0,
+   "Modifiability": 4.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "While Go, Rust, and Redis offer sub-50ms execution, the architecture contains contradictory relationships: the scoring engine synchronously calls the Python Explainability Service for SHAP values via gRPC/REST, which will severely degrade P99 latency beyond 50 ms under 3,000 req/s.",
+    "elements": [
+     "API Gateway / Ingestion Service",
+     "Real-Time Scoring Engine",
+     "Decision Logic Coordinator",
+     "Feature Assembler",
+     "Explainability Service"
+    ],
+    "sensitivity_points": [
+     "Synchronous inline SHAP calculation latency",
+     "Redis cluster network throughput at 3,000 req/sec"
+    ],
+    "tradeoffs": [
+     "Real-time explainability completeness versus transaction latency and throughput"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Analyst operations are cleanly isolated from the scoring data path. The Case Management Backend queries RDS PostgreSQL and S3, while the scoring engine relies on in-memory Redis and local ONNX runtime, preventing analyst query interference with real-time scoring.",
+    "elements": [
+     "Case Management Backend",
+     "Case API Router",
+     "Feature Store & Metadata DB",
+     "Redis Feature Cache Component",
+     "PostgreSQL Transaction & Metadata Store Component"
+    ],
+    "sensitivity_points": [
+     "Database read replica isolation between analytics and operational metadata"
+    ],
+    "tradeoffs": [
+     "Asynchronous replication lag between scoring writes and analyst case visibility"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Decision Logic Coordinator specifies circuit-breaker fallback logic, but it resides inside the Scoring Engine. If the entire scoring container crashes, the API Gateway lacks an explicit standalone fallback routing mechanism to issue and audit fallback decisions within 1 minute.",
+    "elements": [
+     "API Gateway / Ingestion Service",
+     "Ingestion Router & API Handler",
+     "Real-Time Scoring Engine",
+     "Decision Logic Coordinator"
+    ],
+    "sensitivity_points": [
+     "Placement of fallback logic outside vs inside the scoring service"
+    ],
+    "tradeoffs": [
+     "Centralized gateway fail-open/close routing versus engine-level fallback granularity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Audit dispatching is completely decoupled from the critical path using Amazon SQS queues and asynchronous workers. If the long-term audit store or database slows down, messages buffer securely in durable SQS without stalling scoring latency or dropping records.",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Audit Dispatcher",
+     "Asynchronous Ingestion Bus",
+     "Amazon S3 Object Lock"
+    ],
+    "sensitivity_points": [
+     "SQS queue retention period and message backpressure limits"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit decoupling versus immediate read-after-write audit consistency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Model & Rule Registry uses S3, RDS metadata catalogs, and EventBridge/SQS notifications to broadcast version updates to scoring nodes without downtime. However, the precise zero-downtime rolling reload and fast rollback orchestration on the Rust scoring nodes is only partially elaborated.",
+    "elements": [
+     "Model & Rule Registry",
+     "Registry Core Engine",
+     "Event Dispatcher",
+     "Metadata Catalog",
+     "Real-Time Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "In-memory dynamic model swapping without connection dropping or latency spikes"
+    ],
+    "tradeoffs": [
+     "Dynamic runtime model reloading versus immutable container redeployment"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The Registry API Service and Core Engine provide approval workflows and event dispatching to push rules within one hour. Metadata catalogs track lineage and versions, but the rule execution engine's ability to track and name individual rule attributions alongside ML explanations lacks detail.",
+    "elements": [
+     "Registry API Service",
+     "Registry Core Engine",
+     "Event Dispatcher",
+     "Decision Logic Coordinator"
+    ],
+    "sensitivity_points": [
+     "Dynamic rule propagation latency across distributed scoring worker instances"
+    ],
+    "tradeoffs": [
+     "Hot rule injection flexibility versus deterministic rule validation testing"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The Case Management Backend features a dedicated Data Masking Interceptor stripping PANs before reaching the UI. Cognito enforces MFA, while CloudTrail and EventBridge provide automated anomaly detection and alerting to the engineering team within 15 minutes.",
+    "elements": [
+     "Case Management Backend",
+     "Data Masking Interceptor",
+     "Authentication & Identity Component",
+     "Monitoring & Alerting"
+    ],
+    "sensitivity_points": [
+     "Completeness of data masking at the API gateway/interceptor boundary"
+    ],
+    "tradeoffs": [
+     "Strict tokenization/masking versus analyst context during manual fraud reviews"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "S3 Object Lock in Compliance Mode combined with Glacier Flexible Archive provides 7-year immutable, tamper-evident WORM retention. Audit & Compliance Exporter retrieves cryptographically signed SHA-256 historical decision logs and metadata well within one working day.",
+    "elements": [
+     "Audit & Compliance Exporter",
+     "Audit Ledger Component",
+     "Audit & Tamper-Evident Storage Component",
+     "Amazon S3 Object Lock"
+    ],
+    "sensitivity_points": [
+     "Glacier archive retrieval time and index availability for 6-year-old decisions"
+    ],
+    "tradeoffs": [
+     "Low-cost cold archiving (Glacier) versus instantaneous historical query retrieval"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "none",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "partial"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Load Balancer & Perimeter Controller",
+     "Data Masking Interceptor",
+     "Authentication & Identity Component",
+     "Secrets & Vault Component",
+     "PostgreSQL Transaction & Metadata Store Component",
+     "Model Evaluator"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Explainability Service",
+     "SHAP Calculator Component",
+     "Audit & Tamper-Evident Storage Component",
+     "Audit Ledger Component",
+     "Audit & Compliance Exporter"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none"
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Monitoring & Alerting",
+     "Telemetry & Metrics Publisher"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "API Gateway / Ingestion Service",
+     "Ingestion Router & API Handler",
+     "Real-Time Scoring Engine",
+     "Decision Logic Coordinator",
+     "Model Evaluator"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Backend",
+     "Case Management Web App",
+     "Case API Router",
+     "Case Workflow Engine",
+     "Case Queue & Review Dashboard Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model & Rule Registry",
+     "Registry API Service",
+     "Registry Core Engine",
+     "Metadata Catalog",
+     "Event Dispatcher"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "API Gateway / Ingestion Service",
+     "Real-Time Scoring Engine",
+     "Redis Feature Cache Component",
+     "Asynchronous Ingestion Bus",
+     "Model Evaluator"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Data Masking Interceptor",
+     "PostgreSQL Transaction & Metadata Store Component",
+     "Model Evaluator"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Dispatcher",
+     "Audit Ledger Component",
+     "Audit & Tamper-Evident Storage Component",
+     "SHAP Calculator Component",
+     "Feature Formatter Component",
+     "Metadata Catalog"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Decision Logic Coordinator"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

@@ -1,0 +1,324 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 5
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are met: 'Scoring Engine' delivers real-time decisions (R-01), 'Case Management' with 'Case Workflow Engine' supports analyst investigations (R-02), and 'Model Registry' feeding Wasm bytecode to 'Inference Executor' enables zero-downtime model updates (R-03).",
+   "performance_efficiency": "'Scoring Engine' uses Go and compiled Wasm, sub-millisecond 'Redis / Amazon ElastiCache' feature lookups, and decouples write latency via 'Amazon MSK / Kafka' and 'Audit Ingestion Worker', comfortably satisfying the 3,000 TPS at <50ms P99 target.",
+   "compatibility": "Well-defined interfaces include gRPC over TLS 1.3 for 'Payment Gateway / Core Ledger' and REST/OIDC for external actors. However, interaction between 'Scoring Engine' and external 'Card Schemes / Identity Providers' defined at Level 1 is omitted from lower-level component flows.",
+   "usability": "'Fraud Analyst' interactions are well-channeled through 'Case API Controller' supporting standard REST and OIDC/OAuth2 authentication. However, no frontend application or user interface container is specified for the analyst workflow.",
+   "reliability": "'Circuit Breaker & Fallback Manager' and 'Envoy Sidecar Proxy' provide aggressive 15ms timeouts and fallback feature profiles. However, the exact fail-open or stand-in policy guaranteeing payments are not blocked beyond 1 minute (R-07) lacks explicit gateway-level coordination.",
+   "security": "PCI-DSS Level 1 is strictly addressed via mTLS 1.3, 'Masking Interceptor Component' preventing PAN exposure (R-05), AWS KMS envelope encryption, and tamper-evident storage using S3 Object Lock and 'Audit Ledger Table' with update/delete blocking triggers (R-06).",
+   "maintainability": "Modular separation between 'Scoring Engine', 'Case Management', and 'Model Registry' is clean. However, managing Kafka (MSK), Aurora, Redis, Envoy, and three programming languages (Go, Node.js, Python) imposes high operational complexity on a team of only three engineers.",
+   "portability": "Architecture targets AWS eu-west-1 natively utilizing AWS ALB, S3, Aurora, and ElastiCache. Standard container technologies (Go, NestJS, Envoy) combined with AWS managed services provide clear environment adaptability and smooth deployment."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 3,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The Go-based Scoring Engine, in-memory Wasm execution, and Redis feature caching comfortably meet sub-50ms latency. Direct Aurora logging in the container diagram introduces slight latency variance despite internal ring buffering.",
+    "elements": [
+     "AWS Application Load Balancer",
+     "Envoy Sidecar Proxy",
+     "Scoring Engine",
+     "In-Memory Data Store",
+     "Inference Executor",
+     "Audit Logger"
+    ],
+    "sensitivity_points": [
+     "Redis lookup timeout thresholds",
+     "Ring buffer capacity during peak burst traffic"
+    ],
+    "tradeoffs": [
+     "In-memory Wasm execution guarantees low latency at the expense of runtime model flexibility"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Analyst workloads are physically decoupled from scoring through independent Case Management containers, SQS queues, and Redis isolation, with PgBouncer preventing connection pool contention on Aurora.",
+    "elements": [
+     "Case API Controller",
+     "Case Workflow Engine",
+     "Scoring Engine",
+     "In-Memory Data Store",
+     "Aurora PostgreSQL",
+     "PgBouncer"
+    ],
+    "sensitivity_points": [
+     "Aurora IOPS contention between analyst reads and audit ledger writes",
+     "PgBouncer pool sizing"
+    ],
+    "tradeoffs": [
+     "Sharing Aurora between case data and audit logs saves cost but risks database contention"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Envoy provides outlier detection and Circuit Breaker handles Redis failure, but no standalone stand-in authorization mechanism or default decision policy is defined if all Scoring Engine instances crash.",
+    "elements": [
+     "Envoy Sidecar Proxy",
+     "Circuit Breaker & Fallback Manager",
+     "AWS Application Load Balancer",
+     "Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Envoy health check detection and circuit trip latency",
+     "Fallback decision defaults"
+    ],
+    "tradeoffs": [
+     "Failing open preserves payment processing availability but exposes the business to uninspected fraud"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The asynchronous decoupling via Amazon MSK and the Go Audit Logger's in-memory ring-buffers isolate the critical scoring path from Aurora latency or temporary downtime without dropping records.",
+    "elements": [
+     "Audit Logger",
+     "Amazon MSK / Kafka",
+     "Audit Ingestion Worker",
+     "Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "MSK topic retention limits and disk sizing during sustained database outages",
+     "Audit Logger ring-buffer size"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit ingestion decouples critical path latency but delays immediate ledger consistency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Model Registry stores versioned Wasm bytecode in S3 with Object Lock. The Inference Executor dynamically fetches signed Wasm models at runtime, enabling zero-downtime updates, version tracking, and quick rollback.",
+    "elements": [
+     "Model Registry",
+     "Model Storage Manager",
+     "Inference Executor",
+     "Amazon S3",
+     "Registry REST API"
+    ],
+    "sensitivity_points": [
+     "Wasm compilation compatibility and signature verification speed",
+     "Registry metadata synchronization interval"
+    ],
+    "tradeoffs": [
+     "Dynamic in-memory model reloads eliminate downtime but require strict memory management in Go"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "The architecture treats scoring logic primarily as compiled Wasm models in MLflow/S3. It lacks a dedicated rule management authoring and hot-reload interface for non-technical analysts to deploy rules directly within one hour.",
+    "elements": [
+     "Model Registry",
+     "Inference Executor",
+     "Case Management",
+     "Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Model compilation and build pipeline duration for simple rule updates",
+     "Rule metadata tagging in decisions"
+    ],
+    "tradeoffs": [
+     "Compiling all business rules into Wasm models enforces strong typing but slows rule authoring agility"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The Masking Interceptor Component strictly prevents clear-text PAN exposure to analysts, but the architecture does not specify a UEBA, SIEM, or anomalous access detection mechanism to trigger alerts within 15 minutes.",
+    "elements": [
+     "Masking Interceptor Component",
+     "Case API Controller",
+     "Case Management Store",
+     "Fraud Analyst"
+    ],
+    "sensitivity_points": [
+     "Completeness of data masking across all API endpoints",
+     "Log forwarding latency to security monitoring"
+    ],
+    "tradeoffs": [
+     "In-process data masking minimizes tokenization query overhead but risks leakage if middleware is bypassed"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Aurora monthly partitions detached to Amazon S3 with Object Lock Compliance Mode, combined with KMS-signed hash-chain audit ledgers, ensure immutable 7-year retention and reproducible explanations within one day.",
+    "elements": [
+     "Audit Ledger Table",
+     "Amazon S3",
+     "AWS KMS",
+     "Model Storage Manager",
+     "Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "S3 Object Lock retention policy configuration",
+     "KMS key rotation and lifecycle persistence over seven years"
+    ],
+    "tradeoffs": [
+     "Archiving partitions to cold S3 storage cuts database expenses but requires manual retrieval workflows"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "partial"
+  },
+  "coverage": 0.6818181818181818,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "AWS Application Load Balancer",
+     "Envoy Sidecar Proxy",
+     "Masking Interceptor Component",
+     "AWS KMS"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Audit Logger",
+     "Audit Ledger Table",
+     "Amazon S3",
+     "Model Storage Manager"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none"
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none"
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "API Gateway (AWS API Gateway / ALB)",
+     "Scoring Engine",
+     "API Ingress Controller",
+     "Inference Executor",
+     "fraud-decisions-out"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management",
+     "Case API Controller",
+     "Case Workflow Engine",
+     "Case Management Store"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model Registry",
+     "Registry REST API",
+     "Model Storage Manager",
+     "Inference Executor"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "Feature Fetcher",
+     "Circuit Breaker & Fallback Manager",
+     "Redis / Amazon ElastiCache",
+     "In-Memory Data Store",
+     "Envoy Sidecar Proxy"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Masking Interceptor Component",
+     "AWS KMS"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Logger",
+     "Audit Ledger Table",
+     "Audit Ingestion Worker",
+     "Amazon S3",
+     "AWS KMS"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Circuit Breaker & Fallback Manager",
+     "Circuit Breaker & Retry Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

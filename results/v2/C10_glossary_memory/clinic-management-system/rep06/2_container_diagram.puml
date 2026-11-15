@@ -1,0 +1,53 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patients, "Patients", "Individuals receiving care who interact with the system for scheduling and portals via web or mobile clients.")
+Person(ReceptionistsAdmins, "Receptionists/Admins", "Administrative staff managing patient admissions, front-desk workflows, and scheduling.")
+Person(CliniciansDoctors, "Clinicians/Doctors", "Medical professionals managing electronic medical records (EMR), clinical workflows, and patient care.")
+Person(BillingSpecialists, "Billing Specialists", "Staff members handling financial records, invoicing, and insurance claims.")
+Person(ComplianceSecurityOfficers, "Compliance/Security Officers", "Personnel responsible for monitoring audit trails, security, and regulatory compliance (HIPAA, GDPR).")
+Person(HospitalClinicManagement, "Hospital/Clinic Management", "Executives viewing management dashboards and high-level clinical operations data.")
+
+System_Ext(ExternalIdentityProvideIdP, "External Identity Provider (IdP)", "External system providing authentication services via OpenID Connect (OIDC) / SAML 2.0 with MFA.")
+System_Ext(ExternalLabImagingSystems, "External Lab & Imaging Systems", "External diagnostic systems exchanging medical imaging and lab data via HL7 FHIR.")
+System_Ext(InsuranceClearinghouse, "Insurance Clearinghouse", "External system receiving insurance and billing claims via EDI over secure SFTP / HTTPS.")
+
+System_Boundary(ClinicManagementSystem, "Clinic Management System") {
+    Container(PatientPortal, "Patient Portal", "React / TypeScript, Nginx", "Web and mobile interface allowing patients to manage scheduling and view personal portal information.")
+    Container(InternalStaffApplication, "Internal Staff Application", "React / TypeScript, Nginx", "Internal web application for receptionists, clinicians, billing specialists, compliance officers, and management.")
+    Container(ApiGateway, "API Gateway", "Kong / Envoy", "Handles mTLS, rate limiting, and token validation for incoming requests.")
+    Container(PatientAdmissionService, "Patient Admission Service", "Go / Node.js", "Manages patient admissions and front-desk workflows.")
+    Container(SchedulingService, "Scheduling Service", "Go / Node.js", "Handles appointments and scheduling workflows.")
+    Container(EmrService, "EMR Service", "Go / Node.js", "Manages electronic medical records with sub-second performance.")
+    Container(BillingService, "Billing Service", "Java Spring Boot", "Handles financial records, invoicing, and insurance claims.")
+    Container(IntegrationEngine, "Integration Engine", "Go / Node.js", "Securely integrates with external health systems and clearinghouses.")
+    ContainerDb(DataStore, "Data Store", "PostgreSQL, WORM Object Storage", "Persists core data with multi-region active-passive setup, AES-256 encryption, and 10-year audit retention.")
+}
+
+Rel(Patients, PatientPortal, "Accesses portals and scheduling", "HTTPS (Web/Mobile)")
+Rel(ReceptionistsAdmins, InternalStaffApplication, "Manages patient admissions and front-desk workflows", "HTTPS (Web)")
+Rel(CliniciansDoctors, InternalStaffApplication, "Manages electronic medical records and clinical workflows", "HTTPS (Web)")
+Rel(BillingSpecialists, InternalStaffApplication, "Handles financial records and billing", "HTTPS (Web)")
+Rel(ComplianceSecurityOfficers, InternalStaffApplication, "Monitors audit trails and security compliance", "HTTPS (Web)")
+Rel(HospitalClinicManagement, InternalStaffApplication, "Views management dashboards and operations data", "HTTPS (Web)")
+
+Rel(PatientPortal, ApiGateway, "Sends API requests", "HTTPS (mTLS/OIDC)")
+Rel(InternalStaffApplication, ApiGateway, "Sends API requests", "HTTPS (mTLS/OIDC)")
+
+Rel(ApiGateway, PatientAdmissionService, "Routes admission requests", "gRPC / REST over internal mesh")
+Rel(ApiGateway, SchedulingService, "Routes scheduling requests", "gRPC / REST over internal mesh")
+Rel(ApiGateway, EmrService, "Routes EMR requests", "gRPC / REST over internal mesh")
+Rel(ApiGateway, BillingService, "Routes billing requests", "gRPC / REST over internal mesh")
+
+Rel(IntegrationEngine, ExternalLabImagingSystems, "Exchanges diagnostic data and lab results", "HL7 FHIR over HTTPS (REST/JSON) with mTLS")
+Rel(IntegrationEngine, InsuranceClearinghouse, "Submits insurance and billing claims", "EDI over SFTP / HTTPS")
+
+Rel(PatientAdmissionService, DataStore, "Reads and writes admission data", "PostgreSQL protocol with AES-256")
+Rel(SchedulingService, DataStore, "Reads and writes scheduling data", "PostgreSQL protocol with AES-256")
+Rel(EmrService, DataStore, "Reads and writes EMR data", "PostgreSQL protocol with AES-256")
+Rel(BillingService, DataStore, "Reads and writes billing data", "PostgreSQL protocol with AES-256")
+
+@enduml

@@ -1,0 +1,330 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are met: R-01 via 'Web Portal', R-02 via 'Adjuster Web Application', and R-03 via 'Claim Routing Service' and 'Feature & Routing Switcher' enabling incremental, claim-type by claim-type migration.",
+   "performance_efficiency": "Sub-2 s response time (R-05) against 5 s mainframe latency is achieved using 'BFF Response Cache' (Redis) and client-side caching ('TanStack Query'). Mainframe batch window constraints are respected via 'Batch Rate Limiter' and 'Batch Orchestration Controller'.",
+   "compatibility": "Robust coexistence with the legacy mainframe is provided by 'Mainframe Anti-Corruption Layer', 'Mainframe Adapter' (Camel/MQ), and 'Sequential File Parser' handling EBCDIC files. Enterprise integration with Active Directory, payment gateways, and rating engines is explicitly modeled.",
+   "usability": "Distinct user groups are catered to with dedicated interfaces: external customers and brokers utilize 'Web Portal' with 'Claim Submission Wizard' and localization, while internal adjusters utilize 'Adjuster Web Application' featuring specialized workspace components.",
+   "reliability": "Zero data loss and duplicate prevention (R-04) are guaranteed through 'Idempotency & Deduplication Guard', 'Outbox Transaction Processor', and 'Idempotency & Checkpoint Manager'. Fault tolerance is enforced by 'State & Circuit Breaker Component' and system-versioned temporal audit tables.",
+   "security": "R-07 is fulfilled via 'Authentication Module' (MSAL.js) integrating with Active Directory, 'Token Exchange Middleware', and 'Authorization & Context Enforcer'. Secrets management via 'Azure Key Vault' and comprehensive auditing via 'Security & Access Auditor' are thoroughly defined.",
+   "maintainability": "One-day rollback (R-06) is well-supported by 'Dynamic Routing Rule Synchronizer' and 'Feature & Routing Switcher'. However, the highly polyglot stack (.NET, Java/Spring, Node.js, Python) imposes significant cognitive overhead on a team with stated little cloud experience.",
+   "portability": "Architecture aligns with the hybrid requirement (on-prem mainframe and azure-westeurope). Core workloads run in Azure Container Apps, though several components rely heavily on proprietary Azure PaaS (Cosmos DB, Azure SQL CDC, API Management), mildly hindering cross-environment portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.9375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Client-side TanStack caching and Redis BFF caching decouple UI rendering from mainframe latency. However, cold cache misses for claims not yet staged in the cloud data store could still block on slow mainframe queries.",
+    "elements": [
+     "Adjuster Web Application",
+     "Client-Side Cache Component",
+     "API Gateway / BFF",
+     "BFF Response Cache",
+     "Claims Database"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios for infrequently accessed claims residing primarily on mainframe"
+    ],
+    "tradeoffs": [
+     "Aggressive caching improves load times but risks displaying stale claims data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Submissions are buffered asynchronously using the Outbox pattern and Azure Service Bus. The Batch Rate Limiter explicitly throttles traffic to prevent overwhelming the mainframe during the nightly batch window.",
+    "elements": [
+     "Web Portal",
+     "Claims Management App",
+     "Outbox Transaction Processor",
+     "Integration & Sync Service",
+     "Batch Rate Limiter"
+    ],
+    "sensitivity_points": [
+     "Azure Service Bus queue capacity and consumer throughput during volume spikes"
+    ],
+    "tradeoffs": [
+     "Throttling downstream traffic preserves mainframe stability at the expense of eventual consistency latency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Online claims are stored locally in Azure SQL and published via Outbox and Azure Service Bus queues. The Batch Rate Limiter pauses or queues outbound mainframe sync until the batch window completes.",
+    "elements": [
+     "Claims Management App",
+     "Outbox Transaction Processor",
+     "Azure Service Bus",
+     "Integration & Sync Service",
+     "Batch Rate Limiter"
+    ],
+    "sensitivity_points": [
+     "Message retention duration and queue dead-letter limits during prolonged mainframe windows"
+    ],
+    "tradeoffs": [
+     "Asynchronous decoupling maximizes availability but delays legacy system of record synchronization"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The architecture incorporates Idempotency Guards, an Outbox Processor, and an Audit & Reconciliation Ledger running automated state reconciliation to safely retry failed synchronizations without duplicate processing.",
+    "elements": [
+     "Integration & Sync Service",
+     "Sync Orchestrator",
+     "Idempotency & Deduplication Filter",
+     "Audit & Reconciliation Ledger",
+     "Mainframe Data Ingestion Worker"
+    ],
+    "sensitivity_points": [
+     "Accuracy and determinism of deduplication keys across legacy and cloud boundaries"
+    ],
+    "tradeoffs": [
+     "Strict idempotency checks and reconciliation batch jobs increase processing latency and storage overhead"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The dedicated Claim Routing Service and Feature Flag Switcher support dynamic routing per claim type. Apache Camel adapters isolate mainframe changes, enabling rapid rule toggles and rollback within one day.",
+    "elements": [
+     "Claim Routing Service",
+     "Routing Engine Component",
+     "Dynamic Routing Rule Synchronizer Component",
+     "Feature Flag & Routing Switcher",
+     "Mainframe Fallback Adapter Component"
+    ],
+    "sensitivity_points": [
+     "Correctness of dynamic routing rule propagation from configuration to execution engine"
+    ],
+    "tradeoffs": [
+     "Dynamic routing layer introduces minor hop latency in exchange for zero-downtime rollback capability"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "User interfaces interact purely with the API Gateway / BFF, which routes to modern cloud domain services. Mainframe-specific interactions are abstracted behind the Anti-Corruption Layer and routing services, requiring zero UI rewrites.",
+    "elements": [
+     "Web Portal",
+     "Adjuster Web Application",
+     "API Gateway / BFF",
+     "Claims Management App",
+     "Mainframe Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Total domain independence of frontend contracts from legacy DB2 data models"
+    ],
+    "tradeoffs": [
+     "BFF and ACL translation layers increase upfront implementation effort for clean UI decoupling"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "BFF Token Exchange Middleware validates identities while the Data Access Security Layer enforces tenant and row-level security. Failed attempts are captured and audited by the Security & Access Auditor.",
+    "elements": [
+     "API Gateway / BFF",
+     "Token Exchange Middleware",
+     "Claims Management App",
+     "Data Access Security & Abstraction Layer",
+     "Security & Access Auditor"
+    ],
+    "sensitivity_points": [
+     "Enforcement of broker identity context across all data queries and tenant boundaries"
+    ],
+    "tradeoffs": [
+     "Row-level database filtering ensures strict multi-tenancy but marginally increases query execution time"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Active Directory SSO revokes authentication centralized in AD for the modern platform. However, the architecture does not explicitly define short-lived token lifetimes or active session revocation to strictly guarantee 15-minute cutoffs.",
+    "elements": [
+     "Active Directory",
+     "Adjuster Web Application",
+     "Authentication Module",
+     "API Gateway / BFF",
+     "Token Exchange Middleware"
+    ],
+    "sensitivity_points": [
+     "Access token expiration TTL and implementation of continuous access evaluation or revocation"
+    ],
+    "tradeoffs": [
+     "Short token lifespans improve revocation speed but increase token refresh load on AD"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Mainframe Anti-Corruption Layer (ACL)",
+     "Integration & Sync Service",
+     "Sync Orchestrator",
+     "Mainframe Adapter"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Batch Rate Limiter",
+     "Batch Orchestration Controller",
+     "Mainframe Batch Poller"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Mainframe Anti-Corruption Layer (ACL)",
+     "Sequential File Parser",
+     "Mainframe Batch Poller"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Document Storage Component",
+     "Document Ingestion Proxy Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer",
+     "Broker",
+     "Web Portal",
+     "Claim Submission Wizard"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjuster",
+     "Adjuster Web Application",
+     "Claims Dashboard Component",
+     "Claim Details Workspace Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Claim Routing Service",
+     "Routing Engine Component",
+     "Feature & Routing Switcher",
+     "Dynamic Routing Rule Synchronizer Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Idempotency & Deduplication Guard Component",
+     "Idempotency & Deduplication Filter",
+     "Idempotency & Checkpoint Manager",
+     "Outbox Transaction Processor",
+     "Audit & History Table Store",
+     "Audit & Reconciliation Ledger"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Client-Side Cache Component",
+     "BFF Response Cache",
+     "Adjuster BFF"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Claim Routing Service",
+     "Feature & Routing Switcher",
+     "Feature Flag & Routing Switcher",
+     "Mainframe Fallback Adapter Component",
+     "Database Migration & Versioning Controller"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Active Directory",
+     "Authentication Module",
+     "Authentication Context / SSO Module",
+     "Token Exchange Middleware",
+     "Authorization & Context Enforcer"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

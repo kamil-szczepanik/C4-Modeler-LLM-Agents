@@ -1,0 +1,354 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively met: Video Consultation Service handles consultations (R-01), Interoperability Adapter dispatches e-prescriptions (R-02), AI Symptom Checker with Triage Inference Engine assesses urgency (R-03), and Consent Management Service manages purpose-specific patient consent (R-04).",
+   "performance_efficiency": "Performance is supported via Triton Inference Server for model execution, BullMQ in Resilience & Queue Manager for asynchronous offloading, Ristretto caching with GCP Pub/Sub invalidation in Consent Management Service, and Adaptive Quality Manager for bandwidth-efficient media routing.",
+   "compatibility": "Interoperability targets are explicitly fulfilled by the Interoperability Adapter, implementing the FHIR Translation Service for US HL7 FHIR integration and the EU E-Prescription Adapter for National E-Prescription Gateways and local pharmacies.",
+   "usability": "Patients and Licensed Clinicians are supported across web/mobile touchpoints via API Gateway, with Adaptive Quality Manager maintaining low-bandwidth video usability. However, client-side frontend containers (web and mobile applications) are omitted from the Level 2 container model.",
+   "reliability": "High availability and resilience are addressed by Istio Service Mesh Circuit Breaker, Resilience & Queue Manager with GCP Pub/Sub for retry offloading, and Adaptive Quality Manager enabling degraded video consultations below 300 kbit/s.",
+   "security": "Robust security mechanisms are provided: regional isolation via Regional GKE Clusters, CMEK encryption, Data Residency Enforcer, PHI Sanitization Middleware, Auth & Consent Enforcement Component, and cryptographic immutability in the Audit & Traceability Ledger Component.",
+   "maintainability": "System decomposition into discrete containers (Consent Management Service, AI Symptom Checker, Interoperability Adapter) provides high cohesion and low coupling. Domain boundaries are clean, leveraging modular internal adapters and declarative GitOps via ArgoCD within Regional GKE Clusters.",
+   "portability": "The design cleanly matches target GCP regions (europe-west3 and us-central1) using Regional GKE Clusters, Cloud SQL, and Cloud Storage, while relying on standard container and Kubernetes abstractions that preserve environmental adaptability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "LiveKit SFU and GKE clusters scale horizontally to distribute media loads. However, lacking explicit autoscaling policies or edge TURN and STUN relays across distributed networks might introduce latency spikes during simultaneous room initialization under peak flu season load.",
+    "elements": [
+     "Video Consultation Service",
+     "SFU Media Router",
+     "Signaling Controller",
+     "Adaptive Quality Manager",
+     "Regional GKE Clusters",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "SFU media routing throughput and bandwidth limits",
+     "Signaling Controller WebSocket connection capacity"
+    ],
+    "tradeoffs": [
+     "Higher server compute and bandwidth costs to maintain low joining latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "50,000 requests per hour equates to approximately 14 requests per second. The Triton Inference Server and FastAPI controllers easily handle this throughput under 3 seconds, supported by Istio circuit breakers and horizontal pod scaling.",
+    "elements": [
+     "AI Symptom Checker",
+     "Symptom API Controller",
+     "Clinical NLP Pipeline",
+     "Triage Inference Engine",
+     "Istio Service Mesh Circuit Breaker"
+    ],
+    "sensitivity_points": [
+     "Model execution latency on Triton Inference Server",
+     "NLP pipeline tokenization and sanitization processing overhead"
+    ],
+    "tradeoffs": [
+     "Inference server resource pre-allocation versus dynamic GPU scaling latency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Adaptive Quality Manager dynamically restricts bitrates and enforces degraded operational modes for connections under 300 kbit/s. Decoupled signaling and transactional persistence ensure consultation state and clinical notes remain intact without call drops.",
+    "elements": [
+     "Video Consultation Service",
+     "Adaptive Quality Manager",
+     "SFU Media Router",
+     "Signaling Controller",
+     "Data Storage"
+    ],
+    "sensitivity_points": [
+     "Adaptive Quality Manager dynamic bandwidth detection threshold",
+     "LiveKit SFU simulcast and audio degradation fallback logic"
+    ],
+    "tradeoffs": [
+     "Sacrificing video resolution and frame rate to preserve uninterrupted audio stream"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Target cloud and architecture define only us-central1 for the US without a secondary US disaster recovery region or cross-region backup. A complete outage of us-central1 prevents restoring US operations within 1 hour while respecting data residency.",
+    "elements": [
+     "Regional GKE Clusters",
+     "Data Storage",
+     "US Telehealth System",
+     "Global Management Plane"
+    ],
+    "sensitivity_points": [
+     "Single-region deployment constraint for US data residency",
+     "Absence of secondary regional cold or warm standby storage"
+    ],
+    "tradeoffs": [
+     "Strict regional residency prevents failover to EU infrastructure during major regional outages"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The architecture isolates EU prescription integration within the dedicated EU E-Prescription Adapter in the Interoperability Adapter container. Adding a new national standard requires modifying only this localized adapter without impacting core consultation or triage services.",
+    "elements": [
+     "Interoperability Adapter",
+     "EU E-Prescription Adapter",
+     "Egress Policy Enforcer",
+     "National E-Prescription Gateways (EU)"
+    ],
+    "sensitivity_points": [
+     "Modularity of the EU E-Prescription Adapter interface",
+     "Egress Policy Enforcer schema validation extensibility"
+    ],
+    "tradeoffs": [
+     "Maintaining custom translation logic per country versus adopting a unified internal standard"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Global Management Plane and Argo Rollouts enable versioned, progressive model deployments with rollback capabilities. Every triage decision is recorded with model version metadata into the tamper-proof Audit and Traceability Ledger component.",
+    "elements": [
+     "AI Symptom Checker",
+     "Triage Inference Engine",
+     "Audit & Traceability Logger",
+     "Audit & Traceability Ledger Component",
+     "Global Management Plane",
+     "Security & Observability Agents"
+    ],
+    "sensitivity_points": [
+     "Model version tagging and artifact metadata consistency across deployment stages",
+     "Audit ledger immutability and cryptographic verification"
+    ],
+    "tradeoffs": [
+     "Synchronous audit record logging overhead versus strict EU MDR regulatory compliance"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Cross-region requests are intercepted by the Auth and Consent Enforcement component and evaluated against the Consent Policy Engine. The Data Residency Enforcer blocks unauthorized cross-border PHI transfers, while all access attempts are logged in verifiable audit ledgers.",
+    "elements": [
+     "API Gateway",
+     "Auth & Consent Enforcement Component",
+     "Consent Management Service",
+     "Consent Policy Engine",
+     "Data Residency Enforcer",
+     "Relational Database Component"
+    ],
+    "sensitivity_points": [
+     "Deterministic payload inspection in Data Residency Enforcer",
+     "Real-time consent rule evaluation latency on cross-border data requests"
+    ],
+    "tradeoffs": [
+     "Added latency on cross-border queries to verify inline consent checks"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Consent withdrawals are processed via the Consent API Handler and propagated across regions via GCP Pub/Sub to invalidate local caches immediately. Cryptographic audit logs verify that data-sharing permissions are revoked within the required 24-hour window.",
+    "elements": [
+     "Consent Management Service",
+     "Consent API Handler",
+     "Consent Policy Engine",
+     "Cache Invalidation Subsystem",
+     "GCP Pub/Sub",
+     "Audit Logger Component"
+    ],
+    "sensitivity_points": [
+     "GCP Pub/Sub cross-region event delivery latency",
+     "Local Ristretto cache invalidation propagation across distributed application instances"
+    ],
+    "tradeoffs": [
+     "Eventual consistency in distributed caches versus synchronous cross-region cache eviction locks"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Regional GKE Clusters",
+     "Consent Policy Engine",
+     "Data Storage",
+     "External Secrets Operator",
+     "Customer-Managed Encryption Keys"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "EU Telehealth System",
+     "US Telehealth System",
+     "Regional GKE Clusters",
+     "Data Storage",
+     "Data Residency Enforcer",
+     "Egress Policy Enforcer"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker",
+     "Audit & Traceability Logger",
+     "Audit & Traceability Ledger Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Adaptive Quality Manager",
+     "Video Consultation Service",
+     "Istio Service Mesh Circuit Breaker",
+     "Resilience & Queue Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Video Consultation Service",
+     "Signaling Controller",
+     "SFU Media Router"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Interoperability Adapter",
+     "EU E-Prescription Adapter",
+     "National E-Prescription Gateways (EU)",
+     "Local EU/US Pharmacies"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker",
+     "Symptom API Controller",
+     "Clinical NLP Pipeline",
+     "Triage Inference Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Consent Management Service",
+     "Consent API Handler",
+     "Consent Policy Engine",
+     "Auth & Consent Enforcement Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Data Residency Enforcer",
+     "Egress Policy Enforcer",
+     "Regional GKE Clusters",
+     "Consent Management Service",
+     "Auth & Consent Enforcement Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Adaptive Quality Manager",
+     "Video Consultation Service",
+     "SFU Media Router"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Audit & Traceability Logger",
+     "Audit & Traceability Ledger Component",
+     "AI Symptom Checker",
+     "Relational Database Component"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Interoperability Adapter",
+     "FHIR Translation Service",
+     "EU E-Prescription Adapter",
+     "HL7/FHIR Mapping Schema layer",
+     "National E-Prescription Gateways (EU)",
+     "HL7 FHIR Interoperability Services (US)"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

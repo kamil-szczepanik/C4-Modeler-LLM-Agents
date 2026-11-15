@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container_Boundary(recommendation_service, "Recommendation Service") {
+    Component(RecommendationAPIController, "Recommendation API Controller", "Python / FastAPI", "Handles asynchronous API routing, schema validation, and real-time personalized suggestion requests.")
+    Component(ModelInferenceEngine, "Model Inference Engine", "Python / PyTorch", "Executes lightweight collaborative filtering and machine learning model inference.")
+    Component(RecommendationCacheManager, "Recommendation Cache Manager", "Python / redis-py", "Manages caching operations using a cache-aside pattern for sub-50ms responses.")
+    Component(FeatureStoreClient, "Feature Store Client", "Python / boto3", "Fetches user purchase history and book metadata from DynamoDB.")
+    Component(CacheWarmupWorker, "Cache Warm-up Worker", "Python / Asyncio / Celery", "Precomputes and warms up recommendation caches asynchronously.")
+    ComponentDb(AmazonElastiCacheRedis, "Amazon ElastiCache (Redis)", "Amazon ElastiCache (Redis)", "Provides sub-50ms caching for precomputed recommendations via RESP over TCP.")
+    ComponentDb(AmazonDynamoDB, "Amazon DynamoDB", "Amazon DynamoDB", "Scalable NoSQL storage for user purchase history and book metadata.")
+    Component(AmazonSQSDeadLetterQueues, "Amazon SQS (Dead-Letter Queues)", "Amazon SQS", "Handles message queuing and dead-letter queues for background worker tasks.")
+}
+
+Rel(RecommendationAPIController, RecommendationCacheManager, "In-process call")
+Rel(RecommendationCacheManager, AmazonElastiCacheRedis, "RESP over TCP, Cache-aside pattern")
+Rel(RecommendationAPIController, ModelInferenceEngine, "In-memory function call")
+Rel(ModelInferenceEngine, FeatureStoreClient, "gRPC")
+Rel(FeatureStoreClient, AmazonDynamoDB, "HTTPS/AWS SDK")
+Rel(CacheWarmupWorker, ModelInferenceEngine, "In-memory call")
+Rel(CacheWarmupWorker, AmazonSQSDeadLetterQueues, "AMQP/AWS SDK")
+
+@enduml

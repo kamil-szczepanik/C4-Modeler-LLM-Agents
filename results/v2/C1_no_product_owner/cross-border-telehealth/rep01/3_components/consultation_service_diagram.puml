@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Consultation Service container
+
+Container_Ext(api_gateway, "API Gateway / BFF", "gRPC over TLS", "External entry point for internal routing.")
+System_Ext(clients, "Clients", "WebRTC / DTLS-SRTP", "End users consuming WebRTC media streams.")
+System_Ext(cloud_storage, "Cloud Storage (GCS)", "HTTPS", "Stores session recording chunks.")
+System_Ext(redis, "Google Memorystore (Redis)", "Redis", "Stores real-time peer connection states.")
+System_Ext(audit_service, "Consent & Audit Service", "gRPC", "Receives asynchronous telemetry via region-bound topics.")
+
+Container_Boundary(consultation_service, "Consultation Service") {
+    Component(signaling_manager, "Signaling Manager", "Go, WebSockets", "Handles WebSocket connections and WebRTC signaling exchange.")
+    Component(session_controller, "Session Controller", "Go, JWT", "Manages consultation lifecycle states and cryptographically signed JWT authorization tokens.")
+    Component(media_relay_proxy, "Media Relay Proxy", "Go/C++ binding, SFU, WebRTC", "SFU-based media router featuring a Degraded Mode Fallback Controller for low-bandwidth environments.")
+    Component(audit_logger, "Audit Logger Interceptor & Event Publisher", "Go, gRPC", "Captures sanitized lifecycle events and streams them asynchronously.")
+}
+
+Rel(api_gateway, session_controller, "Internal routing", "gRPC over TLS via Istio mTLS")
+Rel(signaling_manager, redis, "Real-time peer connection states", "TCP")
+Rel(media_relay_proxy, clients, "WebRTC media streams", "DTLS-SRTP over UDP")
+Rel(media_relay_proxy, cloud_storage, "Session recording chunks", "HTTPS")
+Rel(audit_logger, audit_service, "Asynchronous telemetry", "gRPC with region-bound topics")
+
+@enduml

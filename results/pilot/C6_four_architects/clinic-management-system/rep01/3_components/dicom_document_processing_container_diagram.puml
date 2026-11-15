@@ -1,0 +1,34 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container_Ext(Hybrid_VPN_Gateway_Container, "Hybrid VPN Gateway Container", "VPN / Network Gateway", "External system providing imaging streams via TLS-secured TCP/DIMSE.")
+Container_Ext(Apache_Kafka_StatefulSet, "Apache Kafka StatefulSet", "Apache Kafka", "External messaging system for raw imaging events.")
+Container_Ext(MinIO_Object_Storage_Gateway, "MinIO Object Storage Gateway", "MinIO", "External storage system for binary asset persistence.")
+Container_Ext(PostgreSQL_Container_cluster, "PostgreSQL Container cluster", "PostgreSQL", "External relational database for clinical indices.")
+Container_Ext(Elasticsearch_Containers, "Elasticsearch Containers", "Elasticsearch", "External search engine for full-text search.")
+Container_Ext(HL7_FHIR_Adapter_Container, "HL7 FHIR Adapter Container", "HL7 FHIR Adapter", "External adapter container for routing FHIR resources.")
+Container_Ext(RabbitMQ_Container_cluster, "RabbitMQ Container cluster", "RabbitMQ", "External message queuing system for processing backlogs.")
+Container_Ext(Redis_Container_tier, "Redis Container tier", "Redis", "External caching tier for image pyramids.")
+Container_Ext(Audit_Compliance_Sidecar_Container, "Audit & Compliance Sidecar Container", "Sidecar Container", "External container receiving signed event hashes.")
+
+Container_Boundary(DICOM_Document_Processing_Container, "DICOM & Document Processing Container") {
+    Component(DICOM_Ingestion_Engine, "DICOM Ingestion Engine", "Node.js, dcmjs, DICOMweb, WADO-RS, QIDO-RS, DIMSE C-STORE SCP", "Receives imaging streams and handles DICOM ingestion.")
+    Component(Document_Parser_Service, "Document Parser Service", "Node.js, MuPDF, Tesseract.js OCR", "Parses clinical documents and performs OCR text extraction.")
+    Component(Image_Transcoder, "Image Transcoder", "Node.js, dcmtk, C++ bindings, WebP/JPEG 2000 tile pyramids", "Handles ingestion, parsing, transcoding, and indexing of medical imaging.")
+    Component(Metadata_Extractor, "Metadata Extractor", "Node.js, FHIR DiagnosticReport and DocumentReference mapping", "Maps and extracts metadata into FHIR resources.")
+    Component(Job_Orchestrator_Compliance_Audit_Interceptor, "Job Orchestrator & Compliance Audit Interceptor", "BullMQ, Unix domain sockets", "Orchestrates processing jobs and dispatches signed event hashes for compliance.")
+}
+
+Rel(Hybrid_VPN_Gateway_Container, DICOM_Ingestion_Engine, "Receives imaging streams via TLS-secured TCP/DIMSE.", "TLS / TCP")
+Rel(DICOM_Ingestion_Engine, Apache_Kafka_StatefulSet, "Publishes raw imaging events via TCP/Kafka.", "TCP / Kafka")
+Rel(Image_Transcoder, MinIO_Object_Storage_Gateway, "Uses for binary persistence via HTTPS/S3.", "HTTPS / S3")
+Rel(Document_Parser_Service, MinIO_Object_Storage_Gateway, "Uses for binary persistence via HTTPS/S3.", "HTTPS / S3")
+Rel(Metadata_Extractor, PostgreSQL_Container_cluster, "Queries clinical indices via TLS/PostgreSQL wire protocol.", "TLS / PostgreSQL")
+Rel(Document_Parser_Service, Elasticsearch_Containers, "Streams OCR text via HTTPS for full-text search.", "HTTPS")
+Rel(Metadata_Extractor, HL7_FHIR_Adapter_Container, "Routes FHIR resources via internal gRPC.", "gRPC")
+Rel(Job_Orchestrator_Compliance_Audit_Interceptor, RabbitMQ_Container_cluster, "Consumes processing backlogs via AMQPS.", "AMQPS")
+Rel(Image_Transcoder, Redis_Container_tier, "Caches image pyramids via Redis protocol.", "Redis Protocol")
+Rel(Job_Orchestrator_Compliance_Audit_Interceptor, Audit_Compliance_Sidecar_Container, "Dispatches signed event hashes via Unix domain sockets.", "Unix Domain Sockets")
+
+@enduml

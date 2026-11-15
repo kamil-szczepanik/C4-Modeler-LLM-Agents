@@ -1,0 +1,334 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Claim Submission Module serves customers/brokers (R-01), Adjuster Dashboard & Case Workspace serves adjusters (R-02), and Claim Routing Engine in the Migration Router enables claim-type-by-claim-type migration (R-03).",
+   "performance_efficiency": "Azure Cache for Redis, Optimistic UI Manager, and Async Polling / WebSocket Notifier decouple adjuster screens from 5-second mainframe latency to achieve sub-2s loads (R-05). However, explicit throttling mechanisms for the fixed nightly batch window are omitted.",
+   "compatibility": "The Mainframe Integration Adapter (Legacy Protocol Client, IBM MQ) and Translation Service effectively coexist with the legacy COBOL/DB2 system. However, specific architectural elements handling the scheduled batch file window integration remain somewhat generic.",
+   "usability": "Both user personas have tailored interfaces: Claim Submission Module offers wizard-style flows with Offline Draft Storage for external users, while Adjuster Dashboard & Case Workspace provides an optimized operational interface for claims adjusters.",
+   "reliability": "Transactional Outbox Store, Dual-Write & Reconciliation Manager, Dead-Letter Subsystems, and Resiliency & Circuit Breaker Component (Polly) explicitly ensure zero data loss, fault tolerance, and idempotency to satisfy R-04.",
+   "security": "R-07 is fully satisfied via Auth Client (MSAL.js) and Authentication Middleware federating with Active Directory using OIDC/OAuth2. Data integrity and accountability are reinforced through the Audit Log Store and Audit & Reconciliation Logger.",
+   "maintainability": "The Fallback & Feature Flag Manager combined with the Claim Routing Engine provides dynamic toggling to switch claim types back to the mainframe within one day (R-06). Clear separation exists between domain logic and legacy adapters.",
+   "portability": "The architecture addresses the hybrid topology (Azure West Europe and on-premise mainframe) effectively, though heavy reliance on proprietary Azure services (Azure Container Apps, Service Bus, Redis) poses vendor lock-in considerations for a cloud-inexperienced team."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.9375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Redis caching, distributed response caching at the BFF, and asynchronous WebSocket updates enable adjuster screens to render cached data in under 2 seconds while background fetching hydrates mainframe records.",
+    "elements": [
+     "Claims Web Application",
+     "API Gateway / BFF",
+     "Azure Cache for Redis",
+     "Response Caching & Transformation Service",
+     "Async Polling / WebSocket Notifier"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios and TTL configuration in Redis",
+     "WebSocket connection stability for client updates"
+    ],
+    "tradeoffs": [
+     "Caching risks eventual consistency against changing mainframe data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Peak claim submissions are captured asynchronously into Azure Service Bus and transactional outbox stores, rate-limiting downstream message delivery to prevent mainframe overload during the fixed batch window.",
+    "elements": [
+     "API Gateway / BFF",
+     "Azure Service Bus",
+     "Claim Submission Topic",
+     "Outbox Store",
+     "Mainframe Integration Adapter"
+    ],
+    "sensitivity_points": [
+     "Queue depth capacity and rate-limiting throttles on the adapter"
+    ],
+    "tradeoffs": [
+     "Asynchronous message buffering delays final claim confirmation on mainframe"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Submissions persist locally in Azure SQL via the transactional outbox pattern and queue in Service Bus; circuit breakers pause mainframe delivery until the batch window completes without data loss.",
+    "elements": [
+     "Azure Service Bus",
+     "Mainframe Relay Queues",
+     "Database",
+     "Outbox Store",
+     "Resiliency & Circuit Breaker Component"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue storage limits during extended downtime",
+     "Circuit breaker reset threshold configuration"
+    ],
+    "tradeoffs": [
+     "Extended buffering increases latency before mainframe state is updated"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Dual-Write & Reconciliation Manager, Dead-Letter Queues, and the Migration Sync Tracker record transaction states and detect partial sync failures, ensuring safe replay and duplicate prevention.",
+    "elements": [
+     "Dual-Write & Reconciliation Manager",
+     "Migration Sync Tracker",
+     "Dead-Letter Subsystems",
+     "Audit & Reconciliation Logger"
+    ],
+    "sensitivity_points": [
+     "Idempotency key enforcement across legacy integration boundaries",
+     "Reconciliation cadence and automated error detection"
+    ],
+    "tradeoffs": [
+     "Dual-write reconciliation logic adds operational and processing overhead"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Migration Router ACL isolates legacy models using feature flags via Azure App Configuration, allowing per-claim-type dynamic routing and instantaneous switch-back without modifying mainframe programs.",
+    "elements": [
+     "Migration Router / Anti-Corruption Layer",
+     "Claim Routing Engine",
+     "Fallback & Feature Flag Manager",
+     "Translation Service"
+    ],
+    "sensitivity_points": [
+     "Dynamic flag evaluation latency in the routing pipeline",
+     "Accuracy of translation mapping for legacy formats"
+    ],
+    "tradeoffs": [
+     "Maintaining dual routing paths temporarily increases codebase complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The frontend is fully decoupled from the mainframe by the API Gateway and Migration Router; decommissioning the mainframe only requires repointing the routing engine, leaving user interfaces unchanged.",
+    "elements": [
+     "Claims Web Application",
+     "API Gateway / BFF",
+     "Migration Router / Anti-Corruption Layer",
+     "Claim Entity Store"
+    ],
+    "sensitivity_points": [
+     "Strict isolation between UI layer and backend integration protocols"
+    ],
+    "tradeoffs": [
+     "Maintaining abstraction layers incurs persistent architectural complexity"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Authentication middleware and MSAL enforce AD identity, and audit logging captures security activity. However, broker-level tenancy segregation and fine-grained authorization policies are not explicitly detailed in the component model.",
+    "elements": [
+     "Claims Web Application",
+     "Auth Client",
+     "Authentication Middleware",
+     "Audit Log Store"
+    ],
+    "sensitivity_points": [
+     "Token claim validation logic for broker-customer ownership rules"
+    ],
+    "tradeoffs": [
+     "Centralized authorization checks at BFF increase processing per request"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "SSO via Active Directory using OIDC/OAuth2 cuts off adjuster access to the modernization platform immediately upon account deactivation; however, automated revocation propagation to legacy mainframe credentials lacks explicit architectural definition.",
+    "elements": [
+     "Active Directory",
+     "Auth Client",
+     "Authentication Middleware",
+     "Legacy Mainframe (COBOL/DB2)"
+    ],
+    "sensitivity_points": [
+     "Token lifespan and revocation check intervals across session boundaries"
+    ],
+    "tradeoffs": [
+     "Short-lived access tokens require frequent token refreshes"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe (COBOL/DB2)",
+     "Migration Router / Anti-Corruption Layer",
+     "Dual-Write & Reconciliation Manager",
+     "Migration Sync Tracker",
+     "Mainframe Integration Adapter"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Azure Service Bus",
+     "Mainframe Relay Queues",
+     "Mainframe Integration Adapter"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Migration Router / Anti-Corruption Layer",
+     "Translation Service",
+     "Mainframe Integration Adapter",
+     "Translation & Mapping Engine"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Claims Web Application",
+     "API Gateway / BFF",
+     "Database"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers & Brokers",
+     "Claims Web Application",
+     "Claim Submission Module",
+     "API Gateway / BFF"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Claims Web Application",
+     "Adjuster Dashboard & Case Workspace",
+     "API Gateway / BFF"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Migration Router / Anti-Corruption Layer",
+     "Claim Routing Engine",
+     "Fallback & Feature Flag Manager",
+     "Routing Filter Rules"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Dual-Write & Reconciliation Manager",
+     "Azure Service Bus",
+     "Dead-Letter Subsystems",
+     "Outbox Store",
+     "Outbox Publisher",
+     "Audit Log Store",
+     "Database"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Azure Cache for Redis",
+     "Redis Cache Engine",
+     "Claim State Cache Manager",
+     "Distributed Output Cache Provider",
+     "Response Caching & Transformation Service",
+     "Optimistic UI / Cache State Manager",
+     "Async Polling / WebSocket Notifier"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Fallback & Feature Flag Manager",
+     "Migration Router / Anti-Corruption Layer",
+     "Claim Routing Engine"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Active Directory",
+     "Auth Client",
+     "Authentication Middleware",
+     "Claims Web Application",
+     "API Gateway / BFF"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

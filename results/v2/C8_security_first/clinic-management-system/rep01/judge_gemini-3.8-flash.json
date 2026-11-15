@@ -1,0 +1,333 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: 'Patient Intake Container' manages registration (R-01), 'Scheduling Engine Container' enforces clash checks via 'Resource Allocation Coordinator' (R-02), 'EMR Workspace Container' captures records with 'Audit & Event Emitter' (R-03), and 'Billing & Claims Container' handles invoicing and claims (R-04).",
+   "performance_efficiency": "The sub-second P95 target is met using Go/gRPC in 'EMR Workspace Container' backed by 'Distributed L2 Cache' (Redis Enterprise). Citus sharding with 'PgBouncer' in 'Primary Database' and high-throughput streaming in 'Event Broker' (Redpanda) effectively minimize data access latency.",
+   "compatibility": "Requirement R-08 is directly addressed by 'Integration & FHIR Mediator', which utilizes 'Transformation Engine Component' with HAPI FHIR to mediate exchanges with 'External Lab & Imaging Systems'. Financial protocols are handled via 'Payment & Clearinghouse Adapter' for insurance claim systems.",
+   "usability": "All user personas (Clinician, Receptionist, Patient, Billing Specialist) connect via 'Envoy / NGINX API Gateway'. However, the model lacks dedicated frontend presentation layers or user interface containers (such as web or mobile applications), leaving user interaction mechanisms largely implicit.",
+   "reliability": "High availability (99.99%) is supported by 'Distributed L2 Cache' active-active replication, Raft consensus in 'Event Broker', and synchronous shard replication in 'Primary Database'. However, cross-region active-active traffic steering and failover coordination between on-prem-k8s and eu-central-1 lack detailed mechanisms.",
+   "security": "Satisfies R-05, HIPAA, and GDPR. Implements MFA via 'Identity Provider', mTLS through 'Envoy / NGINX API Gateway', and AES-256 rest encryption using 'PHI Crypto Middleware' and 'Tiered Storage Encryption Interceptor'. Audit tracking and 'GDPR Purge & Tombstone Controller' ensure accountability.",
+   "maintainability": "The architecture is cleanly modularized into domain-aligned microservices with distinct boundaries. Loose coupling is achieved through 'Event Broker' with transactional guarantees from 'Outbox Processor'. Container components exhibit clear separation of concerns across API routing, business logic, and data access.",
+   "portability": "Deployments across 'on-prem-k8s' and 'eu-central-1' are well-supported through containerized polyglot services and infrastructure-agnostic tools like Redpanda, Camel K, and PostgreSQL. Only minor cloud dependencies exist, such as binding 'PHI Crypto Middleware' to both Cloud KMS and on-prem HSM."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.90625,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.0,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The Go/gRPC EMR Workspace with an active-active Redis Enterprise L2 cache and Citus distributed database behind PgBouncer is specifically designed for sub-second P95 screen loads under concurrent clinician access.",
+    "elements": [
+     "Envoy / NGINX API Gateway",
+     "EMR Workspace Container",
+     "gRPC API Handler",
+     "EMR Business Logic Engine",
+     "Distributed L2 Cache",
+     "Primary Database"
+    ],
+    "sensitivity_points": [
+     "Redis L2 cache hit ratio directly dictates P95 EMR retrieval latency"
+    ],
+    "tradeoffs": [
+     "Active-active cache replication adds memory cost to ensure low-latency reads"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Apache Camel K FHIR mediator parses incoming HL7 payloads and offloads them asynchronously to the Redpanda event broker, preventing database contention and isolating the synchronous EMR read path.",
+    "elements": [
+     "Integration & FHIR Mediator",
+     "Inbound Gateway Component",
+     "Transformation Engine Component",
+     "Outbound Dispatcher Component",
+     "Event Broker",
+     "EMR Workspace Container"
+    ],
+    "sensitivity_points": [
+     "Redpanda broker ingestion throughput and partition sizing during burst traffic"
+    ],
+    "tradeoffs": [
+     "Asynchronous event processing yields eventual consistency for lab results in EMR"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "While Citus shard replication and Raft consensus are present, cross-region active-active hybrid routing lacks a global server load balancer or automated DNS failover mechanism between on-premise and eu-central-1.",
+    "elements": [
+     "Envoy / NGINX API Gateway",
+     "Primary Database",
+     "Storage & Raft Consensus Engine",
+     "Distributed L2 Cache"
+    ],
+    "sensitivity_points": [
+     "Hybrid WAN latency impacting synchronous cross-site database shard replication"
+    ],
+    "tradeoffs": [
+     "Synchronous replication achieves zero data loss at the cost of write performance"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Billing resiliency is guaranteed by the Transactional Outbox Processor in the Billing container alongside Citus synchronous shard replicas and PgBouncer pooling, preventing duplicate or lost claim submissions upon node failure.",
+    "elements": [
+     "Billing & Claims Container",
+     "Outbox Processor",
+     "Payment & Clearinghouse Adapter",
+     "Primary Database",
+     "Connection Pooling Proxy (PgBouncer)",
+     "Worker Nodes (Shard Replicas)"
+    ],
+    "sensitivity_points": [
+     "Fast shard failover detection and outbox idempotency verification on retry"
+    ],
+    "tradeoffs": [
+     "Outbox table polling incurs minor database overhead to ensure exactly-once semantics"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Payment & Clearinghouse Adapter cleanly encapsulates external insurance gateway interactions inside the Billing & Claims Container, leaving the EMR Workspace and other upstream services entirely unaffected.",
+    "elements": [
+     "Billing & Claims Container",
+     "Payment & Clearinghouse Adapter",
+     "Claims & Invoicing Engine"
+    ],
+    "sensitivity_points": [
+     "Clean adapter interfaces isolating third-party clearinghouse API contract shifts"
+    ],
+    "tradeoffs": [
+     "Adapter translation layer slightly increases maintenance overhead for internal DTO mappings"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Adding an audited demographic field is isolated to three components in the Patient Intake Container (Intake API Router Pydantic schema, Patient Intake Service, and Data Access Repository) plus database schema evolution.",
+    "elements": [
+     "Patient Intake Container",
+     "Intake API Router",
+     "Patient Intake Service",
+     "Data Access Repository",
+     "Primary Database"
+    ],
+    "sensitivity_points": [
+     "Pydantic and Citus schema migration tooling without service downtime"
+    ],
+    "tradeoffs": [
+     "Rigid DTO validation requires schema updates across multiple internal component layers"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The API Gateway enforces TLS 1.3, multi-factor authentication, and OAuth 2.0/OIDC token validation with the Identity Provider; Falco and Observability Stack flag and alert unauthorized login attempts in real time.",
+    "elements": [
+     "Envoy / NGINX API Gateway",
+     "Listener & TLS Termination Component",
+     "Authentication Filter Component",
+     "Identity Provider (IdP) with local on-premise cache proxy",
+     "Observability Stack",
+     "Falco"
+    ],
+    "sensitivity_points": [
+     "Strict MFA validation enforcement prior to upstream routing by Envoy"
+    ],
+    "tradeoffs": [
+     "MFA challenge and token inspection introduce marginal roundtrip authentication latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "EMR read operations emit immutable audit records via the Audit & Event Emitter to Redpanda with S3-tiered storage and AES-256 encryption for 10-year retention, though dynamic relationship-based access control policies are implicit.",
+    "elements": [
+     "EMR Workspace Container",
+     "EMR Business Logic Engine",
+     "Audit & Event Emitter",
+     "Event Broker",
+     "Storage & Raft Consensus Engine",
+     "Tiered Storage Encryption Interceptor"
+    ],
+    "sensitivity_points": [
+     "Comprehensive capture of read events within the EMR business logic pipeline"
+    ],
+    "tradeoffs": [
+     "Auditing 100% of read accesses produces substantial log volume requiring tiered storage"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "PHI Crypto Middleware",
+     "Audit & Compliance Logger Component",
+     "GDPR Purge & Tombstone Controller",
+     "External Auditors / Compliance Officers",
+     "Observability Stack",
+     "Rate Limiting & WAF Filter Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Distributed L2 Cache",
+     "Storage & Raft Consensus Engine",
+     "Primary Database",
+     "Worker Nodes (Shard Replicas)"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Storage & Raft Consensus Engine",
+     "Tiered Storage Encryption Interceptor",
+     "GDPR Purge & Tombstone Controller"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Intake Container",
+     "Intake API Router",
+     "Patient Intake Service",
+     "Data Access Repository"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Engine Container",
+     "Booking API Controller",
+     "Conflict Resolution Service",
+     "Calendar & Slot Manager",
+     "Resource Allocation Coordinator"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Workspace Container",
+     "EMR Business Logic Engine",
+     "Audit & Event Emitter",
+     "Event Broker"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Container",
+     "Claims & Invoicing Engine",
+     "Payment & Clearinghouse Adapter",
+     "Insurance Claim Processors / Payment Gateways"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP) with local on-premise cache proxy",
+     "Authentication Filter Component",
+     "PHI Crypto Middleware",
+     "Tiered Storage Encryption Interceptor"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Distributed L2 Cache",
+     "Storage & Raft Consensus Engine",
+     "Worker Nodes (Shard Replicas)"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "EMR Workspace Container",
+     "gRPC API Handler",
+     "Distributed L2 Cache",
+     "EMR Business Logic Engine"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration & FHIR Mediator",
+     "Inbound Gateway Component",
+     "Transformation Engine Component",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

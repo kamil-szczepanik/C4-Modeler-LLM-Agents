@@ -1,0 +1,343 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 3,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 2,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "Requirements R-01 through R-04 are addressed by Patient Admission Service, Scheduling Service, EMR Service, and Billing Service. However, resource clash check logic is not explicitly modeled within Scheduling Service or its components.",
+   "performance_efficiency": "While Read Replica Cluster offloads queries and gRPC is used internally, EMR Service lacks dedicated query caching or edge caching mechanisms required to reliably satisfy the < 1 s P95 latency target across hybrid cloud environments.",
+   "compatibility": "Integration Engine provides dedicated HL7 FHIR Adapter with mTLS for External Lab & Imaging Systems (R-08) and EDI Clearinghouse Adapter for the Insurance Clearinghouse, perfectly aligning with required standards.",
+   "usability": "Every user persona in the brief is accommodated through dedicated front-ends: Patient Portal UI for patients, and Internal Staff Application modules (Admission & Reception, EMR Clinical Workspace, Billing & Claims, Compliance Dashboard) for staff.",
+   "reliability": "Requirement R-06 demands active-active 99.99% availability, but Data Store is explicitly documented as having a 'multi-region active-passive setup' and Primary Relational Database uses active-passive replication to Read Replica Cluster, directly contradicting the brief.",
+   "security": "R-05, HIPAA, and GDPR are thoroughly addressed with Staff Auth & Session Manager enforcing MFA, API Gateway performing token validation and mTLS, AES-256 across Data Store, and 10-year immutable Audit & Archive Object Store.",
+   "maintainability": "Microservices (EMR Service, Billing Service, Patient Admission Service) exhibit high cohesion and loose coupling through API Gateway, message brokers (Message Routing Engine), and modular Level 3 component design.",
+   "portability": "Containerized components (Kong/Envoy, Go, Spring Boot) are portable across Kubernetes and AWS, but the architecture omits deployment topology and synchronization mechanisms between on-prem-k8s and eu-central-1."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.0,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The architecture separates EMR services and provides read replicas to handle concurrent read queries. However, there is no explicit caching layer in the EMR service to buffer peak concurrent reads.",
+    "elements": [
+     "Internal Staff Application",
+     "EMR Clinical Workspace Module",
+     "API Gateway",
+     "EMR Service",
+     "EMR Data Access Layer",
+     "Read Replica Cluster"
+    ],
+    "sensitivity_points": [
+     "Read replica replication lag under heavy concurrent clinical read load",
+     "Connection pooling limits between EMR Data Access Layer and PostgreSQL"
+    ],
+    "tradeoffs": [
+     "Direct database reads guarantee fresh clinical charts at the cost of database load"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "The Integration Engine utilizes an asynchronous Message Routing Engine (RabbitMQ / NATS) to absorb burst ingest. Read replicas insulate EMR query performance from primary database ingestion writes.",
+    "elements": [
+     "Integration Engine",
+     "HL7 FHIR Adapter",
+     "Message Routing Engine",
+     "EMR Service",
+     "Primary Relational Database",
+     "Read Replica Cluster"
+    ],
+    "sensitivity_points": [
+     "Message queue ingestion throughput and consumer concurrency",
+     "Primary database write saturation impacting read replica replication stream"
+    ],
+    "tradeoffs": [
+     "Asynchronous message ingestion protects EMR responsiveness but introduces slight visibility lag"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The brief specifies active-active hybrid operation, but the Data Store uses an active-passive setup across on-prem and cloud. Achieving sub-minute failover with zero data loss over WAN active-passive PostgreSQL is contradictory and unproven.",
+    "elements": [
+     "Data Store",
+     "Primary Relational Database",
+     "Read Replica Cluster",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Replication latency across hybrid cloud and on-prem network links",
+     "Automated failover orchestration time and split-brain resolution"
+    ],
+    "tradeoffs": [
+     "Active-passive hybrid replication avoids write conflict resolution but risks RPO and RTO"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Billing Service uses Spring Batch and Spring Integration with an internal message broker, supporting idempotent job restartability and message retries. The primary database failover can satisfy the 30-second target.",
+    "elements": [
+     "Billing Service",
+     "Claims Processing Component",
+     "Clearinghouse Adapter Component",
+     "Data Store",
+     "Primary Relational Database"
+    ],
+    "sensitivity_points": [
+     "Idempotency token enforcement across clearinghouse submissions",
+     "Database connection retry timeout settings in Spring Data source"
+    ],
+    "tradeoffs": [
+     "Strict transactional boundary checks ensure zero duplicate claims but increase submission latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Integration Engine isolates clearinghouse communication using the EDI Clearinghouse Adapter, and Billing Service uses Clearinghouse Adapter Component. EMR Service is completely decoupled through domain microservices.",
+    "elements": [
+     "Billing Service",
+     "Clearinghouse Adapter Component",
+     "Integration Engine",
+     "EDI Clearinghouse Adapter",
+     "Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Clearinghouse adapter interface stability against format changes"
+    ],
+    "tradeoffs": [
+     "Decoupling clearinghouses via integration adapters adds operational hops for claim delivery"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Changes are confined to exactly three components: Admission & Reception Module (UI), Demographic Validator & Deduplication Module (validation), and Data Access Repository (persistence schema).",
+    "elements": [
+     "Admission & Reception Module",
+     "Demographic Validator & Deduplication Module",
+     "Data Access Repository",
+     "Primary Relational Database"
+    ],
+    "sensitivity_points": [
+     "Coupling between demographic validation logic and database persistence schemas"
+    ],
+    "tradeoffs": [
+     "Component modularity accelerates feature delivery but requires coordinated contract updates"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "MFA is strictly enforced via the External IdP and validated by the API Gateway Authentication Filter. However, a specific real-time security alerting pipeline or SIEM component is not modeled.",
+    "elements": [
+     "External Identity Provider (IdP)",
+     "Staff Auth & Session Manager",
+     "API Gateway",
+     "Authentication & Authorization Filter"
+    ],
+    "sensitivity_points": [
+     "External Identity Provider MFA policy enforcement and webhook delivery latency"
+    ],
+    "tradeoffs": [
+     "Delegating MFA to an external IdP simplifies identity security but limits custom alerting control"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "The API Gateway supports RBAC/ABAC and the Data Store includes a 10-year WORM store. However, the EMR Service lacks an explicit read-audit capture mechanism to reliably record every chart access before rendering.",
+    "elements": [
+     "API Gateway",
+     "Authentication & Authorization Filter",
+     "EMR Service",
+     "Audit & Archive Object Store",
+     "Primary Relational Database"
+    ],
+    "sensitivity_points": [
+     "Audit trail capture overhead on every read request",
+     "Synchronization reliability between relational transactions and immutable WORM object storage"
+    ],
+    "tradeoffs": [
+     "Auditing 100% of read accesses ensures compliance but impacts EMR sub-second response times"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Compliance & Audit Dashboard",
+     "Compliance/Security Officers",
+     "Audit & Archive Object Store",
+     "Staff Auth & Session Manager"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Data Store",
+     "Primary Relational Database",
+     "Read Replica Cluster"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Data Store",
+     "Audit & Archive Object Store"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Admission Service",
+     "Admission API Controller",
+     "Admission Workflow Engine",
+     "Demographic Validator & Deduplication Module",
+     "Data Access Repository",
+     "Admission & Reception Module"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Scheduling Service",
+     "Scheduling Controller",
+     "Appointment Workflow Manager",
+     "Scheduling Repository",
+     "Appointment Scheduler UI"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "EMR API Controller",
+     "Clinical Workflow Manager",
+     "EMR Data Access Layer",
+     "EMR Clinical Workspace Module",
+     "Audit & Archive Object Store",
+     "Compliance & Audit Dashboard"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service",
+     "Invoice Management Component",
+     "Claims Processing Component",
+     "Payment Reconciliation Component",
+     "Clearinghouse Adapter Component",
+     "Patient Billing Portal Component",
+     "Billing & Claims Module",
+     "Integration Engine",
+     "EDI Clearinghouse Adapter"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "External Identity Provider (IdP)",
+     "Staff Auth & Session Manager",
+     "Portal Authentication Client",
+     "Authentication & Authorization Filter",
+     "Data Store",
+     "Primary Relational Database"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Data Store",
+     "Primary Relational Database",
+     "Read Replica Cluster"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "EMR Clinical Workspace Module",
+     "EMR Service",
+     "Clinical Workflow Manager",
+     "Read Replica Cluster"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "HL7 FHIR Adapter",
+     "Integration Engine",
+     "Message Routing Engine",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

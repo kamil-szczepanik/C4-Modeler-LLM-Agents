@@ -1,0 +1,37 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening
+
+Person(Fraud_Analysts, "Fraud Analysts", "Internal personnel reviewing flagged transactions via case management.")
+
+System_Ext(Payment_Gateway___Acquirer, "Payment Gateway / Acquirer", "External source sending card-not-present payment authorization requests.")
+System_Ext(Identity_Provider__IdP_, "Identity Provider (IdP)", "External OIDC service handling SSO and MFA for analysts.")
+System_Ext(Audit_Sink, "Audit Sink", "Write-only destination for tamper-evident audit logs.")
+System_Ext(Secrets_Manager, "Secrets Manager", "AWS Secrets Manager storing database credentials and encryption keys.")
+
+System_Boundary(Real_Time_Payment_Fraud_Screening_System, "Real-Time Payment Fraud Screening System") {
+    Container(AWS_ALB__Ingress___API_Gateway_, "AWS ALB (Ingress / API Gateway)", "AWS Application Load Balancer", "Routes inbound traffic and terminates TLS/mTLS.")
+    Container(Fraud_Scoring_Engine, "Fraud Scoring Engine", "Go container on Amazon ECS on EC2", "Screens card-not-present payment authorizations for fraud under tight latency constraints.")
+    Container(Case_Management_API, "Case Management API", "Node.js/TypeScript container on Amazon ECS on EC2", "Manages analyst review cases and user workflows.")
+    ContainerDb(Redis_Feature_Store, "Redis Feature Store", "Amazon ElastiCache Multi-AZ Redis", "Low-latency feature store and rule caching with automatic failover.")
+    ContainerDb(Transactional___Audit_Data_Store, "Transactional & Audit Data Store", "Amazon RDS PostgreSQL", "Stores transactional cases and append-only audit logs with IAM auth.")
+    Container(Asynchronous_Messaging, "Asynchronous Messaging", "Amazon SQS", "Buffers and distributes audit events asynchronously.")
+}
+
+Rel(Payment_Gateway___Acquirer, AWS_ALB__Ingress___API_Gateway_, "Sends payment authorization requests", "gRPC over mTLS")
+Rel(Fraud_Analysts, AWS_ALB__Ingress___API_Gateway_, "Accesses case management workflows", "HTTPS / OAuth 2.0 / OIDC")
+Rel(AWS_ALB__Ingress___API_Gateway_, Fraud_Scoring_Engine, "Forwards screening requests", "gRPC over mTLS")
+Rel(AWS_ALB__Ingress___API_Gateway_, Case_Management_API, "Forwards case management requests", "HTTPS")
+Rel(Fraud_Scoring_Engine, Redis_Feature_Store, "Reads/writes features and rules", "Redis Protocol")
+Rel(Fraud_Scoring_Engine, Transactional___Audit_Data_Store, "Reads/writes transactional data", "PostgreSQL Wire Protocol with IAM")
+Rel(Fraud_Scoring_Engine, Asynchronous_Messaging, "Publishes audit events", "SQS API")
+Rel(Case_Management_API, Redis_Feature_Store, "Reads/writes cache and state data", "Redis Protocol")
+Rel(Case_Management_API, Transactional___Audit_Data_Store, "Reads/writes case storage and audit logs", "PostgreSQL Wire Protocol with IAM")
+Rel(Case_Management_API, Asynchronous_Messaging, "Publishes audit events", "SQS API")
+Rel(Fraud_Scoring_Engine, Secrets_Manager, "Retrieves runtime secrets and certificates", "AWS SDK / Secrets Manager API")
+Rel(Case_Management_API, Secrets_Manager, "Retrieves database credentials and keys", "AWS SDK / Secrets Manager API")
+Rel(Asynchronous_Messaging, Audit_Sink, "Streams tamper-evident audit logs", "HTTPS / AWS API")
+Rel(Case_Management_API, Identity_Provider__IdP_, "Authenticates analyst sessions", "OAuth 2.0 / OIDC")
+@enduml

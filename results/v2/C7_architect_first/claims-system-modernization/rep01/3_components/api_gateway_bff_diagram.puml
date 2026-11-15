@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the API Gateway / BFF container
+
+Person(ClaimsWebApp, "Claims Web Application", "External client application")
+System_Ext(ClaimsProcessingService, "Claims Processing Service", "Backend service for processing claims")
+System_Ext(IntegrationACL, "Integration & Anti-Corruption Layer", "Layer for integrating with legacy systems")
+System_Ext(ConfigStore, "Configuration & Feature Store", "Stores dynamic feature flags and configurations")
+
+Container_Boundary(ApiGatewayBff, "API Gateway / BFF") {
+    Component(RoutingProxyComponent, "Routing & Proxy Component", "YARP (Yet Another Reverse Proxy)", "Handles high-performance routing, load balancing, and canary rollouts for phased claim migrations.")
+    Component(AuthMiddleware, "Authentication & Authorization Middleware", ".NET Core Middleware", "Secures incoming traffic, manages authentication, and processes OIDC/JWT tokens.")
+    Component(FeatureRoutingComponent, "Feature Routing & Orchestration Component", ".NET Core with Local Fallback Cache", "Orchestrates phased claim migrations using dynamic feature flags and local fallback caching for business continuity.")
+    Component(ContextPropagationMiddleware, "Context Propagation Middleware", ".NET Core Middleware", "Injects and propagates OpenTelemetry trace contexts and metadata headers across hybrid cloud boundaries.")
+    Component(RateLimitingComponent, "Rate Limiting & Resilience Component", "Polly", "Provides rate limiting, resilience, and fault tolerance for outgoing calls.")
+}
+
+Rel(ClaimsWebApp, RoutingProxyComponent, "HTTPS / JSON (OIDC/JWT)")
+Rel(RoutingProxyComponent, AuthMiddleware, "Validates requests")
+Rel(AuthMiddleware, FeatureRoutingComponent, "Forwards authenticated requests")
+Rel(FeatureRoutingComponent, ContextPropagationMiddleware, "Enriches request with trace contexts")
+Rel(ContextPropagationMiddleware, RateLimitingComponent, "Applies resilience and limits")
+Rel(RateLimitingComponent, ClaimsProcessingService, "gRPC (mTLS, TLS 1.3)", "with OpenTelemetry trace contexts and metadata headers")
+Rel(RateLimitingComponent, IntegrationACL, "gRPC (mTLS, TLS 1.3)", "with OpenTelemetry trace contexts and metadata headers")
+Rel(FeatureRoutingComponent, ConfigStore, "HTTPS / gRPC", "with local fallback cache")
+
+@enduml

@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Component(api_gateway, "API Gateway", "API Gateway", "Routes API traffic to the core services container.")
+Component_Ext(external_idp, "External IdP", "Identity Provider", "Provides cached public keys for local JWT validation.")
+Component_Ext(search_container, "Search Container", "Search Service", "Indexes and searches catalog data.")
+Component_Ext(message_broker, "Message Broker", "Message Broker", "Receives published signed audit and domain events.")
+Component_Ext(payment_gateway, "Payment Gateway", "Payment Service", "Processes financial transactions.")
+Component_Ext(notification_service, "Notification Service", "Notification Service", "Dispatches alerts.")
+
+System_Boundary(core_services_container, "Core Services Container") {
+    Component(security_rbac_module, "Security & RBAC Module", "Spring Security", "Handles local JWT validation and least-privilege checks.")
+    Component(catalog_circulation_module, "Catalog & Circulation Module", "Spring Data JPA / HikariCP", "Manages items, loans, and HikariCP connection pools.")
+    Component(audit_event_dispatcher, "Audit & Event Dispatcher", "Spring Events / Kafka Client", "Emits signed audit and domain events.")
+    Component(database, "Database", "PostgreSQL", "Stores transactional data with column-level PII encryption.")
+}
+
+Rel(api_gateway, security_rbac_module, "Routes API traffic", "gRPC/REST over mTLS")
+Rel(security_rbac_module, external_idp, "Fetches cached public keys for local JWT validation", "HTTPS")
+Rel(catalog_circulation_module, database, "Executes transactional reads/writes", "JDBC over mTLS with sslmode=verify-full")
+Rel(catalog_circulation_module, search_container, "Queries catalog index", "mTLS")
+Rel(audit_event_dispatcher, message_broker, "Publishes signed audit and domain events", "TCP/mTLS")
+Rel(security_rbac_module, payment_gateway, "Processes financial transactions", "HTTPS/REST with certificate pinning")
+Rel(audit_event_dispatcher, notification_service, "Dispatches alerts", "HTTPS/SMTP")
+
+@enduml

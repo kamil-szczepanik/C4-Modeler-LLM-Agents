@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway routing client requests")
+System_Ext(messaging_bus, "Messaging Bus", "External messaging infrastructure for asynchronous events")
+
+Container_Boundary(order_checkout_service, "Order & Checkout Service") {
+    Component(checkout_controller, "Checkout Controller", "REST/GraphQL via mTLS", "Exposes REST/GraphQL endpoints via mTLS.")
+    Component(order_management_manager, "Order Management Manager", "Java (Spring Boot)", "Handles domain logic, state transitions, and cart mapping.")
+    Component(payment_client, "Payment Client", "Resilience4j", "Integrates with external payment gateways using Resilience4j circuit breakers.")
+    Component(shipping_client, "Shipping Client", "Resilience4j", "Integrates with external shipping gateways using Resilience4j circuit breakers.")
+    Component(order_repository, "Order Repository", "Spring Data JPA", "Manages data persistence via Spring Data JPA.")
+    Component(domain_event_mapper, "Domain Event Mapper", "Java", "Transforms JPA entities into versioned event schemas.")
+    Component(event_publisher, "Event Publisher", "AWS SDK", "Publishes messages to the Messaging Bus.")
+    Component(amazon_aurora_postgresql, "Amazon Aurora (PostgreSQL)", "PostgreSQL with Outbox Pattern", "Stores transactional order data using Outbox Pattern tables.")
+    Component(amazon_ecs_fargate, "Amazon ECS (Fargate)", "Amazon ECS", "Hosts the containerized microservice.")
+}
+
+Rel(api_gateway, checkout_controller, "Routes secure client requests", "REST/GraphQL via mTLS over HTTPS")
+Rel(checkout_controller, order_management_manager, "Delegates requests", "In-process")
+Rel(order_management_manager, payment_client, "Executes payment processing", "REST/JSON over HTTPS")
+Rel(order_management_manager, shipping_client, "Integrates for order fulfillment", "REST/SOAP over HTTPS")
+Rel(order_management_manager, order_repository, "Persists and retrieves data", "Spring Data JPA")
+Rel(order_repository, amazon_aurora_postgresql, "Persists transactional data", "Dedicated database driver with AWS KMS encryption")
+Rel(order_management_manager, domain_event_mapper, "Generates domain events", "In-process")
+Rel(domain_event_mapper, event_publisher, "Passes mapped events", "In-process")
+Rel(event_publisher, messaging_bus, "Publishes asynchronous order events", "SQS/SNS protocols")
+
+@enduml

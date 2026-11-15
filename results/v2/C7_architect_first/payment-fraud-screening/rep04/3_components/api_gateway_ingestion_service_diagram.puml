@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the API Gateway / Ingestion Service container
+
+Container_Boundary("api_gateway_ingestion_service", "API Gateway / Ingestion Service") {
+    Component(HTTP_Ingestion_Handler, "HTTP Ingestion Handler", "Go (net/http)", "Securely ingests, validates, and routes real-time payment authorization requests while enforcing strict security controls, latency SLAs, and PCI-DSS compliance.")
+    Component(Rate_Limiter___Circuit_Breaker, "Rate Limiter & Circuit Breaker", "Custom middleware", "Protects the service and downstream dependencies by enforcing rate limits and providing fault-tolerant merchant availability.")
+    Component(gRPC_Client, "gRPC Client", "Go (grpc-go)", "Forwards sanitized authorization requests to the Fraud Scoring Engine.")
+    Component(Audit_Dispatcher, "Audit Dispatcher", "Asynchronous worker pool", "Asynchronously writes tamper-evident decision inputs and metadata to the Audit & Event Store.")
+    Component(FluentBit_log_redaction_sidecar, "FluentBit log redaction sidecar", "FluentBit sidecar", "Performs log redaction to ensure sensitive data is not exposed.")
+}
+
+System_Ext(Fraud_Scoring_Engine, "Fraud Scoring Engine", "External Fraud Scoring Engine")
+System_Ext(Audit___Event_Store, "Audit & Event Store", "External Audit & Event Store")
+
+Rel(HTTP_Ingestion_Handler, Rate_Limiter___Circuit_Breaker, "Passes incoming HTTP requests for traffic management and resilience", "")
+Rel(HTTP_Ingestion_Handler, gRPC_Client, "Invokes to forward sanitized requests", "")
+Rel(HTTP_Ingestion_Handler, Audit_Dispatcher, "Triggers asynchronous audit logging", "")
+Rel(gRPC_Client, Fraud_Scoring_Engine, "Sends gRPC requests over HTTP/2 with mTLS via AWS VPC security groups", "gRPC / HTTP/2")
+Rel(Audit_Dispatcher, Audit___Event_Store, "Asynchronously writes via HTTPS / AWS SDK with HMAC-SHA256", "HTTPS / AWS SDK")
+
+@enduml

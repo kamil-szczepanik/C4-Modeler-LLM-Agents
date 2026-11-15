@@ -1,0 +1,39 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalyst, "Fraud Analyst", "Internal user who manages cases and reviews suspicious transactions.")
+Person(RiskOfficer, "Risk Officer", "Internal user who oversees risk management rules and policies.")
+Person(FraudOperationsManager, "Fraud Operations Manager", "Internal user who monitors fraud operations metrics and team workflows.")
+
+System_Ext(PaymentGateway, "Payment Gateway", "Upstream external system that submits payment authorization requests.")
+System_Ext(IdentityProviderIdP, "Identity Provider (IdP)", "External authentication provider for user authentication and authorization.")
+System_Ext(SIEMComplianceArchive, "SIEM / Compliance Archive", "External storage sink for compliance and audit logs.")
+
+System_Boundary(FraudSystem, "Real-Time Payment Fraud Screening System") {
+    Container(APIGatewayEnvoy, "API Gateway (Envoy)", "Envoy", "Routes incoming requests and terminates mTLS from the Payment Gateway.")
+    Container(RealTimeScoringEngine, "Real-Time Scoring Engine", "Go, ONNX Runtime, AWS ECS Fargate", "Executes high-performance stateless fraud scoring on payment authorizations.")
+    Container(CaseManagementBackend, "Case Management Backend", "Node.js / Spring Boot", "Handles fraud cases, workflows, and analyst review operations.")
+    Container(WebApplication, "Web Application", "React SPA, AWS S3, CloudFront", "Provides the user interface for fraud analysts and operations managers.")
+    Container(AuditLogWorker, "Audit Log Worker", "Go", "Processes audit logs asynchronously and writes them to immutable storage.")
+    ContainerDb(RedisElastiCache, "Redis (ElastiCache)", "Redis, AWS ElastiCache", "Provides low-latency feature caching for real-time scoring.")
+    ContainerDb(AWSAuroraPostgreSQL, "AWS Aurora PostgreSQL", "PostgreSQL, AWS Aurora", "Stores immutable 7-year tamper-evident audit and case records.")
+    Container(AmazonSQS, "Amazon SQS", "Amazon SQS", "Queues audit log messages between the scoring engine and audit worker.")
+}
+
+Rel(PaymentGateway, APIGatewayEnvoy, "Submits payment authorization requests", "mTLS/HTTPS")
+Rel(APIGatewayEnvoy, RealTimeScoringEngine, "Forwards scoring requests", "gRPC/HTTP2")
+Rel(RealTimeScoringEngine, RedisElastiCache, "Retrieves cached features", "TCP/RESP")
+Rel(RealTimeScoringEngine, AmazonSQS, "Publishes audit events", "AWS SDK / SQS API")
+Rel(AmazonSQS, AuditLogWorker, "Delivers audit events", "SQS Polling")
+Rel(AuditLogWorker, AWSAuroraPostgreSQL, "Persists audit logs to immutable tables", "IAM-authenticated TLS")
+Rel(WebApplication, CaseManagementBackend, "Sends API requests for case workflows", "REST/GraphQL over HTTPS")
+Rel(CaseManagementBackend, IdentityProviderIdP, "Authenticates users", "OAuth 2.0 / OIDC")
+Rel(FraudAnalyst, WebApplication, "Interacts with the fraud review UI", "HTTPS")
+Rel(RiskOfficer, WebApplication, "Reviews risk rules and metrics", "HTTPS")
+Rel(FraudOperationsManager, WebApplication, "Monitors operations and team activity", "HTTPS")
+Rel(AuditLogWorker, SIEMComplianceArchive, "Exports compliance archive logs", "HTTPS / TLS")
+
+@enduml

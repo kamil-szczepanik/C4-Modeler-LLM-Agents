@@ -1,0 +1,234 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 2,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 3.75,
+  "justifications": {
+   "functional_suitability": "Cataloguing and circulation are covered by 'Staff Circulation & Cataloguing Container' and 'Circulation & Cataloguing Engine', handling MARC/ONIX via 'Batch Worker Pods'. Self-service is addressed by 'Patron Self-Service Portal Container', though dedicated discovery/search mechanisms for digital items are not explicitly modeled.",
+   "performance_efficiency": "The architecture lacks a dedicated search indexing or caching mechanism (such as Elasticsearch or search query caching) to meet the R-05 sub-800ms 99th-percentile search target. Redis is only configured for 'Rate Limiting and Circuit Breaker' at the 'API Gateway Container'.",
+   "compatibility": "Interoperability is supported through 'Batch Worker Pods' ingesting standard MARC/ONIX library metadata formats. 'API Gateway Container' and 'Authentication and Authorization Handler' cleanly integrate with 'External Identity Provider (IdP)' using OAuth 2.0 and OIDC protocols.",
+   "usability": "'Patron Web Frontend' within 'Patron Self-Service Portal Container' explicitly serves patrons. However, 'Staff Circulation & Cataloguing Container' only provides a backend REST endpoint ('Staff Request Controller') without any staff-facing user interface or presentation layer.",
+   "reliability": "Fault tolerance is addressed via 'Rate Limiting and Circuit Breaker' in the gateway, asynchronous queue decoupling in 'Background Worker Queue', and resilient message handling with 'Dead Letter Queue Manager'. Database high-availability and recovery mechanisms are not detailed.",
+   "security": "Strict EU data residency is enforced via 'EU Cloud Infrastructure Boundary'. Ingress uses TLS 1.3 and OAuth2/OIDC, microservices use internal mTLS, logs stream to 'Audit and Compliance Trust Zone' with WORM controls, and telemetry scrubs PII via 'Telemetry & PII Scrubber'.",
+   "maintainability": "Microservices are well-isolated by bounded contexts ('Staff Circulation & Cataloguing Container', 'Notification Service Container', 'Admin & Reporting Container'). OpenTelemetry sidecars standardize observability, although some containers conflate components with duplicated container definitions.",
+   "portability": "All containers deploy to Kubernetes and utilize cloud-agnostic standards (mTLS, OpenTelemetry sidecars, OIDC). 'Ephemeral Object Storage' supports standard S3-compatible APIs, though cloud hosting mentions specific AWS regions within the EU boundary."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 2,
+   "PERF-02": 2,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.4375,
+  "by_quality_attribute": {
+   "Performance": 2.0,
+   "Availability": 3.0,
+   "Modifiability": 2.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "justification": "The architecture lacks a dedicated search index container and caching layer. Search queries hit frontends without a defined query pathway or indexing mechanism to guarantee sub-800ms P99 latency.",
+    "elements": [
+     "API Gateway Container",
+     "Patron Self-Service Portal Container",
+     "Routing and Proxy Engine"
+    ],
+    "sensitivity_points": [
+     "Absence of dedicated search indexing engine or caching layer",
+     "Capacity of Kubernetes pod routing under 2,000 concurrent queries"
+    ],
+    "tradeoffs": [
+     "Offloading search to transactional services risks backend saturation"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "justification": "Although Batch Worker Pods handle asynchronous ingestion, the architecture lacks an explicit search index and index synchronization pipeline to guarantee search availability within 5 minutes under concurrent peak load.",
+    "elements": [
+     "Staff Circulation & Cataloguing Container",
+     "Circulation & Cataloguing Engine",
+     "Batch Worker Pods",
+     "API Gateway Container"
+    ],
+    "sensitivity_points": [
+     "Asynchronous propagation lag from catalog updates to search indexes",
+     "Resource contention between batch ingestion and real-time operations"
+    ],
+    "tradeoffs": [
+     "Asynchronous batch ingestion decouples load but delays catalog item visibility"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "No dedicated search index component or data storage architecture is defined. Without an explicit search index cluster or failover mechanism, the architecture cannot guarantee recovery within one minute.",
+    "elements": [
+     "Circulation & Cataloguing Engine",
+     "API Gateway Container",
+     "Routing and Proxy Engine"
+    ],
+    "sensitivity_points": [
+     "Clustering and automated failover capabilities of the search tier",
+     "Decoupling search indices from transactional circulation data"
+    ],
+    "tradeoffs": [
+     "Relying on primary datastores for search risks transaction failure during outages"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Envoy routing and circuit breaking within Kubernetes handle stateless container failover without interrupting active patron transactions, though externalized session state management across portal replicas is not explicitly detailed.",
+    "elements": [
+     "API Gateway Container",
+     "Routing and Proxy Engine",
+     "Rate Limiting and Circuit Breaker",
+     "Patron Self-Service Portal Container"
+    ],
+    "sensitivity_points": [
+     "Envoy health checking and rapid upstream rerouting",
+     "Stateless frontend pod replication in Kubernetes"
+    ],
+    "tradeoffs": [
+     "Stateless frontend failover avoids lost transactions but requires externalized session state"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "The architecture specifies Batch Worker Pods for MARC/ONIX, but lacks an extensible integration adapter or connector framework specifically designed for third-party digital e-book providers, requiring modifications to core cataloguing services.",
+    "elements": [
+     "Staff Circulation & Cataloguing Container",
+     "Circulation & Cataloguing Engine",
+     "Batch Worker Pods"
+    ],
+    "sensitivity_points": [
+     "Extensibility of metadata ingestion pipelines for external vendor APIs",
+     "Modular abstraction of digital item providers"
+    ],
+    "tradeoffs": [
+     "Generic batch workers reduce custom services but require code changes for APIs"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The model delegates loan rules to the Circulation & Cataloguing Engine without specifying a configurable rules engine, dynamic policy service, or external configuration store required to change policies at runtime without redeployment.",
+    "elements": [
+     "Staff Circulation & Cataloguing Container",
+     "Circulation & Cataloguing Engine",
+     "Admin & Reporting Container"
+    ],
+    "sensitivity_points": [
+     "Runtime rule evaluation engine versus hardcoded business logic",
+     "Configuration management interface for library policy rules"
+    ],
+    "tradeoffs": [
+     "Dynamic rule engines introduce runtime evaluation latency compared to compiled rules"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "EU data residency is explicitly enforced by design across all tiers: an explicit EU Cloud Boundary, localized APM/logging pipelines, EU-confined storage with CMK, and localized persistent DLQs prevent cross-border data leakage.",
+    "elements": [
+     "EU Cloud Infrastructure Boundary",
+     "In-Region APM and Log Aggregation Pipeline",
+     "Audit and Compliance Trust Zone",
+     "Dead Letter Queue Manager",
+     "Admin & Reporting Container"
+    ],
+    "sensitivity_points": [
+     "Strict boundary isolation of cloud hosting and telemetry within EU",
+     "Cryptographic enforcement and localized persistent queues"
+    ],
+    "tradeoffs": [
+     "Restricting all telemetry and queues to EU regions prevents using global SaaS"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "The API Gateway validates tokens and logs audit events to the compliance zone. However, patron-facing microservices lack explicit fine-grained, object-level authorization components to enforce patron data isolation on loan records.",
+    "elements": [
+     "API Gateway Container",
+     "Authentication and Authorization Handler",
+     "Audit Event Streamer",
+     "Audit and Compliance Trust Zone"
+    ],
+    "sensitivity_points": [
+     "Fine-grained object-level authorization versus role-based gateway checks",
+     "Completeness of audit trails for unauthorized access attempts"
+    ],
+    "tradeoffs": [
+     "Centralized gateway token validation offloads services but misses record-level authorization checks"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "none"
+  },
+  "coverage": 0.6666666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "EU Cloud Infrastructure Boundary",
+     "In-Region APM and Log Aggregation Pipeline",
+     "Admin & Reporting Container",
+     "Dead Letter Queue Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Staff Circulation & Cataloguing Container",
+     "Staff Request Controller",
+     "Circulation & Cataloguing Engine",
+     "Batch Worker Pods"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

@@ -1,0 +1,326 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively supported: 'Customer Portal & Adjuster Web Apps' serves customers, brokers (via Broker Context Manager), and adjusters, while 'Claim Router / Anti-Corruption Layer (ACL)' and 'Claim Management API' enable incremental claim-type migrations.",
+   "performance_efficiency": "The 2 s load target is achieved by decoupling adjuster queries from the 5 s mainframe via 'Azure SQL Database', 'API Client & Caching Component', and asynchronous batch buffering using 'Azure Service Bus' and 'Outbox Dispatcher Component'.",
+   "compatibility": "Coexistence with the legacy mainframe is exceptionally modeled via 'Translation / Mapper Component' handling COBOL copybooks, 'Mainframe Adapter Component' over mTLS/ExpressRoute, and 'Mainframe-Outbox Queue' buffering transactions during the unextendable 23:00-05:00 batch window.",
+   "usability": "All target personas are addressed within 'Customer Portal & Adjuster Web Apps' using 'Dynamic Form Engine Component', 'Broker Context Manager Component', and 'Local Persistence Queue Component' for resilient submissions. Separate containers for external and internal portals would be cleaner.",
+   "reliability": "Zero claim loss and exactly-once processing (R-04) are guaranteed by 'Outbox Dispatcher Component', 'Azure Service Bus' DLQs, 'Audit & Reconciliation Service' running scheduled reconciliations, and Polly policies in 'Routing Engine Component'.",
+   "security": "R-07 is fully met via 'Azure Active Directory / Entra ID' integration and 'Authentication Handler Component'. Data protection is enforced via mTLS, 'Azure Key Vault' HSM keys, Managed Identities, and SQL Ledger tamper-evident audit logs.",
+   "maintainability": "R-06 is directly satisfied by 'Azure App Configuration' and 'Feature Flag Manager', enabling immediate (<1 day) claim-type rollbacks through 'Routing Engine Component'. Responsibilities are cleanly separated using an Anti-Corruption Layer and MediatR handlers.",
+   "portability": "The hybrid requirement is met across on-prem and Azure West Europe. However, tight coupling to proprietary services ('Azure Service Bus', 'Azure App Configuration', 'Azure Key Vault') limits adaptability to other platforms, which is risky given the team's low cloud experience."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "While client-side caching exists, claims requiring live mainframe reads route synchronously through the Claim Router/ACL. Since the mainframe response takes up to 5 seconds, loading un-cached hybrid claims will exceed the 2-second target without explicit asynchronous composite loading or backend read replicas.",
+    "elements": [
+     "Customer Portal & Adjuster Web Apps",
+     "API Client & Caching Component",
+     "Claim Management API",
+     "Claim Router / Anti-Corruption Layer (ACL)",
+     "Legacy Mainframe System"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio for adjuster screens and mainframe latency"
+    ],
+    "tradeoffs": [
+     "Data freshness versus screen responsiveness when retrieving legacy data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Azure API Gateway rate limiting protects the ingress, while Claim Management API decouples write operations via Azure Service Bus. Messages are buffered in the Mainframe-Outbox Queue, absorbing month-end submission surges without impacting mainframe throughput or the nightly batch window.",
+    "elements": [
+     "Azure API Gateway with Rate Limiter",
+     "Claim Management API",
+     "Azure Service Bus",
+     "Mainframe-Outbox Queue",
+     "Claim Router / Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Queue capacity and message consumption rates during peak load"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of submissions versus immediate mainframe confirmation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The architecture incorporates an Outbox Dispatcher and a dedicated Mainframe-Outbox Queue in Azure Service Bus explicitly configured to buffer messages during batch windows. Submissions persist locally and in Azure SQL, preventing loss and forwarding messages once the batch finishes.",
+    "elements": [
+     "Azure Service Bus",
+     "Mainframe-Outbox Queue",
+     "Outbox Dispatcher Component",
+     "Claim Router / Anti-Corruption Layer (ACL)",
+     "Azure SQL Database"
+    ],
+    "sensitivity_points": [
+     "Message retention duration and queue health during extended maintenance"
+    ],
+    "tradeoffs": [
+     "Asynchronous message buffering versus real-time mainframe validation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Reliable eventing through Azure Service Bus, Dead-Letter Queues, and the Outbox pattern prevents lost messages. The Audit & Reconciliation Service runs scheduled Hangfire comparison jobs against mainframe extracts, while tamper-resistant SQL Ledger and CDC ensure discrepancies are detected and resolved without duplicate processing.",
+    "elements": [
+     "Audit & Reconciliation Service",
+     "Reconciliation Engine",
+     "Audit Logger",
+     "Azure Service Bus",
+     "DLQ Subscriptions",
+     "Azure SQL Database"
+    ],
+    "sensitivity_points": [
+     "Scheduled reconciliation extract completeness and deduplication keys"
+    ],
+    "tradeoffs": [
+     "Batch reconciliation processing overhead versus complex distributed transaction coordination"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Claim Router/ACL evaluates real-time feature flags from Azure App Configuration to route claim types dynamically. The Translation/Mapper isolates COBOL copybooks, and the Feature Flag Manager explicitly supports rapid one-day switch-backs without modifying mainframe interfaces.",
+    "elements": [
+     "Azure App Configuration",
+     "Feature Flag Manager",
+     "Routing Engine Component",
+     "Translation / Mapper Component",
+     "Claim Router / Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Dynamic feature toggle propagation latency across container instances"
+    ],
+    "tradeoffs": [
+     "Routing and mapping layer complexity versus zero-downtime rollback flexibility"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Adjuster and customer frontends connect exclusively to the Azure API Gateway and modern APIs. The mainframe is abstracted behind the Claim Router/ACL; decommissioning it simply requires redirecting routing flags entirely to modern services without altering UI components or backend contracts.",
+    "elements": [
+     "Customer Portal & Adjuster Web Apps",
+     "Azure API Gateway with Rate Limiter",
+     "Claim Management API",
+     "Claim Router / Anti-Corruption Layer (ACL)",
+     "Azure App Configuration"
+    ],
+    "sensitivity_points": [
+     "Loose coupling of frontend clients from legacy data schemas"
+    ],
+    "tradeoffs": [
+     "Maintaining anti-corruption abstraction layers versus direct legacy integration"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Entra ID authentication, Broker Context Manager, and API Controller validation enforce authenticated access, while Audit Logger tracks interactions. However, multi-tenant broker data authorization policies and boundary checks inside the legacy mainframe adapter are not explicitly detailed.",
+    "elements": [
+     "Authentication Handler Component",
+     "Broker Context Manager Component",
+     "API Controller Layer",
+     "Audit Logger",
+     "Azure Active Directory / Entra ID"
+    ],
+    "sensitivity_points": [
+     "Robustness of domain-level claim ownership verification in API handlers"
+    ],
+    "tradeoffs": [
+     "Fine-grained row-level authorization checks versus query execution latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Single sign-on via Azure Active Directory/Entra ID centralizes adjuster identity revocation, and adjusters interface solely through the modern web apps rather than directly with the mainframe. However, 15-minute revocation guarantees depend on Continuous Access Evaluation (CAE) or short token lifespans, which are unmentioned.",
+    "elements": [
+     "Azure Active Directory / Entra ID",
+     "Authentication Handler Component",
+     "Customer Portal & Adjuster Web Apps",
+     "Azure API Gateway with Rate Limiter"
+    ],
+    "sensitivity_points": [
+     "OAuth token expiry lifetimes and Continuous Access Evaluation configuration"
+    ],
+    "tradeoffs": [
+     "Short-lived access tokens versus frequent identity provider token refreshes"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe System",
+     "Claim Router / Anti-Corruption Layer (ACL)",
+     "Audit & Reconciliation Service",
+     "Reconciliation Engine"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Claim Router / Anti-Corruption Layer (ACL)",
+     "Azure Service Bus",
+     "Mainframe-Outbox Queue"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Claim Router / Anti-Corruption Layer (ACL)",
+     "Translation / Mapper Component",
+     "Mainframe Adapter Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers & Brokers",
+     "Customer Portal & Adjuster Web Apps",
+     "Broker Context Manager Component",
+     "Dynamic Form Engine Component",
+     "Claim Management API"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Customer Portal & Adjuster Web Apps",
+     "Claim Management API"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Claim Router / Anti-Corruption Layer (ACL)",
+     "Routing Engine Component",
+     "Azure App Configuration",
+     "Feature Flag Manager"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Audit & Reconciliation Service",
+     "Reconciliation Engine",
+     "Audit Logger",
+     "Outbox Dispatcher Component",
+     "Azure Service Bus",
+     "Mainframe-Outbox Queue",
+     "DLQ Subscriptions",
+     "Azure SQL Database"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Customer Portal & Adjuster Web Apps",
+     "API Client & Caching Component",
+     "Claim Management API",
+     "Azure SQL Database"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Azure App Configuration",
+     "Feature Flag Manager",
+     "Routing Engine Component",
+     "Claim Router / Anti-Corruption Layer (ACL)"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Azure Active Directory / Entra ID",
+     "Authentication Handler Component",
+     "Customer Portal & Adjuster Web Apps"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

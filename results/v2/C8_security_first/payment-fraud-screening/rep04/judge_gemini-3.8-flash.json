@@ -1,0 +1,318 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Scoring Engine Container provides real-time scoring, Case Management API Container manages analyst review workflows, and Model Loader & Verifier Component enables zero-downtime atomic model updates, while Audit & Compliance Ledger Container writes tamper-evident audit records.",
+   "performance_efficiency": "The sub-50ms P99 target at 3,000 rps is supported by in-memory evaluation in Model Evaluator Component, sub-millisecond lookups via Amazon ElastiCache Serverless, and asynchronous offloading of audit writes via Amazon SQS & DLQ.",
+   "compatibility": "Standard protocols are adopted cleanly: gRPC/mTLS and TLS 1.3 for Payment Gateway integration, REST/HTTPS for Card Networks / Tokenization Service, and OIDC/SAML for Corporate IdP federation.",
+   "usability": "While Case Management API Controller and Compliance API Controller provide endpoints for Fraud Analysts and Compliance Officers, no frontend UI container is defined to support operational case review workflows.",
+   "reliability": "R-07 availability is addressed through Circuit Breaker Controller in Envoy Proxy and Local Heuristic Fallback Component in Scoring Engine Container. Amazon SQS & DLQ ensures audit persistence without blocking evaluation paths.",
+   "security": "Security requirements are thoroughly satisfied via Card Networks / Tokenization Service, TLS 1.3 termination, AWS KMS & Secrets Manager integration, IdP authentication, and tamper-evident storage using AWS QLDB for R-06.",
+   "maintainability": "Responsibilities are cleanly divided across decoupled containers. Managed AWS services (Aurora, QLDB, ElastiCache, SQS) significantly reduce operational overhead for the 3-engineer team, and atomic pointer updates isolate scoring logic.",
+   "portability": "The design fits the target AWS eu-west-1 environment well using containerized Go and Node.js workloads, but tightly couples audit and operational storage to proprietary services like AWS QLDB and Amazon Aurora."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The scoring path runs purely in-memory in Go via internal gRPC, backed by sub-millisecond Redis caching in ElastiCache Serverless. Asynchronous decoupling to SQS prevents database write latency from impacting scoring, comfortably achieving sub-50ms P99 latency at 3,000 rps.",
+    "elements": [
+     "Envoy Proxy",
+     "Scoring Engine Container",
+     "API Router Component",
+     "Model Evaluator Component",
+     "Amazon ElastiCache Serverless",
+     "Amazon SQS & DLQ"
+    ],
+    "sensitivity_points": [
+     "In-memory evaluation speed and network hop latency between Envoy and Go engine",
+     "Redis cluster throughput and connection pool sizing under 3,000 rps"
+    ],
+    "tradeoffs": [
+     "In-memory model execution limits complex feature pipelines in exchange for sub-50ms latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management workloads are completely segregated from the real-time scoring data path. Operational queries hit Amazon Aurora PostgreSQL read replicas and writer nodes via dedicated NestJS containers, eliminating resource contention with the Go scoring engine and ElastiCache.",
+    "elements": [
+     "Case Management API Container",
+     "Case Management API Controller",
+     "Primary Writer Database Instance",
+     "Read Replica Database Instance",
+     "Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Strict isolation of databases between operational case workflows and scoring engines"
+    ],
+    "tradeoffs": [
+     "Replicating operational data across Aurora instances introduces minor read lag for analyst screens"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The Scoring Engine incorporates a Local Heuristic Fallback Component to handle evaluation timeouts, and Envoy's Circuit Breaker Controller routes failed traffic. However, Envoy fallback routing to a standalone bypass service during complete engine container outages is not fully detailed.",
+    "elements": [
+     "Envoy Proxy",
+     "Circuit Breaker Controller",
+     "Scoring Engine Container",
+     "Local Heuristic Fallback Component",
+     "Amazon SQS & DLQ"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker failure detection thresholds and rapid switchover time in Envoy"
+    ],
+    "tradeoffs": [
+     "Accepting lower fraud precision during heuristic fallback to maintain payment availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The scoring service publishes audit records asynchronously to Amazon SQS with DLQ support. If QLDB or the Audit Ledger service experiences latency or outages, records accumulate safely in SQS without degrading real-time scoring latency or losing critical audit trails.",
+    "elements": [
+     "Scoring Engine Container",
+     "Amazon SQS & DLQ",
+     "Audit & Compliance Ledger Container",
+     "Ledger Ingestion Service",
+     "AWS QLDB"
+    ],
+    "sensitivity_points": [
+     "SQS retention limits and Dead-Letter Queue capacity during prolonged ledger outages"
+    ],
+    "tradeoffs": [
+     "Eventual consistency in the audit ledger in exchange for decoupling scoring path availability"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Model Loader & Verifier component fetches validated model artifacts and swaps them into the Model Evaluator using atomic pointer updates in Go memory. This achieves zero-downtime deployment, sub-5-minute rollbacks, and explicit model version stamping on every scored transaction.",
+    "elements": [
+     "Scoring Engine Container",
+     "Model Loader & Verifier Component",
+     "Model Evaluator Component",
+     "API Router Component"
+    ],
+    "sensitivity_points": [
+     "Thread-safe atomic pointer swapping without locking the scoring evaluation loop"
+    ],
+    "tradeoffs": [
+     "Pre-loading model binaries into container memory increases memory usage per instance"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Rule updates can leverage atomic in-memory reloading and ElastiCache velocity lookups. However, the system lacks an explicit rule distribution control plane connecting analyst authoring to the engine's Model Loader, requiring external deployment orchestration to meet the one-hour SLA.",
+    "elements": [
+     "Scoring Engine Container",
+     "Model Loader & Verifier Component",
+     "Local Heuristic Fallback Component",
+     "Amazon ElastiCache Serverless",
+     "Case Management API Container"
+    ],
+    "sensitivity_points": [
+     "Propagation latency of new rule definitions across all distributed engine containers"
+    ],
+    "tradeoffs": [
+     "Stateless runtime engines require distributed invalidation signals or polling for rule changes"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "PAN exposure is prevented because tokenization occurs externally and at Envoy ingress, ensuring analysts access only tokens. However, the architecture completely lacks an intrusion detection system (IDS), SIEM, or automated alerting mechanism to detect and alert anomalous account access within 15 minutes.",
+    "elements": [
+     "Envoy Proxy",
+     "TLS Termination Filter",
+     "Card Networks / Tokenization Service",
+     "Case Management API Container",
+     "Corporate IdP"
+    ],
+    "sensitivity_points": [
+     "Strict tokenization boundaries preventing clear-text PAN from entering operational databases"
+    ],
+    "tradeoffs": [
+     "Relying on external tokenization reduces PCI scope but adds token resolution overhead"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "AWS QLDB provides an immutable, cryptographically verifiable, append-only journal retaining inputs, model versions, and decision metadata. The Compliance API Controller and Audit Query Component directly query historical records using PartiQL, easily satisfying the one-day retrieval response measure.",
+    "elements": [
+     "AWS QLDB",
+     "Ledger Journal Storage Component",
+     "Ion Document Storage Component",
+     "QLDB PartiQL API Component",
+     "Audit & Compliance Ledger Container",
+     "Compliance API Controller"
+    ],
+    "sensitivity_points": [
+     "Cryptographic digest verification and index lifecycle over 7-year retention in QLDB"
+    ],
+    "tradeoffs": [
+     "QLDB ledger querying introduces higher storage and API costs than flat cold archival"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.6818181818181818,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Card Networks / Tokenization Service",
+     "AWS KMS & Secrets Manager",
+     "TLS Termination Filter",
+     "Compliance & Audit Officer"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Audit & Compliance Ledger Container",
+     "AWS QLDB",
+     "Tamper-Evident Journal Manager",
+     "Ledger Journal Storage Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Scoring Engine Container",
+     "API Router Component",
+     "Model Evaluator Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management API Container",
+     "Case Management API Controller",
+     "Case Workflow Service",
+     "Amazon Aurora PostgreSQL",
+     "Fraud Analysts"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model Loader & Verifier Component",
+     "Model Evaluator Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Envoy Proxy",
+     "Scoring Engine Container",
+     "Model Evaluator Component",
+     "Amazon ElastiCache Serverless"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Card Networks / Tokenization Service",
+     "TLS Termination Filter",
+     "AWS KMS & Secrets Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Ledger Container",
+     "AWS QLDB",
+     "Tamper-Evident Journal Manager",
+     "Ledger Journal Storage Component",
+     "Ion Document Storage Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Circuit Breaker Controller",
+     "Local Heuristic Fallback Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

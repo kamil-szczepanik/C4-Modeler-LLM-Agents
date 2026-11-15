@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Caching Layer container
+
+Container_Ext(api_gateway, "API Gateway", "Gateway", "External API Gateway")
+Container_Ext(core_domain_service, "Core Domain Service", "Microservice", "External Core Domain Service")
+System_Ext(apache_kafka, "Apache Kafka", "Event Bus", "Transports asynchronous cache invalidation events.")
+
+Container_Boundary(caching_layer, "Caching Layer") {
+    Component(Cache_Manager, "Cache Manager", "Redis Core", "Stores hot catalogue items and patron session states in-memory.")
+    Component(Rate_Limiter, "Rate Limiter", "Redis Module", "Enforces distributed rate limits for the API Gateway.")
+    Component(Cache_Invalidation_Listener, "Cache Invalidation Listener", "Redis Pub/Sub Subscriber", "Purges stale catalogue entries upon receiving updates.")
+    Component(Distributed_Lock_Manager, "Distributed Lock Manager", "Redis Redlock / SETNX", "Prevents cache stampedes during sudden traffic spikes.")
+}
+
+Rel(api_gateway, Rate_Limiter, "Evaluates rate limits", "TCP/RESP")
+Rel(core_domain_service, Cache_Manager, "Reads and writes hot items via cache-aside/write-through patterns", "TCP/RESP")
+Rel(core_domain_service, Distributed_Lock_Manager, "Acquires and releases locks during cache miss re-population using atomic commands", "TCP/RESP")
+Rel(apache_kafka, Cache_Invalidation_Listener, "Triggers cache eviction on data updates", "TCP")
+Rel(Cache_Invalidation_Listener, Cache_Manager, "Executes internal DEL/UNLINK commands", "In-Memory Function Call")
+
+@enduml

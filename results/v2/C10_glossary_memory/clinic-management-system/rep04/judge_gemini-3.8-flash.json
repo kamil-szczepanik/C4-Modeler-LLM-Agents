@@ -1,0 +1,335 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "The architecture covers all requirements: 'EMR Clinical Service' for records, 'Scheduling & Billing Dashboard' for scheduling, 'Billing Processor Service' for claims, and 'Audit Collector Component' for audits. However, explicit mechanisms for appointment resource clash checks are not elaborated within the clinical components.",
+   "performance_efficiency": "The 'Payload Aggregator' in the API Gateway and 'FHIR JSON Document Store Component' with GIN indexing explicitly target the sub-second P95 requirement. Asynchronous processing via the 'Message Broker' offloads heavy billing workflows, though dedicated distributed caching layers are omitted.",
+   "compatibility": "Interoperability is thoroughly supported by the 'Integration Service Container' featuring 'FHIR Translator Route' and 'Outbound HTTP Gateway' for HL7 FHIR exchanges with Lab & Imaging Systems, along with 'Insurance Integration Client' handling EDI X12 external clearinghouse protocols.",
+   "usability": "Every user role has tailored interfaces: patients use 'Patient Portal SPA/Mobile', clinicians and administrative staff use 'Clinician/Admin Workspace SPA' with dedicated role views, and compliance officers access audit trails via 'Compliance Query Service Component'.",
+   "reliability": "The 'Integration Service Container' includes 'Circuit Breaker Component' and 'Retry & Dead-Letter Handler' for fault tolerance. However, mechanisms to achieve the required 99.99% active-active availability across hybrid regions (on-prem-k8s and eu-central-1) like cross-site database replication are missing.",
+   "security": "MFA and OAuth2/OIDC are enforced via 'Token Exchange & Auth Service'. Data at rest uses AES-256 in 'Relational Core Component', gRPC over mTLS protects service communication, and 'WORM Storage Adapter Component' guarantees tamper-proof >= 10-year audit retention.",
+   "maintainability": "The architecture exhibits high modularity with clear separation of concerns across 'Core Services Container', 'Billing Service Container', and 'Integration Service Container'. Internal component layers (controllers, services, repositories) are loosely coupled using distinct protocols like gRPC and REST.",
+   "portability": "Services are containerized with technology-agnostic runtimes (Java, Node.js), but the hybrid deployment across on-prem-k8s and eu-central-1 lacks orchestration details. The 'WORM Storage Adapter Component' binds directly to AWS S3 Object Lock, potentially complicating on-premises deployment."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 2.5,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "While Payload Aggregator and GIN indexing support low-latency reads, the architecture lacks an explicit distributed caching tier (e.g., Redis) or read-replica pool to reliably guarantee sub-second P95 responses for 500 concurrent clinician morning rounds.",
+    "elements": [
+     "Clinician/Admin Workspace SPA",
+     "API Gateway / BFF",
+     "Payload Aggregator",
+     "Core Services Container",
+     "EMR Clinical Service",
+     "PostgreSQL & HL7 FHIR Compliant Data Stores"
+    ],
+    "sensitivity_points": [
+     "Database connection pooling and index efficiency under simultaneous read bursts",
+     "Payload aggregation overhead at API Gateway"
+    ],
+    "tradeoffs": [
+     "Direct database reads preserve absolute consistency at the expense of peak response latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Ingress Rate Limiter, Camel routes, and Message Broker adequately decouple high-throughput FHIR ingestion from synchronous clinical transactions. However, shared Core Services and PostgreSQL instances could experience contention without strict resource isolation.",
+    "elements": [
+     "Integration Service Container",
+     "Ingress Rate Limiter",
+     "FHIR Translator Route",
+     "Message Broker",
+     "Core Services Container",
+     "PostgreSQL & HL7 FHIR Compliant Data Stores"
+    ],
+    "sensitivity_points": [
+     "Message broker partitioning and downstream worker concurrency",
+     "JSONB write throughput and index update overhead in PostgreSQL"
+    ],
+    "tradeoffs": [
+     "Asynchronous ingestion guarantees gateway stability but introduces slight eventual consistency into EMR"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The hybrid regions (on-prem-k8s, eu-central-1) and active-active requirement are cited in requirements, but the architecture omits global traffic routing, cross-region state synchronization, and hybrid database replication mechanisms required for sub-minute zero-data-loss failover.",
+    "elements": [
+     "API Gateway / BFF",
+     "Core Services Container",
+     "PostgreSQL & HL7 FHIR Compliant Data Stores",
+     "Message Broker"
+    ],
+    "sensitivity_points": [
+     "Hybrid cross-site replication latency between on-premises and eu-central-1",
+     "Automated DNS or anycast traffic failover convergence times"
+    ],
+    "tradeoffs": [
+     "Synchronous multi-region replication eliminates data loss but increases write latency across hybrid links"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Kafka distributed commit logs and isolated billing queues provide message durability and retry mechanisms. However, database failover topology and automated idempotent transaction reconciliation within 30 seconds are not explicitly detailed for the billing datastore.",
+    "elements": [
+     "Billing Service Container",
+     "Billing Processor Service",
+     "Message Broker",
+     "Distributed Commit Log Engine",
+     "PostgreSQL & HL7 FHIR Compliant Data Stores"
+    ],
+    "sensitivity_points": [
+     "Idempotency token handling during message re-delivery",
+     "Database connection pool retry policies and cluster failover timing"
+    ],
+    "tradeoffs": [
+     "At-least-once message delivery prevents claim losses but requires strict deduplication logic"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The modular architecture completely isolates clearinghouse integrations inside the Billing Service Container via the Insurance Integration Client, leaving EMR and Core Services completely decoupled and unaffected.",
+    "elements": [
+     "Billing Service Container",
+     "Insurance Integration Client",
+     "Insurance Clearinghouse / External Billing Provider"
+    ],
+    "sensitivity_points": [
+     "Coupling between Insurance Integration Client and external EDI X12 clearinghouse interfaces"
+    ],
+    "tradeoffs": [
+     "Encapsulating EDI transformations in billing service avoids cross-service complexity but centralizes billing maintenance"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Modifications are largely confined to UI components, Core Services persistence, and schema definitions. PostgreSQL JSONB storage enables fast schema extensions, though end-to-end updates across UI, domain entity, and audit ingestion push the boundary of three components.",
+    "elements": [
+     "Clinician/Admin Workspace SPA",
+     "Core Services Container",
+     "PostgreSQL & HL7 FHIR Compliant Data Stores",
+     "Audit & Compliance Logging Container"
+    ],
+    "sensitivity_points": [
+     "Flexibility of JSONB document schemas versus relational patient demographic tables"
+    ],
+    "tradeoffs": [
+     "Extending JSONB demographic fields speeds modification but weakens strict relational integrity constraints"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Enforcing MFA at the API Gateway via the Token Exchange & Auth Service prevents unauthorized access from stolen credentials alone. Security event streaming captures attempts, though dedicated real-time SIEM alert triggers within 1 minute are lightly specified.",
+    "elements": [
+     "API Gateway / BFF",
+     "Token Exchange & Auth Service",
+     "Audit & Compliance Logging Container",
+     "Audit Collector Component"
+    ],
+    "sensitivity_points": [
+     "Enforcement of strict MFA validation before upstream session token issuance",
+     "Latency of security incident streaming and alert dispatch"
+    ],
+    "tradeoffs": [
+     "Mandatory MFA validation on every edge authentication increases login latency to improve security posture"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Every read request is captured through pgaudit log streaming and API Gateway validation, while WORM Storage Adapter with S3 Object Lock explicitly guarantees tamper-evident compliance and retention for at least 10 years.",
+    "elements": [
+     "Core Services Container",
+     "PostgreSQL & HL7 FHIR Compliant Data Stores",
+     "Audit & Compliance Logging Container",
+     "Audit Indexing & Tokenization Service Component",
+     "WORM Storage Adapter Component"
+    ],
+    "sensitivity_points": [
+     "Completeness of pgaudit capture for direct read operations",
+     "Object Lock immutability configuration in compliance mode"
+    ],
+    "tradeoffs": [
+     "Auditing 100% of read access to WORM storage increases storage overhead to satisfy strict regulatory compliance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Logging Container",
+     "Audit Indexing & Tokenization Service Component",
+     "Audit Collector Component",
+     "WORM Storage Adapter Component",
+     "Message Validation Component",
+     "PostgreSQL & HL7 FHIR Compliant Data Stores"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Circuit Breaker Component",
+     "Retry & Dead-Letter Handler",
+     "Message Broker"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "WORM Storage Adapter Component",
+     "Relational Core Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Patient Portal SPA/Mobile",
+     "Clinician/Admin Workspace SPA",
+     "EMR & Patient Management Module",
+     "Clinical Domain Controller"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Scheduling & Billing Dashboard",
+     "Clinical Domain Controller",
+     "Patient UI Router & Views"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Clinical Service",
+     "EMR & Patient Management Module",
+     "Clinical Domain Controller",
+     "PostgreSQL & HL7 FHIR Compliant Data Stores",
+     "Audit & Compliance Logging Container"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service Container",
+     "Billing Controller",
+     "Billing Processor Service",
+     "Insurance Integration Client",
+     "Message Broker",
+     "Insurance Clearinghouse / External Billing Provider"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Token Exchange & Auth Service",
+     "PostgreSQL & HL7 FHIR Compliant Data Stores",
+     "Relational Core Component",
+     "Distributed Commit Log Engine",
+     "WORM Storage Adapter Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Circuit Breaker Component",
+     "Retry & Dead-Letter Handler",
+     "Message Broker"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Payload Aggregator",
+     "EMR Clinical Service",
+     "FHIR JSON Document Store Component"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Service Container",
+     "FHIR Translator Route",
+     "Outbound HTTP Gateway",
+     "Inbound Polling Adapter",
+     "Lab & Imaging Systems",
+     "FHIR JSON Document Store Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

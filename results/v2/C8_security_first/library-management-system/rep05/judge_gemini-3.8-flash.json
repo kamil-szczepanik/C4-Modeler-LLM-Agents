@@ -1,0 +1,239 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "The architecture directly satisfies R-01 and core functions via Search & Catalogue Service, Digital Content Providers integration, Circulation & Loan Engine, and dedicated Patron Self-Service Portal and Staff Management Console containers.",
+   "performance_efficiency": "R-05 is directly addressed by incorporating Elasticsearch in Search & Catalogue Service, PgBouncer connection pooling, PostgreSQL Read-Replica, Redis caching, and asynchronous processing across the Message Broker and Notification Engine.",
+   "compatibility": "Integration with external systems is thoroughly defined via standard protocols: REST/JSON over TLS 1.3 and mTLS for Payment Gateway, Inter-Library Loan Networks, and Digital Content Providers.",
+   "usability": "Both patrons and staff are well served via dedicated interfaces: Patron Self-Service Portal (with WCAG 2.1 AA support and mobile storage) and Staff Management Console (tailored BFF controllers and role adaptability).",
+   "reliability": "High availability and fault tolerance are ensured via PostgreSQL replication using Patroni, Quorum Queues, DLQ & Retry Manager in the Message Broker, and circuit breakers on external calls and search queries.",
+   "security": "Strict EU data residency is explicitly enforced by EU-bound API Gateway and EU region-locked Object Storage. It also features AES-256 encryption, OIDC/OAuth2 with MFA/PKCE, mTLS, and audit logging via pgaudit.",
+   "maintainability": "Clear modular separation into bounded microservices (Search & Catalogue Service, Circulation & Loan Engine, Notification Engine) and BFFs ensures low coupling, single responsibilities, and isolated components.",
+   "portability": "Deployable across Kubernetes and Istio environments with containerized services. Minor gap: infrastructure orchestration definitions across EU cloud regions or bare-metal library environments are not detailed beyond mentioning Kubernetes and Istio."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 5,
+   "MOD-01": 2,
+   "MOD-02": 4,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 3.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture dedicates an Elasticsearch-backed Search & Catalogue Service with circuit breakers and PostgreSQL read-replicas, communicating via low-latency gRPC to ensure search queries remain well below the 800 ms threshold under peak load.",
+    "elements": [
+     "Search & Catalogue Service",
+     "Search Query Engine",
+     "EU-bound API Gateway",
+     "PostgreSQL Read-Replica"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch index sizing and query optimization",
+     "PgBouncer read-replica connection pool capacity"
+    ],
+    "tradeoffs": [
+     "Elasticsearch indexing latency traded off for sub-second search speeds"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Search reads are decoupled from writes via asynchronous catalogue synchronization. Catalogue Synchronization Worker processes update events from the message broker to update Elasticsearch and read-replicas asynchronously, comfortably satisfying the 5-minute propagation limit without degrading search latency.",
+    "elements": [
+     "Catalogue Synchronization Worker",
+     "Message Broker",
+     "Search Query Engine",
+     "Catalogue Repository"
+    ],
+    "sensitivity_points": [
+     "Message broker throughput and queue backlog under peak updates",
+     "PostgreSQL streaming replication lag"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of search index traded for uninterrupted query throughput"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Circulation workflows run in a completely isolated container with direct database access, safeguarding transactions from search failures. The Search Query Engine incorporates circuit breakers, though the Elasticsearch multi-node failover topology itself is not explicitly detailed.",
+    "elements": [
+     "Search Query Engine",
+     "Search & Catalogue Service",
+     "Circulation & Loan Engine",
+     "Primary Database & Read-Replica"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker trip thresholds and fallback query strategies",
+     "Isolation of search storage from transactional primary storage"
+    ],
+    "tradeoffs": [
+     "Graceful degradation to reduced search capabilities avoids total system downtime"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Patron Self-Service Portal is structured as a stateless SPA/mobile client serviced through an EU-bound API Gateway with health checks and CDN edges. Failed instances are bypassed without patron transaction loss, as state is managed by backend microservices and transactional PostgreSQL.",
+    "elements": [
+     "EU-bound API Gateway",
+     "Patron Self-Service Portal (Web/Mobile App)",
+     "Circulation & Loan Engine",
+     "PostgreSQL Primary"
+    ],
+    "sensitivity_points": [
+     "API Gateway health check interval and failover detection latency",
+     "Client-side retry logic and session token preservation"
+    ],
+    "tradeoffs": [
+     "Stateless portal design increases token validation overhead across backend calls"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "Although Digital Content Providers appears as an external system in Level 1, no container or component in Level 2 or Level 3 connects to it or implements an integration adapter for e-book providers. Integrating a new provider requires adding new interfaces across several layers.",
+    "elements": [
+     "Digital Content Providers",
+     "Search & Catalogue Service",
+     "Staff Management Console"
+    ],
+    "sensitivity_points": [
+     "Absence of a dedicated digital provider ingestion or adapter component",
+     "Coupling between catalogue schema and vendor-specific e-book metadata"
+    ],
+    "tradeoffs": [
+     "Deferring provider adapter design lowers initial complexity but increases modification cost"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The Circulation & Loan Engine contains a distinct Loan Policy Evaluator component explicitly designed to evaluate dynamic loan rules. However, the exact configuration mechanism or runtime persistence interface for these dynamic rules is not fully detailed.",
+    "elements": [
+     "Circulation & Loan Engine",
+     "Loan Policy Evaluator",
+     "Loan Workflow Controller"
+    ],
+    "sensitivity_points": [
+     "Dynamic rule engine evaluation performance during loan checkouts",
+     "Externalized policy store reload mechanism without application restarts"
+    ],
+    "tradeoffs": [
+     "Dynamic policy evaluation adds slight processing overhead over hardcoded rules"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The architecture strictly enforces data residency through perimeter-level routing via the EU-bound API Gateway, an EU-restricted CDN, region-locked Cloud Object Storage, and primary PostgreSQL databases configured with Patroni and AES-256 encryption.",
+    "elements": [
+     "EU-bound API Gateway",
+     "CDN Edge Nodes",
+     "Object Storage",
+     "Primary Database & Read-Replica"
+    ],
+    "sensitivity_points": [
+     "Strict perimeter filtering of ingress and egress network traffic",
+     "Correct geographical pinning of cloud-managed storage and database resources"
+    ],
+    "tradeoffs": [
+     "EU-only residency limits routing flexibility and cloud provider regional redundancy options"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Authentication client PKCE/OIDC tokens and API Gateway JWT validation protect boundaries, and unauthorized database access attempts are audited via pgaudit, Patroni logs, and message broker audit streaming. However, explicit fine-grained patron ownership checks within the controller are only implicitly addressed.",
+    "elements": [
+     "Authentication Client",
+     "Loan Workflow Controller",
+     "Primary Database & Read-Replica",
+     "Message Broker"
+    ],
+    "sensitivity_points": [
+     "Validation of patron identity claim against requested loan record identifier",
+     "Asynchronous audit log durability and tamper-proofing"
+    ],
+    "tradeoffs": [
+     "Comprehensive database and event auditing consumes additional storage and I/O bandwidth"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "EU-bound API Gateway",
+     "Object Storage"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Digital Content Providers",
+     "Staff Management Console",
+     "Catalogue & Inventory Controller",
+     "Search & Catalogue Service",
+     "Catalogue Synchronization Worker",
+     "Catalogue Repository"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search & Catalogue Service",
+     "Search Query Engine",
+     "PostgreSQL Read-Replica"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

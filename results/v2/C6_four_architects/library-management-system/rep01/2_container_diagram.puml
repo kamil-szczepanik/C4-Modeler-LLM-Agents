@@ -1,0 +1,40 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Library Management System (LMS)
+
+Person(Patron_Librarian_Staff, "Patron & Librarian / Staff", "End-users accessing the platform for self-service portals, item cataloging, and circulation management.")
+
+System_Ext(EU_Tenant_Identity_Provider_IdP, "EU-Tenant Identity Provider (IdP)", "External system for authentication, identity management, and JWT validation restricted to EU endpoints.")
+System_Ext(EU_Hosted_Payment_Gateway, "EU-Hosted Payment Gateway", "External system for processing financial transactions securely within EU residency constraints.")
+System_Ext(Notification_Service, "Notification Service", "External system for sending communications and notifications.")
+System_Ext(Digital_Content_Repository___DRM_Provider, "Digital Content Repository / DRM Provider", "External system providing digital content and DRM services.")
+
+System_Boundary(LMS, "Library Management System (LMS)") {
+    Container(Web_Application_SPA, "Web Application (SPA)", "React, Nginx", "Provides responsive user interfaces for patrons and staff.")
+    Container(API_Gateway, "API Gateway", "Spring Cloud Gateway, Java", "Handles request routing, rate limiting, and JWT validation via EU-IdP.")
+    Container(Core_Domain_Service, "Core Domain Service", "Spring Boot, Java", "Powers core cataloging, business logic, and circulation management.")
+    Container(Search_Service, "Search Service", "OpenSearch", "Dedicated search index ensuring sub-800ms search responses.")
+    Container(Notification___Payment_Worker___DRM_Worker, "Notification & Payment Worker / DRM Worker", "Python, Celery", "Isolates and handles external third-party integrations for payments, notifications, and DRM.")
+    Container(Message_Broker, "Message Broker", "Apache Kafka", "Manages decoupled, replayable domain event synchronization.")
+    ContainerDb(Caching_Layer, "Caching Layer", "Redis", "Provides distributed rate limiting and hot item caching.")
+    ContainerDb(Database, "Database", "PostgreSQL", "Ensures transactional integrity within EU data residency constraints.")
+}
+
+Rel(Patron_Librarian_Staff, Web_Application_SPA, "Accesses user interfaces", "HTTPS")
+Rel(Web_Application_SPA, API_Gateway, "Sends API requests", "HTTPS/REST")
+Rel(API_Gateway, Core_Domain_Service, "Routes domain requests", "REST/TLS")
+Rel(API_Gateway, Search_Service, "Routes search queries", "REST/TLS")
+Rel(API_Gateway, Caching_Layer, "Reads and writes cache and rate limits", "TCP")
+Rel(Core_Domain_Service, Caching_Layer, "Reads and writes cache and rate limits", "TCP")
+Rel(Core_Domain_Service, Database, "Persists domain data", "JDBC")
+Rel(Core_Domain_Service, Message_Broker, "Publishes domain events", "Apache Kafka")
+Rel(Message_Broker, Search_Service, "Consumes events to update search index", "Apache Kafka")
+Rel(Message_Broker, Notification___Payment_Worker___DRM_Worker, "Consumes asynchronous task events", "Apache Kafka")
+Rel(Notification___Payment_Worker___DRM_Worker, EU_Hosted_Payment_Gateway, "Processes payments and financial transactions", "HTTPS")
+Rel(Notification___Payment_Worker___DRM_Worker, Notification_Service, "Dispatches external notifications", "HTTPS")
+Rel(Notification___Payment_Worker___DRM_Worker, Digital_Content_Repository___DRM_Provider, "Manages digital content and DRM rights", "HTTPS")
+Rel(API_Gateway, EU_Tenant_Identity_Provider_IdP, "Validates JWT tokens and authenticates users", "REST/TLS")
+
+@enduml

@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Real-Time Scoring Engine container
+
+System_Ext(api_gateway, "API Gateway & Ingress", "Ingresses requests")
+System_Ext(elasticache, "Amazon ElastiCache", "Redis cache for feature lookups")
+System_Ext(model_service, "Model & Rule Management Service", "Manages model binaries")
+System_Ext(kinesis, "Amazon Kinesis Data Streams", "Handles asynchronous, tamper-evident audit logging")
+
+Container_Boundary(real_time_scoring_engine, "Real-Time Scoring Engine") {
+    Component(scoring_api, "Scoring API Controller", "Java / Spring MVC", "Ingests payment authorization requests via gRPC over HTTP/2.")
+    Component(feature_aggregator, "Feature Aggregator", "Java / Spring Data", "Fetches user velocity profiles and features from ElastiCache.")
+    Component(inference_engine, "Inference Engine", "Java + ONNX Runtime", "Executes machine learning models in-process via JNI for ultra-low latency.")
+    Component(decision_evaluator, "Decision Evaluator", "Java", "Evaluates raw scores to determine fraud risk and manage analyst reviews.")
+    Component(model_hotswapper, "Model Hot-Swapper", "Java", "Updates model references via in-memory pointer swap.")
+    Component(audit_publisher, "Audit Event Publisher", "Java / AWS SDK", "Enqueues and publishes batched audit events to Kinesis.")
+    Component(circuit_breaker, "Circuit Breaker & Fallback Handler", "Resilience4j", "Wraps execution with circuit breaking and fallbacks to prevent upstream payment blocking.")
+}
+
+Rel(api_gateway, scoring_api, "Ingests requests", "gRPC over HTTP/2")
+Rel(scoring_api, feature_aggregator, "Fetches features", "Direct Method Call")
+Rel(feature_aggregator, elasticache, "Fetches user velocity profiles", "RESP over TCP")
+Rel(scoring_api, inference_engine, "Invokes model inference", "In-memory ONNX Runtime API")
+Rel(inference_engine, decision_evaluator, "Passes raw scores", "Direct Method Call")
+Rel(model_service, model_hotswapper, "Pushes model binaries", "gRPC / HTTPS")
+Rel(model_hotswapper, inference_engine, "Updates model reference", "In-memory pointer swap")
+Rel(decision_evaluator, audit_publisher, "Enqueues logs", "ConcurrentQueue")
+Rel(audit_publisher, kinesis, "Publishes batched events", "AWS SDK over HTTPS")
+Rel(circuit_breaker, scoring_api, "Wraps execution", "AOP Interceptor")
+
+@enduml

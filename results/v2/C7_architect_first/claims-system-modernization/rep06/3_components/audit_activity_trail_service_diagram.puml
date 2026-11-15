@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Audit & Activity Trail Service container
+
+System_Ext(AzureServiceBus, "Azure Service Bus", "Asynchronous messaging system")
+System_Ext(AzureCosmosDB, "Azure Cosmos DB (SQL API)", "Immutable append-only storage for compliance logs")
+System_Ext(AzureDataLake, "Azure Data Lake", "Storage for regulatory reporting")
+
+Container_Boundary(AuditAndActivityTrailService, "Audit & Activity Trail Service") {
+    Component(AuditEventConsumer, "Audit Event Consumer", "Spring Boot, Java 17, Azure Service Bus Client", "Consumes asynchronous audit events from the Azure Service Bus via AMQP to decouple logging from core claims processing.")
+    Component(AuditProcessorAndEncryptionEngine, "Audit Processor and Encryption Engine", "Java 17, Azure Key Vault SDK", "Applies envelope encryption and processes audit payloads to protect Personally Identifiable Information (PII).")
+    Component(AuditPersistenceManager, "Audit Persistence Manager", "Spring Data JPA, Azure Cosmos DB SQL API Client", "Persists immutable, append-only compliance logs to Azure Cosmos DB.")
+    Component(ComplianceQueryAPI, "Compliance Query API", "Spring Web, REST / HTTPS, Azure AD PIM/MFA", "Provides secured REST endpoints for compliance officers and support managers to query audit trails.")
+    Component(ChangeFeedStreamer, "Change Feed Streamer", "Azure Cosmos DB Change Feed Processor, TLS", "Streams change feeds from Azure Cosmos DB to Azure Data Lake for regulatory reporting.")
+}
+
+Rel(AzureServiceBus, AuditEventConsumer, "Insumes audit events asynchronously", "AMQP")
+Rel(AuditEventConsumer, AuditProcessorAndEncryptionEngine, "Passes raw audit payloads for encryption and processing", "In-memory")
+Rel(AuditProcessorAndEncryptionEngine, AuditPersistenceManager, "Sends encrypted payloads for storage", "In-memory")
+Rel(AuditPersistenceManager, AzureCosmosDB, "Persists append-only logs", "TLS / Spring Data JPA")
+Rel(ComplianceQueryAPI, AuditPersistenceManager, "Queries stored audit logs", "In-memory")
+Rel(ChangeFeedStreamer, AzureDataLake, "Streams change feeds for reporting", "Encrypted TLS")
+Rel(AzureCosmosDB, ChangeFeedStreamer, "Provides change feed stream", "TLS")
+@enduml

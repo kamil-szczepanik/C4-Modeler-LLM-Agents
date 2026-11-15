@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the RabbitMQ container
+
+Component(CirculationService, "Circulation Service", "Quarkus", "Publishes circulation events with confirms enabled via AMQP over TLS.")
+Component(CatalogSearchService, "Catalog & Search Service", "Spring Boot", "Publishes catalog events to the exchange routing layer.")
+Component(NotificationWorker, "Notification Worker", "Node.js", "Consumes notification payloads delivered by quorum queue instances.")
+Component_Ext(CentralizedObservabilityPlatform, "Centralized Observability Platform", "Prometheus", "Scrapes metrics from the telemetry plugin for monitoring queue depth and consumer lag.")
+
+Container_Boundary(RabbitMQ, "RabbitMQ") {
+    Component(RabbitMQBrokerContainer, "RabbitMQ Broker Container", "RabbitMQ / Kubernetes", "Core broker container deployed with persistent volume provisioned IOPS and resource quotas.")
+    Component(ExchangeRoutingLayer, "Exchange Routing Layer", "AMQP 0-9-1 Topic Exchanges", "Routes published events to appropriate queues based on topics.")
+    Component(QuorumQueueInstances, "Quorum Queue Instances", "Raft-backed Queues", "Provides crash-safe metadata replication across availability zones and delivers notification payloads.")
+    Component(PublisherConfirmFlowControlModule, "Publisher Confirm & Flow Control Module", "AMQP over TLS Module", "Handles event publishing with confirms enabled for reliable messaging.")
+    Component(ManagementTelemetryPlugin, "Management & Telemetry Plugin", "RabbitMQ Plugin / HTTPS", "Ships telemetry and queue metrics to the centralized observability platform.")
+    Component(DeadLetterExchanges, "Dead-Letter Exchanges", "AMQP", "Retains failed messages for auditing and re-routes them to quorum queue instances.")
+}
+
+Rel(CirculationService, ExchangeRoutingLayer, "Publishes circulation events", "AMQP over TLS")
+Rel(CirculationService, PublisherConfirmFlowControlModule, "Publishes events with confirms enabled", "AMQP over TLS")
+Rel(CatalogSearchService, ExchangeRoutingLayer, "Publishes catalog events", "AMQP over TLS")
+Rel(QuorumQueueInstances, NotificationWorker, "Delivers notification payloads", "AMQP over TLS")
+Rel(DeadLetterExchanges, QuorumQueueInstances, "Retains failed messages for auditing", "Internal AMQP")
+Rel(ManagementTelemetryPlugin, CentralizedObservabilityPlatform, "Ships telemetry and queue metrics", "HTTPS/Prometheus")
+
+@enduml

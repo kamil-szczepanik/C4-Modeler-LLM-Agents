@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Integration Service container
+
+System_Ext(ExternalPharmacyNetworks, "External Pharmacy Networks", "External pharmacy networks and systems.")
+System_Ext(GoogleCloudBigQuery, "Google Cloud BigQuery", "Cloud data warehouse for audit logs.")
+
+Container_Boundary(IntegrationService, "Integration Service") {
+    Component(FHIRAdapterComponent, "FHIR Adapter Component", "TypeScript / HAPI FHIR or custom mapper", "Bridges internal domain models with external pharmacy networks.")
+    Component(EUEPrescriptionGatewayComponent, "EU E-Prescription Gateway Component", "TypeScript", "Manages EU e-prescription routing and gateway operations.")
+    Component(DataResidencyEnforcerComponent, "Data Residency Enforcer Component", "Region-isolated instances in europe-west3 and us-central1", "Strictly enforces regional data residency for EU and US traffic.")
+    Component(AuditLoggerComponent, "Audit Logger Component", "Google Cloud BigQuery API", "Records audit logs asynchronously.")
+    Component(RetryDeadLetterQueueComponent, "Retry & Dead-Letter Queue Component", "BullMQ / Redis", "Offloads and retries failed outbound requests.")
+    Component(TransformationEngineComponent, "Transformation Engine Component", "JSONata / Handlebars", "Applies schema mappings for complex national e-prescription schemas.")
+    Component(CircuitBreakerRateLimiterComponent, "Circuit Breaker & Rate Limiter Component", "Opossum", "Evaluates health and dispatches outbound requests with rate limiting.")
+}
+
+Rel(FHIRAdapterComponent, TransformationEngineComponent, "Applies schema mappings", "In-memory")
+Rel(EUEPrescriptionGatewayComponent, TransformationEngineComponent, "Applies schema mappings", "In-memory")
+Rel(FHIRAdapterComponent, RetryDeadLetterQueueComponent, "Offloads failed outbound requests", "Redis protocol")
+Rel(EUEPrescriptionGatewayComponent, RetryDeadLetterQueueComponent, "Offloads failed outbound requests", "Redis protocol")
+Rel(FHIRAdapterComponent, CircuitBreakerRateLimiterComponent, "Evaluates health and dispatches outbound requests", "In-memory")
+Rel(EUEPrescriptionGatewayComponent, CircuitBreakerRateLimiterComponent, "Evaluates health and dispatches outbound requests", "In-memory")
+Rel(CircuitBreakerRateLimiterComponent, ExternalPharmacyNetworks, "Sends payloads", "HTTPS/REST, mTLS")
+Rel(IntegrationService, ExternalPharmacyNetworks, "Transmits payloads", "HTTPS/REST, mTLS")
+Rel(IntegrationService, GoogleCloudBigQuery, "Records audit logs asynchronously", "BigQuery API")
+
+@enduml

@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Feature Store & Metadata DB container
+
+Container_Boundary(feature_store_boundary, "Feature Store & Metadata DB") {
+    Component(RedisFeatureCacheComponent, "Redis Feature Cache Component", "AWS ElastiCache Redis", "Provides sub-millisecond in-memory feature retrieval for low-latency scoring.")
+    Component(PostgreSQLTransactionMetadataStoreComponent, "PostgreSQL Transaction & Metadata Store Component", "PostgreSQL (RDS), AWS KMS, pgcrypto", "Manages relational metadata, case mappings, and structured audit logs with AES-256 storage encryption.")
+    Component(AuditLedgerComponent, "Audit Ledger Component", "SHA-256 Cryptographic Chaining, AWS S3 Object Lock", "Ensures tamper-evident audit logging for 7-year retention via immutable WORM storage.")
+    Component(FeatureIngestionWorkerComponent, "Feature Ingestion Worker Component", "Backend Worker Service", "Updates relational metadata and ingests new features into the storage layer.")
+}
+
+Component_Ext(RealTimeScoringEngine, "Real-Time Scoring Engine", "External System / Engine", "Retrieves features via TCP/Redis Protocol.")
+Component_Ext(AmazonS3ObjectLock, "Amazon S3 Object Lock", "AWS S3", "Guarantees immutable, write-once-read-many (WORM) long-term storage.")
+Component_Ext(CaseManagementBackend, "Case Management Backend", "Backend Service", "Queries case-to-feature snapshots via TCP/PostgreSQL Protocol.")
+
+Rel(RealTimeScoringEngine, RedisFeatureCacheComponent, "Retrieves features", "TCP/Redis Protocol")
+Rel(FeatureIngestionWorkerComponent, PostgreSQLTransactionMetadataStoreComponent, "Updates relational metadata", "TCP/PostgreSQL Protocol")
+Rel(AuditLedgerComponent, AmazonS3ObjectLock, "Syncs immutable logs", "AWS SDK")
+Rel(CaseManagementBackend, PostgreSQLTransactionMetadataStoreComponent, "Queries case-to-feature snapshots", "TCP/PostgreSQL Protocol")
+
+@enduml

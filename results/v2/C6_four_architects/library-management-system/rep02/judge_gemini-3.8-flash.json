@@ -1,0 +1,247 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 and core domain needs through CatalogueComponent, DigitalAssetComponent, and Digital Asset Storage Container for physical/digital items, alongside CirculationComponent and Web Application Container for self-service and circulation management.",
+   "performance_efficiency": "Requirement R-05 (<800ms P99 search) is directly addressed by Search Service Container with FastAPI, Query Translator, and OpenSearch, backed by Redis Cache Container for frequent queries and PgBouncer for database connection pooling.",
+   "compatibility": "External interoperability is thoroughly supported with industry-standard protocols, including OAI-PMH via National Library Registry, ISO 18626 via IllNetworkAdapter for interlibrary loans, OIDC with EU Identity Provider, and S3 API compatibility via MinIO.",
+   "usability": "Both Library Patron and Librarian/Staff roles are served through Web Application Container, featuring UI Component Library, Router Component, and Localization (i18n) Component, though dedicated interfaces or distinct portals for staff versus patrons are combined in one SPA.",
+   "reliability": "High availability and resilience are well architected using DLQ Manager and Stream Processing in Event Broker Container, Redis Replication & High Availability Manager, and Backup & PITR Agent in Database Container.",
+   "security": "The EU-only constraint and general security are rigorously enforced via IP Geolocation & Geo-Fencing Plugin, Data Residency Enforcer (RLS), EU-hosted KMS with AES-256 in Encryption Service, Auth Plugin, and Kafka Access Control & mTLS Gateway.",
+   "maintainability": "Modularity is well achieved through distinct container boundaries and cleanly decoupled components, utilizing Event Broker Container for asynchronous messaging, Redis Pub/Sub for cache invalidation, and Spring Data abstractions.",
+   "portability": "Standard container technologies (Docker-compatible runtimes, Nginx, PostgreSQL, Redis, MinIO) offer excellent portability across cloud and on-premise environments, with minor vendor coupling seen in specific Kong and Celery plugin choices."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 2.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Dedicated Search Service with OpenSearch and Redis caching bypasses the transactional database, providing optimized query paths to satisfy sub-800ms P99 latency under 2,000 concurrent requests.",
+    "elements": [
+     "API Gateway Container",
+     "Search Service Container",
+     "Search API Router",
+     "Redis Cache Container",
+     "Search Index Engine"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in Redis Cache Container",
+     "OpenSearch cluster sizing and replica shard distribution"
+    ],
+    "tradeoffs": [
+     "In-memory caching reduces query latency but introduces cache invalidation complexity"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalogue updates write transactionally to PostgreSQL and emit Kafka events asynchronously. The search index updates decoupled without locking search paths, easily meeting the 5-minute indexing window while preserving read latency.",
+    "elements": [
+     "Core Services Container",
+     "CatalogueComponent",
+     "Event Broker Container",
+     "Search Service Container",
+     "Index Synchronization Consumer",
+     "Search Index Engine"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer lag and bulk indexing throughput in OpenSearch"
+    ],
+    "tradeoffs": [
+     "Eventual consistency between the primary relational database and the search index"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "OpenSearch replica shard placement ensures uninterrupted search functionality if a node fails. Circulation operations execute independently against PostgreSQL via CirculationComponent, completely isolating transactions from search node failures.",
+    "elements": [
+     "Search Service Container",
+     "Search Index Engine",
+     "Core Services Container",
+     "CirculationComponent",
+     "Database Container"
+    ],
+    "sensitivity_points": [
+     "Automated replica shard promotion time in OpenSearch"
+    ],
+    "tradeoffs": [
+     "Maintaining replica shards increases storage and synchronization overhead across nodes"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The frontend is a stateless Single Page Application using token-based authentication routed through an API gateway. Redundant instances can take over traffic seamlessly, though infrastructure-level auto-scaling and failover details are not explicitly modeled.",
+    "elements": [
+     "Web Application Container",
+     "API Gateway Container",
+     "Routing & Proxy Engine",
+     "State Management Component"
+    ],
+    "sensitivity_points": [
+     "Gateway health-check responsiveness and upstream failover detection"
+    ],
+    "tradeoffs": [
+     "Client-side session management requires token refresh and state rehydration on failover"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Digital items are supported via DigitalAssetComponent and MinIO storage, but there is no dedicated external provider integration adapter modeled. Integrating a new e-book provider requires modifying core service cataloguing components directly.",
+    "elements": [
+     "Core Services Container",
+     "CatalogueComponent",
+     "DigitalAssetComponent",
+     "Digital Asset Storage Container"
+    ],
+    "sensitivity_points": [
+     "Coupling between core catalogue models and third-party e-book provider APIs"
+    ],
+    "tradeoffs": [
+     "Consolidating asset logic into core services avoids microservice sprawl but harms extensibility"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "CirculationComponent handles workflows in application code without a business rule engine, configurable policy store, or dynamic rule evaluation mechanism. Changing loan rules between library types requires code changes and redeploying Core Services Container.",
+    "elements": [
+     "Core Services Container",
+     "CirculationComponent",
+     "Database Container"
+    ],
+    "sensitivity_points": [
+     "Hardcoded circulation logic versus externalized policy rule definitions"
+    ],
+    "tradeoffs": [
+     "Embedding loan rules directly in Java services avoids rules-engine overhead but prevents runtime reconfiguration"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "EU data residency is enforced comprehensively across all tiers: API Gateway geo-fencing, PostgreSQL with row-level security residency enforcement, EU-hosted Kafka, MinIO with EU-hosted KMS, and exclusively EU-based third-party integrations.",
+    "elements": [
+     "API Gateway Container",
+     "IP Geolocation & Geo-Fencing Plugin",
+     "Database Container",
+     "Data Residency Enforcer (RLS)",
+     "Digital Asset Storage Container",
+     "Event Broker Container"
+    ],
+    "sensitivity_points": [
+     "Strictness and accuracy of IP geolocation filtering at the edge"
+    ],
+    "tradeoffs": [
+     "Restricting infrastructure strictly to EU regions restricts disaster recovery geographic options"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "The API Gateway validates JWT tokens while CirculationComponent and PostgreSQL Row-Level Security prevent unauthorized cross-patron access. Unauthorized attempts are captured through the database Audit Logging manager and gateway telemetry.",
+    "elements": [
+     "API Gateway Container",
+     "Auth Plugin",
+     "Core Services Container",
+     "IdentityAdapter",
+     "CirculationComponent",
+     "Database Container",
+     "Audit Logging & Encryption Manager"
+    ],
+    "sensitivity_points": [
+     "Granular patron identity validation in CirculationComponent and RLS policies"
+    ],
+    "tradeoffs": [
+     "Synchronous audit logging and policy checks add minor latency to data queries"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Database Container",
+     "IP Geolocation & Geo-Fencing Plugin",
+     "Data Residency Enforcer (RLS)",
+     "Digital Asset Storage Container",
+     "Event Broker Container",
+     "Search Index Engine",
+     "Encryption Service"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "CatalogueComponent",
+     "DigitalAssetComponent",
+     "Digital Asset Storage Container",
+     "Database Container"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Service Container",
+     "Search API Router",
+     "Search Index Engine",
+     "Redis Cache Container",
+     "Telemetry & Tracing Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

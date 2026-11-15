@@ -1,0 +1,20 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(api_gateway, "Amazon API Gateway / ALB", "External load balancer or API Gateway")
+System_Ext(elasticache, "Amazon ElastiCache Serverless", "Redis-compatible cache for models and rules")
+System_Ext(qldb_s3, "Amazon QLDB / S3 Object Lock", "Immutable storage for audit logging")
+
+Container_Boundary(fraud_scoring_engine, "Fraud Scoring Engine") {
+    Component(request_handler, "Request Handler Component", "Rust, Axum/Tonic", "Ingresses scoring requests via gRPC over mTLS and passes masked payloads.")
+    Component(evaluation_pipeline, "Evaluation Pipeline Component", "Rust, Wasm/AST rule evaluator", "Evaluates real-time card-not-present payment authorizations and syncs models and rules.")
+    Component(audit_logger, "Audit Logger Component", "Rust", "Dispatches cryptographically signed decision payloads for compliance and auditability.")
+}
+
+Rel(api_gateway, request_handler, "Ingresses scoring requests", "gRPC over mTLS")
+Rel(request_handler, evaluation_pipeline, "Passes masked payloads", "lock-free crossbeam channels")
+Rel(evaluation_pipeline, elasticache, "Syncs models and rules", "Redis protocol over mTLS")
+Rel(audit_logger, qldb_s3, "Dispatches cryptographically signed decision payloads", "AWS SDK over TLS")
+
+@enduml

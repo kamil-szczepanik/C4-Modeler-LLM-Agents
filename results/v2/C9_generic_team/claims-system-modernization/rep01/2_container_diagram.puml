@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Hybrid Insurance Claims Modernization Platform
+
+Person(Customers_and_Brokers, "Customers and Brokers", "Submit online claims.")
+Person(Claims_Adjusters, "Claims Adjusters", "Handle claims via modern web application.")
+
+System_Ext(On_Premises_COBOL_DB2_Mainframe, "On-Premises COBOL/DB2 Mainframe", "System of record for legacy claims processing.")
+System_Ext(Azure_Active_Directory, "Azure Active Directory", "Provides Single Sign-On (SSO) and identity management.")
+System_Ext(Azure_Monitor_Application_Insights, "Azure Monitor/Application Insights", "Provides distributed tracing, monitoring, and observability.")
+
+System_Boundary(Hybrid_Insurance_Claims_Modernization_Platform, "Hybrid Insurance Claims Modernization Platform") {
+    Container(API_Gateway, "API Gateway", "Azure Hosted API Gateway", "Routes ingress traffic internally and serves low-latency claims reads.")
+    Container(Claim_Ingestion_Validation_Module, "Claim Ingestion & Validation Module", ".NET Core / Modular Monolith", "Validates incoming claim payloads.")
+    Container(Anti_Corruption_Layer_ACL, "Anti-Corruption Layer (ACL)", ".NET Core / Modular Monolith", "Translates and dispatches claim data to legacy interfaces.")
+    ContainerDb(Read_Model_Cache, "Read-Model Cache", "Azure Cache / In-Memory Database", "Serves low-latency claim reads (<2s response) to the API Gateway and Adjuster UI.")
+    Container(Data_Synchronization_Worker, "Data Synchronization Worker", ".NET Background Worker", "Updates claim states asynchronously via Azure Service Bus.")
+    Container(Feature_Flag_Management_Module, "Feature Flag Management Module", "Azure App Configuration", "Dynamically toggles claim-type routing for rapid rollback.")
+    Container(Centralized_Observability_Audit_Logging_Module, "Centralized Observability & Audit Logging Module", "Azure Monitor / Application Insights", "Handles centralized auditing and logging.")
+    Container(Database_Migration_Schema_Versioning_Module, "Database Migration & Schema Versioning Module", "Flyway / Entity Framework", "Performs automated schema versioning.")
+}
+
+Rel(Customers_and_Brokers, API_Gateway, "Submit online claims", "HTTPS")
+Rel(Claims_Adjusters, API_Gateway, "Handle claims via modern web application", "HTTPS / SSO via Azure Active Directory")
+Rel(API_Gateway, Claim_Ingestion_Validation_Module, "Route ingress traffic internally", "Internal API")
+Rel(Claim_Ingestion_Validation_Module, Anti_Corruption_Layer_ACL, "Forward validated claims payloads", "Internal Routing")
+Rel(Anti_Corruption_Layer_ACL, On_Premises_COBOL_DB2_Mainframe, "Translate and dispatch claim data via restricted legacy interfaces", "Restricted Legacy Interfaces")
+Rel(Data_Synchronization_Worker, Read_Model_Cache, "Update claim states asynchronously", "Azure Service Bus")
+Rel(Read_Model_Cache, API_Gateway, "Serve low-latency claim reads (<2s response)", "Internal Cache Query")
+Rel(Feature_Flag_Management_Module, Anti_Corruption_Layer_ACL, "Dynamically toggle claim-type routing for rapid rollback", "Azure App Configuration")
+Rel(Feature_Flag_Management_Module, API_Gateway, "Dynamically toggle claim-type routing for rapid rollback", "Azure App Configuration")
+
+@enduml

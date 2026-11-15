@@ -1,0 +1,32 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Circulation Service container
+
+Container_Boundary(circulation_service, "Circulation Service") {
+    Component(CirculationController, "Circulation Controller", "Spring MVC / Spring gRPC", "Endpoint receiver that handles incoming circulation requests.")
+    Component(LoanManagementComponent, "Loan Management Component", "Java Spring Boot", "Manages item borrowing, returns, loan rules, and publishes domain events.")
+    Component(FineManagementComponent, "Fine Management Component", "Java Spring Boot", "Triggers fine assessments and manages financial penalties.")
+    Component(PaymentIntegrationClient, "Payment Integration Client", "Spring WebClient", "Handles outbound REST calls to process fine payments via the External Payment Gateway.")
+    Component(DataAccessRepository, "Data Access Repository", "Spring Data JPA", "Manages transactional persistence to PostgreSQL.")
+    Component(ComplianceAuditComponent, "Compliance Audit Component", "Spring Aspect / Service", "Intercepts writes for GDPR compliance and enforces EU data residency requirements.")
+}
+
+System_Ext(ApiGateway, "API Gateway", "Routes circulation requests")
+System_Ext(ExternalPaymentGateway, "External Payment Gateway", "Processes fines and fees")
+System_Ext(PostgreSQL, "PostgreSQL", "Stores circulation data")
+System_Ext(RabbitMQ, "RabbitMQ", "Messaging broker for domain events")
+
+Rel(ApiGateway, CirculationController, "Routes circulation requests", "gRPC over TLS")
+Rel(CirculationController, LoanManagementComponent, "Invokes business rules", "In-memory method call")
+Rel(LoanManagementComponent, FineManagementComponent, "Triggers fine assessments", "In-memory")
+Rel(FineManagementComponent, PaymentIntegrationClient, "Requests fine processing", "REST/HTTPS")
+Rel(PaymentIntegrationClient, ExternalPaymentGateway, "Processes fines and fees", "REST/HTTPS")
+Rel(LoanManagementComponent, DataAccessRepository, "Persists state", "JPA/TCP")
+Rel(FineManagementComponent, DataAccessRepository, "Persists state", "JPA/TCP")
+Rel(DataAccessRepository, PostgreSQL, "Reads and writes circulation data", "TCP")
+Rel(LoanManagementComponent, RabbitMQ, "Publishes LoanCreated and ItemReturned events", "AMQP over TLS")
+Rel(ComplianceAuditComponent, DataAccessRepository, "Intercepts writes for GDPR compliance", "In-memory aspect")
+
+@enduml

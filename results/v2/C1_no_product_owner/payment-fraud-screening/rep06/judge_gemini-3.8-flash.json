@@ -1,0 +1,318 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "All functional requirements are met: Go Fraud Scoring Engine scores transactions, Case Management Backend provides analyst workflows, and Config & Model Synchronizer enables zero-downtime updates of rules and ONNX models from Amazon S3.",
+   "performance_efficiency": "In-memory ONNX Runtime C bindings, Redis ElastiCache velocity counters, and an Async Batch Writer for audit logging ensure high throughput and low latency, though AWS API Gateway at 3,000 rps introduces notable latency and cost overhead.",
+   "compatibility": "The architecture integrates cleanly via standardized protocols, using gRPC and HTTPS with mTLS 1.3 for acquirers, OIDC/OAuth 2.0 via AWS Cognito for analysts, and standard AWS SDK APIs for compliance archiving.",
+   "usability": "Fraud analysts are supported via Case Management Backend and Case API Controller with Masking Middleware, but no web UI or presentation container is modeled for analyst interactions.",
+   "reliability": "A Circuit Breaker Wrapper provides in-memory fault tolerance, but the architecture lacks an explicit fallback or fail-open mechanism at the gateway layer to guarantee payments are not blocked for over 1 minute if scoring fails.",
+   "security": "Security requirements are thoroughly satisfied: mTLS Endpoint Configuration, AWS WAF, Masking Middleware to prevent PAN exposure, column encryption with pgcrypto, and S3 Object Lock in Compliance Mode for tamper-evident audit storage.",
+   "maintainability": "Strong modularity separates scoring, case management, and persistence. Using managed services like ECS Fargate and Aurora Serverless keeps operational maintenance manageable for a small three-engineer team.",
+   "portability": "The architecture effectively targets AWS eu-west-1 using ECS Fargate, Aurora Serverless v2, and S3 Object Lock, though high reliance on AWS-specific features like VPC Lattice and Cognito limits multi-cloud portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.0,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "In-memory ONNX scoring, Go rule engine, and async batch audit logging keep latencies low, though AWS API Gateway and VPC Lattice ingress hops require careful tuning under 3,000 RPS.",
+    "elements": [
+     "AWS API Gateway",
+     "Go Fraud Scoring Engine",
+     "API Handler Component",
+     "Rule Engine Component",
+     "Model Scorer Component",
+     "Amazon ElastiCache (Redis)",
+     "Audit Logger Component"
+    ],
+    "sensitivity_points": [
+     "VPC Lattice and API Gateway networking overhead on overall request latency",
+     "In-memory model execution times with ONNX runtime"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging improves scoring latency but introduces risk of data buffering during spikes"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management is isolated in its own ECS container and queries a segregated read replica store in Aurora, preventing analyst analytical queries from interfering with the real-time scoring path.",
+    "elements": [
+     "Case Management Backend",
+     "Case API Controller",
+     "Amazon Aurora Serverless v2",
+     "Case Management Data Store",
+     "Go Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Aurora replication lag between fraud scoring writes and analyst case queries"
+    ],
+    "tradeoffs": [
+     "Read replication preserves real-time scoring throughput at the cost of slight case data staleness"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The circuit breaker is placed inside the Go Fraud Scoring Engine; if the scoring container itself crashes, API Gateway lacks an explicit fallback mechanism or standalone degraded handler to process payments.",
+    "elements": [
+     "AWS API Gateway",
+     "Go Fraud Scoring Engine",
+     "Circuit Breaker Wrapper"
+    ],
+    "sensitivity_points": [
+     "Absence of edge-level fallback routing when scoring containers are unreachable"
+    ],
+    "tradeoffs": [
+     "Handling fallback in scoring engine saves architectural complexity but fails during full container crashes"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Audit Logger Component uses an asynchronous batch writer, decoupling scoring decisions from Aurora storage latency. Extended outages could exhaust memory buffers without a documented durable local staging spool.",
+    "elements": [
+     "Go Fraud Scoring Engine",
+     "Audit Logger Component",
+     "Amazon Aurora Serverless v2"
+    ],
+    "sensitivity_points": [
+     "In-memory batch buffer size limits during prolonged database backpressure"
+    ],
+    "tradeoffs": [
+     "Decoupling audit writing prioritizes decision latency over immediate audit durability guarantees"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Config & Model Synchronizer pulls models dynamically from S3 into memory with ONNX runtime bindings, enabling hot-reloads and rapid rollbacks with model version tracking in audit records without restarting tasks.",
+    "elements": [
+     "Config & Model Synchronizer Component",
+     "Model Scorer Component",
+     "Amazon S3",
+     "Audit Logger Component"
+    ],
+    "sensitivity_points": [
+     "Model loading memory spikes and sync polling frequency from Amazon S3"
+    ],
+    "tradeoffs": [
+     "Dynamic in-process model swapping avoids restarts but increases container memory footprint"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Rules are decoupled via an embedded DSL and fetched continuously from S3 using the Config & Model Synchronizer Component, ensuring sub-hour rule activation without downtime while logging rule execution trails.",
+    "elements": [
+     "Rule Engine Component",
+     "Config & Model Synchronizer Component",
+     "Amazon S3",
+     "Audit Logger Component"
+    ],
+    "sensitivity_points": [
+     "Consistency of active rule sets across distributed Fargate scoring instances"
+    ],
+    "tradeoffs": [
+     "Dynamically evaluated DSL rules offer rapid zero-downtime updates at slightly lower execution speed"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Masking Middleware enforces PAN masking for analysts, but the architecture lacks explicit behavioral anomaly detection mechanisms to detect and alert on compromised analyst accounts within 15 minutes.",
+    "elements": [
+     "Masking Middleware",
+     "Workflow & Assignment Service",
+     "Case API Controller",
+     "AWS WAF"
+    ],
+    "sensitivity_points": [
+     "Lack of behavioral analysis or UEBA tooling integrated with Cognito or WAF"
+    ],
+    "tradeoffs": [
+     "Data masking at API boundary simplifies storage logic but requires strict middleware enforcement"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Decisions, inputs, and models are systematically archived to Amazon S3 Object Lock in Compliance Mode for 7 years, providing an unalterable, searchable historical audit trail easily queryable within one day.",
+    "elements": [
+     "Audit / Compliance Archive",
+     "Amazon Aurora Serverless v2",
+     "Audit Logging Adapter",
+     "Fraud Scoring Data Store"
+    ],
+    "sensitivity_points": [
+     "Retention policy enforcement in S3 Object Lock and encryption key lifecycle in KMS"
+    ],
+    "tradeoffs": [
+     "Immutable write-once storage guarantees compliance but prevents subsequent data corrections"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "none",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "mTLS Endpoint Configuration",
+     "AWS WAF",
+     "Masking Middleware",
+     "Session State & Token Map",
+     "Fraud Scoring Data Store"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Audit / Compliance Archive",
+     "Amazon Aurora Serverless v2",
+     "Audit Logger Component",
+     "Audit Logging Adapter"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "External Notification / Alerting Service",
+     "AWS API Gateway",
+     "Amazon Aurora Serverless v2"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Go Fraud Scoring Engine",
+     "API Handler Component",
+     "Rule Engine Component",
+     "Model Scorer Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Backend",
+     "Case API Controller",
+     "Workflow & Assignment Service",
+     "Persistence Repository",
+     "Fraud Analyst & Risk Engineer"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Config & Model Synchronizer Component",
+     "Amazon S3",
+     "Rule Engine Component",
+     "Model Scorer Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Go Fraud Scoring Engine",
+     "Model Scorer Component",
+     "Amazon ElastiCache (Redis)",
+     "Velocity Counter Component",
+     "Feature Cache"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Masking Middleware",
+     "Session State & Token Map",
+     "Fraud Scoring Data Store"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit / Compliance Archive",
+     "Audit Logger Component",
+     "Audit Logging Adapter",
+     "Amazon Aurora Serverless v2"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Circuit Breaker Wrapper"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

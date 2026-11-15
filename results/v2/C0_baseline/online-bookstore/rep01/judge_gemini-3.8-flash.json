@@ -1,0 +1,324 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are met: browsing/search via 'Search Engine Service' and OpenSearch; checkout via 'Cart & Checkout Orchestrator'; ratings via 'Review & Rating Aggregator'; and recommendations via 'Personalization Engine'. Multi-currency, shipping integrations, and GDPR/CCPA are explicitly managed across dedicated containers and 'PII Scrubber and Processor'.",
+   "performance_efficiency": "Performance and 1M MAU scalability are achieved through AWS CloudFront CDN caching, Route 53 latency routing, OpenSearch indexing, Redis session caching, and asynchronous pipelines using AWS SQS, Kinesis Firehose, and MSK Debezium CDC for decoupled processing.",
+   "compatibility": "The architecture seamlessly integrates with specified external systems including 'Payment Gateway', 'Third-Party Shipping API', and 'Tax Calculation Service' using standard HTTPS/REST, gRPC over mTLS, and AWS SDK messaging protocols.",
+   "usability": "The 'Single Page Application (SPA)' provides tailored interfaces for Book Buyers, Site Administrators, and Support Representatives. International usability is well-supported by the 'Localization Container' via 'Translation Service Component' and 'Currency Conversion Engine'.",
+   "reliability": "High availability (99.95%) is addressed via multi-region edge routing, SQS dead-lettering, SQLite WAL local buffering, and the transactional Outbox Pattern. However, explicit multi-region database replication and failover topologies for PostgreSQL instances are omitted.",
+   "security": "OWASP Top-10 mitigations are enforced via AWS WAF and the 'Traffic Policy & Throttling Component'. Security is reinforced using AWS Cognito JWT validation, App Mesh mTLS, ephemeral PCI-DSS card tokenization in 'Payment Processor Client', and boundary PII scrubbing.",
+   "maintainability": "The system exhibits high maintainability through clean domain decomposition (Catalog, Checkout, Localization, Analytics). Components maintain low coupling and clear responsibilities using asynchronous messaging, event streaming, and well-defined gRPC contracts.",
+   "portability": "The architecture targets AWS across the three required regions via CloudFront and Route 53. Application containers use standard runtimes (Node, Spring Boot, Go, Python), though deep reliance on proprietary services like App Mesh and Kinesis limits cloud provider portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront CDN and S3 host the SPA for low-latency delivery on 3G. Backend search queries are offloaded to Amazon OpenSearch. However, automated dynamic scaling policies for container instances under sudden 10x peak load are not explicitly specified.",
+    "elements": [
+     "Single Page Application (SPA)",
+     "Edge Router & TLS Termination",
+     "Catalog & Search Container",
+     "Search Engine Service"
+    ],
+    "sensitivity_points": [
+     "CloudFront edge caching configuration for catalogue assets",
+     "OpenSearch query latency and cluster sizing under ten-fold traffic"
+    ],
+    "tradeoffs": [
+     "Aggressive edge caching improves load times but risks serving stale catalog data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendation computation is completely decoupled in an independent Recommendation Container and executed out-of-band. The Catalog & Search Container serves user browsing directly via OpenSearch without runtime dependencies on recommendation model recomputation.",
+    "elements": [
+     "Recommendation Container",
+     "Personalization Engine",
+     "Catalog & Search Container",
+     "Search Engine Service"
+    ],
+    "sensitivity_points": [
+     "Independent resource allocation preventing recommendation workload interference",
+     "Fast fallback to cold-start cache during intensive batch updates"
+    ],
+    "tradeoffs": [
+     "Decoupled asynchronous recommendation updates trade immediate freshness for browsing stability"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Cart & Checkout Orchestrator uses the transactional Outbox Pattern and Amazon SQS to decouple order fulfillment from the Third-Party Shipping API. If the shipping API fails, checkout succeeds immediately and shipping events are retried asynchronously.",
+    "elements": [
+     "Order & Checkout Container",
+     "Cart & Checkout Orchestrator",
+     "AWS SQS",
+     "Fulfillment & Tax Broker"
+    ],
+    "sensitivity_points": [
+     "Reliability of SQS message retention and dead-letter queues",
+     "Transactional atomicity between order write and outbox event dispatch"
+    ],
+    "tradeoffs": [
+     "Asynchronous fulfillment ensures order capture but delays immediate tracking number generation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "While Route 53 latency-based routing and multiple AWS regions are listed in the brief, the architecture lacks cross-region database replication mechanisms (such as Aurora Global Database) for the Order Database PostgreSQL instance, risking data loss or downtime during regional failover.",
+    "elements": [
+     "Order Database",
+     "Order & Checkout Container",
+     "Edge Router & TLS Termination"
+    ],
+    "sensitivity_points": [
+     "Cross-region database replication latency and failover automation",
+     "Route 53 DNS TTL and health check failover responsiveness"
+    ],
+    "tradeoffs": [
+     "Multi-region data consistency increases cross-region replication costs and write latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Multi-currency support is cleanly encapsulated within the Localization Container via the Currency Conversion Engine and Locale Router. Checkout and payments interact via external payment gateways and localization providers without modifying catalog or recommendation code.",
+    "elements": [
+     "Localization Container",
+     "Currency Conversion Engine",
+     "Order & Checkout Container",
+     "Payment Processor Client"
+    ],
+    "sensitivity_points": [
+     "Dynamic exchange rate update interfaces in Currency Conversion Engine",
+     "Support for zero-decimal currencies like JPY in Payment Processor Client"
+    ],
+    "tradeoffs": [
+     "Centralized localization service simplifies currency additions but introduces internal network hops"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Recommendation Container encapsulates recommendation logic behind a dedicated API router. Algorithms inside Personalization Engine can be upgraded or replaced with zero interface or behavioral changes required in the Catalog or API Gateway containers.",
+    "elements": [
+     "Recommendation Container",
+     "Personalization Engine",
+     "Recommendation API Router"
+    ],
+    "sensitivity_points": [
+     "Adherence to stable gRPC and REST recommendation interface contracts",
+     "Isolation of algorithmic models within container boundary"
+    ],
+    "tradeoffs": [
+     "Strict container modularity simplifies algorithm evolution but adds gRPC serialization overhead"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "AWS WAF and API Gateway enforce OWASP Top-10 mitigations and schema validation at the perimeter. Backend components use Spring Data JPA parameterized queries and OpenSearch DSL, eliminating SQL injection and filtering XSS payloads before persisting review data.",
+    "elements": [
+     "Traffic Policy & Throttling Component",
+     "Request Transformer",
+     "Product Metadata Repository",
+     "Catalog API Controller"
+    ],
+    "sensitivity_points": [
+     "Completeness of WAF rule sets and perimeter input validation",
+     "Consistent parameterization in PostgreSQL queries and OpenSearch indexing"
+    ],
+    "tradeoffs": [
+     "Strict perimeter schema and payload validation slightly increases ingress processing latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "The architecture provides a PII Scrubber at ingestion and consent flags, but lacks a centralized deletion coordinator or orchestration workflow to purge personal data across PostgreSQL, local buffer storage, OpenSearch, and downstream event sinks within 30 days.",
+    "elements": [
+     "Analytics & Event Ingestion Container",
+     "PII Scrubber and Processor",
+     "Order Database",
+     "Local Buffer Manager"
+    ],
+    "sensitivity_points": [
+     "Cross-service data deletion orchestration across multiple persistent stores",
+     "Handling encrypted PII in backups and immutable log streams"
+    ],
+    "tradeoffs": [
+     "Comprehensive distributed deletion guarantees compliance but complicates distributed event sourcing architectures"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Compliance & Consent Banner",
+     "PII Scrubber and Processor",
+     "Cold-Start & Fallback Engine",
+     "Order Database"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Localization Container",
+     "Localization Context Provider",
+     "Currency Conversion Engine",
+     "Tax Calculation Service"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Third-Party Shipping API",
+     "Fulfillment & Tax Broker",
+     "Order & Checkout Container"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Container",
+     "Catalog & Search Module",
+     "Catalog API Controller",
+     "Search Engine Service",
+     "Product Metadata Repository"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Order & Checkout Container",
+     "Payment Gateway",
+     "Checkout & Cart Module",
+     "Cart & Checkout Orchestrator",
+     "Payment Processor Client"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Review & Rating Aggregator"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Container",
+     "Personalization Engine",
+     "Recommendation API Router"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Single Page Application (SPA)",
+     "API Gateway",
+     "Session Cache",
+     "AWS SQS",
+     "Sync & Resilience Pipeline"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Single Page Application (SPA)",
+     "Edge Router & TLS Termination"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Single Page Application (SPA)",
+     "Edge Router & TLS Termination",
+     "Session Cache",
+     "Sync & Resilience Pipeline",
+     "AWS SQS"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Traffic Policy & Throttling Component",
+     "Auth & Token Validator",
+     "Cart & Checkout Orchestrator"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

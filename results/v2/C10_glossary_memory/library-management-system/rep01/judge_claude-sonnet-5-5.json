@@ -1,0 +1,257 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 3,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.75,
+  "justifications": {
+   "functional_suitability": "R-01 is covered by Search & Catalog Service (Catalog Management Service, Elasticsearch Client Adapter) and Digital Content Sync Worker for digital items. Circulation & Core Engine and the portals cover the wider scope. Gaps: no explicit physical item inventory model, and the Search-to-Elasticsearch indexing path is unclear.",
+   "performance_efficiency": "Elasticsearch in Search & Catalog Service, PgBouncer Connection Pooler, async workers via queues, and CDN/rate limiting support the sub-800ms target. Gaps: no search result caching, no autoscaling or replicas for search, and no latency budget or load testing; APM is only monitoring.",
+   "compatibility": "Standards-based interfaces: OIDC/OAuth2 with the EU IdP, OAuth2/REST to OverDrive/Libby via Digital Content Sync Worker, SMTP/HTTPS notifications, OTLP and Syslog. Gaps: no library-standard protocols (MARC, Z39.50, SIP2, NCIP) and no anti-corruption layer for provider APIs.",
+   "usability": "Each user group has a dedicated interface: Patron Portal (Catalog Discovery UI, Loan Management Dashboard), Staff Circulation App with offline caching, and Admin Console with reporting. Gaps: no accessibility or multilingual UI mechanisms (only localized notifications) and an unclear mobile channel.",
+   "reliability": "Primary Database has Replication & Failover Component, EU Secondary Region Backup Target, multi-AZ Redis, async queues, Sync Circuit Breaker & Retry Manager, and offline caching in Staff Circulation App. Gaps: no stated availability targets, no redundancy for gateway, Search or Elasticsearch, and no RPO/RTO or queue durability.",
+   "security": "Strong coverage: EU IdP with MFA/OIDC, JWT Validation Filter, DDoS CDN, rate limiting, mTLS and TLS 1.3, AES-256 and pgcrypto column-level PII encryption, encrypted offline cache, Patron Policy and override permissions, audit export to EU Compliance & Audit Logging Service, and EU-only residency.",
+   "maintainability": "Clear decomposition into containers and components with single responsibilities: Search & Catalog Service, Circulation & Core Engine, separate workers, and a BFF layer. Async queues decouple workers. Gaps: the polyglot stack (Go/Node/Java), some inconsistent L3 diagrams (containers listed as components), and shared Primary Database coupling.",
+   "portability": "Open technologies (PostgreSQL, Elasticsearch, Envoy, RabbitMQ) and AWS/Azure EU hosting enable cloud flexibility. Gaps: no containerization or orchestration or IaC is described, and the CDN and APM providers are named without abstraction layers; replaceability is implied rather than designed."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 2,
+   "PERF-01": 3,
+   "PERF-02": 2,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.4375,
+  "by_quality_attribute": {
+   "Performance": 2.5,
+   "Availability": 2.0,
+   "Modifiability": 3.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Search & Catalog Service",
+     "Elasticsearch Client Adapter",
+     "API Gateway / BFF",
+     "Rate Limiting & Threat Protection Component",
+     "Anycast CDN / DDoS Protection Service (EU-PoPs)"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch sizing, sharding and replicas are unspecified",
+     "Rate limiting thresholds could throttle legitimate semester-start bursts"
+    ],
+    "tradeoffs": [
+     "Rate limiting protects search but may reject peak legitimate traffic",
+     "Extra gateway hops add latency"
+    ],
+    "justification": "Dedicated Elasticsearch-backed search with gateway and rate limiting is sound, but no caching, autoscaling, cluster sizing or load-test evidence supports P99 under 800 ms at 2,000 concurrent searches."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "elements": [
+     "Search & Catalog Service",
+     "Catalog Management Service",
+     "Elasticsearch Client Adapter",
+     "Primary Database",
+     "Circulation & Core Engine"
+    ],
+    "sensitivity_points": [
+     "Index update path and refresh interval are undefined",
+     "No defined sync between PostgreSQL and Elasticsearch"
+    ],
+    "tradeoffs": [
+     "Indexing frequency trades freshness against search latency",
+     "Write load on shared Elasticsearch competes with queries"
+    ],
+    "justification": "The catalog service indexes records, but there is no explicit mechanism guaranteeing 5-minute searchability, no separation of read/write load, and no queue or CDC from the database; the freshness measure is unaddressed."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "Search & Catalog Service",
+     "Elasticsearch Client Adapter",
+     "Primary Database",
+     "Replication & Failover Component"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster topology and replica shards are unspecified",
+     "Search is a single container with no stated redundancy"
+    ],
+    "tradeoffs": [
+     "Replica shards improve availability but increase cost and indexing load"
+    ],
+    "justification": "Database replication and failover exist, protecting loan transactions via ACID. Nothing states Elasticsearch clustering, replicas or failover, so search continuity during a node failure is not shown; circulation is independent of search, which helps."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Patron Portal",
+     "API Gateway / BFF",
+     "Anycast CDN / DDoS Protection Service (EU-PoPs)",
+     "Primary Database"
+    ],
+    "sensitivity_points": [
+     "No multiple instances or load balancing of portal/gateway are modeled",
+     "Health checks and failover timing are unspecified"
+    ],
+    "tradeoffs": [
+     "Stateless instances ease failover but require externalised session state"
+    ],
+    "justification": "Portal is a client-side container and the CDN gives some routing resilience, but no redundant instances, orchestration or health-check mechanism is shown. Loan data is protected by the database's replication, so loss is unlikely, yet the 1-minute interruption bound is unsupported."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "elements": [
+     "Digital Content Sync Worker",
+     "Provider Integration Client",
+     "Catalog Persistence Adapter",
+     "Sync Circuit Breaker & Retry Manager"
+    ],
+    "sensitivity_points": [
+     "Provider client may lack an abstract interface for multiple providers",
+     "Metadata mapping to the catalog schema may leak into the persistence adapter"
+    ],
+    "tradeoffs": [
+     "A uniform provider abstraction eases extension but limits provider-specific features"
+    ],
+    "justification": "Isolated Provider Integration Client and asynchronous worker confine provider-specific logic to one component, with persistence and resilience separate. However, there is no explicit pluggable provider interface, and catalog indexing into Elasticsearch is unclear."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "elements": [
+     "Patron Policy Component",
+     "Loan Management Component",
+     "Admin Console",
+     "System Configuration Client"
+    ],
+    "sensitivity_points": [
+     "Loan rules location (code versus data) is unspecified",
+     "Rules per library tenant are not modeled"
+    ],
+    "tradeoffs": [
+     "Configurable rules add flexibility but complicate validation and testing"
+    ],
+    "justification": "A separate Patron Policy Component and Admin configuration client suggest a place for rules, but no rule engine, tenant-specific configuration store or runtime reload is described. Rules are probably in Go code, requiring redeployment."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "elements": [
+     "EU Cloud Infrastructure (AWS/Azure EU Region)",
+     "Primary Database",
+     "EU Secondary Region Backup Target",
+     "Anycast CDN / DDoS Protection Service (EU-PoPs)",
+     "Notification Worker",
+     "External Notification Service"
+    ],
+    "sensitivity_points": [
+     "External Notification Service location is not stated as EU",
+     "Third-party providers and OverDrive/Libby receive data without EU guarantee"
+    ],
+    "tradeoffs": [
+     "EU-only providers limit vendor choice and may raise cost"
+    ],
+    "justification": "Hosting, database, backups, CDN PoPs, IdP, logging and APM are all EU-bound. Gaps: External Notification Service and content providers are not stated EU, and no technical enforcement (policy, egress control) is shown. Also offline caching of PII on client devices."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Authentication & JWT Validation Filter",
+     "Circulation API & Auth Facade",
+     "Patron Policy Component",
+     "Audit & Event Dispatcher Component",
+     "EU Compliance & Audit Logging Service"
+    ],
+    "sensitivity_points": [
+     "Object-level authorization for loan history is not explicit",
+     "Denied-access events are not explicitly audited"
+    ],
+    "tradeoffs": [
+     "Fine-grained per-record checks add latency and complexity to every request"
+    ],
+    "justification": "JWT validation, an auth facade, a policy component and audit export to a compliance service provide the pieces. However, no explicit ownership check for loan history, nor logging of denied attempts, is described; the loan history is not named as an audited resource."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "partial"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "EU Cloud Infrastructure (AWS/Azure EU Region)",
+     "EU Secondary Region Backup Target",
+     "Anycast CDN / DDoS Protection Service (EU-PoPs)",
+     "Primary Database",
+     "EU Identity Provider (IdP)",
+     "EU Compliance & Audit Logging Service",
+     "EU Monitoring & APM Provider"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Search & Catalog Service",
+     "Catalog Management Service",
+     "Digital Content Sync Worker",
+     "Provider Integration Client",
+     "Catalog Persistence Adapter",
+     "Primary Database",
+     "Third-Party Digital Content Providers (OverDrive/Libby)",
+     "Elasticsearch Client Adapter"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Search & Catalog Service",
+     "Elasticsearch Client Adapter",
+     "Rate Limiting & Threat Protection Component",
+     "EU Monitoring & APM Provider",
+     "Edge Router & TLS Termination Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

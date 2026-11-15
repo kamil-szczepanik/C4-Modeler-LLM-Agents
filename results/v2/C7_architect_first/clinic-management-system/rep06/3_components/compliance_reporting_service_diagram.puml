@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Compliance & Reporting Service container
+
+System_Ext(Core_Business_Services, "Core Business Services", "External system publishing domain and access events.")
+System_Ext(API_Gateway, "API Gateway", "External gateway routing client requests.")
+
+Container_Boundary(Compliance_Reporting_Service, "Compliance & Reporting Service") {
+    Component(Compliance_Dashboard_API, "Compliance Dashboard API", "Spring Boot REST controller", "Spring Boot REST controller handling secure, RBAC-protected ad-hoc queries.")
+    Component(Audit_Log_Processor, "Audit Log Processor", "Asynchronous Kafka consumer", "Asynchronous Kafka consumer handling log ingestion, normalization, and cryptographic chaining.")
+    Component(Regulatory_Report_Generator, "Regulatory Report Generator", "Isolated KEDA-scaled worker pool", "Isolated KEDA-scaled worker pool producing encrypted PDF, JSON, and CSV reports.")
+    Component(Data_Retention_Enforcer, "Data Retention Enforcer", "Background lifecycle worker", "Background lifecycle worker managing the 10-year data archiving policy.")
+    ComponentDb(WORM_Audit_Store, "WORM Audit Store", "External immutable storage", "External immutable storage target with cross-region replication and object-lock.")
+    ComponentDb(CockroachDB_Redis, "CockroachDB & Redis", "Distributed SQL database and in-memory cache", "Distributed SQL database with read-replicas and in-memory cache with strict TTL.")
+    Component(HashiCorp_Vault, "HashiCorp Vault", "KMS", "KMS managing AES-256 keys for temporary scratch space and export encryption.")
+}
+
+Rel(Core_Business_Services, Audit_Log_Processor, "Publishes domain and access events", "Kafka over TLS with mTLS")
+Rel(API_Gateway, Compliance_Dashboard_API, "Exposes compliance queries", "HTTPS/REST")
+Rel(Compliance_Dashboard_API, CockroachDB_Redis, "Fetches masked audit metadata", "JDBC/TLS")
+Rel(Regulatory_Report_Generator, HashiCorp_Vault, "Fetches encryption keys", "HTTPS/TLS")
+Rel(Data_Retention_Enforcer, WORM_Audit_Store, "Archives finalized bundles and verifies health", "gRPC/TLS")
+Rel(Regulatory_Report_Generator, WORM_Audit_Store, "Archives finalized bundles and verifies health", "gRPC/TLS")
+
+@enduml

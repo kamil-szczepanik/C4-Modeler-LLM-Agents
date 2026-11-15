@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Notification Worker Container container
+
+Container_Boundary(notification_worker_container, "Notification Worker Container") {
+    Component(Event_Consumer_Engine, "Event Consumer Engine", "Go / Sarama/Segmentio", "Consumes domain events from the message broker using TLS-secured protocols.")
+    Component(Notification_Preferences_Consent_Manager, "Notification Preferences & Consent Manager", "Go", "Validates patron consent and filters payloads to ensure GDPR compliance.")
+    Component(Template_Personalization_Engine, "Template & Personalization Engine", "Go", "Formats and personalizes notification templates with filtered payloads.")
+    Component(Dispatch_Router_Circuit_Breaker, "Dispatch Router & Circuit Breaker", "Go", "Routes messages to external EU email/SMS gateways safely with circuit-breaker protection.")
+    Component(Retry_Dead_Letter_Queue_DLQ_Manager, "Retry & Dead-Letter Queue (DLQ) Manager", "Go", "Audits failed messages, handles retries, and drops unconsented events to EU-hosted PostgreSQL.")
+}
+
+Component(Message_Broker, "Message Broker", "Apache Kafka / RabbitMQ", "Reliable, decoupled asynchronous event streaming for domain events.")
+Component(EU_hosted_PostgreSQL_Redis_Cache, "EU-hosted PostgreSQL & Redis Cache", "PostgreSQL & Redis", "Utilized for consent caching and DLQ auditing, secured with AES-256 encryption-at-rest and EU-only residency.")
+Component(External_EU_Email_SMS_Gateways, "External EU Email/SMS Gateways", "SendGrid/Twilio EU endpoints", "Delivers external email and SMS notifications via TLS 1.3 HTTPS/REST.")
+
+Rel(Event_Consumer_Engine, Message_Broker, "Consumes domain events", "TLS-secured gRPC/AMQP with SASL/SCRAM-V5 and mTLS")
+Rel(Event_Consumer_Engine, Notification_Preferences_Consent_Manager, "Validates consent", "In-Process Function Call / gRPC")
+Rel(Notification_Preferences_Consent_Manager, Template_Personalization_Engine, "Forwards filtered payloads", "In-Process Function Call")
+Rel(Dispatch_Router_Circuit_Breaker, External_EU_Email_SMS_Gateways, "Sends notifications", "TLS 1.3 HTTPS/REST with certificate pinning")
+Rel(Retry_Dead_Letter_Queue_DLQ_Manager, EU_hosted_PostgreSQL_Redis_Cache, "Audits failed messages and drops unconsented events", "AES-256 encrypted connection")
+@enduml

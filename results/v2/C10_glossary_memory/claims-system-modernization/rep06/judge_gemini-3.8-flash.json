@@ -1,0 +1,331 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "Customer Portal App covers R-01 and Adjuster Web App satisfies R-02. Claim Query & Routing Component and Fallback Orchestrator Component support staged migration (R-03), though explicit routing rules per claim type across the hybrid boundary are minimally specified.",
+   "performance_efficiency": "The sub-2s target (R-05) is met by decoupling reads from the 5s mainframe via Claim Read Database and Claim Query & Routing Component, complemented by BFF Orchestrator Service and asynchronous queuing via Azure Service Bus to avoid blocking sync calls.",
+   "compatibility": "Integrates smoothly with Legacy Mainframe COBOL/DB2 System of Record via Enterprise Service Bus / Integration Gateway using MQ/MFT, and integrates with Insurer Active Directory using OIDC/OAuth2 via Entra ID Connect without requiring excessive mainframe modifications.",
+   "usability": "Dedicated interfaces serve each user group: Claim Submission UI for Customers & Brokers, Adjuster Web App (UI Shell & Routing, Claim Action Queue) for adjusters, and Audit Query API for Finance & Compliance Auditors.",
+   "reliability": "Azure Service Bus buffers traffic to protect the 23:00-05:00 batch window and prevents message loss. Fallback Orchestrator Component handles mainframe resilience, though explicit deduplication or idempotent processing mechanisms for R-04 are not detailed.",
+   "security": "R-07 is thoroughly addressed via Insurer Active Directory integration with Authentication Client and Session & Token Manager. In addition, Claim Read Store employs TDE and Dynamic Data Masking, and Audit Data Store utilizes Azure SQL Database Ledger.",
+   "maintainability": "The .NET Core modular monolith (Claims Core API) provides clear domain separation. Fallback Orchestrator Component aids the one-day switchback requirement (R-06), though configuration mechanisms (such as feature flags or routing tables) for switching back are not explicitly detailed.",
+   "portability": "Well-adapted to the hybrid target (on-prem-mainframe and azure-westeurope) via Azure Container Apps, Azure Service Bus, and IPsec VPN/ExpressRoute. The implementation leans on Azure-specific PaaS offerings, which slightly limits cloud portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 4.0,
+   "Modifiability": 4.5,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "The BFF and Claim Read Database decouple UI loads from the mainframe. However, the architecture lacks an explicit reverse-synchronization path from the mainframe to populate legacy data in the Claim Read Store ahead of time.",
+    "elements": [
+     "Adjuster Web App",
+     "BFF Orchestrator Service / BFF Claim Controller",
+     "Claims Core API",
+     "Claim Read Database",
+     "Claim Read Store"
+    ],
+    "sensitivity_points": [
+     "Read model staleness depends on proactive synchronization frequency from mainframe data.",
+     "Direct mainframe calls during query routing would breach the 2-second SLA."
+    ],
+    "tradeoffs": [
+     "Eventual consistency of claim views is traded off against sub-2-second UI response time."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Submissions are accepted by the Claims Core API and immediately queued in Azure Service Bus. The Integration Worker decouples ingestion from mainframe delivery, throttling traffic to avoid impacting the nightly batch window.",
+    "elements": [
+     "Customer Portal App",
+     "Claims Core API",
+     "Azure Service Bus",
+     "Integration Worker",
+     "Service Bus Message Listener"
+    ],
+    "sensitivity_points": [
+     "Azure Service Bus queue retention and maximum partition capacities under peak load bursts.",
+     "Worker throttling rate during the active processing window."
+    ],
+    "tradeoffs": [
+     "Real-time processing in the mainframe is traded off for system ingestion availability."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Azure Service Bus reliably queues all online submissions while the mainframe is unavailable during the batch window. Once the window closes, the Integration Worker resumes forwarding messages without dropping data.",
+    "elements": [
+     "Customer Portal App",
+     "Claims Core API",
+     "Azure Service Bus",
+     "Integration Worker",
+     "Enterprise Service Bus / Integration Gateway"
+    ],
+    "sensitivity_points": [
+     "Message time-to-live and queue storage limits during prolonged batch windows.",
+     "Integration Worker operational schedule coordination with batch window boundaries."
+    ],
+    "tradeoffs": [
+     "Latency in updating the legacy system of record is traded for high availability."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "The asynchronous pipeline buffers failures, but explicit reconciliation mechanisms, deduplication keys, dead-letter re-processing, and idempotency controls are omitted from the design descriptions.",
+    "elements": [
+     "Integration Worker",
+     "Mainframe Integration Processor",
+     "Azure Service Bus",
+     "Enterprise Service Bus / Integration Gateway",
+     "Legacy Mainframe COBOL/DB2 System of Record"
+    ],
+    "sensitivity_points": [
+     "Lack of documented idempotent message handling at the mainframe integration boundary.",
+     "Dead-letter queue handling and automated reconciliation jobs are undefined."
+    ],
+    "tradeoffs": [
+     "Asynchronous decoupling introduces message retry states that risk duplicate updates without idempotency."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The modular monolith in Claims Core API, Fallback Orchestrator, and ESB allow routing claim types independently. Switching back can be configured via routing logic without changing the core platform.",
+    "elements": [
+     "Claims Core API",
+     "Fallback Orchestrator Component",
+     "Claim Query & Routing Component",
+     "Enterprise Service Bus / Integration Gateway"
+    ],
+    "sensitivity_points": [
+     "Routing rule configurations must allow immediate rollback without application redeployment.",
+     "Mainframe interface changes must remain backward-compatible across versions."
+    ],
+    "tradeoffs": [
+     "Dual-routing logic complexity in the API is traded for rapid fallback capabilities."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Customer Portal App and Adjuster Web App integrate entirely with Claims Core API and BFF components. Decommissioning the mainframe simply removes the Integration Worker and backend sync without altering any user interfaces.",
+    "elements": [
+     "Customer Portal App",
+     "Adjuster Web App",
+     "Claims Core API",
+     "Integration Worker",
+     "Claim Read Database"
+    ],
+    "sensitivity_points": [
+     "Full independence of frontend interfaces from mainframe data models and protocols.",
+     "Transition of Claim Read Database to become the primary write and read authority."
+    ],
+    "tradeoffs": [
+     "Early abstraction overhead pays off in zero UI modifications at decommissioning."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Authentication client and Active Directory SSO are present, and the Audit & Compliance Service records security events. However, data-level authorization and tenant segregation logic between brokers are not detailed.",
+    "elements": [
+     "Customer Portal App",
+     "Authentication Client",
+     "Claims Core API",
+     "Audit & Compliance Service",
+     "Audit Data Store"
+    ],
+    "sensitivity_points": [
+     "Enforcement of resource-level authorization within the modular monolith Claim Submission Component.",
+     "Auditing pipeline capture completeness for rejected authorization attempts."
+    ],
+    "tradeoffs": [
+     "Granular access control checks increase API execution overhead on claim queries."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Both legacy and new platforms federate with Insurer Active Directory via OIDC / Entra ID Connect. Revoking the user account centrally removes access to both platforms, subject to token lifetime duration.",
+    "elements": [
+     "Insurer Active Directory",
+     "Adjuster Web App",
+     "Session & Token Manager",
+     "Claims Core API"
+    ],
+    "sensitivity_points": [
+     "Access token expiration TTL must be configured below 15 minutes or support continuous revocation.",
+     "Synchronization latency between on-premises Active Directory and Azure Entra ID Connect."
+    ],
+    "tradeoffs": [
+     "Short-lived tokens improve revocation speed but increase token refresh traffic against AD."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe COBOL/DB2 System of Record",
+     "Enterprise Service Bus / Integration Gateway",
+     "Integration Worker",
+     "Mainframe Integration Processor"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Azure Service Bus",
+     "Integration Worker",
+     "Service Bus Message Listener"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Enterprise Service Bus / Integration Gateway",
+     "Integration Worker",
+     "Mainframe Integration Processor"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Claims Core API"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers & Brokers",
+     "Customer Portal App",
+     "Claim Submission UI",
+     "Claims Core API",
+     "Claim Submission Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Adjuster Web App",
+     "UI Shell & Routing",
+     "Claim Action Queue",
+     "BFF Orchestrator Service / BFF Claim Controller"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Claim Query & Routing Component",
+     "Claims Core API"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Azure Service Bus",
+     "Integration Worker",
+     "Audit & Compliance Service"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Claim Read Database",
+     "Claim Read Store",
+     "Claim Query & Routing Component",
+     "Adjuster Web App",
+     "BFF Orchestrator Service / BFF Claim Controller",
+     "UI Shell & Routing"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Fallback Orchestrator Component",
+     "Claim Query & Routing Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Insurer Active Directory",
+     "Authentication Client",
+     "Session & Token Manager",
+     "Adjuster Web App",
+     "Customer Portal App"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

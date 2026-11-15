@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container_Boundary(recommendation, "Recommendation") {
+    Component(RecommendationAPIController, "Recommendation API Controller", "Python, FastAPI", "Handles incoming recommendation requests and routes them to the algorithm engine.")
+    Component(AlgorithmEngine, "Algorithm Engine", "Python, FastAPI", "Executes similarity logic and processes item recommendations.")
+    Component(ModelCache, "Model Cache", "Amazon ElastiCache Global Datastore (Redis)", "Caches pre-computed scores to deliver fast response times.")
+    Component(EventPublisher, "Event Publisher", "Python, AWS SDK", "Emits telemetry and domain events.")
+    Component(EventConsumer, "Event Consumer", "Python, AWS SQS Protocol", "Polls asynchronous domain events to invalidate or update cached scores.")
+}
+
+System_Ext(AmazonDynamoDB, "Amazon DynamoDB", "Stores persistent item similarity graphs for fallback queries.")
+System_Ext(AWSEventBridge, "AWS EventBridge", "Handles asynchronous messaging and telemetry events.")
+System_Ext(AWSSQS, "AWS SQS", "Handles asynchronous messaging and queueing.")
+
+Rel(RecommendationAPIController, AlgorithmEngine, "Executes similarity logic", "In-process")
+Rel(AlgorithmEngine, ModelCache, "Fetches pre-computed scores", "Redis Protocol / TCP")
+Rel(AlgorithmEngine, AmazonDynamoDB, "Falls back for deep item similarity graphs on cache misses", "HTTPS / boto3")
+Rel(EventPublisher, AWSEventBridge, "Emits telemetry events", "HTTPS / AWS SDK")
+Rel(AWSSQS, EventConsumer, "Polls asynchronous domain events", "AWS SQS Protocol")
+Rel(EventConsumer, ModelCache, "Invalidates or updates cached scores", "Redis Protocol / TCP")
+
+@enduml

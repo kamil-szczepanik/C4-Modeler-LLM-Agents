@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the PostgreSQL container
+
+System_Ext(spring_boot_core_services, "Spring Boot Core Services", "External container")
+System_Ext(apache_superset, "Apache Superset", "External container")
+System_Ext(go_audit_logging_container, "Go Audit Logging Container", "External container")
+
+Container_Boundary(postgresql, "PostgreSQL") {
+    Component(connection_pooler, "Connection Pooler", "PgBouncer", "Provides connection pooling with session mode for safe context propagation.")
+    Component(postgresql_primary_instance, "PostgreSQL Primary Instance", "PostgreSQL 16", "Handles transactional data, ACID compliance, and multi-tenant data isolation using Row-Level Security.")
+    Component(postgresql_read_replica_cluster, "PostgreSQL Read-Replica Cluster", "PostgreSQL 16", "Handles heavy analytical queries to isolate them from the primary instance and guarantee sub-second EMR performance.")
+    Component(backup_daemon, "Backup Daemon", "pgBackRest", "Manages AES-256 encrypted backups and WAL archiving for 10-year retention.")
+    Component(ha_orchestration, "HA Orchestration", "Patroni with etcd", "Provides automated leader election and high availability for 99.99% uptime.")
+    Component(audit_monitoring, "Audit & Monitoring", "pgaudit, postgres_exporter", "Handles database activity monitoring and audit logging for HIPAA and GDPR compliance.")
+}
+
+Rel(spring_boot_core_services, connection_pooler, "Writes transactional data", "JDBC/TLS 1.3")
+Rel(apache_superset, postgresql_read_replica_cluster, "Queries analytics data", "JDBC/TLS 1.3")
+Rel(postgresql_primary_instance, postgresql_read_replica_cluster, "Streams WAL replication", "TCP/mTLS")
+Rel(postgresql_primary_instance, go_audit_logging_container, "Sends audit events", "pgaudit/Async")
+
+@enduml

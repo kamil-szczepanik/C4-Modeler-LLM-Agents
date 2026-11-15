@@ -1,0 +1,335 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: Patient & Scheduling Service handles registration and clash-checked scheduling, EMR Service with Audit Trail Service provides records and auditing, and Billing Service manages claims and payments via Payment Gateway Adapter.",
+   "performance_efficiency": "EMR sub-second latency is directly supported by Redis caching in Clinical Record Manager, HikariCP connection pooling, gRPC over service mesh, and table-partitioned PostgreSQL Databases alongside asynchronous Apache Kafka Event Broker offloading.",
+   "compatibility": "Interoperability targets are thoroughly addressed via Integration Service containing FHIR Route Engine and HL7 v2/v3 Adapter, alongside the EMR Service's FHIR Interoperability Adapter communicating with External Lab & Imaging Systems using standard FHIR APIs.",
+   "usability": "While Patients are served by Patient Portal Service, Clinicians and Hospital Administrators interact with backend APIs directly via API Gateway without dedicated web or mobile client UI containers specified to support their specific workflows.",
+   "reliability": "High availability (99.99%) is addressed by active-active API Gateway Core, Patroni/CloudNativePG database failover, Kafka KRaft, and Circuit Breaker engines. However, multi-region hybrid active-active state synchronization details are only lightly addressed.",
+   "security": "Addresses requirements comprehensively with Patient Profile & Auth Manager enforcing MFA, HashiCorp Vault Transit Client providing envelope encryption at rest, TLS/mTLS enforcers, WAF sanitization, and pgaudit with Audit Trail Service ensuring HIPAA compliance.",
+   "maintainability": "Microservices are modularly separated by business domain with clear internal layering and Outbox Dispatcher patterns. However, Integration Service creates tight coupling by directly accessing all four independent PostgreSQL Databases (Patient, Scheduling, EMR, Billing).",
+   "portability": "Workloads are containerized and leverage cloud-agnostic technologies (Kubernetes-native CloudNativePG, Envoy, Patroni, Kafka) suitable for both on-prem-k8s and eu-central-1, though cloud-to-on-prem hybrid orchestration mechanisms are not explicitly detailed."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The EMR Service incorporates Redis caching for encrypted summaries, HikariCP connection pooling, and read replicas on the EMR PostgreSQL database, effectively absorbing read spikes. However, cache invalidation and distributed cache consistency across hybrid clusters introduce minor latency overhead under heavy concurrency.",
+    "elements": [
+     "API Gateway",
+     "EMR API Controller",
+     "Clinical Record Manager",
+     "PostgreSQL Databases",
+     "Redis"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio for active clinician patient lists",
+     "Database read replica replication lag under concurrent reads"
+    ],
+    "tradeoffs": [
+     "Caching encrypted PHI reduces latency but increases CPU overhead for frequent cryptographic operations"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "The Integration Service decouples high-volume external ingestion using Apache Camel and asynchronous buffering through the Kafka Event Broker, preventing direct write saturation on EMR databases. However, backpressure throttling and DB write contention during final persistence require strict partition tuning to preserve P95 read targets.",
+    "elements": [
+     "Integration Service",
+     "FHIR Route Engine",
+     "Apache Kafka Event Broker",
+     "EMR Service",
+     "EMR DB"
+    ],
+    "sensitivity_points": [
+     "Kafka topic partitioning and consumer group throughput",
+     "Database write IOPS contention during bulk ingestion"
+    ],
+    "tradeoffs": [
+     "Asynchronous ingestion guarantees EMR responsiveness but introduces eventual consistency for incoming lab reports"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Active-active ingress via Envoy and container orchestration across on-prem and cloud are specified, but the model lacks concrete hybrid replication topologies (e.g., synchronous WAN replication vs. Patroni cross-site failover) to guarantee zero data loss and under one-minute failover across distinct hybrid environments.",
+    "elements": [
+     "API Gateway",
+     "API Gateway Core",
+     "PostgreSQL Databases",
+     "Apache Kafka Event Broker"
+    ],
+    "sensitivity_points": [
+     "Cross-region network latency and split-brain resolution mechanisms",
+     "Patroni and CloudNativePG failover timing across hybrid boundaries"
+    ],
+    "tradeoffs": [
+     "Synchronous database replication ensures RPO=0 but degrades write latency across WAN connections"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "CloudNativePG and Patroni manage automated node failover within seconds. SQLAlchemy transactional boundaries and the Kafka Event Consumer provide retry capabilities. However, external payment gateway calls require explicit idempotency keys in the Payment Gateway Adapter to avoid duplicate claim submissions during unexpected crashes.",
+    "elements": [
+     "Billing Service",
+     "Billing Data Access Repository",
+     "Payment Gateway Adapter",
+     "Billing DB",
+     "Kafka Event Consumer"
+    ],
+    "sensitivity_points": [
+     "Automated database failover detection time in Patroni",
+     "Idempotency token tracking across external payment gateways"
+    ],
+    "tradeoffs": [
+     "Strict transactional locking prevents inconsistent claim states but reduces billing processing throughput"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "External financial interfaces are fully encapsulated within the Payment Gateway Adapter inside the Billing Service container. The EMR Service and scheduling services are completely decoupled through microservice boundaries and asynchronous messaging, allowing changes to be isolated entirely to one adapter component.",
+    "elements": [
+     "Billing Service",
+     "Payment Gateway Adapter",
+     "Claim Processing Engine"
+    ],
+    "sensitivity_points": [
+     "Cohesion of adapter interfaces across disparate clearinghouse protocols"
+    ],
+    "tradeoffs": [
+     "Adapter encapsulation increases layer abstraction but confines clearinghouse-specific churn"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are confined to the Patient & Scheduling Service, Patient Portal Service, and underlying database schemas, aided by Confluent Schema Registry contracts. Updating both portal and scheduling layers plus schema validations requires coordination across two services, though well within a single sprint.",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Patient Portal Service",
+     "Patient & Portal DB",
+     "Schema Registry"
+    ],
+    "sensitivity_points": [
+     "Schema evolution compatibility modes enforced by Kafka Schema Registry"
+    ],
+    "tradeoffs": [
+     "Segregating patient portal and scheduling services isolates concerns but requires multi-service schema synchronization"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Authentication is delegated to an external IdP enforcing MFA, and the API Gateway strictly inspects OAuth2/OIDC tokens and scopes. While unauthorized access without second-factor completion is prevented, the model does not detail an automated real-time SIEM alerting mechanism to satisfy the one-minute alert metric.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "API Gateway",
+     "OAuth2/OIDC Token Introspection & Scope Enforcer",
+     "Telemetry Exporter"
+    ],
+    "sensitivity_points": [
+     "Token introspection caching policies versus instantaneous revocation",
+     "Security incident alerting pipeline latency"
+    ],
+    "tradeoffs": [
+     "Delegating MFA to an external IdP simplifies compliance but shifts authentication latency outside the system boundary"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "The Consent & Preference Handler pre-validates access rights, and pgaudit alongside the Audit Trail Service streams signed read events via Kafka. Kafka Connect offloads records to long-term immutable storage for ten-year retention. Enforcing non-blocking logging for 100% of read operations remains sensitive to broker availability.",
+    "elements": [
+     "EMR API Controller",
+     "Consent & Preference Handler",
+     "Audit Trail Service & Compliance Dashboard Feed",
+     "EMR DB",
+     "Kafka Connect"
+    ],
+    "sensitivity_points": [
+     "Audit trail pipeline throughput during high-frequency read operations",
+     "Immutability guarantees of long-term object storage offloaded by Kafka Connect"
+    ],
+    "tradeoffs": [
+     "Synchronous audit validation guarantees full compliance but adds latency overhead to clinical read paths"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent & Preference Handler",
+     "Data Masking & PII Redirection Filter",
+     "Audit Trail Service & Compliance Dashboard Feed",
+     "Audit & Compliance Interceptor",
+     "EMR DB",
+     "Payload Masking & Audit Interceptor"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "API Gateway Core",
+     "Rate Limiting & Circuit Breaker Engine",
+     "PostgreSQL Databases",
+     "Consul Storage Backend / Raft Consensus",
+     "Kafka Broker Core"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Kafka Connect",
+     "EMR DB"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Controller",
+     "Patient Profile & Auth Manager",
+     "Patient & Scheduling Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Controller",
+     "Appointment Engine",
+     "Conflict Resolution Service",
+     "Data Access Repository"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR API Controller",
+     "Clinical Record Manager",
+     "Audit Trail Service & Compliance Dashboard Feed",
+     "EMR DB",
+     "Apache Kafka Event Broker"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Invoice Controller",
+     "Claim Processing Engine",
+     "Payment Gateway Adapter",
+     "Billing Data Access Repository",
+     "Payment Gateways & Insurance Clearinghouses"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Patient Profile & Auth Manager",
+     "OAuth2/OIDC Token Introspection & Scope Enforcer",
+     "Vault Transit Client",
+     "HashiCorp Vault",
+     "Billing Data Access Repository"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "API Gateway Core",
+     "PostgreSQL Databases",
+     "Kafka Broker Core",
+     "Consul Storage Backend / Raft Consensus"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Clinical Record Manager",
+     "PostgreSQL Databases",
+     "Request Transformation Engine",
+     "EMR API Controller"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Service",
+     "FHIR Route Engine",
+     "HL7 v2/v3 Adapter",
+     "FHIR Interoperability Adapter",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

@@ -1,0 +1,328 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are met: R-01 via 'Customer Portal' ('Claim Submission Wizard' and 'Broker Portfolio Manager'), R-02 via 'Adjuster Web Application', and R-03 via 'Strangler Fig Router Policy' in 'Azure API Management' and 'Migration Routing Component' in 'Claims Processing Engine'.",
+   "performance_efficiency": "The sub-2s target against 5s mainframe responses (R-05) is directly met using 'Azure Cache for Redis' ('Claim State Cache'), BFF 'Read Model Projections Cache Service', and asynchronous decoupling via 'Buffering & Routing Component' in the 'Anti-Corruption Layer'.",
+   "compatibility": "Mainframe coexistence is handled comprehensively by the 'Anti-Corruption Layer' ('Translation Component') and secure connectivity via APIM. Active Directory integration is properly addressed through 'Azure Active Directory & Key Vault' and 'Gateway Security Enforcer'.",
+   "usability": "Distinct persona needs are addressed with tailored frontends: 'Customer Portal' provides wizards and broker management, while 'Adjuster Web Application' provides optimized adjuster workflows with local draft autosaving.",
+   "reliability": "Consistency and zero message loss (R-04) are guaranteed through 'Buffering & Routing Component' (Azure Service Bus), the 'Reconciliation Worker', and immutable tracking in 'Audit & Reconciliation Component'.",
+   "security": "R-07 is achieved using 'Token Service' with Azure AD Connect SSO. Security is reinforced by 'Gateway Security Enforcer', 'Secrets Provider' (Key Vault), mTLS on mainframe links, and 'Audit Trail Service'.",
+   "maintainability": "R-06 rollback is enabled via 'Strangler Fig Router Policy' and 'Routing Configuration Store' feature flags. However, deploying AKS microservices creates high operational overhead for a team constrained by little cloud experience.",
+   "portability": "The architecture satisfies the hybrid deployment topology between on-premises mainframe and Azure West Europe. While backend microservices use portable ASP.NET Core, there is significant dependency on proprietary Azure PaaS services."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The Adjuster BFF uses the Read Model Projections Cache Service and Azure Cache for Redis to serve claim data under 2 s. However, cold cache misses on unmigrated mainframe claims could still breach the latency threshold unless aggressively pre-warmed.",
+    "elements": [
+     "Adjuster Web Application",
+     "Read Model Projections Cache Service",
+     "Azure Cache for Redis",
+     "Claim State Cache",
+     "Anti-Corruption Layer"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios for active adjuster claims",
+     "TTL and pre-warming strategy for mainframe read projections"
+    ],
+    "tradeoffs": [
+     "Low latency via caching versus eventual consistency with the legacy mainframe"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Online claims are received by Azure API Management and asynchronously buffered through Azure Service Bus in the Anti-Corruption Layer. This decouples peak submission spikes from the mainframe, allowing controlled throttled dispatch outside the nightly batch window.",
+    "elements": [
+     "Azure API Management",
+     "Claims Processing Engine",
+     "Anti-Corruption Layer",
+     "Buffering & Routing Component"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue ingestion capacity and consumer throttle rates",
+     "Message backlog limits before throttling upstream portal clients"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission decoupling versus immediate end-to-end mainframe confirmation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "During nightly batch windows, incoming submissions are buffered in Azure Service Bus queues within the Anti-Corruption Layer. Messages persist safely without data loss and are automatically processed and forwarded once the mainframe resumes normal operations.",
+    "elements": [
+     "Azure API Management",
+     "Claims Processing Engine",
+     "Anti-Corruption Layer",
+     "Buffering & Routing Component",
+     "Translation Component"
+    ],
+    "sensitivity_points": [
+     "Durability and retention configuration of Service Bus queues during 6-hour windows",
+     "Retry and backoff triggers upon mainframe window resumption"
+    ],
+    "tradeoffs": [
+     "Guaranteed availability and persistence versus delayed batch sync to legacy records"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Reconciliation Worker, Audit & Reconciliation Component, and Cosmos DB audit store track sync transactions and detect state discrepancies. However, automated distributed rollback or compensatory transactions for partially executed mainframe writes are not fully detailed.",
+    "elements": [
+     "Claims Processing Engine",
+     "Reconciliation Worker",
+     "Anti-Corruption Layer",
+     "Audit & Reconciliation Component",
+     "Reconciliation & Alerting Component"
+    ],
+    "sensitivity_points": [
+     "Idempotency token propagation across modern services and mainframe interfaces",
+     "Accuracy of automated discrepancy alerts via Azure Monitor"
+    ],
+    "tradeoffs": [
+     "Strict reconciliation and consistency checking versus processing throughput"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Claim type routing is handled dynamically by the Strangler Fig Router in APIM driven by feature flags in Azure App Configuration. Migrating motor claims or triggering a rollback requires only updating configuration rules within minutes, requiring no mainframe interface overhaul.",
+    "elements": [
+     "Azure API Management",
+     "Strangler Fig Router Policy",
+     "Routing Configuration Store",
+     "Claims Processing Engine",
+     "Migration Routing Component"
+    ],
+    "sensitivity_points": [
+     "Granularity of routing rules stored in Azure App Configuration",
+     "Instant configuration propagation latency to APIM policies"
+    ],
+    "tradeoffs": [
+     "Dynamic gateway-level routing flexibility versus increased routing logic complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "UI components communicate exclusively with Azure API Management and BFF controllers rather than directly with the mainframe. Decommissioning the mainframe simply involves promoting modern microservices to system of record and retiring the Anti-Corruption Layer without UI modification.",
+    "elements": [
+     "Customer Portal",
+     "Adjuster Web Application",
+     "Azure API Management",
+     "Claims Processing Engine",
+     "Anti-Corruption Layer"
+    ],
+    "sensitivity_points": [
+     "Clean separation of frontend APIs from underlying backend system schemas",
+     "Storage cutover execution without UI contract disruptions"
+    ],
+    "tradeoffs": [
+     "Abstraction overhead in BFF and APIM versus seamless long-term decommissioning"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The architecture includes token validation via Entra ID and APIM Gateway Security Enforcer. However, fine-grained object-level authorization (verifying broker tenant ownership of claim records) and security violation audit logging for brokers are not explicitly specified.",
+    "elements": [
+     "Customer Portal",
+     "Broker Portfolio Manager",
+     "Azure API Management",
+     "Gateway Security Enforcer",
+     "Azure Active Directory & Key Vault"
+    ],
+    "sensitivity_points": [
+     "Enforcement of tenant and broker claims validation within JWT payloads",
+     "Comprehensive security event emission on unauthorized access attempts"
+    ],
+    "tradeoffs": [
+     "Fine-grained claim ownership checks at BFF/APIM versus policy evaluation latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "SSO integrates on-prem Active Directory via Azure AD Connect. While revoking access in AD revokes central tokens, mainframe direct session revocation within 15 minutes is unaddressed, and JWT token lifetimes might permit lingering modern platform access without continuous evaluation.",
+    "elements": [
+     "Active Directory",
+     "Azure Active Directory & Key Vault",
+     "Token Service",
+     "Azure API Management",
+     "Gateway Security Enforcer",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Active Directory to Azure Entra ID synchronization latency",
+     "Access token lifetimes and lack of Continuous Access Evaluation configuration",
+     "Mainframe RACF/security credential revocation synchronization"
+    ],
+    "tradeoffs": [
+     "Rapid revocation propagation versus distributed token session caching"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Anti-Corruption Layer",
+     "Translation Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Anti-Corruption Layer",
+     "Translation Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers & Brokers",
+     "Customer Portal",
+     "Claim Submission Wizard",
+     "Broker Portfolio Manager"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Adjuster Web Application",
+     "SPA UI Components",
+     "Claim Management Controller"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Azure API Management",
+     "Strangler Fig Router Policy",
+     "Routing Configuration Store",
+     "Migration Routing Component",
+     "Claims Processing Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Buffering & Routing Component",
+     "Audit & Reconciliation Component",
+     "Reconciliation & Alerting Component",
+     "Reconciliation Worker"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Adjuster Web Application",
+     "Read Model Projections Cache Service",
+     "Azure Cache for Redis",
+     "Claim State Cache"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Azure API Management",
+     "Strangler Fig Router Policy",
+     "Routing Configuration Store"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Active Directory",
+     "Azure Active Directory & Key Vault",
+     "Token Service",
+     "Gateway Security Enforcer",
+     "Auth Guard Component",
+     "Auth & Session Manager"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Fraud Scoring Engine container
+
+System_Ext(api_gateway, "API Gateway / Ingestion Service", "External service providing scoring payloads")
+System_Ext(sqs, "Amazon SQS", "Queuing service for asynchronous audit payloads")
+System_Ext(aurora, "Amazon Aurora", "Database for immutable ledger records")
+
+Container_Boundary(fraud_scoring_engine, "Fraud Scoring Engine") {
+    Component(rule_evaluation_engine, "Rule Evaluation Engine", "Rust", "Executes compiled deterministic rules.")
+    Component(ml_scoring_runtime, "ML Scoring Runtime", "Embedded ONNX Runtime", "Executes gradient-boosting models with SHAP explainability.")
+    Component(feature_store_client, "Feature Store Client", "In-memory LRU cache backed by Redis with AWS KMS", "Provides low-latency feature lookups.")
+    Component(audit_payload_formatter, "Audit Payload Formatter", "Zero-copy Rust channel (crossbeam)", "Assembles tamper-evident SHA-256 chains.")
+}
+
+Rel(api_gateway, fraud_scoring_engine, "Delivers scoring payloads", "gRPC with mTLS")
+Rel(rule_evaluation_engine, feature_store_client, "Executes synchronous lookups", "Redis")
+Rel(ml_scoring_runtime, feature_store_client, "Executes synchronous lookups", "Redis")
+Rel(fraud_scoring_engine, sqs, "Publishes signed audit payloads asynchronously")
+Rel(fraud_scoring_engine, aurora, "Persists immutable ledger records for 7-year audit retention")
+
+@enduml

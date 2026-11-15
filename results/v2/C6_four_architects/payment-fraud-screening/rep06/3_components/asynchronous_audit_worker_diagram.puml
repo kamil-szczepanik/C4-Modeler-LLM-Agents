@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Asynchronous Audit Worker container
+
+Container_Boundary(asynchronous_audit_worker, "Asynchronous Audit Worker") {
+    Component(Event Consumer Component, "Event Consumer Component", "Go / AWS Lambda", "Consumes messages from Amazon SQS.")
+    Component(Batch Processor Component, "Batch Processor Component", "Go / AWS Lambda", "Passes batched SQS messages and delegates individual event formatting and hashing.")
+    Component(Audit Formatter Component, "Audit Formatter Component", "Go / AWS Lambda", "Handles individual event formatting and hashing, routing unprocessable payloads on failure.")
+    Component(S3 Exporter Component, "S3 Exporter Component", "Go / AWS Lambda", "Passes formatted and hashed audit batches and executes WORM-compliant storage operations.")
+    Component(DLQ Handler Component, "DLQ Handler Component", "Go / AWS Lambda", "Routes unprocessable audit payloads on failure and forwards dead-letter audit events.")
+}
+
+System_Ext(AWS S3 Object Lock, "AWS S3 Object Lock", "Compliance Archive / AWS S3 Object Lock")
+System_Ext(Amazon SQS / SNS, "Amazon SQS / SNS", "Amazon SQS / SNS")
+
+Rel(Event Consumer Component, Batch Processor Component, "Passes batched SQS messages", "Internal Function Call")
+Rel(Batch Processor Component, Audit Formatter Component, "Delegates individual event formatting and hashing", "Internal Function Call")
+Rel(Batch Processor Component, S3 Exporter Component, "Passes formatted and hashed audit batches", "Internal Function Call")
+Rel(S3 Exporter Component, AWS S3 Object Lock, "Executes WORM-compliant storage operations", "HTTPS / AWS SDK")
+Rel(Audit Formatter Component, DLQ Handler Component, "Routes unprocessable audit payloads on failure", "Internal Function Call")
+Rel(DLQ Handler Component, Amazon SQS / SNS, "Forwards dead-letter audit events", "HTTPS / AWS SDK")
+@enduml

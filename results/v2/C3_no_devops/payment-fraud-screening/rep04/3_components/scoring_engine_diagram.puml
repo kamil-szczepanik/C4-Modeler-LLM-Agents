@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Scoring Engine container
+
+Container_Boundary(scoring_engine, "Scoring Engine") {
+    Component(API_Handler, "API Handler", "Go", "Manages ingress traffic via HTTP/2, tokenization boundary checks, and circuit-breaker fallback logic.")
+    Component(Model_Evaluator, "Model Evaluator", "Go with WebAssembly/ONNX runtime", "Executes in-memory fraud scoring and computes explainability feature weights.")
+    Component(Model_Hot_Swapper, "Model Hot-Swapper", "Go", "Background loader that verifies cryptographic signatures and hot-swaps ONNX models without downtime.")
+    Component(Feature_Store_Cache, "Feature Store Cache", "In-memory/Go LRU", "Retrieves real-time velocity counters for transaction evaluation.")
+    Component(Audit_Dispatcher, "Audit Dispatcher", "Go", "Cryptographically signs decision payloads and dispatches them asynchronously.")
+}
+
+System_Ext(Amazon_SQS_SNS, "Amazon SQS / SNS", "AWS Messaging Services", "Receives published signed, tamper-evident audit payloads.")
+
+Rel(API_Handler, Model_Evaluator, "Executes synchronous calls", "HTTP/2")
+Rel(API_Handler, Feature_Store_Cache, "Fetches velocity data", "In-Memory")
+Rel(Model_Hot_Swapper, Model_Evaluator, "Securely loads cryptographically verified model binaries into memory", "Function Call")
+Rel(Model_Evaluator, Audit_Dispatcher, "Passes explainability feature vectors and decision inputs", "In-Memory")
+Rel(Audit_Dispatcher, Amazon_SQS_SNS, "Publishes signed, tamper-evident audit payloads", "AWS SDK / HTTPS")
+
+@enduml

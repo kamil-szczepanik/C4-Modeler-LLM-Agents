@@ -1,0 +1,328 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively addressed: EMR Container handles records with pgaudit/Immutable Audit Storage Sink, Scheduling Container enforces atomic clashes via Reservation Service, Billing Container manages insurance claims, and Patient Portal Container captures registration.",
+   "performance_efficiency": "PgBouncer Connection Pooler, Gateway Cache Client (Redis), and asynchronous Event Broker support low latency, though EMR Container lacks explicit read-caching or dedicated read-replica routing to guarantee sub-second P95 response times.",
+   "compatibility": "FHIR Interoperability Adapter provides explicit HL7 FHIR integration with External Labs/Imaging Vendors, and Billing Container interfaces directly with Insurance Clearinghouses over secure REST APIs.",
+   "usability": "While multiple human personas (Clinicians, Receptionists, Billing Specialists, Administrators) are defined at Level 1, only Patient Portal Container exists at Level 2/3, leaving staff roles without defined frontend user interfaces.",
+   "reliability": "PostgreSQL Databases explicitly implement an active-passive Patroni cluster, directly contradicting the brief's requirement for active-active high availability to achieve 99.99% uptime across hybrid cloud regions.",
+   "security": "Addressed thoroughly with HashiCorp Vault (Transit Secrets Engine AES-256), Auth Validator (MFA, OAuth2/OIDC), In-Memory Redaction Engine for PHI, pgaudit Module, and WORM Storage Controller for 10-year immutable audit retention.",
+   "maintainability": "Clean domain microservice separation (EMR, Scheduling, Billing, Notification) decoupled via Event Broker. Minor gap: Level 3 for Billing Container repeats the container name rather than decomposing internal components.",
+   "portability": "Supports hybrid on-prem Kubernetes and AWS eu-central-1 via Kubernetes Ingress, containerized workloads, Vault Agent Sidecars, and cloud-neutral storage abstractions (AWS S3 Object Lock / MinIO)."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.5625,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 3.0,
+   "Modifiability": 4.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "The architecture provides PgBouncer and an API Gateway cache client, but lacks application-level caching for clinical data. Dynamic field-level decryption via HashiCorp Vault on every read under 500 concurrent users threatens the sub-second P95 latency target without caching decrypted views.",
+    "elements": [
+     "EMR Container",
+     "Clinical Data Manager",
+     "PgBouncer Connection Pooler",
+     "PostgreSQL Databases",
+     "HashiCorp Vault"
+    ],
+    "sensitivity_points": [
+     "Vault Transit Secrets Engine latency during concurrent field-level decryption operations.",
+     "Database connection pool sizing in PgBouncer under concurrent load spikes."
+    ],
+    "tradeoffs": [
+     "Field-level encryption increases clinical data security but adds significant computational latency to reads."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "justification": "The FHIR Interoperability Adapter receives lab results directly within the EMR Container. Without an explicit asynchronous buffer or dedicated ingestion queue prior to processing, high-volume ingestion can contend for database and compute resources, degrading concurrent clinician screen response times.",
+    "elements": [
+     "FHIR Interoperability Adapter",
+     "EMR Container",
+     "Clinical Data Manager",
+     "PostgreSQL Databases",
+     "Event Broker"
+    ],
+    "sensitivity_points": [
+     "Decoupling level between FHIR ingestion and clinician-facing read query execution.",
+     "Rate limiting and batch processing capacity of the FHIR adapter."
+    ],
+    "tradeoffs": [
+     "Synchronous FHIR processing ensures immediate data availability but risks starving concurrent user queries."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture specifies active-passive Patroni clustering across a hybrid environment without clarifying cross-region replication topology, RPO guarantees, or global DNS/GSLB failover orchestration to transition traffic and guarantee zero data loss within one minute.",
+    "elements": [
+     "PostgreSQL Databases",
+     "Patroni/etcd Clustering Engine",
+     "API Gateway",
+     "WAF Container"
+    ],
+    "sensitivity_points": [
+     "WAN latency and synchronization lag between on-premises and eu-central-1 databases.",
+     "Automated DNS failover detection and propagation times across hybrid regions."
+    ],
+    "tradeoffs": [
+     "Synchronous replication guarantees zero data loss but introduces prohibitive inter-region WAN write latency."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Patroni with etcd orchestrates PostgreSQL failover within 30 seconds while PgBouncer manages connection pooling to minimize connection errors. However, in-flight transactions require client-side retry logic and distributed transaction handling between Billing, Event Broker, and clearinghouses to prevent duplicates.",
+    "elements": [
+     "Patroni/etcd Clustering Engine",
+     "PgBouncer Connection Pooler",
+     "PostgreSQL Databases",
+     "Billing Container",
+     "Event Broker"
+    ],
+    "sensitivity_points": [
+     "Patroni failover timeout settings and etcd leader election lease durations.",
+     "Idempotency implementation across insurance claim submissions and database write transactions."
+    ],
+    "tradeoffs": [
+     "Rapid automated database failover limits downtime but drops uncommitted in-flight claims requiring retries."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Claim submissions are encapsulated within the Billing Container, completely decoupling clearinghouse integrations from the EMR Container. However, the Billing container lacks internal modular separation for vendor-specific clearinghouse adapters, meaning changes require modifying and redeploying the monolithic billing microservice.",
+    "elements": [
+     "Billing Container",
+     "Insurance Clearinghouses",
+     "EMR Container"
+    ],
+    "sensitivity_points": [
+     "Coupling between billing domain logic and clearinghouse-specific payload transformation protocols.",
+     "Standardization of internal insurance claim interfaces."
+    ],
+    "tradeoffs": [
+     "Isolating clearinghouses in Billing protects EMR but concentrates multiple integration dependencies internally."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Adding an audited demographic field requires modifying the Web and Mobile Frontend, the Clinical Data Manager, and the underlying database schema. Changes are localized to three components, and pgaudit automatically logs DML modifications to the database without custom audit code.",
+    "elements": [
+     "Web and Mobile Frontend",
+     "Clinical Data Manager",
+     "PostgreSQL Databases",
+     "pgaudit Module"
+    ],
+    "sensitivity_points": [
+     "Schema migration strategy and backwards compatibility across microservice deployments.",
+     "Automated capture coverage of pgaudit for newly added database columns."
+    ],
+    "tradeoffs": [
+     "End-to-end schema propagation maintains strict data typing but requires synchronized multi-component deployment."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The WAF and API Gateway Auth Validator enforce MFA and OAuth2/OIDC, preventing unauthorized login with stolen passwords alone. However, while failed attempts are recorded, the architecture lacks an explicit SIEM, IDS, or real-time security alerting mechanism to guarantee alerts within one minute.",
+    "elements": [
+     "WAF Container",
+     "API Gateway",
+     "Auth Validator",
+     "Immutable Audit Storage Sink"
+    ],
+    "sensitivity_points": [
+     "Enforcement points for multi-factor authentication prior to internal service access.",
+     "Latency between security log generation and real-time administrator alerting."
+    ],
+    "tradeoffs": [
+     "Mandatory multi-factor authentication prevents credential stuffing but increases clinician authentication friction."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Clinical Data Manager enforces row-level authorization, and WORM Storage Controller enforces 10-year retention. However, EMR Container has no direct link to the Immutable Audit Sink, and auditing 100% of read access via pgaudit or Kafka creates immense logging overhead without explicit read-audit pipeline definitions.",
+    "elements": [
+     "Clinical Data Manager",
+     "pgaudit Module",
+     "PostgreSQL Databases",
+     "Immutable Audit Storage Sink",
+     "WORM Storage Controller"
+    ],
+    "sensitivity_points": [
+     "Read-level audit logging pipeline from EMR services to immutable storage.",
+     "WORM storage ingestion throughput and retention policy configuration."
+    ],
+    "tradeoffs": [
+     "Auditing every read access guarantees stringent regulatory compliance but incurs significant storage overhead."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Web Application Firewall Engine",
+     "In-Memory Redaction Engine",
+     "Data Masking Engine",
+     "Clinical Data Manager",
+     "pgaudit Module",
+     "PostgreSQL Databases",
+     "Transit Secrets Engine",
+     "Immutable Audit Storage Sink"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Patroni/etcd Clustering Engine",
+     "PgBouncer Connection Pooler",
+     "Reservation Service"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Immutable Audit Storage Sink",
+     "WORM Storage Controller",
+     "Audit Logger"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Patient Portal Container",
+     "Web and Mobile Frontend",
+     "Clinical Data Manager"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Container",
+     "Scheduling Controller",
+     "Reservation Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Container",
+     "EMR Service Controller",
+     "Clinical Data Manager",
+     "pgaudit Module",
+     "Immutable Audit Storage Sink"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Container",
+     "Insurance Clearinghouses"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "WAF Container",
+     "Auth Validator",
+     "HashiCorp Vault",
+     "Transit Secrets Engine",
+     "PostgreSQL Databases"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Patroni/etcd Clustering Engine",
+     "Reservation Service"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "PgBouncer Connection Pooler",
+     "Gateway Cache Client"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Interoperability Adapter",
+     "External Labs/Imaging Vendors",
+     "EMR Container"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Azure Service Bus container
+
+Container_Boundary(azure_service_bus, "Azure Service Bus") {
+    Component(TopicRouterComponent, "Topic Router Component", "Azure Service Bus Topic / Routing Logic", "Routes incoming claim messages to appropriate subscriptions and integrates with downstream workers.")
+    Component(SessionManagerComponent, "Session Manager Component", "Azure Service Bus Sessions", "Manages ordered session-based message processing for claims.")
+    Component(DeadLetterMonitorComponent, "Dead-Letter Monitor Component", "Azure Service Bus DLQ Monitoring", "Monitors and processes failed or poisoned claim messages.")
+    Component(ClaimMessageSchemaRegistryComponent, "Claim Message Schema Registry Component", "Azure Service Bus Schema Validation", "Validates and ensures claim message conformance against defined schemas.")
+    Component(BackpressureThrottlingControllerComponent, "Backpressure & Throttling Controller Component", "Azure Service Bus Flow Control", "Manages rate-limiting and backpressure to protect downstream legacy systems.")
+}
+
+Container(ClaimsCoreAPIService, "Claims Core API Service", ".NET", "Claims Core API Service")
+Container(ClaimRouterIntegrationWorker, "Claim Router & Integration Worker", ".NET Worker Service", "Claim Router & Integration Worker")
+
+Rel(ClaimsCoreAPIService, ClaimMessageSchemaRegistryComponent, "Validates claim messages", "AMQP")
+Rel(ClaimMessageSchemaRegistryComponent, TopicRouterComponent, "Forwards validated messages", "Internal memory/pipelining")
+Rel(TopicRouterComponent, ClaimRouterIntegrationWorker, "Dispatches messages", "AMQP via Azure Service Bus Subscriptions")
+Rel(TopicRouterComponent, SessionManagerComponent, "Manages session routing", "AMQP")
+Rel(SessionManagerComponent, ClaimRouterIntegrationWorker, "Processes ordered messages", "AMQP")
+
+@enduml

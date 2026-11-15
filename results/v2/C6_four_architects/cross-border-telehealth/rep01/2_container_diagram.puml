@@ -1,0 +1,42 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Cross-Border Telehealth Platform
+
+Person(Patients_EU_US, "Patients (EU/US)", "Patients from the EU and US accessing video consultations, e-prescriptions, and the AI symptom checker.")
+Person(Licensed_Clinicians, "Licensed Clinicians", "Licensed medical professionals conducting video consultations and prescribing treatments.")
+
+System_Ext(National_Pharmacies, "National Pharmacies", "External national pharmacy systems for handling e-prescriptions.")
+System_Ext(National_EHR_Gateways, "National EHR Gateways", "External Electronic Health Record gateways for medical record integration.")
+System_Ext(Payment_Gateways_Stripe, "Payment Gateways (Stripe)", "External payment processing provider.")
+System_Ext(Notification_Providers_Twilio_Firebase, "Notification Providers (Twilio/Firebase)", "External providers for sending system notifications.")
+
+System_Boundary(Cross_Border_Telehealth_Platform, "Cross-Border Telehealth Platform") {
+    Container(API_Gateway_Consent_Container, "API Gateway & Consent Container", "Envoy / Google Cloud Endpoints, Open Policy Agent", "Manages incoming HTTPS/WSS traffic, routing, and enforces consent and regional access policies.")
+    Container(Core_Telehealth_Backend, "Core Telehealth Backend", "Node.js / Go", "Handles core telehealth business logic, orchestration, and service coordination.")
+    Container(Video_Consultation_Service, "Video Consultation Service", "WebRTC / Janus Media Server on GCE MIGs", "Provides real-time video and audio streaming for patient-clinician consultations.")
+    Container(AI_Symptom_Checker, "AI Symptom Checker", "Python / FastAPI", "Provides AI-driven symptom analysis and preliminary assessments for users.")
+    Container(Interoperability_Adapter, "Interoperability Adapter", "Java / Spring Boot", "Translates and manages secure communications with external national EHR gateways and pharmacies.")
+    Container(Asynchronous_Event_Broker, "Asynchronous Event Broker", "GCP Pub/Sub", "Handles asynchronous event distribution and system decoupling across microservices.")
+    Container(Dedicated_Audit_Logging_Container, "Dedicated Audit & Logging Container", "Fluentbit / OpenTelemetry", "Collects, aggregates, and stores audit logs and telemetry data from backends and AI containers.")
+    ContainerDb(Regional_Databases, "Regional Databases", "Cloud SQL PostgreSQL, Cloud Storage, Cloud Firestore", "Provides region-locked transactional storage, object storage, and document storage with WORM immutability.")
+}
+
+Rel(Patients_EU_US, API_Gateway_Consent_Container, "Accesses telehealth services via API Gateway", "HTTPS/WSS")
+Rel(Licensed_Clinicians, API_Gateway_Consent_Container, "Accesses telehealth services via API Gateway", "HTTPS/WSS")
+Rel(Patients_EU_US, Video_Consultation_Service, "Connects to video consultation streams", "WebRTC (UDP/TCP)")
+Rel(Licensed_Clinicians, Video_Consultation_Service, "Connects to video consultation streams", "WebRTC (UDP/TCP)")
+Rel(API_Gateway_Consent_Container, Core_Telehealth_Backend, "Forwards validated requests", "gRPC over mTLS")
+Rel(API_Gateway_Consent_Container, AI_Symptom_Checker, "Routes symptom check requests", "gRPC over mTLS")
+Rel(Core_Telehealth_Backend, Asynchronous_Event_Broker, "Publishes and consumes asynchronous events", "GCP Pub/Sub")
+Rel(Core_Telehealth_Backend, Regional_Databases, "Reads and writes transactional and file data", "SQL / HTTPS")
+Rel(Interoperability_Adapter, National_Pharmacies, "Sends e-prescriptions and prescription data", "mTLS over HTTPS")
+Rel(Interoperability_Adapter, National_EHR_Gateways, "Exchanges patient health records", "mTLS over HTTPS")
+Rel(Core_Telehealth_Backend, Dedicated_Audit_Logging_Container, "Sends audit logs and telemetry", "gRPC")
+Rel(AI_Symptom_Checker, Dedicated_Audit_Logging_Container, "Sends audit logs and telemetry", "gRPC")
+Rel(Interoperability_Adapter, Dedicated_Audit_Logging_Container, "Sends audit logs and telemetry", "gRPC")
+Rel(Core_Telehealth_Backend, Payment_Gateways_Stripe, "Processes payments", "HTTPS/REST")
+Rel(Core_Telehealth_Backend, Notification_Providers_Twilio_Firebase, "Sends notifications", "HTTPS/REST")
+
+@enduml

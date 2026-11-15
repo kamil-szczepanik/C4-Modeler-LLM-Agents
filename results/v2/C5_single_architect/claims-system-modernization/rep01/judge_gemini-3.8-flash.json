@@ -1,0 +1,333 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are met: R-01 via 'Customer Portal' and 'Claim Submission Form', R-02 through 'Adjuster Workspace', and R-03 using 'Adapter Router', 'Migration Sync Ledger', and 'Claim Aggregate Store' to handle incremental migration by claim type.",
+   "performance_efficiency": "Requirement R-05 is directly addressed by 'Workflow Orchestrator' with local caching, gRPC communication to 'Claims Core Engine', and decoupled asynchronous synchronization via 'Azure Event Hubs', decoupling adjuster screen response times from the 5-second mainframe latency.",
+   "compatibility": "Interoperability is thoroughly established with 'On-premises Active Directory' via OIDC and 'Legacy Mainframe' via 'Protocol Translator', 'Mainframe ACL', and Apache Camel. This architecture respects the mainframe constraints and coexistence requirements.",
+   "usability": "Every user persona is addressed with dedicated interfaces: Customers and Brokers access the responsive 'Customer Portal' with tracking and submission components, while internal Claims Adjusters are served through a dedicated 'Adjuster Workspace' BFF.",
+   "reliability": "Requirement R-04 is satisfied via 'Outbox Event Publisher' using Debezium, 'Idempotency & Replay Manager' on Redis, and Resilience4j in the 'Anti-Corruption Layer (ACL)', ensuring zero message loss and exact-once semantics during batch windows.",
+   "security": "Requirement R-07 is satisfied with SSO via 'Authentication & Authorization Component' and 'MSAL.js' tied to Active Directory. Data is protected using TLS across gRPC and JDBC connections, complemented by 'Audit & Fallback Log'.",
+   "maintainability": "R-06 is supported by 'Adapter Router' and 'Audit & Fallback Log' for rapid rollbacks. However, introducing multiple disparate runtimes (Node.js, Java Spring, Camel, Debezium) creates high cognitive overhead for a team with little cloud experience.",
+   "portability": "The hybrid topology across on-premises and Azure is respected with containerized components on Azure Container Apps. However, heavy reliance on proprietary platform services (Azure Event Hubs, Azure Front Door) slightly hinders portability across environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "While Workflow Orchestrator mentions local caching and Claims Core Engine includes an Anti-Corruption Layer, synchronous retrieval of uncached mainframe data taking 5 seconds will still breach the 2-second screen budget without an explicit asynchronous or progressive UI data loading strategy.",
+    "elements": [
+     "Workflow Orchestrator",
+     "Engine Client",
+     "Claims Core Engine",
+     "Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios for legacy claims data",
+     "Latency of synchronous remote calls to the legacy mainframe"
+    ],
+    "tradeoffs": [
+     "Serving stale cached data improves responsiveness but risks temporary data inconsistencies"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Peak submission bursts are buffered through Azure Event Hubs and the Transactional Outbox pattern in PostgreSQL. Mainframe dispatch is decoupled and rate-limited via Apache Camel, completely shielding the nightly mainframe batch window from online volume surges.",
+    "elements": [
+     "API Gateway",
+     "Claims Core Engine",
+     "Outbox Event Publisher",
+     "Integration Layer",
+     "Routing Mediator"
+    ],
+    "sensitivity_points": [
+     "Event Hubs throughput capacity and partition configuration",
+     "Outbox consumer polling frequency during peak ingestion"
+    ],
+    "tradeoffs": [
+     "Buffering requests guarantees availability and protects batch windows at the cost of eventual consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Transactional Outbox pattern and Azure Event Hubs buffer all submissions locally in Azure SQL/PostgreSQL when the mainframe is down for batch processing. The Integration Layer replays and synchronizes accumulated records once the batch window concludes.",
+    "elements": [
+     "Claim Aggregate Store",
+     "Outbox Event Publisher",
+     "Integration Layer",
+     "Routing Mediator",
+     "Idempotency & Replay Manager"
+    ],
+    "sensitivity_points": [
+     "Storage retention limits on Event Hubs and outbox tables during batch windows"
+    ],
+    "tradeoffs": [
+     "Decoupled asynchronous persistence guarantees ingestion availability but delays mainframe record visibility"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Idempotency & Replay Manager backed by Redis, combined with the PostgreSQL Migration Sync Ledger and append-only Audit Log, provides solid primitives to detect duplicate events and retry failed deliveries, though manual reconciliation workflows remain largely implicit.",
+    "elements": [
+     "Idempotency & Replay Manager",
+     "Migration Sync Ledger",
+     "Audit & Fallback Log",
+     "Protocol Translator"
+    ],
+    "sensitivity_points": [
+     "Completeness of deduplication key tracking across Redis and the relational ledger"
+    ],
+    "tradeoffs": [
+     "Strict idempotency checks add processing overhead to message pipelines"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The dynamic Adapter Router in Claims Core Engine routes claims by type between modern persistence and the legacy ACL. The Audit & Fallback Log and Migration Sync Ledger explicitly support fast one-day switch-backs without requiring structural changes on the mainframe.",
+    "elements": [
+     "Adapter Router",
+     "Anti-Corruption Layer (ACL)",
+     "Audit & Fallback Log",
+     "Migration Sync Ledger"
+    ],
+    "sensitivity_points": [
+     "Dynamic routing rule configuration in the Adapter Router",
+     "Bi-directional schema mapping in the Protocol Translator"
+    ],
+    "tradeoffs": [
+     "Routing abstractions allow rapid rollback but add architectural indirection and dual-maintenance overhead"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Client applications interact strictly with the API Gateway and Adjuster Workspace/Claims Core Engine via gRPC. The mainframe integration is fully encapsulated within the Integration Layer and ACL, allowing complete mainframe decommission without UI code rewrites.",
+    "elements": [
+     "Customer Portal",
+     "Adjuster Workspace",
+     "API Gateway",
+     "Claims Core Engine",
+     "Adapter Router"
+    ],
+    "sensitivity_points": [
+     "Strict boundary isolation between UI frontends and legacy domain semantics"
+    ],
+    "tradeoffs": [
+     "Introducing an intermediate BFF and Core Engine increases deployment topology complexity"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Authentication and centralized token validation are handled via OIDC at the API Gateway, but fine-grained authorization policies and tenant/broker boundary enforcement are not explicitly modeled or enforced within the backend components.",
+    "elements": [
+     "API Gateway",
+     "Authentication & Authorization Component",
+     "Claim Domain Service",
+     "Audit & Fallback Log"
+    ],
+    "sensitivity_points": [
+     "Enforcement location for resource-level authorization checks (Gateway vs Domain Service)"
+    ],
+    "tradeoffs": [
+     "Centralized gateway auth simplifies ingress but requires downstream services to enforce data-ownership boundaries"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Single Sign-On is federated through on-premises Active Directory and Azure AD with centralized token validation at the API Gateway. Revoking access in AD invalidates authentication across cloud applications quickly, though direct mainframe propagation depends on legacy directory synchronization.",
+    "elements": [
+     "On-premises Active Directory",
+     "API Gateway",
+     "Authentication & Authorization Component",
+     "Customer Portal"
+    ],
+    "sensitivity_points": [
+     "JWT and access token expiration/revocation propagation time across Azure App Gateway",
+     "Synchronization latency between on-premises Active Directory and Azure AD"
+    ],
+    "tradeoffs": [
+     "Short-lived access tokens enforce timely revocation within 15 minutes but increase token exchange load"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Legacy Mainframe (COBOL/DB2)",
+     "Integration Layer",
+     "Event Publisher Component",
+     "Outbox Event Publisher",
+     "Migration Sync Ledger"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Integration Layer",
+     "Idempotency & Replay Manager",
+     "Outbox Event Publisher",
+     "Azure Event Hubs"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Anti-Corruption Layer",
+     "Anti-Corruption Layer (ACL)",
+     "Mainframe ACL",
+     "Protocol Translator"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Integration Layer",
+     "Customer Portal",
+     "Adjuster Workspace"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers",
+     "Brokers",
+     "Customer Portal",
+     "Claim Submission Form",
+     "Claim Status Tracker",
+     "API Gateway"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Adjuster Web App",
+     "Adjuster Workspace",
+     "Routing Controller",
+     "Workflow Orchestrator"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Adapter Router",
+     "Claim Domain Service",
+     "Claim Aggregate Store",
+     "Migration Sync Ledger"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Idempotency & Replay Manager",
+     "Outbox Event Publisher",
+     "Migration Sync Ledger",
+     "Claim Aggregate Store"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Workflow Orchestrator",
+     "Engine Client",
+     "Anti-Corruption Layer (ACL)",
+     "Migrated Claims Database"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Adapter Router",
+     "Audit & Fallback Log",
+     "Anti-Corruption Layer (ACL)"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "On-premises Active Directory",
+     "Active Directory",
+     "Authentication & Authorization Component",
+     "Authentication Module",
+     "API Gateway"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

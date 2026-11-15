@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Async Event Broker container
+
+Component(CoreDomainService, "Core Domain Service", "Java / Spring Boot", "Produces domain events and validates payload structure.")
+Component(SearchService, "Search Service", "Elasticsearch", "Consumes events to update search indices to meet performance targets.")
+Component(BackgroundWorker, "Background Worker", "Python/Celery or Node.js", "Consumes asynchronous background tasks.")
+
+Container_Boundary(AsyncEventBroker, "Async Event Broker") {
+    Component(EventRouterExchange, "Event Router / Exchange", "Apache Kafka Topics", "Routes events with replication factor 3 for reliable asynchronous processing.")
+    Component(MessageQueueLogStorage, "Message Queue / Log Storage", "Apache Kafka Clustered Brokers", "Appends messages to distributed commit logs for persistent event streams.")
+    Component(DeadLetterQueueDLQHandler, "Dead Letter Queue (DLQ) Handler", "Kafka DLQ Topic", "Dedicated Kafka DLQ topic with retention policies for failed event processing.")
+    Component(SchemaRegistry, "Schema Registry", "Confluent Schema Registry", "Enforces backward and forward compatibility contracts and validates message schema compliance.")
+}
+
+Rel(CoreDomainService, SchemaRegistry, "Validates event payload structure", "HTTP/2 + mTLS")
+Rel(CoreDomainService, EventRouterExchange, "Publishes domain events", "Kafka Producer API / TCP + TLS 1.3")
+Rel(EventRouterExchange, SchemaRegistry, "Verifies message schema compliance on ingestion", "Internal Protocol")
+Rel(EventRouterExchange, MessageQueueLogStorage, "Appends messages to distributed commit logs", "Internal Broker Protocol")
+Rel(MessageQueueLogStorage, SearchService, "Consumes events to update search indices", "Kafka Consumer API over mTLS")
+Rel(MessageQueueLogStorage, BackgroundWorker, "Consumes asynchronous background tasks", "Kafka Consumer API over mTLS")
+
+@enduml

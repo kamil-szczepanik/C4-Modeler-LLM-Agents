@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the PostgreSQL Cluster container
+
+Person(Core_API_Service, "Core API Service", "External system")
+Person(EMR_Engine, "EMR Engine", "External system")
+System_Ext(WORM_Object_Storage, "WORM Object Storage", "Stores automated pg_backrest archives for long-term retention.")
+
+Container_Boundary(postgresql_cluster_boundary, "PostgreSQL Cluster") {
+    Component(Primary_Database_Node, "Primary Database Node", "PostgreSQL", "Manages write operations and DDL execution.")
+    Component(Synchronous_Standby_Nodes, "Synchronous Standby Nodes", "PostgreSQL, Patroni with etcd", "Maintains zero-data-loss high availability via Patroni.")
+    Component(Asynchronous_Read_Replicas, "Asynchronous Read Replicas", "PostgreSQL", "Scales query loads for EMR and billing operations.")
+    Component(PgBouncer, "PgBouncer", "PgBouncer", "Manages connection pooling and routes incoming application queries.")
+    Component(Audit_Logging_Sidecar, "Audit Logging Sidecar", "pgaudit", "Collects pgaudit security logs for immutable tracking.")
+}
+
+Rel(Core_API_Service, PgBouncer, "Persists transactional data", "PostgreSQL wire protocol over TCP with mTLS")
+Rel(EMR_Engine, PgBouncer, "Queries patient records", "PostgreSQL wire protocol over TCP with mTLS")
+Rel(Primary_Database_Node, Synchronous_Standby_Nodes, "Replicates transactions", "streaming replication protocol over TLS 1.3")
+Rel(Primary_Database_Node, WORM_Object_Storage, "Exports automated pg_backrest archives", "HTTPS/TLS")
+@enduml

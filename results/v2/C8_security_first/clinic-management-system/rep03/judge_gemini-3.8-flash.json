@@ -1,0 +1,311 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 3,
+   "compatibility": 5,
+   "usability": 2,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.5,
+  "justifications": {
+   "functional_suitability": "Dedicated components cover the requirements: EMR Engine and Audit Logger for R-03, Scheduling Engine for R-02, and Claim Management with Clearinghouse Adapter for R-04. Explicit mechanisms for resource clash validation logic and patient demographic capture remain high-level.",
+   "performance_efficiency": "Uses gRPC over mTLS and asynchronous messaging via RabbitMQ/Kafka for inter-service efficiency. However, no caching layer or read-replica strategy is defined around the EMR Engine to reliably guarantee the sub-second P95 screen load requirement.",
+   "compatibility": "Thoroughly addressed via Interoperability Service featuring FHIR Transformer & Validator, Kong FHIR Mediator Route, SMART-on-FHIR scopes, and dedicated Clearinghouse Adapter components interfacing with external payment gateways and lab systems.",
+   "usability": "While patient usability is detailed with the Patient-Facing UI, Next.js BFF Server, and accessibility considerations, internal clinical personas (Clinicians, Receptionists, Billing Officers) connect directly to the API Gateway with no dedicated clinical or administrative user interfaces.",
+   "reliability": "Resiliency & DLQ Handler and message queues offer fault tolerance. However, the 99.99% active-active target lacks concrete multi-region data replication, database clustering, or conflict-resolution mechanisms, and the Sync & Store-and-Forward Worker is absent from container models.",
+   "security": "Strong identity mechanisms using OIDC, OAuth 2.1 with PKCE, mTLS, WORM Audit Logger, and Authorization Interceptor enforcing RBAC/ABAC. However, the required AES-256 data-at-rest encryption is not substantiated because underlying database/storage containers are omitted.",
+   "maintainability": "Microservice decomposition cleanly separates clinical, billing, gateway, and integration concerns using standard integration patterns (Apache Camel) and telemetry (OpenTelemetry). Redundant overlap between the Patient Portal and Patient-Facing UI containers slightly impairs architectural clarity.",
+   "portability": "The software stack leverages portable containerized technologies (Spring Boot, Node.js, Kong). However, concrete deployment configurations, cluster synchronization, or orchestration mechanisms across the target hybrid environments (on-prem-k8s and AWS eu-central-1) are omitted."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.0,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Clinical Core Services contains an EMR Engine designed for sub-second data access and internal gRPC communication. However, the architecture omits an explicit database or caching layer for EMR entities, introducing potential risk during concurrent morning rounds.",
+    "elements": [
+     "API Gateway",
+     "Edge Router & Reverse Proxy",
+     "Clinical Core Services",
+     "Authorization Interceptor",
+     "EMR Engine"
+    ],
+    "sensitivity_points": [
+     "Database indexing and caching efficiency under concurrent read spikes",
+     "Overhead of synchronous authorization policy checks per record access"
+    ],
+    "tradeoffs": [
+     "Strict per-request ABAC evaluation versus low P95 read latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Interoperability Service incorporates Apache Camel Route Orchestration, a Redis Idempotency Store, and RabbitMQ/Kafka resiliency buffering, completely decoupling ingestion from core clinical screen queries to sustain sub-second P95 latency.",
+    "elements": [
+     "Interoperability Service",
+     "Route Orchestrator",
+     "FHIR Transformer & Validator",
+     "Idempotency Store",
+     "Resiliency & DLQ Handler",
+     "Clinical Core Services"
+    ],
+    "sensitivity_points": [
+     "Message queue ingestion throughput and consumer thread concurrency",
+     "Idempotency store lookups preventing redundant processing"
+    ],
+    "tradeoffs": [
+     "Asynchronous message buffering versus real-time data visibility in EMR"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "While Sync & Store-and-Forward workers and bi-directional replication are mentioned at Context level, concrete data persistence tiers, automated DNS failover, and zero-loss active-active replication mechanisms are absent across container and component views.",
+    "elements": [
+     "Sync & Store-and-Forward Worker",
+     "API Gateway",
+     "Clinical Core Services"
+    ],
+    "sensitivity_points": [
+     "Cross-region replication latency and split-brain resolution mechanisms",
+     "Automated traffic failover speed between hybrid deployment regions"
+    ],
+    "tradeoffs": [
+     "Strong data consistency across regions versus fast automated failover without loss"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "The Billing Service features a Dead-Letter Queue handler and asynchronous message queues for submission retries, but database persistence, crash-recovery mechanisms, and transactional boundary handling are not defined anywhere in the container model.",
+    "elements": [
+     "Billing & Claims Service",
+     "Claim Management Component",
+     "Clearinghouse Adapter Component",
+     "Billing Exception & DLQ Handler Component"
+    ],
+    "sensitivity_points": [
+     "Database crash-recovery and transaction replay capabilities",
+     "Message broker consumer acknowledgment and deduplication protocols"
+    ],
+    "tradeoffs": [
+     "Idempotent retry mechanisms versus operational overhead of distributed transaction coordination"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The system cleanly isolates clearinghouse interactions into a dedicated Clearinghouse Adapter Component within the Billing & Claims Service. The EMR and Clinical Core Services remain entirely isolated and unaffected via gRPC interfaces.",
+    "elements": [
+     "Billing & Claims Service",
+     "Clearinghouse Adapter Component",
+     "Claim Management Component"
+    ],
+    "sensitivity_points": [
+     "Modularity and abstraction depth of the clearinghouse adapter interface"
+    ],
+    "tradeoffs": [
+     "Standardized adapter abstraction versus vendor-specific clearinghouse protocol optimizations"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are localized to the UI onboarding/viewer module, EMR Engine, and Audit Logger. However, lack of detailed domain schema management or database migration strategies may slightly increase coordination effort within the sprint.",
+    "elements": [
+     "Patient-Facing UI",
+     "Clinical Core Services",
+     "EMR Engine",
+     "Audit Logger"
+    ],
+    "sensitivity_points": [
+     "Coupling between frontend view models and backend EMR entities",
+     "Extensibility of the WORM audit logging schema"
+    ],
+    "tradeoffs": [
+     "Strict end-to-end schema validation versus rapid delivery across multiple tiers"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Authentication is mediated by an external Identity Provider enforcing adaptive MFA via OAuth 2.0/OIDC. API Gateway forwarders stream audit events, though rapid SIEM alerting within one minute relies entirely on unmodeled external infrastructure.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "API Gateway",
+     "Security & Auth Plugin Module",
+     "Telemetry & Audit Forwarder"
+    ],
+    "sensitivity_points": [
+     "Enforcement of adaptive MFA challenges prior to token generation",
+     "Latency of real-time security telemetry streaming to SIEM"
+    ],
+    "tradeoffs": [
+     "Aggressive MFA enforcement versus frictionless access for clinicians during emergencies"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The Clinical Core Services uses an Authorization Interceptor that enforces ABAC policies before EMR access, routing all read events to a dedicated WORM-compliant Audit Logger, supplemented by the gateway audit forwarder for long-term retention.",
+    "elements": [
+     "Clinical Core Services",
+     "Authorization Interceptor",
+     "EMR Engine",
+     "Audit Logger",
+     "Telemetry & Audit Forwarder"
+    ],
+    "sensitivity_points": [
+     "ABAC rule coverage for clinical relationship-based access control",
+     "Tamper-evidence and durability of WORM audit storage"
+    ],
+    "tradeoffs": [
+     "Synchronous audit writes on read operations versus overall query performance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "none",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.6818181818181818,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit Sidecar",
+     "Audit Logger",
+     "Policy Enforcement Hook",
+     "Financial Ledger & Audit Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Sync & Store-and-Forward Worker"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Receptionists",
+     "Appointment, EMR & Billing Viewer, and Self-Service Onboarding Modules"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Engine",
+     "Appointment & Scheduling Facade"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Engine",
+     "Audit Logger",
+     "Clinical Core Services"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Service",
+     "Claim Management Component",
+     "Clearinghouse Adapter Component",
+     "Third-Party Payment Gateway & Insurance Clearinghouses"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Patient Auth Delegator",
+     "Security & Auth Plugin Module"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Sync & Store-and-Forward Worker"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "EMR Engine"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Interoperability Service",
+     "External Lab & Imaging Systems",
+     "FHIR Transformer & Validator",
+     "FHIR Mediator Route"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

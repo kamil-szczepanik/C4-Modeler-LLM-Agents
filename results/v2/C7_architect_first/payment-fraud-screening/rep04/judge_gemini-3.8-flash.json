@@ -1,0 +1,335 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 5
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "Elements like Fraud Scoring Engine and Case Management API cover core scoring and review requirements. However, explicit mechanisms to update fraud rules and ML models without downtime (R-03) are omitted from the Rule Evaluation Engine and ML Scoring Runtime.",
+   "performance_efficiency": "Rust implementation, embedded ONNX runtime, and local Redis LRU cache in Fraud Scoring Engine ensure sub-50 ms P99 latencies. Asynchronous queuing through Ingestion Buffer / WAL (SQS FIFO) decouples audit logging from the 3,000 TPS critical path.",
+   "compatibility": "Interoperability is thoroughly supported using gRPC with TLS 1.3 for Payment Gateway ingestion, standard OAuth2/OIDC protocols for Identity Provider integration, and standard PostgreSQL wire protocol for Aurora database interaction.",
+   "usability": "Dedicated interfaces serve each user group: Fraud Analyst interacts with Analyst Web Application (React SPA), while Compliance Officer / Auditor is served by the Audit & Compliance Portal with query and export capabilities.",
+   "reliability": "The Rate Limiter & Circuit Breaker and SQS FIFO buffer offer traffic smoothing and dependency resilience. However, an explicit fallback or fail-open mechanism to guarantee unblocked payments within 1 minute during scoring outages (R-07) lacks clear definition.",
+   "security": "Tamper-evident audit trails with S3 Object Lock, mTLS, RBAC, and FluentBit log redaction satisfy key needs. However, a dedicated tokenization service or vault to satisfy strict PCI-DSS Level 1 PAN handling (R-05) is not explicitly modeled.",
+   "maintainability": "Containers show strong modular separation between ingestion, evaluation, case management, and audit querying. However, employing three different runtimes (Go, Rust, Node.js) across several microservices adds maintenance complexity for a small team of three engineers.",
+   "portability": "The system targets AWS eu-west-1 using well-integrated managed services including AWS ECS Fargate, Amazon S3, Aurora, and SQS, fully aligning with target cloud constraints while maintaining containerized workloads."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 2,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.65625,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.0,
+   "Modifiability": 4.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "While Rust and in-memory Redis feature caching support low latency, Level 2 specifies synchronous cryptographic ledger writes directly on the scoring path. Under 3,000 TPS, synchronous relational persistence severely jeopardizes achieving sub-50 ms P99 decision latency.",
+    "elements": [
+     "API Gateway / Ingestion Service",
+     "HTTP Ingestion Handler",
+     "gRPC Client",
+     "Fraud Scoring Engine",
+     "Rule Evaluation Engine",
+     "ML Scoring Runtime",
+     "Feature Store Client",
+     "Audit & Event Store"
+    ],
+    "sensitivity_points": [
+     "Latency of synchronous cryptographic ledger writes on the critical path",
+     "In-memory Redis feature store cache hit ratio under peak throughput"
+    ],
+    "tradeoffs": [
+     "Strict synchronous audit consistency versus achieving sub-50 ms P99 latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management and analyst applications run as independent ECS containers decoupled from real-time scoring. Workloads use dedicated Aurora read replicas, Redis query caches, and CloudFront CDN hosting, ensuring heavy analyst queries never impact scoring engine resources.",
+    "elements": [
+     "Analyst Web Application",
+     "Case Management API",
+     "Audit Query API",
+     "Audit & Compliance Portal",
+     "Amazon Aurora Read Replica",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Strict compute and network isolation between case management and scoring workloads",
+     "Read replica query offloading for analyst search operations"
+    ],
+    "tradeoffs": [
+     "Read replica data freshness versus zero performance impact on core scoring"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "The API Gateway includes a circuit breaker middleware component to isolate failures. However, the architecture omits an explicit fallback scoring strategy (such as stand-in authorization logic or default rules) and does not specify how fallback decisions are audited during engine crashes.",
+    "elements": [
+     "API Gateway / Ingestion Service",
+     "Rate Limiter & Circuit Breaker",
+     "HTTP Ingestion Handler",
+     "Audit Dispatcher",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker failure detection thresholds and rapid trip timing",
+     "Absence of explicit stand-in decision logic and audit routing"
+    ],
+    "tradeoffs": [
+     "Stand-in approval availability versus increased fraud exposure during scoring outages"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Level 3 provides an SQS FIFO buffer and an asynchronous dispatcher to decouple audit writes. However, Level 2 explicitly defines synchronous cryptographic ledger writes from the scoring engine to the audit store, which would cause audit store slowdowns to block scoring.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Audit Dispatcher",
+     "Audit Payload Formatter",
+     "Ingestion Buffer / WAL",
+     "Audit & Event Store"
+    ],
+    "sensitivity_points": [
+     "Conflicting synchronous ledger write versus asynchronous SQS buffering specifications",
+     "SQS FIFO buffer sizing and ingestion backpressure handling"
+    ],
+    "tradeoffs": [
+     "Asynchronous buffered persistence versus immediate cryptographic durability on critical path"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Embedded ONNX runtime models inside ECS Fargate containers support zero-downtime rolling deployments and quick 5-minute rollbacks. Audit payloads explicitly capture model versions and SHAP explanations, although automated canary routing or dynamic runtime model hot-reloading is not detailed.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "ML Scoring Runtime",
+     "Audit Payload Formatter"
+    ],
+    "sensitivity_points": [
+     "ECS Fargate rolling deployment duration and container initialization latency",
+     "Explicit model version capture in audit event serialization"
+    ],
+    "tradeoffs": [
+     "Containerized model immutability versus runtime dynamic model hot-swapping agility"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Rules execute in a compiled Rust engine. Updating rules via automated CI/CD container redeployment easily completes within the 1-hour window without downtime. Audit records capture evaluated rules, though analysts cannot dynamically author rules directly without code compilation and deployment.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Rule Evaluation Engine",
+     "Audit Payload Formatter"
+    ],
+    "sensitivity_points": [
+     "CI/CD compilation and container deployment pipeline duration",
+     "Rule metadata linkage into the audit record payload"
+    ],
+    "tradeoffs": [
+     "Compiled rule execution performance versus runtime dynamic rule evaluation flexibility"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "justification": "Log redaction sidecars are provided, but the architecture does not specify PAN tokenization components or data-masking mechanisms within the Case Management API and data tiers. Crucially, it completely lacks automated anomaly detection and alerting capabilities to notify within 15 minutes.",
+    "elements": [
+     "Analyst Web Application",
+     "Case Management API",
+     "Identity Provider (IdP)",
+     "FluentBit log redaction sidecar"
+    ],
+    "sensitivity_points": [
+     "Missing explicit tokenization or masking layer for cardholder data",
+     "Absence of behavioral monitoring, SIEM, or automated alerting mechanisms"
+    ],
+    "tradeoffs": [
+     "Relying solely on external IdP RBAC versus dedicated real-time intrusion monitoring"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The architecture incorporates Amazon S3 Object Lock in Compliance Mode for 7-year immutability alongside Aurora PostgreSQL ledger tables. A dedicated Audit Query API and Compliance Portal enable compliance officers to query historical inputs, model versions, and explanations well within one working day.",
+    "elements": [
+     "Audit & Compliance Portal",
+     "Audit Query API",
+     "Audit Query Service",
+     "Ledger Repository",
+     "Retention & Archival Worker",
+     "Amazon Aurora PostgreSQL",
+     "Amazon S3 with Object Lock"
+    ],
+    "sensitivity_points": [
+     "S3 Object Lock Compliance Mode retention configuration",
+     "Archival worker indexing efficiency for rapid cold-tier retrieval"
+    ],
+    "tradeoffs": [
+     "Cold S3 archival cost savings versus query retrieval latency overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "none",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "partial"
+  },
+  "coverage": 0.6818181818181818,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "HTTP Ingestion Handler",
+     "FluentBit log redaction sidecar",
+     "API Gateway / Ingestion Service",
+     "Fraud Scoring Engine"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "ML Scoring Runtime",
+     "Audit Payload Formatter",
+     "Audit & Event Store",
+     "Amazon S3 with Object Lock",
+     "Retention & Archival Worker",
+     "AWS S3"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Static Asset Hosting",
+     "Amazon S3 with Object Lock",
+     "AWS ECS (Fargate)"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "AWS ECS (Fargate)",
+     "Amazon Aurora with immutable ledgers",
+     "Static Asset Hosting"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "API Gateway / Ingestion Service",
+     "Fraud Scoring Engine",
+     "Rule Evaluation Engine",
+     "ML Scoring Runtime",
+     "HTTP Ingestion Handler",
+     "gRPC Client"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management API",
+     "Analyst Web Application",
+     "Analyst SPA UI",
+     "Case Controller Component",
+     "Workflow Service Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "none",
+    "elements": []
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Feature Store Client",
+     "Audit Payload Formatter",
+     "gRPC Client"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Audit Query Service",
+     "FluentBit log redaction sidecar",
+     "HTTP Ingestion Handler"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "ML Scoring Runtime",
+     "Audit Payload Formatter",
+     "Audit & Event Store",
+     "Amazon Aurora PostgreSQL",
+     "Amazon S3 with Object Lock",
+     "Audit Dispatcher"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Rate Limiter & Circuit Breaker"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

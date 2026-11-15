@@ -1,0 +1,43 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Modern Claims Platform
+
+Person(Customers, "Customers", "End users submitting claims online.")
+Person(Brokers, "Brokers", "Intermediaries submitting and managing claims on behalf of customers.")
+Person(Claims_Adjusters, "Claims Adjusters", "Internal staff responsible for claim management.")
+Person(Migration_Operations_Managers, "Migration Operations Managers", "Personnel overseeing the hybrid migration process.")
+
+System_Ext(COBOL_DB2_Legacy_Mainframe, "COBOL/DB2 Legacy Mainframe", "On-premises 30-year-old COBOL/DB2 mainframe claims system.")
+System_Ext(Azure_Active_Directory, "Azure Active Directory", "Identity provider enforcing SSO, RBAC, and JIT privileged access.")
+System_Ext(Payment_Gateway, "Payment Gateway", "External service handling secure payment transactions.")
+System_Ext(Notification_Service, "Notification Service", "Service handling asynchronous notifications.")
+
+System_Boundary(Modern_Claims_Platform, "Modern Claims Platform") {
+    Container(Web_Application, "Web Application", "React/Next.js on Azure App Service", "Frontend interface for customers, brokers, and adjusters ensuring sub-2-second user load times.")
+    Container(Operations_BFF___Admin_Portal, "Operations BFF & Admin Portal", ".NET Core / React", "Operations and administration portal for managing the platform and migration.")
+    Container(Claims_API_Gateway___Backend_for_Frontend, "Claims API Gateway / Backend-for-Frontend", ".NET Core on Azure Container Apps", "API Gateway and Backend-for-Frontend routing and isolating requests.")
+    Container(Claims_Processing_Service, "Claims Processing Service", ".NET Core Web API on Azure Container Apps", "Core service handling business logic for claims processing.")
+    Container(Anti_Corruption_Layer_ACL, "Anti-Corruption Layer (ACL)", "Azure Container Apps / On-Prem VM", "Integration layer isolating mainframe dependencies and decoupling the legacy system.")
+    Container(Azure_Service_Bus___Apache_Kafka, "Azure Service Bus / Apache Kafka", "Azure Service Bus / Apache Kafka", "Asynchronous event-driven messaging backbone ensuring zero data loss across hybrid boundaries.")
+    ContainerDb(Azure_SQL_Database, "Azure SQL Database", "Azure SQL Database", "Relational storage for migrated claim types ensuring rapid rollback capability.")
+    Container(Azure_Key_Vault___Managed_Identities, "Azure Key Vault & Managed Identities", "Azure Key Vault", "Secures credentials and secrets without hardcoding.")
+}
+
+Rel(Customers, Web_Application, "Submits and manages claims online", "HTTPS/TLS 1.3 (OIDC/OAuth2 SSO via Azure AD)")
+Rel(Brokers, Web_Application, "Submits and manages claims on behalf of customers", "HTTPS/TLS 1.3 (OIDC/OAuth2 SSO via Azure AD)")
+Rel(Claims_Adjusters, Web_Application, "Performs claim management and processing", "HTTPS/TLS 1.3 (OIDC/OAuth2 SSO via Azure AD)")
+Rel(Migration_Operations_Managers, Operations_BFF___Admin_Portal, "Oversees migration operations and administration", "HTTPS/TLS 1.3 (OIDC/OAuth2 SSO via Azure AD)")
+Rel(Web_Application, Claims_API_Gateway___Backend_for_Frontend, "Sends API and UI requests", "HTTPS REST/GraphQL")
+Rel(Operations_BFF___Admin_Portal, Claims_API_Gateway___Backend_for_Frontend, "Sends operations and admin requests", "HTTPS REST/GraphQL")
+Rel(Claims_API_Gateway___Backend_for_Frontend, Claims_Processing_Service, "Forwards business requests", "gRPC with mTLS")
+Rel(Claims_Processing_Service, Azure_SQL_Database, "Reads and writes claim data", "TDS/SQL over TLS 1.3")
+Rel(Claims_Processing_Service, Azure_Service_Bus___Apache_Kafka, "Publishes and consumes asynchronous event streams", "AMQP/Kafka Protocol")
+Rel(Claims_Processing_Service, Anti_Corruption_Layer_ACL, "Communicates with legacy systems", "AMQP/Kafka Protocol")
+Rel(Anti_Corruption_Layer_ACL, COBOL_DB2_Legacy_Mainframe, "Integrates with legacy mainframe operations", "IBM MQ / TCP over ExpressRoute/VPN hybrid link with mTLS")
+Rel(Web_Application, Azure_Active_Directory, "Authenticates users via SSO", "OIDC/OAuth2")
+Rel(Claims_Processing_Service, Payment_Gateway, "Processes financial claim transactions", "HTTPS/REST")
+Rel(Claims_Processing_Service, Notification_Service, "Triggers notifications", "Azure Service Bus / HTTPS")
+
+@enduml

@@ -1,0 +1,317 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All requirements are explicitly covered: Patient Registry Component handles demographics (R-01), Scheduling Engine Component executes clash checks (R-02), Medical Record Manager with Audit Logger Interceptor satisfies EMR needs (R-03), and Billing & Claims Service handles invoicing and claims (R-04).",
+   "performance_efficiency": "The sub-second EMR load target is addressed via Redis Cache Sidecar for cached demographics and FHIR resources, Fastify framework, internal gRPC communication, asynchronous event offloading via RabbitMQ, and CockroachDB's distributed Dist_SQL query execution.",
+   "compatibility": "Addressed thoroughly via the dedicated FHIR Interoperability Service, HL7 Client Adapter, FHIR API Controller, and EMR Service FHIR Mapping Adapter interfacing with External Lab & Imaging Systems, alongside Clearinghouse Adapter for insurance claims.",
+   "usability": "All user personas (Patient, Clinician, Receptionist, Billing Specialist) connect directly to API Gateway via REST/HTTPS. However, dedicated user interfaces or client applications (e.g., clinician web portal, patient mobile app) are entirely missing from the model.",
+   "reliability": "High availability (99.99%) is supported by multi-region CockroachDB (Raft consensus), RabbitMQ Quorum Queues with Federation Plugin, and active-active Ingress Router. However, mechanisms for the required 10-year data retention lifecycle and archival storage are not explicitly detailed.",
+   "security": "Security is thoroughly implemented with Authentication Manager (OAuth2/OIDC with MFA), HashiCorp Vault for AES-256 and column-level encryption, mTLS via SPIFFE/SPIRE, immutable WORM audit logs, and OpenTelemetry PII/PHI Redaction Processor.",
+   "maintainability": "Maintains high modularity through bounded microservices (EMR, Scheduling, Billing, FHIR). Components exhibit clean separation of concerns using adapters, repositories, outbox patterns, and GitOps lifecycle management powered by ArgoCD and Helm.",
+   "portability": "ArgoCD Application Controller actively synchronizes deployments across the target hybrid environments (on-prem-k8s and eu-central-1). Containerized microservices, RabbitMQ Federation Plugin, and distributed CockroachDB ensure seamless operation across hybrid infrastructure."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 4.5,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Fastify gRPC framework, Redis Cache Sidecar for demographic and FHIR caching, and distributed CockroachDB provide sub-second read latencies under concurrent clinician loads.",
+    "elements": [
+     "API Gateway",
+     "EMR Service",
+     "Redis Cache Sidecar",
+     "EMR API Controller",
+     "CockroachDB"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in Redis sidecar directly dictates sub-second response times."
+    ],
+    "tradeoffs": [
+     "In-memory cache freshness versus database read load and strict data consistency."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "FHIR Interoperability Service and Polly adapters decouple ingestion, while Redis sidecar shields EMR screen reads from ingestion database load. However, synchronous gRPC ingestion to EMR could degrade write throughput.",
+    "elements": [
+     "FHIR Interoperability Service",
+     "Resource Transformer Engine",
+     "HL7 Client Adapter",
+     "EMR Service",
+     "Redis Cache Sidecar"
+    ],
+    "sensitivity_points": [
+     "Concurrency and throttling configuration in FHIR API Controller and gRPC channels."
+    ],
+    "tradeoffs": [
+     "Immediate FHIR data visibility in EMR versus database write contention during bursts."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Traefik active-active routing, ArgoCD multi-cluster sync, and CockroachDB support multi-region resilience; however, running across only two regions creates a Raft consensus split-brain risk unless a third witness zone exists.",
+    "elements": [
+     "Ingress Router",
+     "CockroachDB",
+     "RabbitMQ Federation Plugin",
+     "ArgoCD"
+    ],
+    "sensitivity_points": [
+     "Raft majority quorum requirements across only two target deployment regions."
+    ],
+    "tradeoffs": [
+     "Strong multi-region consistency versus partition tolerance without a third witness site."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "CockroachDB multi-node Raft consensus handles node crashes transparently within seconds. The Outbox Publisher Component and RabbitMQ Quorum Queues guarantee at-least-once delivery and prevent duplicate or lost claims.",
+    "elements": [
+     "CockroachDB",
+     "Claim Processing Engine",
+     "Outbox Publisher Component",
+     "RabbitMQ",
+     "Quorum Queues & Dead-Letter Component"
+    ],
+    "sensitivity_points": [
+     "Outbox pattern transaction boundaries and database failover election time."
+    ],
+    "tradeoffs": [
+     "Transactional outbox storage overhead versus guaranteed zero message loss during crashes."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Clearinghouse integrations are encapsulated within the Clearinghouse Adapter using Spring Integration. The Claim Processing Engine and RabbitMQ decouple external clearinghouse protocols from core billing and EMR services.",
+    "elements": [
+     "Billing & Claims Service",
+     "Clearinghouse Adapter",
+     "Claim Processing Engine",
+     "RabbitMQ"
+    ],
+    "sensitivity_points": [
+     "Strict abstraction of clearinghouse interfaces within the Spring Integration adapter."
+    ],
+    "tradeoffs": [
+     "Adapter translation layer indirection versus isolation of clearinghouse protocol changes."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are localized to Patient Registry Component, CockroachDB schema, and Audit & Compliance Interceptor. However, EMR or FHIR mappings may require adjustments if shared patient schemas leak across services.",
+    "elements": [
+     "Patient Registry Component",
+     "CockroachDB",
+     "Audit & Compliance Interceptor",
+     "Patient & Scheduling Service"
+    ],
+    "sensitivity_points": [
+     "Coupling between patient demographic data models and EMR/FHIR boundary schemas."
+    ],
+    "tradeoffs": [
+     "Service boundary encapsulation versus duplicated demographic schema definitions across services."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Authentication Manager enforces mandatory OAuth2/OIDC with MFA, stopping single-factor breaches at the ingress perimeter. OpenTelemetry captures failed attempts, though automated alerting within 1 minute depends on external SIEM capabilities.",
+    "elements": [
+     "API Gateway",
+     "Authentication Manager",
+     "Enterprise IdP",
+     "OpenTelemetry Collector"
+    ],
+    "sensitivity_points": [
+     "Strict enforcement of MFA at API Gateway before routing to internal services."
+    ],
+    "tradeoffs": [
+     "Rigid perimeter authentication latency versus security enforcement on every external request."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "The Audit Logger Interceptor records EMR operations, and WORM sink logging is noted. However, fine-grained relationship-based access control and 10-year immutable audit storage containers are not modeled.",
+    "elements": [
+     "EMR Service",
+     "Audit Logger Interceptor",
+     "Medical Record Manager",
+     "Audit & Compliance Interceptor"
+    ],
+    "sensitivity_points": [
+     "Interceptor coverage of all read paths and policy evaluation rules for clinician assignments."
+    ],
+    "tradeoffs": [
+     "Fine-grained relationship authorization checks versus read throughput on medical records."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit Logger Interceptor",
+     "Audit & Compliance Interceptor",
+     "PII/PHI Redaction Processor",
+     "Secrets & Encryption Component",
+     "TLS Termination & mTLS Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Ingress Router",
+     "CockroachDB",
+     "RabbitMQ Cluster Operator for Kubernetes",
+     "Quorum Queues & Dead-Letter Component",
+     "RabbitMQ Federation Plugin"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Patient Registry Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Scheduling Engine Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "Medical Record Manager",
+     "Audit Logger Interceptor"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Service",
+     "Claim Processing Engine",
+     "Clearinghouse Adapter",
+     "Invoice & Ledger Manager",
+     "Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Authentication Manager",
+     "HashiCorp Vault",
+     "Secrets & Encryption Component",
+     "CockroachDB"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Ingress Router",
+     "API Gateway",
+     "CockroachDB",
+     "RabbitMQ Federation Plugin"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Redis Cache Sidecar",
+     "EMR Service"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Interoperability Service",
+     "FHIR API Controller",
+     "HL7 Client Adapter",
+     "FHIR Mapping Adapter",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

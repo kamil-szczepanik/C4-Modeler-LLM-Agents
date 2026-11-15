@@ -1,0 +1,318 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 3,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 3,
+   "security": 3,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 3.75,
+  "justifications": {
+   "functional_suitability": "The Real-Time Scoring Engine, Case Management Backend, and Analyst & Rules Portal address R-01 through R-03. However, there is architectural ambiguity between the internal Case Management Backend and the external Case Management SaaS in Level 1 and 2 diagrams.",
+   "performance_efficiency": "In-memory evaluation in Rule Evaluation Component and compiled ONNX Runtime support low latency, but Real-Time Scoring Engine makes synchronous calls to external Third-Party Fraud Intelligence Feeds in the critical path without caching, jeopardizing the 50 ms P99 target at 3,000 req/s.",
+   "compatibility": "Clear integration with Payment Gateway / Acquirer Systems via gRPC/HTTPS and Identity Provider via OIDC/OAuth2. Interfaces to external fraud intelligence feeds are established over HTTPS and AWS PrivateLink.",
+   "usability": "Manual Analysts and Merchant Risk Managers are well served by dedicated modules in Analyst & Rules Portal, including Case Review UI Module, Rule Authoring & Simulation Module, and Simulation Results Visualizer.",
+   "reliability": "Dead-letter queues and buffering exist in Audit & Event Stream, but there is no explicit fail-open or circuit breaker mechanism in AWS ALB + AWS WAF to satisfy R-07 (unblocked payments within 1 minute of scoring failure).",
+   "security": "S3 Object Lock and KMS satisfy 7-year tamper-evident auditability (R-06). However, while ALB + AWS WAF claims PAN masking, the architecture lacks an explicit tokenization and key management mechanism required by PCI-DSS Level 1 and R-05.",
+   "maintainability": "Components like Rule Evaluation Component, ML Inference Component, and Rule Compiler & Validator Component are decoupled. Operational burden is minimized using AWS managed services, aligning well with the three-engineer team constraint.",
+   "portability": "The architecture directly targets AWS eu-west-1 using ECS Fargate, ALB, and S3. Coupling to proprietary services like EventBridge and Firehose limits multi-cloud portability, but adheres strictly to the single-cloud brief."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 3,
+   "MOD-02": 3,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.65625,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 3.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "In-process Go and ONNX runtimes provide fast evaluation, but synchronous PrivateLink queries to external intelligence feeds in the scoring path threaten the 50 ms P99 SLA.",
+    "elements": [
+     "AWS ALB + AWS WAF",
+     "Real-Time Scoring Engine",
+     "Decision Orchestrator Component",
+     "Rule Evaluation Component",
+     "ML Inference Component",
+     "Third-Party Fraud Intelligence Feeds"
+    ],
+    "sensitivity_points": [
+     "Synchronous external HTTP/PrivateLink calls directly impact authorization P99 latency."
+    ],
+    "tradeoffs": [
+     "Inline third-party intelligence increases fraud detection accuracy but risks SLA breaches."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Complete separation of the scoring engine from the case management infrastructure and PostgreSQL database ensures analyst portal traffic cannot degrade real-time authorization performance.",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Analyst & Rules Portal",
+     "Case Management Backend",
+     "Case API Controller",
+     "PostgreSQL Database"
+    ],
+    "sensitivity_points": [
+     "Independent compute clusters prevent cross-workload resource contention."
+    ],
+    "tradeoffs": [
+     "Maintaining distinct services increases operational overhead for a small engineering team."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The design lacks a defined fallback mechanism, circuit breaker, or default-allow/decline policy at the API Gateway/ALB level when the scoring engine container crashes.",
+    "elements": [
+     "API Gateway & Routing Layer",
+     "AWS ALB + AWS WAF",
+     "Real-Time Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Absence of edge circuit breakers causes payment pipeline blocking during scoring outages."
+    ],
+    "tradeoffs": [
+     "Failing open preserves availability but incurs financial fraud risk during crashes."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Decoupling audit persistence via asynchronous queues, EventBridge, and Kinesis Data Firehose guarantees that audit store slowness does not block scoring or drop logs.",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Audit & Event Stream",
+     "Event Ingestion Router",
+     "Buffer & Batcher",
+     "Decision Audit Store (AWS S3 Object Lock & AWS KMS)"
+    ],
+    "sensitivity_points": [
+     "Buffer and queue capacity during extended S3 or KMS service degradation."
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging guarantees low latency at the expense of eventual audit consistency."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "While ONNX runtime allows model swapping and ECS supports rolling updates, the architecture lacks an explicit model registry, canary deployment mechanism, or automated 5-minute rollback flow.",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "ML Inference Component",
+     "Decision Orchestrator Component"
+    ],
+    "sensitivity_points": [
+     "Speed of container image rollout versus dynamic model loading in memory."
+    ],
+    "tradeoffs": [
+     "Baking models into container images improves reproducibility but slows rollback speed."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "Rule authoring and hot-reloading are supported, but stateful velocity checks lack a distributed low-latency caching store (e.g., Redis) accessible by the scoring engine.",
+    "elements": [
+     "Analyst & Rules Portal",
+     "Rule Authoring & Simulation Module",
+     "Rule Compiler & Validator Component",
+     "Rule Evaluation Component"
+    ],
+    "sensitivity_points": [
+     "Stateful velocity tracking requires ultra-low-latency state storage not present in scoring."
+    ],
+    "tradeoffs": [
+     "Stateless in-memory rule engines simplify deployments but constrain complex velocity rule capabilities."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Edge PAN masking and Cognito/Okta access controls protect card data, but no automated user behavior analytics or 15-minute anomaly alerting mechanism is modeled.",
+    "elements": [
+     "AWS ALB + AWS WAF",
+     "Analyst & Rules Portal",
+     "Identity Provider (AWS Cognito / Okta)",
+     "Case Management Backend"
+    ],
+    "sensitivity_points": [
+     "Completeness of PAN tokenization and masking across API layers and UI."
+    ],
+    "tradeoffs": [
+     "Strict PAN masking limits analyst context while ensuring PCI-DSS scope reduction."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "S3 Object Lock with KMS encryption provides WORM compliance, while Parquet files containing inputs, model versions, and outputs allow query reproduction well within one day.",
+    "elements": [
+     "Decision Audit Store (AWS S3 Object Lock & AWS KMS)",
+     "Audit & Event Stream",
+     "Buffer & Batcher"
+    ],
+    "sensitivity_points": [
+     "Retention policy enforcement and immutable write-once configuration in S3."
+    ],
+    "tradeoffs": [
+     "Immutable WORM storage prevents record deletion but guarantees long-term regulatory compliance."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "none"
+  },
+  "coverage": 0.5909090909090909,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "AWS ALB + AWS WAF",
+     "Decision Audit Store (AWS S3 Object Lock & AWS KMS)",
+     "PostgreSQL Database",
+     "Audit Dispatcher Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Decision Audit Store (AWS S3 Object Lock & AWS KMS)",
+     "Audit & Event Stream",
+     "Buffer & Batcher",
+     "Audit Dispatcher Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Case Management Backend",
+     "Audit & Event Stream",
+     "Analyst & Rules Portal"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Event Ingestion Router",
+     "Buffer & Batcher",
+     "Case Management Backend",
+     "Real-Time Scoring Engine"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Decision Orchestrator Component",
+     "Rule Evaluation Component",
+     "ML Inference Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Analyst & Rules Portal",
+     "Case Management Backend",
+     "Case Review UI Module",
+     "Case API Controller",
+     "Workflow Engine Component",
+     "PostgreSQL Database"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Rule Compiler & Validator Component",
+     "Rule Evaluation Component",
+     "Rule Authoring & Simulation Module"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Rule Evaluation Component",
+     "ML Inference Component",
+     "AWS ALB + AWS WAF"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "AWS ALB + AWS WAF",
+     "PostgreSQL Database"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Decision Audit Store (AWS S3 Object Lock & AWS KMS)",
+     "Audit & Event Stream",
+     "Event Ingestion Router",
+     "Buffer & Batcher",
+     "Audit Dispatcher Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

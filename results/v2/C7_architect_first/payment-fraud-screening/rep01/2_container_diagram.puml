@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening
+
+Person(FraudAnalyst, "Fraud Analyst", "Evaluates flagged transactions and manages fraud cases.")
+Person(MerchantRiskManager, "Merchant Risk Manager", "Monitors KPIs and rule efficacy via a web dashboard.")
+Person(ComplianceAuditorOfficer, "Compliance / Auditor Officer", "Reviews audit trails and ensures regulatory compliance.")
+
+System_Ext(PaymentGatewayAcquirerSystems, "Payment Gateway / Acquirer Systems", "External software system providing payment authorization traffic.")
+System_Ext(CardNetworksTokenizationVaults, "Card Networks / Tokenization Vaults", "External software system for card data tokenization and network interaction.")
+System_Ext(CoreBankingLedgerSystems, "Core Banking / Ledger Systems", "External software system receiving asynchronous post-processing messages.")
+
+System_Boundary(RealTimePaymentFraudScreening, "Real-Time Payment Fraud Screening") {
+    Container(AWSAPIGateway, "AWS API Gateway", "AWS API Gateway", "Ingresses and routes incoming payment authorization traffic.")
+    Container(RealTimeScoringEngine, "RealTime Scoring Engine", "Go / Java, AWS ECS Fargate", "Evaluates card-not-present payment authorizations against fraud models.")
+    Container(CaseManagementBackend, "Case Management Backend", "AWS ECS Fargate", "Manages analyst reviews and fraud cases.")
+    ContainerDb(AmazonAuroraPostgreSQL, "Amazon Aurora PostgreSQL", "Amazon Aurora PostgreSQL", "Secure relational storage for transaction history and case records.")
+    Container(AmazonS3, "Amazon S3", "Amazon S3", "Secure WORM storage for audit trails and archives.")
+    ContainerDb(AmazonElastiCacheRedis, "Amazon ElastiCache (Redis)", "Amazon ElastiCache (Redis)", "In-memory feature store for rapid fraud rule evaluation.")
+    Container(AmazonSQS, "Amazon SQS", "AWS SQS", "Lightweight, managed asynchronous event messaging.")
+}
+
+Rel(PaymentGatewayAcquirerSystems, AWSAPIGateway, "Sends payment authorization requests", "HTTPS/REST")
+Rel(AWSAPIGateway, RealTimeScoringEngine, "Routes authorization traffic for scoring", "HTTP/gRPC with mTLS")
+Rel(RealTimeScoringEngine, AmazonElastiCacheRedis, "Retrieves features for rapid rule evaluation", "Redis Protocol")
+Rel(RealTimeScoringEngine, AmazonSQS, "Sends asynchronous event messages", "AWS SDK/SQS API")
+Rel(CaseManagementBackend, AmazonSQS, "Consumes asynchronous event messages", "AWS SDK/SQS API")
+Rel(CaseManagementBackend, AmazonAuroraPostgreSQL, "Persists case data and transaction records", "HTTPS with mTLS")
+Rel(FraudAnalyst, CaseManagementBackend, "Reviews flagged transactions and manages cases", "HTTPS")
+Rel(MerchantRiskManager, CaseManagementBackend, "Monitors KPIs and rule efficacy", "HTTPS")
+Rel(ComplianceAuditorOfficer, AmazonS3, "Reviews audit trails and logs", "Secure Read-Only Access")
+
+@enduml

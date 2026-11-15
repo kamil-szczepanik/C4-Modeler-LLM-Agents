@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Patient Admission Service container
+
+Container(api_gateway, "API Gateway", "Kong / Envoy", "Handles mTLS, rate limiting, and token validation for incoming requests.")
+Container(integration_engine, "Integration Engine", "Go / Node.js", "Securely integrates with external health systems and clearinghouses.")
+ContainerDb(data_store, "Data Store", "PostgreSQL, WORM Object Storage", "Persists core data with multi-region active-passive setup, AES-256 encryption, and 10-year audit retention.")
+
+Container_Boundary(patient_admission_service, "Patient Admission Service") {
+    Component(admission_api_controller, "Admission API Controller", "Go / Fiber", "Handles request routing and front-end clinical workflows for patient admissions.")
+    Component(admission_workflow_engine, "Admission Workflow Engine", "Go / Temporal / FSM", "Manages state and orchestration for admission workflows.")
+    Component(demographic_validator_deduplication_module, "Demographic Validator & Deduplication Module", "Go", "Validates and deduplicates patient demographic information.")
+    Component(data_access_repository, "Data Access Repository", "Go / database/sql with pgx", "Manages persistence operations against the PostgreSQL database.")
+    Component(insurance_eligibility_check_integration_handler, "Insurance Eligibility Check Integration Handler", "Go / gRPC client", "Integrates with external insurance and billing clearinghouses.")
+}
+
+Rel(api_gateway, admission_api_controller, "gRPC / REST over internal mesh with mTLS")
+Rel(admission_api_controller, admission_workflow_engine, "In-process function calls")
+Rel(admission_workflow_engine, demographic_validator_deduplication_module, "In-process function calls")
+Rel(admission_workflow_engine, insurance_eligibility_check_integration_handler, "In-process function calls")
+Rel(demographic_validator_deduplication_module, data_access_repository, "In-process function calls")
+Rel(data_access_repository, data_store, "PostgreSQL protocol with AES-256 and TLS 1.3")
+Rel(insurance_eligibility_check_integration_handler, integration_engine, "gRPC over internal mesh with SPIFFE/SPIRE mTLS")
+
+@enduml

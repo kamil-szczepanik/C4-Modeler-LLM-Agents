@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Interoperability Service container
+
+System_Ext(External_Systems, "External Systems", "External partners interfacing via mTLS and OAuth 2.0")
+System_Ext(Clinical_Core_Container, "Clinical Core Container", "Internal clinical core system")
+System_Ext(Dead_Letter_Queue, "Dead-Letter Queue", "Dead-Letter Queue management")
+System_Ext(Audit_Archive, "Audit Archive", "Secure WORM storage for immutable audit trails")
+
+Container_Boundary(Interoperability_Service, "Interoperability Service") {
+    Component(FHIR_API_Endpoint_Controller, "FHIR API Endpoint Controller", "Java/Spring Boot with HAPI FHIR", "Handles RESTful resource requests and standard compliance.")
+    Component(HL7_DICOM_Translation_Engine, "HL7/DICOM Translation Engine", "Apache Camel", "Transforms legacy payload and performs schema validation.")
+    Component(Integration_Message_Broker_Client, "Integration Message Broker Client", "RabbitMQ/Kafka", "Manages message routing and Dead-Letter Queue management.")
+    Component(Audit_Metrics_Publisher, "Audit & Metrics Publisher", "Java/Spring Boot", "Handles telemetry, compliance logs, and Prometheus/Grafana monitoring.")
+}
+
+Rel(External_Systems, FHIR_API_Endpoint_Controller, "Inbound lab/imaging requests", "mTLS / OAuth 2.0 / HTTPS")
+Rel(FHIR_API_Endpoint_Controller, Clinical_Core_Container, "Forwards processed medical records", "gRPC / TLS 1.3")
+Rel(Integration_Message_Broker_Client, Dead_Letter_Queue, "Offloads unparseable payloads", "AMQP")
+Rel(HL7_DICOM_Translation_Engine, Audit_Metrics_Publisher, "Emits telemetry and logs", "Internal EventBus")
+Rel(FHIR_API_Endpoint_Controller, Audit_Metrics_Publisher, "Emits telemetry and logs", "Internal EventBus")
+Rel(Audit_Metrics_Publisher, Audit_Archive, "Secures immutable audit trails", "HTTPS / WORM storage")
+
+@enduml

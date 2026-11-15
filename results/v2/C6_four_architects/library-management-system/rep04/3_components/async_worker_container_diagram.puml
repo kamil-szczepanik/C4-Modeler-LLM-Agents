@@ -1,0 +1,36 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container_Boundary(async_worker_container, "Async Worker Container") {
+    Component(JobDispatcher, "Job Dispatcher / Component", "Spring AMQP", "Consumes background job events from the Message Broker.")
+    Component(TaskExecutionEngine, "Task Execution Engine", "Spring Task / Java", "Delegates payload and executes background tasks like overdue notices and report generation.")
+    Component(DataAccessComponent, "Data Access Component", "Spring Data JPA", "Persists state and updates entities in the Database.")
+    Component(NotificationClient, "Notification Client", "HTTP Client", "Triggers alerts and routes them via the API Gateway.")
+    Component(CacheClient, "Cache Client", "Spring Data Redis", "Acquires idempotency locks and connects to the Caching Layer.")
+    Component(StorageClient, "Storage Client", "AWS SDK", "Persists reports and uploads them to Object Storage.")
+    Component(MetricsHealthComponent, "Metrics & Health Component", "Micrometer / Actuator", "Provides container telemetry and liveness/readiness probes.")
+    Component(JobErrorHandler, "Job Error Handler / Dead-Letter Component", "Spring Boot", "Forwards failed tasks to the Message Broker's DLX.")
+}
+
+Component(Database, "Database", "PostgreSQL", "Relational persistence with EU data residency.")
+Component(MessageBroker, "Message Broker", "RabbitMQ", "Message consumption and DLQ error handling.")
+Component(CachingLayer, "Caching Layer", "Redis", "Distributed locking and idempotency management.")
+Component(ObjectStorage, "Object Storage", "EU-Region MinIO/S3-Compatible", "Compliant object storage for bulk reports.")
+Component(ApiGateway, "API Gateway", "API Gateway", "Routes alerts from the notification client.")
+
+Rel(MessageBroker, JobDispatcher, "Consumes events", "AMQP")
+Rel(JobDispatcher, TaskExecutionEngine, "Delegates payload", "In-Memory")
+Rel(TaskExecutionEngine, DataAccessComponent, "Persists state", "JDBC")
+Rel(DataAccessComponent, Database, "Updates entities", "JDBC")
+Rel(TaskExecutionEngine, CacheClient, "Acquires idempotency locks", "TCP/Redis")
+Rel(CacheClient, CachingLayer, "Connects", "TCP/Redis Protocol")
+Rel(TaskExecutionEngine, StorageClient, "Persists reports", "HTTPS")
+Rel(StorageClient, ObjectStorage, "Uploads reports", "HTTPS")
+Rel(TaskExecutionEngine, NotificationClient, "Triggers alerts", "In-Memory")
+Rel(NotificationClient, ApiGateway, "Routes alerts", "REST/HTTPS")
+Rel(TaskExecutionEngine, JobErrorHandler, "Forwards failed tasks", "In-Memory")
+Rel(JobErrorHandler, MessageBroker, "Publishes to DLX", "AMQP")
+Rel(ContainerOrchestrator, MetricsHealthComponent, "Scrapes health", "HTTP/REST")
+
+@enduml

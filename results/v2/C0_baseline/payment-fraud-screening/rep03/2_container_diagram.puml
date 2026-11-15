@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalystRiskManager, "Fraud Analyst / Risk Manager", "Performs case reviews and updates fraud rules.")
+Person(MerchantOperationsManager, "Merchant Operations Manager", "Monitors merchant operations and transaction metrics.")
+Person(ComplianceOfficer, "Compliance Officer", "Reviews audit trails and compliance reports.")
+
+System_Ext(PaymentGatewayProcessingEngine, "Payment Gateway / Processing Engine", "External actor that submits authorization requests.")
+System_Ext(IdentityProvider, "Identity Provider", "Manages OIDC/OAuth2 authentication and MFA.")
+System_Ext(PaymentCardNetworkTokenizationVault, "Payment Card Network / Tokenization Vault", "Provides tokenized card data.")
+System_Ext(SecureAuditArchive, "Secure Audit Archive", "Cold storage for tamper-evident retention.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(APIGateway, "API Gateway", "Nginx / AWS ALB", "Routes incoming requests and handles edge security.")
+    Container(FraudScoringEngine, "Fraud Scoring Engine", "Java/Quarkus or Go with embedded ONNX Runtime", "Screens card-not-present payment authorizations for fraud prior to approval.")
+    Container(CaseManagementService, "Case Management Service", "Node.js / TypeScript", "Provides a case management interface for fraud analysts.")
+    Container(AuditComplianceLedger, "Audit & Compliance Ledger", "Rust or Go with AWS KMS-backed signing", "Maintains a tamper-evident audit trail and cryptographic non-repudiation.")
+    Container(AnalyticsExportStream, "Analytics Export Stream", "Fluent Bit sidecar", "Scrubs PII and streams anonymized metrics.")
+    ContainerDb(DataStore, "Data Store", "AWS Aurora PostgreSQL & Amazon Redis", "Provides relational storage for cases/audit and in-memory storage for low-latency feature stores.")
+}
+
+Rel(PaymentGatewayProcessingEngine, APIGateway, "Submits card-not-present payment authorizations", "HTTPS (REST/JSON)")
+Rel(APIGateway, FraudScoringEngine, "Forwards scoring requests over internal ALB", "gRPC over TLS (mTLS)")
+Rel(FraudScoringEngine, DataStore, "Performs feature lookup", "TCP (TLS)")
+Rel(CaseManagementService, IdentityProvider, "Authenticates users via OAuth2/OIDC", "HTTPS")
+Rel(FraudAnalystRiskManager, CaseManagementService, "Interacts for case management and rule updates", "HTTPS (Web UI)")
+Rel(AuditComplianceLedger, SecureAuditArchive, "Writes tamper-evident audit logs and ledgers", "HTTPS (TLS)")
+Rel(AnalyticsExportStream, SecureAuditArchive, "Streams anonymized metrics and scrubbed data", "HTTPS")
+
+@enduml

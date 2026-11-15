@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(web_frontend_spa, "Web Frontend (SPA)", "Single Page Application used by customers and adjusters.")
+
+System_Ext(azure_ad_entra_id, "Azure AD / Entra ID", "Identity provider for Single Sign-On and JWT validation.")
+System_Ext(azure_app_configuration, "Azure App Configuration", "Backs dynamic feature flags for claim type routing.")
+System_Ext(core_claims_service, "Core Claims Service", "Modern backend service running on Azure Container Apps.")
+System_Ext(mainframe_acl, "Mainframe ACL", "Legacy system access layer interfacing with the COBOL/DB2 mainframe.")
+
+Container_Boundary(claims_api_gateway, "Claims API Gateway") {
+    Component(jwt_validation_policy_component, "JWT Validation Policy Component", "Azure API Management Policy / Azure AD", "Validates tokens against Azure AD / Entra ID.")
+    Component(rate_limiting_throttling_component, "Rate Limiting & Throttling Component", "Azure API Management Policy", "Enforces persona-based quotas.")
+    Component(claims_based_authorization_policy_component, "Claims-Based Authorization Policy Component", "Azure API Management Policy", "Enforces RBAC separation.")
+    Component(api_security_gateway_policies, "API Security Gateway Policies", "Azure API Management Policy", "OWASP Top 10 payload validation and sanitization.")
+    Component(distributed_tracing_injector_component, "Distributed Tracing Injector Component", "OpenTelemetry", "Injects OpenTelemetry correlation headers.")
+    Component(health_probing_automated_failover_component, "Health Probing & Automated Failover Component", "Azure API Management Backend Probes / Circuit Breaker", "Provides backend health probes and circuit breaker patterns.")
+    Component(mtls_secure_connector_component, "mTLS & Secure Connector Component", "Azure API Management TLS Profiles", "Manages certificate-based outbound trust.")
+}
+
+Rel(web_frontend_spa, jwt_validation_policy_component, "Sends API requests", "HTTPS / REST")
+Rel(jwt_validation_policy_component, rate_limiting_throttling_component, "Passes authenticated requests")
+Rel(rate_limiting_throttling_component, claims_based_authorization_policy_component, "Evaluates rate-limited requests")
+Rel(claims_based_authorization_policy_component, api_security_gateway_policies, "Enforces RBAC before security validation")
+Rel(api_security_gateway_policies, distributed_tracing_injector_component, "Injects correlation headers into validated requests")
+Rel(distributed_tracing_injector_component, health_probing_automated_failover_component, "Routes requests through health probes and circuit breakers")
+Rel(health_probing_automated_failover_component, mtls_secure_connector_component, "Establishes secure outbound connections")
+Rel(mtls_secure_connector_component, core_claims_service, "Routes authenticated requests", "gRPC / internal HTTPS with mTLS")
+Rel(mtls_secure_connector_component, mainframe_acl, "Forwards fallback requests", "HTTPS with mTLS")
+
+Rel(jwt_validation_policy_component, azure_ad_entra_id, "Validates tokens", "OAuth2 / OpenID Connect")
+Rel(rate_limiting_throttling_component, azure_app_configuration, "Evaluates cached feature flags", "HTTPS")
+
+@enduml

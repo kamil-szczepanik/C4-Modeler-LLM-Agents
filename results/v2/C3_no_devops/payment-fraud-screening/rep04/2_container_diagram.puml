@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(FraudAnalyst, "Fraud Analyst & Risk Manager", "Accesses case management and rule update interfaces.")
+Person(ComplianceAuditor, "Compliance / Auditor", "Queries audit logs for merchant support and compliance.")
+
+System_Ext(PaymentProcessor, "Payment Processor", "Sends transaction authorizations via gRPC.")
+System_Ext(IdentityProvider, "Identity Provider", "Manages user authentication via AWS Cognito (OIDC).")
+
+System_Boundary(FraudSystem, "Real-Time Payment Fraud Screening System") {
+    Container(ALB, "AWS Application Load Balancer", "AWS ALB", "Ingress point for incoming payment authorizations and analyst traffic.")
+    Container(ScoringEngine, "Scoring Engine", "Go container on Amazon ECS on AWS Fargate", "Evaluates card-not-present payment authorizations for fraud at scale with sub-50ms latency.")
+    Container(CaseManagement, "Case Management Backend", "Node.js / TypeScript container on Amazon ECS on AWS Fargate", "Provides case management features for analysts.")
+    Container(AuditorQuery, "Auditor Query Service", "AWS Athena over Amazon S3", "Queries immutable 7-year audit logs.")
+    ContainerDb(DynamoDB, "Amazon DynamoDB", "Amazon DynamoDB", "Handles low-latency feature lookups and case state management.")
+    ContainerDb(Aurora, "Amazon Aurora Serverless v2 PostgreSQL", "Amazon Aurora Serverless v2 PostgreSQL", "Stores tamper-evident audit logs with immutable append-only tables.")
+    Container(Messaging, "Amazon SQS / SNS", "Amazon SQS / SNS", "Provides asynchronous messaging between services.")
+}
+
+Rel(PaymentProcessor, ALB, "Sends payment authorizations", "gRPC/HTTPS with mTLS")
+Rel(FraudAnalyst, ALB, "Accesses case management and rule updates", "HTTPS")
+Rel(ComplianceAuditor, AuditorQuery, "Queries audit logs", "HTTPS")
+Rel(ALB, ScoringEngine, "Routes authorization requests", "HTTP/2")
+Rel(ALB, CaseManagement, "Routes analyst traffic", "HTTPS")
+Rel(ScoringEngine, DynamoDB, "Performs feature lookups and case state updates", "AWS PrivateLink")
+Rel(ScoringEngine, Aurora, "Writes audit logs", "TLS")
+Rel(CaseManagement, Aurora, "Reads and writes case audit data", "TLS")
+
+@enduml

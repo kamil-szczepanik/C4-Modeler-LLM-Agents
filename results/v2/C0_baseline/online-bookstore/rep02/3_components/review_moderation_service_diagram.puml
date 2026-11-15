@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Review & Moderation Service container
+
+Container_Boundary(review_moderation_service, "Review & Moderation Service") {
+    Component(Review_API_Controller, "Review API Controller", "Node.js / Express, Joi / Zod, JWT", "Handles incoming REST/GraphQL traffic and JWT-validated RBAC.")
+    Component(Moderation_Engine, "Moderation Engine", "Node.js / Express, NLP libraries", "Executes automated NLP/toxicity checks and quarantines abusive content.")
+    Component(Compliance_Manager, "Compliance Manager", "Node.js / Express", "Handles GDPR/CCPA data deletions, anonymization, and Right of Access exports.")
+    Component(Event_Publisher, "Event Publisher", "Node.js / Express, Outbox Pattern", "Dispatches domain events asynchronously to the messaging bus.")
+    Component(Export_Aggregator, "Export Aggregator", "Node.js / Express", "Streams user review history securely to cloud storage.")
+    Component(Review_Data_Access_Layer, "Review Data Access Layer", "Node.js / Express, Amazon DocumentDB Driver", "Interfaces with the primary database.")
+    Component(Primary_Database, "Primary Database", "Amazon DocumentDB (MongoDB-compatible)", "Stores semi-structured review schemas with encryption at rest via AWS KMS.")
+    Component(Messaging_Bus, "Messaging Bus", "Amazon SQS / SNS with DLQ", "Asynchronous messaging bus ensuring event delivery resilience and error isolation.")
+    Component(Amazon_S3, "Amazon S3", "Amazon S3", "Cloud storage for export payloads and secure presigned-url generation.")
+}
+
+Rel(Review_API_Controller, Moderation_Engine, "Passes submitted reviews", "In-process function call")
+Rel(Moderation_Engine, Review_Data_Access_Layer, "Persists approved and quarantined statuses", "TCP via TLS 1.3")
+Rel(Review_Data_Access_Layer, Primary_Database, "Reads and writes review schemas", "Encrypted TCP")
+Rel(Compliance_Manager, Messaging_Bus, "Consumes user-deletion events and publishes exports", "Amazon SQS/SNS")
+Rel(Event_Publisher, Messaging_Bus, "Publishes moderation and export events", "Amazon SNS/SQS via outbox pattern")
+Rel(Export_Aggregator, Amazon_S3, "Streams export payloads for secure presigned-url generation", "HTTPS")
+
+@enduml

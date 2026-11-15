@@ -1,0 +1,345 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Search & Indexing Engine with OpenSearch handles catalogue browsing (R-01), Order Management Service with multi-currency pricing handles checkout (R-02), Customer & Review Schema handles reviews (R-03), and Recommendation Service covers recommendations (R-04).",
+   "performance_efficiency": "Amazon CloudFront, Client-Side Cache, Cache Aside Proxy (Redis), OpenSearch, and ElastiCache ensure sub-2s loads on 3G. Asynchronous task decoupling via Task Queue Manager and Event Router easily accommodates 1 M MAU.",
+   "compatibility": "Integration Facade encapsulates third-party shipping APIs, Payment Gateway, and Tax Calculation Service via HTTPS/REST. Clear interoperability standards (OIDC, Redis RESP, PostgreSQL, gRPC) ensure seamless coexistence across external and internal systems.",
+   "usability": "Customer and Store Administrator are served via the Single Page App with specialized components (Catalog & Search View, Cart & Checkout Module). However, dedicated administrative workflows and interfaces are minimally detailed within the SPA components.",
+   "reliability": "99.95% availability is supported by Opossum circuit breakers in Integration Facade, Idempotency Manager, and DLQ Monitor with redrive policies. However, multi-region replication mechanisms (e.g., Aurora Global Database, DynamoDB Global Tables) are omitted.",
+   "security": "OWASP Top-10 is addressed via Security and Auth Validator, Checkout Controller rate-limiting, and Idempotency Manager. GDPR & CCPA compliance is explicitly enforced using Row-Level Security in Aurora PostgreSQL alongside OIDC token validation.",
+   "maintainability": "High modularity is achieved through clear container boundaries (Go, Node.js, Python services) and layered components (Controllers, Domain Managers, Repositories). Loose coupling is maintained via Event Router and Task Queue Manager.",
+   "portability": "Services are containerized with Docker/Fargate across target AWS regions. However, tight architectural coupling to proprietary AWS infrastructure (DynamoDB Streams, EventBridge, CloudFront, Aurora) limits portability outside of the AWS ecosystem."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront CDN, ElastiCache Redis, TanStack Query client caching, and DynamoDB GSIs offload read pressure during surges. However, 3G performance on heavy React SPAs requires strict bundle optimization not detailed in the model.",
+    "elements": [
+     "Single Page App (SPA)",
+     "API Gateway",
+     "Catalog Service",
+     "Cache Aside Proxy",
+     "Database (DynamoDB)"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios on edge and Redis proxies",
+     "DynamoDB read capacity autoscaling under sudden traffic spikes"
+    ],
+    "tradeoffs": [
+     "Aggressive client and edge caching risks showing stale catalogue prices"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendation recomputation is decoupled via asynchronous Celery workers consuming from SQS and writing to Redis and PostgreSQL. Browsing traffic queries read replicas, Redis, and DynamoDB, keeping catalogue browsing completely isolated from compute-heavy retraining.",
+    "elements": [
+     "Recommendation Service",
+     "Model Ingestion Worker",
+     "Recommendation Engine",
+     "Cache (ElastiCache Redis)",
+     "Catalog Service"
+    ],
+    "sensitivity_points": [
+     "Asynchronous task queue throughput and worker resource isolation",
+     "Separation of analytical queries from operational database workloads"
+    ],
+    "tradeoffs": [
+     "Serving stale cached recommendations while batch model updates execute asynchronously"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The Integration Facade incorporates Opossum circuit breakers to guard against external shipping API downtime, and Event Publisher/SQS supports asynchronous retries. However, a dedicated deferred fulfillment state machine is not explicitly diagrammed.",
+    "elements": [
+     "Order & Checkout Service",
+     "Integration Facade",
+     "Event Publisher",
+     "Message Broker",
+     "Shipping Provider APIs"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker timeout thresholds and failure fallback execution",
+     "Reliability of asynchronous event publishing for delayed shipping fulfillment"
+    ],
+    "tradeoffs": [
+     "Accepting orders without immediate shipping confirmation risks subsequent fulfillment failures"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "The system brief designates three AWS regions, but the architecture lacks explicit cross-region replication mechanisms (such as Aurora Global Database or DynamoDB Global Tables) and global DNS/routing failover to survive total loss of us-east-1.",
+    "elements": [
+     "Single Page App (SPA)",
+     "API Gateway",
+     "Database (Aurora PostgreSQL)",
+     "Database (DynamoDB)"
+    ],
+    "sensitivity_points": [
+     "Cross-region data replication lag and recovery point objective",
+     "Global DNS traffic management and automated health check routing"
+    ],
+    "tradeoffs": [
+     "Cross-region active-active database synchronisation introduces high latency and cost"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Multi-currency pricing is explicitly localized to the Order Management Service and the Catalog & Inventory Schema in Aurora PostgreSQL. Adding JPY requires minimal changes restricted to pricing configuration, checkout conversion logic, and Payment Gateway currency mapping.",
+    "elements": [
+     "Order Management Service",
+     "Transaction Coordinator",
+     "Database (Aurora PostgreSQL)",
+     "Integration Facade"
+    ],
+    "sensitivity_points": [
+     "Decoupled currency domain logic within Order Management Service",
+     "External payment gateway currency support and configuration"
+    ],
+    "tradeoffs": [
+     "Storing multi-currency values increases schema complexity over single base-currency models"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Recommendation Engine encapsulates collaborative filtering and machine learning models behind clean internal interfaces and Celery background workers. Algorithm replacements are entirely isolated within this component without altering external contracts or downstream consumers.",
+    "elements": [
+     "Recommendation Engine",
+     "Model Ingestion Worker",
+     "Recommendation API Controller",
+     "Recommendation Service"
+    ],
+    "sensitivity_points": [
+     "Clean abstraction of the recommendation scoring algorithm",
+     "Contract stability of the recommendation API controller and Redis cache schema"
+    ],
+    "tradeoffs": [
+     "Encapsulated algorithms cannot leverage service-specific database optimisations directly"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Prisma ORM parameterization neutralizes SQL injection, Row-Level Security isolates data access, and API Gateway Lambda Authorizers validate JWTs. However, AWS WAF is omitted at the ingress layer to inspect and filter complex XSS payloads.",
+    "elements": [
+     "API Gateway",
+     "Security and Auth Validator",
+     "Checkout Controller",
+     "Transaction Coordinator",
+     "Database (Aurora PostgreSQL)"
+    ],
+    "sensitivity_points": [
+     "Rigorous input sanitization and parameterized ORM queries",
+     "Adequacy of edge authorizers in detecting malicious payloads"
+    ],
+    "tradeoffs": [
+     "Strict input validation and sanitization filters can add request latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Aurora PostgreSQL provides Row-Level Security and identifiable customer schemas, but there is no dedicated privacy orchestration workflow or event handler to coordinate erasure across PostgreSQL, DynamoDB, Redis caches, analytical ML models, and external IdP stores.",
+    "elements": [
+     "Customer & Review Schema",
+     "Database (Aurora PostgreSQL)",
+     "Identity Provider (IdP)",
+     "Recommendation Service",
+     "Message Broker"
+    ],
+    "sensitivity_points": [
+     "Comprehensiveness of distributed deletion event orchestration across services",
+     "Traceability of PII across caches, training sets, and immutable audit logs"
+    ],
+    "tradeoffs": [
+     "Anonymizing transaction records preserves financial auditability but complicates deletion workflows"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "partial"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Customer & Review Schema"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Order Management Service",
+     "Catalog & Inventory Schema"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Provider APIs",
+     "Integration Facade"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search View",
+     "Catalog Service",
+     "Catalog API Controller",
+     "Catalog Domain Manager",
+     "Search & Indexing Engine",
+     "Cache Aside Proxy",
+     "Database (DynamoDB)",
+     "Global Secondary Indexes (SearchIndex)"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Cart & Checkout Module",
+     "Order & Checkout Service",
+     "Checkout Controller",
+     "Order Management Service",
+     "Transaction Coordinator",
+     "Idempotency Manager",
+     "Database (Aurora PostgreSQL)",
+     "Order Schema",
+     "Payment Gateway"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Recommendation & Review Widget",
+     "Customer & Review Schema"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation & Review Widget",
+     "Recommendation Service",
+     "Recommendation API Controller",
+     "Recommendation Engine",
+     "Model Ingestion Worker",
+     "Cache (ElastiCache Redis)",
+     "Recommendation Cache Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Catalog Service",
+     "Order & Checkout Service",
+     "Recommendation Service",
+     "Database (DynamoDB)",
+     "Database (Aurora PostgreSQL)",
+     "Cache (ElastiCache Redis)",
+     "Message Broker"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Single Page App (SPA)",
+     "Routing & Shell Component",
+     "Client-Side Cache & API Client",
+     "Cache Aside Proxy",
+     "Cache (ElastiCache Redis)"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Integration Facade",
+     "Message Broker",
+     "DLQ Monitor",
+     "Task Queue Manager",
+     "Database (Aurora PostgreSQL)",
+     "Database (DynamoDB)"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "partial",
+    "elements": [
+     "Security and Auth Validator",
+     "Checkout Controller",
+     "Idempotency Manager",
+     "Customer & Review Schema"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ },
+ "tag": "retest"
+}

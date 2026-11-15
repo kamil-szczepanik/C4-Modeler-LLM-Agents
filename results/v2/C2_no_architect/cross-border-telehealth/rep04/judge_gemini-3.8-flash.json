@@ -1,0 +1,331 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 3,
+   "portability": 4
+  },
+  "mean": 3.875,
+  "justifications": {
+   "functional_suitability": "While video consultations ('WebRTC SFU') and symptom checking ('AI Symptom Checker Container') are addressed, domain services for e-prescriptions and purpose-based consent ('Patient Consent Portal' exists only at Context level) are absent from 'Regional GKE Clusters', which only contains platform infrastructure rather than business services.",
+   "performance_efficiency": "'Mediasoup SFU Core' explicitly handles low-bandwidth WebRTC degradation (<300 kbit/s), and 'Cloud Pub/Sub buffer' provides asynchronous ingestion for audit logging. However, caching strategies and scaling mechanisms for the AI inference engine in 'Symptom Analysis Controller' are not explicitly defined.",
+   "compatibility": "Interoperability with 'External Pharmacies (EU/US)' using HL7 FHIR and EU national standards is explicitly defined on the regional integration links. 'coturn NAT Traversal' and WebRTC standards ensure network compatibility for client connections across varying topologies.",
+   "usability": "'Frontend Container' and 'Web UI Controller' provide interfaces for patients and clinicians, while network degradation mechanisms accommodate rural users. However, dedicated interfaces or reporting views for 'Compliance Officers' mentioned in the container diagram are not modeled.",
+   "reliability": "'coturn NAT Traversal' mitigates unstable rural connections, 'Async Submission Handler' handles failed tasks via DLQs, and 'Cloud Pub/Sub buffer' ensures audit log persistence. However, multi-region failover and disaster recovery patterns between the EU and US clusters are omitted.",
+   "security": "Security is thoroughly implemented via 'Google Cloud Armor', 'Envoy Edge Router' enforcing regional residency, 'Istio Service Mesh' with SPIFFE mTLS, 'CSI Secrets Store Driver', 'Falco DaemonSet', and tamper-proof auditing using 'Cryptographic Chaining Engine' written to 'WORM Storage Bucket'.",
+   "maintainability": "Component boundaries are muddled: 'Regional GKE Clusters' contains platform tools ('ArgoCD', 'Falco') rather than domain microservices, hiding application coupling. Conversely, 'Audit Sidecar' and 'WebRTC SFU' show clear separation of concerns, aided by declarative GitOps via 'ArgoCD'.",
+   "portability": "'Regional GKE Clusters' deploys across target GCP regions ('europe-west3', 'us-central1') using containerized workloads ('Distroless Container'). Some vendor lock-in exists due to direct dependencies on 'Google Cloud Armor', 'Google Secret Manager', and GCP-specific WORM storage capabilities."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 1,
+   "MOD-01": 2,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 2,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.4375,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 2.5,
+   "Modifiability": 3.0,
+   "Security": 2.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "Mediasoup SFU Core and coturn are defined, but SFUs are stateful and vertical/horizontal auto-scaling mechanisms across GKE nodes to handle 5,000 concurrent media streams within 10 s join latency are not specified.",
+    "elements": [
+     "WebRTC SFU",
+     "Mediasoup SFU Core",
+     "coturn NAT Traversal",
+     "Regional GKE Clusters",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "SFU media pipeline CPU saturation and clustering capability under peak concurrent stream loads",
+     "Signaling channel connection latency during session establishment"
+    ],
+    "tradeoffs": [
+     "Selective forwarding units reduce client bandwidth but require extensive server-side compute and network capacity"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Handling ~14 req/s is well within standard model serving capability. Offloading audit logging asynchronously via the Audit Sidecar and Pub/Sub buffer avoids blocking inference, preserving sub-3s latency.",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Symptom Analysis Controller",
+     "Audit Sidecar",
+     "Cloud Pub/Sub buffer",
+     "WORM Storage Bucket"
+    ],
+    "sensitivity_points": [
+     "Model execution time on TensorFlow inference instances",
+     "Asynchronous sidecar overhead on pod CPU and memory"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging decouples latency from persistence but risks log loss if local buffers overflow"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The architecture explicitly provisions WebRTC adaptive degradation below 300 kbit/s and coturn NAT traversal. However, there is no explicit store-and-forward component for consultation notes during intermittent disconnects.",
+    "elements": [
+     "WebRTC SFU",
+     "Mediasoup SFU Core",
+     "coturn NAT Traversal",
+     "Video Gateway Containers"
+    ],
+    "sensitivity_points": [
+     "SFU adaptive bitrate and dynamic codec downscaling algorithms",
+     "TURN relay throughput on high packet loss rural connections"
+    ],
+    "tradeoffs": [
+     "Degrading video stream quality preserves connection stability and essential audio at low bitrates"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 1,
+    "justification": "Only a single US region (us-central1) is defined in target clouds. If us-central1 fails entirely, no secondary US region exists to restore services without violating data residency by failing over to europe-west3.",
+    "elements": [
+     "Regional GKE Clusters",
+     "Cloud WAF",
+     "Google Cloud Armor"
+    ],
+    "sensitivity_points": [
+     "Single region deployment in the US for regional disaster recovery",
+     "Strict regulatory residency constraints prohibiting cross-border failover"
+    ],
+    "tradeoffs": [
+     "Deploying in a single US region minimizes cost but makes region-level disaster recovery impossible without violating residency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "The container diagram shows prescriptions sent via national standards, but Regional GKE components only show infrastructure tools (Istio, Falco, ArgoCD). Application-level integration adapters for national e-prescriptions are missing.",
+    "elements": [
+     "Regional GKE Clusters",
+     "External Pharmacies (EU/US)"
+    ],
+    "sensitivity_points": [
+     "Absence of modular integration adapters or an interoperability mediation layer in component models"
+    ],
+    "tradeoffs": [
+     "Lack of explicit adapter abstractions increases coupling between clinical services and diverse national pharmacy protocols"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "ArgoCD and Cosign manage deployment integrity, while the Audit Sidecar (Audit Log Collector, Cryptographic Chaining Engine) and WORM storage ensure immutable, cryptographically chained logs linking model versions to inference runs.",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Audit Sidecar",
+     "Cryptographic Chaining Engine",
+     "Storage Writer",
+     "WORM Cloud Storage",
+     "ArgoCD"
+    ],
+    "sensitivity_points": [
+     "Inclusion of model metadata and version IDs in input payloads",
+     "Immutability of chained records in WORM Cloud Storage"
+    ],
+    "tradeoffs": [
+     "Cryptographic chaining and WORM retention guarantee traceability but increase storage overhead and write complexity"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "justification": "Patient Consent Portal is listed at Level 1, and Envoy enforces residency at Level 3. However, fine-grained cross-region consent policy enforcement engines and clinical data services are omitted from container and component layers.",
+    "elements": [
+     "Envoy Edge Router",
+     "Patient Consent Portal",
+     "Routing and mTLS Enforcer",
+     "Regional GKE Clusters"
+    ],
+    "sensitivity_points": [
+     "Consent evaluation engine integration at the cross-region edge",
+     "Zero-trust cross-cluster mTLS authorization between independent regional meshes"
+    ],
+    "tradeoffs": [
+     "Restricting cross-border queries at the API Gateway protects privacy but introduces network latency for cross-region consent checks"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "Consent withdrawal can be submitted via the portal, but research data repositories, ETL pipelines, and consent revocation propagation mechanisms across data stores are completely absent from the architectural diagrams.",
+    "elements": [
+     "Patient Consent Portal",
+     "API Gateway",
+     "Regional GKE Clusters"
+    ],
+    "sensitivity_points": [
+     "Propagation latency of consent revocations across downstream analytical and research stores",
+     "Auditability of data deletion or anonymization events"
+    ],
+    "tradeoffs": [
+     "Decoupled analytical datasets require asynchronous synchronization, complicating verification of 24-hour revocation SLAs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Regional GKE Clusters",
+     "Envoy Edge Router",
+     "WORM Cloud Storage",
+     "Compliance Officers"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Regional GKE Clusters",
+     "Envoy Edge Router",
+     "Storage Writer"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Audit Sidecar",
+     "Cryptographic Chaining Engine",
+     "Storage Writer",
+     "WORM Cloud Storage"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "WebRTC SFU",
+     "coturn NAT Traversal",
+     "Mediasoup SFU Core",
+     "Async Submission Handler"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "WebRTC SFU",
+     "Mediasoup SFU Core",
+     "coturn NAT Traversal",
+     "Frontend Container",
+     "API Gateway"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "External Pharmacies (EU/US)",
+     "Regional GKE Clusters"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Symptom Analysis Controller"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Patient Consent Portal"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Regional GKE Clusters",
+     "Envoy Edge Router"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "WebRTC SFU",
+     "Mediasoup SFU Core",
+     "coturn NAT Traversal"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Audit Sidecar",
+     "Audit Log Collector",
+     "Cryptographic Chaining Engine",
+     "Storage Writer",
+     "WORM Cloud Storage"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "External Pharmacies (EU/US)",
+     "Regional GKE Clusters"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

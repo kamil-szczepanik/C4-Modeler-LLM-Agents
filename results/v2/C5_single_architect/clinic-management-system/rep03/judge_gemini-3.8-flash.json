@@ -1,0 +1,348 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: Patient Registration Controller & Service handles R-01, Scheduling Engine with Redis slot-locking covers R-02 clash checks, EMR Service with Audit Trail Interceptor covers R-03, and Billing Service with Claim Processing Engine covers R-04.",
+   "performance_efficiency": "Performance is addressed with In-Memory Cache (Redis) for clash checks, Read Replica Nodes for non-blocking queries, and asynchronous audit streaming via Kafka. However, specific caching or read-optimization to guarantee the <1s P95 EMR load is minimally detailed.",
+   "compatibility": "HL7 FHIR interoperability (R-08) is thoroughly realized via the dedicated FHIR Integration Broker with FHIR Route Mediator, HL7/FHIR Validator Component, and external integrations over HTTPS/TLS, alongside Payment Gateway and Identity Provider integration.",
+   "usability": "Patients, Clinicians/Staff, and Administrators access the system via Web and Mobile channels entering through the API Gateway. However, dedicated user-facing frontend containers (e.g. web/mobile SPA containers) are abstracted away and omitted from the container model.",
+   "reliability": "High availability (99.99%) is supported by Patroni/etcd consensus, read replicas, Kafka clustering, and a DLQ Handler in the Audit Worker. However, cross-region active-active synchronization across on-prem-k8s and eu-central-1 PostgreSQL instances lacks an explicit mechanism.",
+   "security": "MFA and OAuth2 are handled via Identity Provider and API Gateway, transit is secured with mTLS and TLS 1.3, AES-256 at-rest TDE is handled via Vault/PKCS#11, and PHI Redaction with immutable audit trails ensures HIPAA/GDPR compliance.",
+   "maintainability": "Strong microservice decomposition with clear bounded contexts (Patient & Scheduling, EMR, Billing, Audit). Standardized inter-service communication (mTLS, Kafka with Schema Registry) and clean internal component layering promote low coupling and testability.",
+   "portability": "Containerized components (Spring Boot, NestJS, Go, FastAPI) and Kubernetes-agnostic open-source tooling (Kafka, PostgreSQL, Kong) fit hybrid deployments (on-prem-k8s and AWS eu-central-1), though cloud-specific bindings like Archival Exporter using AWS SDK slightly reduce neutrality."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "Read Replica Nodes offload non-blocking reads, but the lack of an in-memory caching tier in the EMR Service combined with column-level AES-256 decryption overhead threatens the strict sub-second P95 latency under high concurrency.",
+    "elements": [
+     "API Gateway",
+     "EMR Service",
+     "Clinical Record Manager",
+     "Encryption & Data Access Layer",
+     "Database Cluster",
+     "Read Replica Nodes"
+    ],
+    "sensitivity_points": [
+     "Overhead of column-level decryption during bulk concurrent read operations",
+     "Absence of a caching layer in the EMR container"
+    ],
+    "tradeoffs": [
+     "Column-level AES-256 encryption increases security at the expense of read query latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Apache Camel routes and Kafka event buffering decouple high-volume FHIR ingestion from clinical workloads. Segregated read replicas protect EMR queries from primary write saturation, though heavy transactional ingestion may induce database replication lag.",
+    "elements": [
+     "FHIR Integration Broker",
+     "FHIR Route Mediator",
+     "Message Broker",
+     "FHIR Event Consumer",
+     "Database Cluster",
+     "Read Replica Nodes"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer throughput and batching parameters under burst ingestion",
+     "Database cluster replication lag between primary write node and read replicas"
+    ],
+    "tradeoffs": [
+     "Asynchronous event ingestion trades real-time consistency for system stability and read performance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Patroni and etcd manage database failover, but the design lacks a global DNS or load balancing mechanism to redirect traffic across hybrid sites. True multi-region active-active data synchronization across hybrid boundaries remains unaddressed.",
+    "elements": [
+     "API Gateway",
+     "Database Cluster",
+     "Primary Write Node",
+     "Distributed Consensus Manager"
+    ],
+    "sensitivity_points": [
+     "Automated cross-site traffic failover detection time",
+     "State synchronization latency across hybrid cloud and on-premises environments"
+    ],
+    "tradeoffs": [
+     "Synchronous cross-region database replication prevents data loss but increases write transaction latencies"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Distributed Consensus Manager (Patroni/etcd) promotes replicas within 30 seconds to maintain write capabilities. While Billing Service interacts transactionally, explicit distributed claim deduplication or idempotent outbox mechanisms are only partially detailed.",
+    "elements": [
+     "Billing Service",
+     "Billing Data Repository",
+     "Database Cluster",
+     "Distributed Consensus Manager",
+     "Primary Write Node"
+    ],
+    "sensitivity_points": [
+     "Patroni election timeout configuration and heartbeat thresholds",
+     "Idempotent retry mechanisms within the Billing Data Repository"
+    ],
+    "tradeoffs": [
+     "Aggressive failover heartbeats risk false-positive split-brain promotions during transient network blips"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Modifications are strictly limited to the Billing Service's Claims Transformer Component and Payment Gateway Integration Client. The EMR Service is fully decoupled via microservice boundaries and remains untouched.",
+    "elements": [
+     "Billing Service",
+     "Claim Processing Engine",
+     "Claims Transformer Component",
+     "Payment Gateway Integration Client",
+     "Payment Gateway"
+    ],
+    "sensitivity_points": [
+     "Loose coupling of outbound REST/TLS adapters in the billing component"
+    ],
+    "tradeoffs": [
+     "Maintaining dedicated domain mapping components adds minor initial structural complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are confined to the Patient Registration Controller & Service, the Database Cluster schema, and the Message Broker Schema Registry. Demographics are decoupled from clinical workflows, keeping cross-service modifications within the target limit.",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Patient Registration Controller & Service",
+     "Database Cluster",
+     "Message Broker",
+     "Schema Registry"
+    ],
+    "sensitivity_points": [
+     "Schema compatibility rules enforced by the Kafka Schema Registry",
+     "Data migration overhead for encrypted demographic columns"
+    ],
+    "tradeoffs": [
+     "Centralized schema validation requires schema registry updates prior to deployment"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The external Identity Provider enforces multi-factor authentication, while the API Gateway's Authentication & Authorization Filter validates tokens. Unauthenticated requests are immediately blocked, and violations are routed via Kafka to the Audit Worker for rapid alerting.",
+    "elements": [
+     "Identity Provider",
+     "API Gateway",
+     "Authentication & Authorization Filter",
+     "Rate Limiting & Threat Protection Plugin",
+     "Message Broker",
+     "Audit & Compliance Worker"
+    ],
+    "sensitivity_points": [
+     "Strict enforcement of OAuth2/MFA claims at the API Gateway edge",
+     "Latency of real-time security event delivery through Kafka"
+    ],
+    "tradeoffs": [
+     "Edge token and MFA validation introduces slight processing overhead to every request"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The EMR Service's Audit Trail Interceptor uses AOP to capture 100% of read accesses. Events stream through Kafka to the Retention Policy Enforcer and Archival Exporter, guaranteeing immutable long-term compliance storage in Regulatory Archiving.",
+    "elements": [
+     "EMR Service",
+     "Audit Trail Interceptor",
+     "Message Broker",
+     "Commit Log Partition Manager",
+     "Audit & Compliance Worker",
+     "Retention Policy Enforcer Component",
+     "Archival Exporter Component",
+     "Regulatory Archiving / Audit Storage"
+    ],
+    "sensitivity_points": [
+     "Aspect-Oriented Programming pointcuts covering every EMR read invocation",
+     "Guaranteed message delivery semantics (acks=all) on the Kafka audit topic"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit dispatch avoids read latency penalties but relies on broker durability"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Patient Consent & Privacy Manager",
+     "PHI Redaction & Header Injector",
+     "Data Anonymization & Security Filter",
+     "Compliance Normalizer Component",
+     "Audit Logging Interceptor",
+     "Audit & Compliance Worker"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Database Cluster",
+     "Distributed Consensus Manager",
+     "Read Replica Nodes",
+     "Message Broker"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Regulatory Archiving / Audit Storage",
+     "Retention Policy Enforcer Component",
+     "Archival Exporter Component",
+     "Commit Log Partition Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Patient Registration Controller & Service",
+     "Database Cluster"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Scheduling Engine & Resource Validator",
+     "In-Memory Cache"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "Clinical Record Manager",
+     "Audit Trail Interceptor",
+     "Audit & Compliance Worker",
+     "Message Broker",
+     "Database Cluster"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service",
+     "Billing API Controller",
+     "Claim Processing Engine",
+     "Claims Transformer Component",
+     "Payment Gateway Integration Client",
+     "Payment Gateway"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider",
+     "API Gateway",
+     "Authentication & Authorization Filter",
+     "Database Cluster",
+     "Encryption & Key Manager Agent",
+     "Encryption & Data Access Layer",
+     "Billing Data Repository"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Database Cluster",
+     "Primary Write Node",
+     "Read Replica Nodes",
+     "Distributed Consensus Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "EMR Service",
+     "Read Replica Nodes"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Integration Broker",
+     "FHIR Route Mediator",
+     "HL7/FHIR Validator Component",
+     "FHIR Transformer Component",
+     "External Labs & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

@@ -1,0 +1,37 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Audit Log Store container
+
+' External Elements
+System_Ext(Event_Broker, "Event Broker", "Apache Kafka message broker.")
+System_Ext(API_Gateway, "API Gateway", "Entry point for client requests.")
+System_Ext(Core_Services, "Core Services", "Internal microservices.")
+System_Ext(Cloud_Backup, "Cloud Backup", "AWS S3 Glacier long-term storage.")
+System_Ext(Observability_Monitoring_Collector, "Observability & Monitoring Collector", "Metrics and telemetry collector.")
+System_Ext(Key_Management_Service_KMS, "Key Management Service (KMS)", "Provides envelope encryption keys.")
+
+' Container Boundary
+Container_Boundary(Audit_Log_Store, "Audit Log Store") {
+    Component(Audit_Ingestor, "Audit Ingestor", "Node.js / TypeScript", "Processing asynchronous log events.")
+    Component(Immutable_Storage_Engine, "Immutable Storage Engine", "PostgreSQL (Append-Only / WORM)", "Append-only tables utilizing SHA-256 cryptographic chaining.")
+    Component(Archival_Worker, "Archival Worker", "Python", "Handling batch offloads to long-term storage.")
+    Component(Audit_Query_API, "Audit Query API", "Node.js / TypeScript", "Providing secure, read-only compliance access.")
+    Component(Replication_Manager, "Replication Manager", "Go", "Managing multi-region active-active synchronization.")
+    Component(Integrity_Verifier, "Integrity Verifier", "Go", "Performing routine hash-chain verification and alerting.")
+}
+
+' Relationships
+Rel(Event_Broker, Audit_Ingestor, "Consumes log events", "Kafka Protocol over TLS")
+Rel(Audit_Ingestor, Immutable_Storage_Engine, "Writes audit records", "SQL/TCP with TLS")
+Rel(API_Gateway, Audit_Query_API, "Forwards search and compliance requests", "gRPC over mTLS")
+Rel(Core_Services, Audit_Query_API, "Forwards search and compliance requests", "gRPC over mTLS")
+Rel(Audit_Query_API, Immutable_Storage_Engine, "Reads verified audit records", "SQL/TCP with TLS")
+Rel(Immutable_Storage_Engine, Replication_Manager, "Streams Write-Ahead Logs", "TCP with TLS")
+Rel(Archival_Worker, Cloud_Backup, "Exports batch archives", "HTTPS / Encrypted Storage API")
+Rel(Replication_Manager, Cloud_Backup, "Exports batch archives", "HTTPS / Encrypted Storage API")
+Rel(Integrity_Verifier, Observability_Monitoring_Collector, "Emits compliance alert metrics", "gRPC/OTLP over TLS")
+Rel(Immutable_Storage_Engine, Key_Management_Service_KMS, "Requests envelope encryption keys", "HTTPS/REST")
+
+@enduml

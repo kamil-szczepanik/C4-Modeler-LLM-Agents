@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Catalog & Search Container container
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway handling client requests.")
+System_Ext(amazon_kinesis, "Amazon Kinesis", "Enables asynchronous, non-blocking telemetry and search analytics streaming.")
+System_Ext(aurora_postgresql, "Aurora PostgreSQL", "Acts as the primary relational source of truth with multi-region replication.")
+System_Ext(amazon_opensearch, "Amazon OpenSearch", "Provides typo-tolerant keyword search and advanced filtering.")
+
+Container_Boundary(catalog_and_search_container, "Catalog & Search Container") {
+    Component(search_api_handler, "Search API Handler", "Go", "Powers high-performance product browsing, keyword search, and localized pricing, handling requests from the API Gateway.")
+    Component(catalog_management_service, "Catalog Management Service", "Go", "Manages catalog data and interacts directly with Aurora PostgreSQL.")
+    Component(index_synchronizer, "Index Synchronizer", "Go / AWS Lambda", "Synchronizes data between Aurora PostgreSQL and Amazon OpenSearch using CDC/Debezium.")
+    Component(product_read_model_cache, "Product Read Model Cache", "Redis", "Powers low-latency product read caching and currency rate lookups.")
+    Component(localization_currency_resolver, "Localization & Currency Resolver", "Go", "Resolves localized pricing and currency details for users.")
+    Component(search_analytics_emitter, "Search Analytics Emitter", "Go", "Emits search analytics and telemetry asynchronously to Amazon Kinesis.")
+}
+
+Rel(api_gateway, search_api_handler, "gRPC over mTLS", "gRPC/mTLS")
+Rel(search_api_handler, amazon_opensearch, "REST/HTTPS", "REST/HTTPS")
+Rel(catalog_management_service, aurora_postgresql, "SQL/TCP", "SQL/TCP")
+Rel(index_synchronizer, aurora_postgresql, "CDC/Debezium", "Database CDC")
+Rel(index_synchronizer, amazon_opensearch, "CDC/Debezium", "Indexing")
+Rel(search_api_handler, product_read_model_cache, "TCP/Redis Protocol", "TCP")
+Rel(search_api_handler, localization_currency_resolver, "Internal gRPC", "gRPC")
+Rel(search_analytics_emitter, amazon_kinesis, "Async/TCP", "TCP")
+
+@enduml

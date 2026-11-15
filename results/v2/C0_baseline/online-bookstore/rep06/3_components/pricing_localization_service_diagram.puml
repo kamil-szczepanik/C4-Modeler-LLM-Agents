@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway routing traffic.")
+
+Container_Boundary(pricing_localization_service, "Pricing & Localization Service") {
+    Component(pricing_api_controller, "Pricing API Controller", "Node.js / TypeScript (Fastify)", "Handles gRPC/HTTP requests and routes localization requests.")
+    Component(currency_exchange_engine, "Currency Exchange Engine", "Node.js / TypeScript", "Translates base prices into USD, EUR, and GBP using cached rates.")
+    Component(localization_rule_resolver, "Localization Rule Resolver", "Node.js / TypeScript", "Fetches regional tax and compliance rules, and queries fallback rules on cache miss.")
+    Component(price_cache_manager, "Price Cache Manager", "Node.js / TypeScript", "Manages caching logic, cache invalidation, and reads/populates localized pricing.")
+    Component(exchange_rate_sync_worker, "Exchange Rate Sync Worker", "Node.js / TypeScript (Fastify)", "Background worker fetching third-party currency rates and retrieving API keys.")
+    Component(audit_compliance_logger, "Audit & Compliance Logger", "Node.js / TypeScript", "Captures administrative pricing updates.")
+    
+    ComponentDb(aws_elasticache_redis, "AWS ElastiCache (Redis)", "AWS ElastiCache (Redis)", "Regional cache and session store with read-replicas providing sub-10ms localized pricing reads.")
+    ComponentDb(aws_rds_postgresql, "AWS RDS PostgreSQL", "AWS RDS PostgreSQL", "Relational database for persistent pricing records and regional tax rules.")
+    Component(aws_eventbridge, "AWS EventBridge", "AWS EventBridge", "Pub/sub event bus for real-time cache invalidation across regions.")
+    Component(aws_secrets_manager, "AWS Secrets Manager", "AWS Secrets Manager", "Secure storage for external API credentials.")
+}
+
+Rel(api_gateway, pricing_api_controller, "Routes localization requests", "gRPC over HTTP/2, mTLS")
+Rel(pricing_api_controller, price_cache_manager, "Reads localized pricing", "Redis protocol over TCP/TLS")
+Rel(price_cache_manager, aws_elasticache_redis, "Populates and invalidates cache", "TCP/TLS with Encryption at Rest/Transit")
+Rel(localization_rule_resolver, aws_rds_postgresql, "Fetches fallback rules on cache miss", "TCP/TLS")
+Rel(aws_eventbridge, price_cache_manager, "Triggers instant cache invalidation on admin updates", "Pub/Sub")
+Rel(exchange_rate_sync_worker, aws_secrets_manager, "Retrieves API keys", "IAM-authenticated task roles")
+
+@enduml

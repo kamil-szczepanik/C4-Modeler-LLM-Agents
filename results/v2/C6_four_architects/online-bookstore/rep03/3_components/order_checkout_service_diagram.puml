@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container_Boundary("OrderCheckoutService", "Order & Checkout Service") {
+    Component("CheckoutController", "Checkout Controller", "Node.js/Express", "Exposes REST/gRPC endpoints for API Gateway interaction.")
+    Component("IdempotencyGuard", "Idempotency Guard", "Node.js/Redis Client", "Prevents duplicate order creation via atomic locks.")
+    Component("CartManager", "Cart Manager", "Node.js", "Encapsulates shopping cart state and lifecycle management.")
+    Component("OrderOrchestrator", "Order Orchestrator", "Node.js/Temporal.io SDK", "Manages distributed checkout sagas and consistency.")
+    Component("PaymentTaxClient", "Payment & Tax Client", "Node.js/Axios", "Integrates with Stripe/PayPal and Avalara.")
+    Component("FulfillmentRiskClient", "Fulfillment & Risk Client", "Node.js/Axios", "Interfaces with UPS/FedEx and AWS Fraud Detector.")
+    Component("EventPublisher", "Event Publisher", "Node.js/AWS SDK", "Dispatches asynchronous domain events.")
+    Component("OrderDataAccessLayer", "Order Data Access Layer", "Node.js/DynamoDB Document Client", "Manages single-table design access patterns.")
+    Component("AmazonElastiCacheRedis", "Amazon ElastiCache (Redis)", "Amazon ElastiCache (Redis)", "Checks/stores transaction locks [TCP]")
+}
+
+Rel("CheckoutController", "IdempotencyGuard", "Validates request uniqueness", "In-memory")
+Rel("IdempotencyGuard", "AmazonElastiCacheRedis", "Checks/stores transaction locks", "TCP")
+Rel("CheckoutController", "CartManager", "Retrieves active cart items", "In-memory")
+Rel("CheckoutController", "OrderOrchestrator", "Initiates saga workflow", "In-memory")
+Rel("OrderOrchestrator", "PaymentTaxClient", "Executes transaction steps", "HTTPS Egress")
+Rel("OrderOrchestrator", "FulfillmentRiskClient", "Executes transaction steps", "HTTPS Egress")
+Rel("OrderOrchestrator", "OrderDataAccessLayer", "Persists state transitions", "NoSQL API over TCP")
+Rel("CartManager", "OrderDataAccessLayer", "Clears cart state", "NoSQL API over TCP")
+Rel("OrderOrchestrator", "EventPublisher", "Emits completion events", "Event-driven Messaging")
+
+@enduml

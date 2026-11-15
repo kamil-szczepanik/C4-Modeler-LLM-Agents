@@ -1,0 +1,223 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 2,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 3,
+   "portability": 4
+  },
+  "mean": 3.625,
+  "justifications": {
+   "functional_suitability": "While R-01 requires cataloging physical and digital items and managing circulation, the system lacks core cataloging, inventory, or circulation containers. It provides only a Search Container fed by unspecified CDC pipelines, with no transactional database or service to actually create, edit, or manage item records.",
+   "performance_efficiency": "R-05 (<800 ms p99 search) is well-addressed through dedicated OpenSearch/Elasticsearch in 'Search Container', 'OpenAPI Validator & Rate Limiter' in 'API Gateway', and offloading telemetry asynchronously via 'Telemetry Sidecar' (Fluentbit) and Kafka to avoid search latency and I/O degradation.",
+   "compatibility": "Standard integration protocols are defined for external boundaries, including 'External ILS / Book Supplier Integration' via mTLS and JWT/HMAC, 'Notification Gateway' via API, and integrations with external SIEM and reporting systems using standard asynchronous data pipelines.",
+   "usability": "The 'Web UI and Accessibility Layer' in 'Self-Service Portal' explicitly adopts WCAG 2.1 AA standards and axe-core validation to support patrons, librarians, and administrators, although staff-specific workflows for circulation operations lack distinct interface elements.",
+   "reliability": "Reliability includes a 'Dead Letter Queue (DLQ)' in 'User Analytics & Feedback Container' and LUKS-encrypted spillover disks for audit buffering. However, high availability, clustering, and recovery mechanisms for the search data store and ingestion pipelines are omitted.",
+   "security": "The EU-only data residency constraint and security are rigorously handled via 'Audit & Compliance Container' with an EU-localized HSM, WORM storage, Merkle trees, mTLS via SPIFFE/SPIRE, OAuth2/OIDC with PKCE, and 'WAF Input Sanitizer'.",
+   "maintainability": "While containers define clear boundaries, the 'Audit & Compliance Container' component diagram mixes architectural components with humans ('Data Protection Officers') and external systems ('Centralized Logging & SIEM Service'). Core circulation and catalog domains are entirely missing from modular decomposition.",
+   "portability": "The architecture leverages portable containerized infrastructure (Kubernetes, Fluentbit, Kafka, Elasticsearch). Hardware dependence is limited to the EU-localized HSM, which is appropriate for cryptographic enforcement of the EU data residency constraint."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 2,
+   "MOD-02": 1,
+   "PERF-01": 4,
+   "PERF-02": 2,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.375,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 2.5,
+   "Modifiability": 1.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Dedicated horizontally scalable OpenSearch cluster, API Gateway rate limiting, and asynchronous sidecars are explicitly designed to maintain sub-800ms latency under high load, though caching layers are not detailed.",
+    "elements": [
+     "API Gateway",
+     "OpenAPI Validator & Rate Limiter",
+     "Search Container",
+     "Search Indexer",
+     "Search API Handler"
+    ],
+    "sensitivity_points": [
+     "Search cluster indexing concurrency and shard allocation under peak load"
+    ],
+    "tradeoffs": [
+     "Rate limiting guarantees P99 response time but may throttle legitimate patron queries"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "justification": "While asynchronous CDC handles search indexing, the architecture completely lacks a transactional catalog/circulation container or database where librarians write inventory updates.",
+    "elements": [
+     "Search Container",
+     "Search Indexer",
+     "External ILS / Book Supplier Integration"
+    ],
+    "sensitivity_points": [
+     "CDC pipeline throughput and replication lag between writes and search indexing"
+    ],
+    "tradeoffs": [
+     "Asynchronous CDC decoupling protects query performance but risks eventual consistency delay"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "Elasticsearch clustering can handle individual node failover for search, but circulation management and loan transaction persistence mechanisms do not exist in the model.",
+    "elements": [
+     "Search Container",
+     "Search Indexer"
+    ],
+    "sensitivity_points": [
+     "Replica shard distribution and automatic master election timing in OpenSearch"
+    ],
+    "tradeoffs": [
+     "High replica count increases cluster resilience but multiplies storage and infrastructure overhead"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Stateless portal instances behind an API gateway allow failover for UI traffic, but absence of circulation/loan transaction backends leaves loan safety unaddressed.",
+    "elements": [
+     "Self-Service Portal",
+     "API Proxy Client",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Portal session state management across stateless replicas during instance failures"
+    ],
+    "tradeoffs": [
+     "Delegating session state to secure cookies improves resilience but increases payload sizes"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "External book integration exists only as an external system boundary with mTLS; there is no internal integration adapter or ingestion component to isolate provider-specific changes.",
+    "elements": [
+     "External ILS / Book Supplier Integration",
+     "Search Container"
+    ],
+    "sensitivity_points": [
+     "Coupling between external supplier schemas and internal catalog ingestion models"
+    ],
+    "tradeoffs": [
+     "Direct integration reduces pipeline hops but increases coupling across external APIs"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 1,
+    "justification": "The architecture does not contain a circulation service, business rules engine, or configuration management mechanism to support configurable loan policies.",
+    "elements": [
+     "Library Management System"
+    ],
+    "sensitivity_points": [
+     "Absence of a domain-specific loan rules engine in the container model"
+    ],
+    "tradeoffs": [
+     "Configurable rule engines increase design complexity but avoid redeployment for policy updates"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "EU-localized HSM and Kubernetes containers are specified for the audit system, but explicit regional boundary constraints and data store residency controls for patron data are missing elsewhere.",
+    "elements": [
+     "Audit & Compliance Container",
+     "EU-localized HSM",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Enforcement of geographical residency constraints across all cloud storage and logging egress"
+    ],
+    "tradeoffs": [
+     "Strict regional containment ensures regulatory compliance but restricts multi-region failover options"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "OAuth2/OIDC validation, document-level access controls, and tamper-evident Merkle-tree audit logging exist, but loan history entities and circulation domain services are unmodeled.",
+    "elements": [
+     "API Gateway",
+     "OAuth2/OIDC Token Validator",
+     "Search API Handler",
+     "Audit & Compliance Container",
+     "WORM Storage"
+    ],
+    "sensitivity_points": [
+     "Granularity and strictness of document-level authorization checks at API handler layers"
+    ],
+    "tradeoffs": [
+     "Fine-grained document authorization adds processing latency but prevents cross-tenant data leaks"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.6666666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Audit & Compliance Container",
+     "EU-localized HSM"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "External ILS / Book Supplier Integration",
+     "Search Container",
+     "Search Indexer"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Container",
+     "Search Indexer",
+     "Search API Handler",
+     "OpenAPI Validator & Rate Limiter"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

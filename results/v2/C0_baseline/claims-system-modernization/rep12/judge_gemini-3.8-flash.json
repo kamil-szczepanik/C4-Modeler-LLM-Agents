@@ -1,0 +1,307 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All requirements are met: 'Customer Portal' enables online submissions (R-01), 'Adjuster Workspace' provides the adjuster web app (R-02), and 'Integration & Anti-Corruption Layer' with 'Routing & Feature Router' facilitates incremental migration of claim types (R-03).",
+   "performance_efficiency": "Sub-2-second adjuster loading is achieved by decoupling reads from the 5-second mainframe via the 'Claim Read Model Database' (Cosmos DB Direct Mode) and 'Configuration SDK Caching Module', while writes are decoupled asynchronously via 'Outbox Processor'.",
+   "compatibility": "Interoperates smoothly with 'Corporate Active Directory' (OIDC/SAML) and 'Legacy Mainframe' via 'Translation Engine' and MQ/ESB. However, specific architectural coordination to respect the nightly batch window (23:00-05:00) without extension is not explicitly modeled.",
+   "usability": "Each user group is explicitly served by dedicated interfaces: 'Claims SPA Component' inside 'Customer Portal' for brokers and customers, and 'Adjuster UI' within 'Adjuster Workspace' for internal adjusters.",
+   "reliability": "'Outbox Processor' implements the Transactional Outbox pattern to prevent lost claims, backed by 'Async Sync Worker' with Polly retries. However, explicit deduplication mechanisms on legacy ingestion to strictly prevent processing twice are not fully detailed.",
+   "security": "Fully satisfies R-07 via 'Authentication & SSO Handler' validating OIDC/OAuth2 tokens with 'Corporate Active Directory'. Network security is enforced via mTLS, and secrets are secured using 'Secrets Management Client' with Azure Managed Identities.",
+   "maintainability": "R-06 is thoroughly addressed: 'Configuration & Feature Store' combined with 'Routing & Feature Router' allows instant (<1 day) fallbacks per claim type. The 'Integration & Anti-Corruption Layer' encapsulates legacy models to minimize blast radius.",
+   "portability": "Supports the hybrid model across on-prem and Azure West Europe using standard protocols. However, components are tightly coupled to Azure-specific PaaS (Cosmos DB, Azure App Configuration), demanding cloud expertise despite the team's acknowledged limited cloud experience."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 3,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 4.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture decouples adjuster reads via the Claim Read Model Database (Azure Cosmos DB) using direct mode, serving denormalized claims locally in under 2 s without synchronous mainframe queries.",
+    "elements": [
+     "Adjuster UI",
+     "Adjuster API Backend",
+     "Claim Read Model Database",
+     "Integration & Anti-Corruption Layer"
+    ],
+    "sensitivity_points": [
+     "Latency of Cosmos DB direct mode queries",
+     "Eventual consistency lag between mainframe updates and read model"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of claim views traded for sub-second query performance"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Customer Portal and ACL decouple submissions asynchronously via Outbox Processor and MassTransit queues, buffering load. However, explicit scheduling mechanisms pausing mainframe sync specifically during batch windows are not detailed.",
+    "elements": [
+     "Customer Portal",
+     "API Gateway",
+     "Integration & Anti-Corruption Layer",
+     "Outbox Processor",
+     "Async Sync Worker"
+    ],
+    "sensitivity_points": [
+     "Buffer capacity of the transactional outbox during peak submission periods"
+    ],
+    "tradeoffs": [
+     "Asynchronous message accumulation traded for legacy mainframe batch window isolation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Incoming claims are captured locally via the Transactional Outbox pattern in the ACL. When the mainframe is offline during batch windows, messages persist safely and resume transmission via MassTransit/Polly afterwards.",
+    "elements": [
+     "Integration & Anti-Corruption Layer",
+     "Outbox Processor",
+     "Async Sync Worker",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Storage retention and durability of Azure SQL Serverless outbox storage"
+    ],
+    "tradeoffs": [
+     "Temporary synchronization delay during batch windows traded for continuous frontend availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Transactional Outbox and Polly retries guarantee at-least-once delivery without loss. However, explicit mainframe idempotency tokens, deduplication tables, or two-way reconciliation compensation jobs are not fully specified.",
+    "elements": [
+     "Integration & Anti-Corruption Layer",
+     "Outbox Processor",
+     "Async Sync Worker",
+     "Translation Engine"
+    ],
+    "sensitivity_points": [
+     "Mainframe duplicate-detection logic and idempotency key handling"
+    ],
+    "tradeoffs": [
+     "At-least-once delivery resilience traded for potential duplicate processing if idempotency keys fail"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Dynamic routing rules in the Configuration & Feature Store and Routing & Feature Router enable instant runtime toggling and one-day rollbacks per claim type without frontend code modifications.",
+    "elements": [
+     "Configuration & Feature Store",
+     "Routing & Feature Router",
+     "Translation Engine",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Feature store cache invalidation latency across distributed components"
+    ],
+    "tradeoffs": [
+     "Configuration engine complexity traded for instant zero-downtime rollback capability"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "User interfaces interact purely via API Gateway and read models, protecting UI code. However, the system lacks a dedicated cloud write-side system of record to replace mainframe persistence when decommissioned.",
+    "elements": [
+     "Adjuster Workspace",
+     "Customer Portal",
+     "API Gateway",
+     "Integration & Anti-Corruption Layer",
+     "Claim Read Model Database"
+    ],
+    "sensitivity_points": [
+     "Presence of a persistent cloud transactional store of record"
+    ],
+    "tradeoffs": [
+     "Thin write-path architecture traded for major rework when retiring the mainframe"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The API Gateway and Entra ID handle authentication and role validation, but fine-grained multi-tenant relationship authorization (broker-to-customer claim scoping) and audit logging are unaddressed in component definitions.",
+    "elements": [
+     "API Gateway",
+     "Authentication & SSO Handler",
+     "Customer Portal",
+     "BFF Routing & Session Component"
+    ],
+    "sensitivity_points": [
+     "Fine-grained resource-level authorization checks at API Gateway or BFF level"
+    ],
+    "tradeoffs": [
+     "Centralized gateway token validation traded for lack of object-level authorization enforcement"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Centralized Entra ID integration disables cloud SSO immediately. However, active token revocation (token lifetime limits) and propagating revocation to the legacy mainframe within 15 minutes are not addressed.",
+    "elements": [
+     "Corporate Active Directory",
+     "API Gateway",
+     "Authentication & SSO Handler",
+     "Adjuster API Backend",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "OAuth token expiry durations and synchronization of revocation to mainframe RACF/security"
+    ],
+    "tradeoffs": [
+     "Stateless JWT validation performance traded for delayed revocation until token expiry"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7272727272727273,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Integration & Anti-Corruption Layer"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Integration & Anti-Corruption Layer",
+     "Translation Engine"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer Portal",
+     "Claims SPA Component",
+     "Claim Validation & Mapping Component",
+     "BFF Routing & Session Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Workspace",
+     "Adjuster UI",
+     "Adjuster API Backend"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Configuration & Feature Store",
+     "Routing & Feature Router",
+     "Routing & Configuration Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Integration & Anti-Corruption Layer",
+     "Outbox Processor",
+     "Async Sync Worker"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Claim Read Model Database",
+     "Claim Document Store",
+     "Adjuster Workspace"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Configuration & Feature Store",
+     "Routing & Feature Router",
+     "Configuration SDK Caching Module"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Corporate Active Directory",
+     "API Gateway",
+     "Authentication & SSO Handler",
+     "Adjuster API Backend"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

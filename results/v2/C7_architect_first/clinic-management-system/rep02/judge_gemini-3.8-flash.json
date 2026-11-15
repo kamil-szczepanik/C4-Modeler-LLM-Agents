@@ -1,0 +1,339 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: 'Patient Registry Component' covers R-01, 'Scheduling Engine' handles R-02, 'EMR Management Component' manages medical records with audit logs for R-03, and 'Billing Processor' connects to external payment and insurance systems for R-04.",
+   "performance_efficiency": "EMR screen loading under 1 s is supported by 'PgBouncer' and dedicated 'Replica DB Instances' for read queries, alongside asynchronous event publishing via 'Message Broker'. However, a dedicated application-tier query caching layer for medical records is absent.",
+   "compatibility": "The 'Integration Service' implements a dedicated 'FHIR Transformer Engine' and 'External Protocol Adapter' communicating via HL7 FHIR over HTTPS/mTLS to exchange health data with 'External Lab & Imaging Systems', fully meeting R-08 and external system interfaces.",
+   "usability": "While all user groups (Patients, Clinical Staff, Administrators, Billing Specialists) are mapped in context and container levels, the architecture lacks explicit frontend presentation containers (web/mobile portals), having human actors interact directly with the 'API Gateway'.",
+   "reliability": "While 'Resilience4j', Kafka 'DLQ Manager', and Patroni failover provide fault tolerance, the 'Data Tier' is explicitly defined as regional active-passive, which contradicts the mandatory R-06 requirement for an active-active setup to ensure 99.99% availability.",
+   "security": "Security is addressed thoroughly: 'Identity & Access Management' provides MFA and RBAC, 'Data Tier' utilizes 'External KMS' (Vault) with column-level AES-256, and 'Object Store Backend' enforces WORM retention for HIPAA/GDPR audit trails.",
+   "maintainability": "The architecture exhibits modular decomposition into cohesive containers and components ('Core Services', 'Integration Service', 'API Gateway'). Loose coupling is maintained via asynchronous messaging through Kafka and standardized gRPC/mTLS interfaces.",
+   "portability": "Components rely on container-ready technologies (Spring Boot, Envoy, PostgreSQL, Kafka, MinIO/S3). Hybrid replication across on-prem-k8s and eu-central-1 is aided by 'Topic Replicator' (MirrorMaker 2), though multi-region database sync mechanisms remain partially specified."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 3,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 3.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Stateless JWT token validation at the gateway, PDP decision caching in Redis, PgBouncer pooling, and read-only database replicas properly offload EMR queries to support 500 concurrent sessions within 1 second.",
+    "elements": [
+     "API Gateway",
+     "Identity & Access Management",
+     "Caching & Redis Cluster",
+     "Core Services",
+     "EMR Management Component",
+     "Connection Pooler",
+     "Replica DB Instances"
+    ],
+    "sensitivity_points": [
+     "Redis cache hit ratio for authorization policies during peak clinical rounds",
+     "Replication lag between Primary DB and Patroni read replicas"
+    ],
+    "tradeoffs": [
+     "Caching authorizations in Redis improves latency but risks transient stale permission windows"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Apache Camel transforms HL7 FHIR payloads asynchronously and publishes events to Kafka with DLQ routing, buffering high burst volumes without competing with synchronous EMR read traffic on Postgres replicas.",
+    "elements": [
+     "Integration Service",
+     "FHIR Transformer Engine",
+     "External Protocol Adapter",
+     "Message Broker",
+     "Ingestion Router",
+     "DLQ Manager",
+     "Replica DB Instances"
+    ],
+    "sensitivity_points": [
+     "Kafka partition throughput and consumer group concurrency under high ingestion rates",
+     "Camel transformation overhead for deeply nested FHIR resources"
+    ],
+    "tradeoffs": [
+     "Asynchronous message brokering guarantees ingestion stability at the expense of slight display latency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "MirrorMaker 2 synchronizes Kafka topics across hybrid environments, but the transactional database is active-passive. Asynchronous cross-region database replication risks data loss or manual promotion exceeding the 1-minute RTO and RPO=0 requirements.",
+    "elements": [
+     "Data Tier",
+     "Primary DB Instance",
+     "Replica DB Instances",
+     "Message Broker",
+     "Topic Replicator"
+    ],
+    "sensitivity_points": [
+     "Cross-region network latency between on-premises and eu-central-1",
+     "Patroni automated failover across WAN boundaries"
+    ],
+    "tradeoffs": [
+     "Active-passive regional topology avoids split-brain but sacrifices zero-RPO hybrid disaster recovery"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Patroni provides automated database failover within 30 seconds while PgBouncer shields clients from connection breaks. Asynchronous messaging and Kafka DLQs enable safe claim retries without message loss.",
+    "elements": [
+     "Data Tier",
+     "Primary DB Instance",
+     "Replica DB Instances",
+     "Connection Pooler",
+     "Message Broker",
+     "Core Services",
+     "Billing Processor"
+    ],
+    "sensitivity_points": [
+     "Patroni election timeout and health check calibration",
+     "Idempotency handling in Billing Processor for retried transactions"
+    ],
+    "tradeoffs": [
+     "Enforcing strict transaction idempotency introduces messaging and storage processing overhead"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "While Integration Service encapsulates HL7 FHIR protocols, insurance verification and billing gateways connect at the system/Core Services level. Adding a clearinghouse requires modifying the internal Billing Processor rather than a standalone adapter.",
+    "elements": [
+     "Core Services",
+     "Billing Processor",
+     "Integration Service",
+     "Insurance Verification Service",
+     "Payment Gateway"
+    ],
+    "sensitivity_points": [
+     "Coupling between billing domain logic and external payment/clearinghouse transport protocols"
+    ],
+    "tradeoffs": [
+     "Embedding external billing routes in Core Services simplifies deployments but hampers external modifiability"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are isolated to the Patient Registry Component, the database schema partition, and the WORM Storage Ingestion Engine. The decoupled domain model ensures updates are deliverable within a single sprint.",
+    "elements": [
+     "Core Services",
+     "Patient Registry Component",
+     "Data Tier",
+     "Audit Ledger Component",
+     "Storage",
+     "Ingestion & Validation Engine"
+    ],
+    "sensitivity_points": [
+     "Schema evolution synchronization across relational tables and long-term object archives"
+    ],
+    "tradeoffs": [
+     "Schema migration overhead on audit ledgers ensures compliance at the cost of deployment complexity"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Keycloak Core strictly mandates MFA, stopping password-only authentication attempts at the perimeter. The Audit Logger instantly dispatches security breach events to Kafka and SIEM exporters in real time.",
+    "elements": [
+     "Identity & Access Management",
+     "Authentication Engine (Keycloak Core)",
+     "Audit Logger",
+     "Message Broker",
+     "Operational Audit & Compliance Exporter"
+    ],
+    "sensitivity_points": [
+     "Keycloak identity federation and MFA provider availability",
+     "Audit logging pipeline latency from IAM to alerting sinks"
+    ],
+    "tradeoffs": [
+     "Enforcing MFA on every clinical session increases operational security while slightly increasing initial login latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The Policy Decision Point verifies RBAC policies on reads, while EMR Management persists tamper-evident records to Postgres audit partitions and immutable S3 WORM storage with a 10-year retention hold.",
+    "elements": [
+     "Identity & Access Management",
+     "Policy Decision Point (PDP)",
+     "Core Services",
+     "EMR Management Component",
+     "Data Tier",
+     "Audit Ledger Component",
+     "Storage",
+     "Retention & Compliance Controller",
+     "Object Store Backend"
+    ],
+    "sensitivity_points": [
+     "Tamper-evidence guarantees in append-only PostgreSQL ledger tables",
+     "WORM retention lock enforcement policies in object storage"
+    ],
+    "tradeoffs": [
+     "Synchronously auditing 100% of EMR read operations consumes additional storage and write I/O"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Telemetry & Audit Filter Component",
+     "Audit Ledger Component",
+     "Retention & Compliance Controller",
+     "Encryption Manager",
+     "Identity & Access Management",
+     "Data Tier"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Replica DB Instances",
+     "Topic Replicator",
+     "Resilience & Circuit Breaker Manager",
+     "Connection Pooler"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Storage",
+     "Retention & Compliance Controller",
+     "Object Store Backend",
+     "Audit Logger"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Registry Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Scheduling Engine"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Management Component",
+     "Audit Ledger Component",
+     "Storage"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Billing Processor",
+     "Payment Gateway",
+     "Insurance Verification Service"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity & Access Management",
+     "Authentication Engine (Keycloak Core)",
+     "Data Tier",
+     "External KMS",
+     "EMR Management Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Data Tier",
+     "Replica DB Instances",
+     "Topic Replicator"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Replica DB Instances",
+     "Connection Pooler"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Service",
+     "FHIR Transformer Engine",
+     "External Protocol Adapter",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

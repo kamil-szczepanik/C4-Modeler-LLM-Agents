@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the AI Gateway container
+
+System_Ext(api_gateway, "API Gateway / Region Router", "Cloud Endpoints, Envoy")
+System_Ext(ai_engine, "AI Symptom Checker Engine", "External AI Engine")
+System_Ext(data_layer, "Data Layer", "Cloud SQL PostgreSQL, Firestore, Cloud Storage")
+
+Container_Boundary(ai_gateway, "AI Gateway") {
+    Component(policy_interceptor, "Policy & Data Residency Interceptor", "Go", "Enforces regional data separation and compliance policies for incoming payloads.")
+    Component(audit_logger, "Audit & Version Logger", "Go", "Persists compliance logs, structured metadata, and summaries.")
+    Component(throttling_proxy, "Throttling & Fallback Proxy", "Go", "Manages request throttling and proxies sanitized requests to the external AI engine.")
+    Component(triage_formatter, "Triage Explanation Formatter", "Go", "Formats upstream AI responses into finalized recommendations and structured metadata.")
+}
+
+Rel(api_gateway, policy_interceptor, "Forwards raw symptom payload", "gRPC over internal VPC")
+Rel(policy_interceptor, throttling_proxy, "Passes sanitized request", "In-memory Go structs")
+Rel(throttling_proxy, ai_engine, "Proxies sanitized requests", "mTLS")
+Rel(throttling_proxy, triage_formatter, "Passes raw upstream AI responses", "In-memory Go structs")
+Rel(triage_formatter, audit_logger, "Sends structured metadata and summaries", "gRPC")
+Rel(audit_logger, data_layer, "Persists compliance logs", "gRPC/SQL")
+Rel(triage_formatter, api_gateway, "Returns finalized recommendations", "gRPC")
+@enduml

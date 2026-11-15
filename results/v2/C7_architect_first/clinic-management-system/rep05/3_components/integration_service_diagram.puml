@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Integration Service container
+
+System_Ext(api_gateway, "API Gateway", "Kong, Nginx, Envoy sidecar")
+System_Ext(external_labs, "External Lab & Imaging Systems", "External laboratory systems")
+System_Ext(kafka_broker, "Apache Kafka Event Broker", "Apache Kafka event broker")
+System_Ext(postgresql, "PostgreSQL Databases", "PostgreSQL Databases with read replicas")
+
+Container_Boundary(integration_service, "Integration Service") {
+    Component(fhir_engine, "FHIR Route Engine", "Apache Camel / Java", "Orchestrates enterprise integration patterns and HL7 FHIR transformations.")
+    Component(hl7_adapter, "HL7 v2/v3 Adapter", "Apache Camel / Java", "Adapts legacy HL7 v2 and v3 messages for internal consumption.")
+    Component(kafka_publisher, "Kafka Event Publisher", "Java / Kafka Client", "Publishes sanitized events to the Apache Kafka event broker.")
+    Component(dlq_handler, "Resilience & DLQ Handler", "Java / Spring Retry / Camel", "Delegates failures and publishes encrypted poison messages to the DLQ.")
+    Component(masking_interceptor, "Payload Masking & Audit Interceptor", "Java / Interceptor", "Passes and sanitizes clinical payloads in-memory.")
+}
+
+Rel(api_gateway, integration_service, "Routes requests", "gRPC / Internal Mesh with mTLS")
+Rel(fhir_engine, external_labs, "Exchanges clinical data", "HTTPS / REST / HL7 FHIR APIs")
+Rel(fhir_engine, masking_interceptor, "Passes clinical payloads", "In-memory")
+Rel(masking_interceptor, kafka_publisher, "Forwards sanitized events", "In-memory")
+Rel(fhir_engine, dlq_handler, "Delegates failures", "In-memory")
+Rel(dlq_handler, kafka_broker, "Publishes encrypted poison messages to DLQ", "TCP / TLS")
+Rel(integration_service, postgresql, "Reads and writes clinical data", "TCP / TLS")
+
+@enduml

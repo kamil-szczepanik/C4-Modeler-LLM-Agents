@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Recommendation Service container
+
+Container_Boundary(recommendation_service, "Recommendation Service") {
+    Component(API_Controller, "API Controller", "FastAPI / Python", "FastAPI endpoints handling gRPC/REST requests from the API Gateway.")
+    Component(Recommendation_Engine, "Recommendation Engine", "Python", "Core logic implementing collaborative filtering, algorithms, and fallback heuristics.")
+    Component(Model_Loader_Feature_Store_Client, "Model Loader / Feature Store Client", "Python / AWS S3 Client", "Fetches and cryptographically verifies ML models from Amazon S3.")
+    Component(Cache_Manager, "Cache Manager", "Redis Py-Client / Python", "Manages interactions with Amazon ElastiCache (Redis) with circuit breaker patterns.")
+    Component(Telemetry_Publisher, "Telemetry Publisher", "Python / Async Queue", "Emits sanitised asynchronous interaction events to AWS EventBridge.")
+    Component(Fallback_Heuristic_Provider, "Fallback Heuristic Provider", "Python", "Invokes local defaults on circuit breaker trip.")
+}
+
+Component_Ext(Amazon_S3, "Amazon S3", "AWS S3", "Object storage for batch ML artifacts.")
+Component_Ext(Amazon_ElastiCache_Redis, "Amazon ElastiCache (Redis)", "Amazon ElastiCache", "Provides low-latency caching with TLS encryption in transit and KMS at rest.")
+Component_Ext(AWS_EventBridge, "AWS EventBridge", "AWS EventBridge", "Handles asynchronous event publishing for telemetry data.")
+
+Rel(API_Controller, Recommendation_Engine, "In-process method calls", "Python")
+Rel(Recommendation_Engine, Cache_Manager, "Checks pre-computed results", "Redis Py-Client over TCP/TLS")
+Rel(Model_Loader_Feature_Store_Client, Amazon_S3, "Fetches batch ML artifacts asynchronously", "HTTPS with AWS KMS")
+Rel(Cache_Manager, Fallback_Heuristic_Provider, "Invokes local defaults on circuit breaker trip", "In-process")
+Rel(API_Controller, Telemetry_Publisher, "Dispatches user interaction events", "Async queue with bounded buffer")
+Rel(Telemetry_Publisher, AWS_EventBridge, "Emits sanitised asynchronous interaction events")
+Rel(Cache_Manager, Amazon_ElastiCache_Redis, "Manages interactions with caching layer")
+
+@enduml

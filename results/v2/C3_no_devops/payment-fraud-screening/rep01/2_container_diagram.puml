@@ -1,0 +1,32 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(Users, "Fraud Analyst, ML Engineer / Data Scientist, Finance / Operations Manager, Merchant / Merchant Success Manager, and Compliance / Risk Officer", "Internal users and stakeholders who manage fraud cases, review alerts, monitor models, and oversee compliance.")
+
+System_Ext(PaymentGateway, "Payment Gateway / Core Processing Engine", "External system that processes payment authorizations and routes transaction traffic.")
+System_Ext(CardSchemes, "Card Schemes / Identity Providers", "External networks and identity services providing additional verification data.")
+
+System_Boundary(FraudSystem, "Real-Time Payment Fraud Screening System") {
+    Container(ApiGateway, "AWS API Gateway / NLB", "AWS API Gateway / Network Load Balancer", "Edge ingress and tokenization for PCI-DSS scope reduction.")
+    Container(ScoringEngine, "Fraud Scoring Engine", "Go", "High-performance microservice that evaluates authorization traffic for fraud within <50ms P99 latency.")
+    Container(CaseBackend, "Case Management Backend", "Java / Spring Boot with React UI", "Robust backend and frontend for case management, merchant analytics, and review operations.")
+    Container(AuditLogger, "Audit Logger", "AWS Lambda / Worker", "Processes queued decisions and writes tamper-evident audit logs.")
+    ContainerDb(FeatureStore, "Feature Store", "AWS ElastiCache for Redis", "Low-latency feature store providing real-time data for model scoring.")
+    ContainerDb(RelationalStore, "Relational Store", "Amazon RDS for PostgreSQL", "Relational persistence layer for case management data.")
+    ContainerDb(TamperStorage, "Tamper-Evident Storage", "Amazon S3 with Object Lock in Compliance Mode", "WORM storage guaranteeing 7-year tamper-evident auditability.")
+    Container(MessageQueue, "Message Queue", "Amazon SQS with AWS KMS encryption", "Asynchronous message decoupling layer to protect scoring latency.")
+}
+
+Rel(PaymentGateway, ApiGateway, "Routes authorization traffic", "HTTPS")
+Rel(ApiGateway, ScoringEngine, "Invokes scoring evaluation", "gRPC")
+Rel(ScoringEngine, FeatureStore, "Queries real-time features", "Low-latency TCP")
+Rel(ScoringEngine, MessageQueue, "Asynchronously publishes decision payloads", "Amazon SQS API")
+Rel(MessageQueue, AuditLogger, "Consumes decision payloads", "Event-driven consumption")
+Rel(AuditLogger, TamperStorage, "Writes tamper-evident audit logs", "AWS S3 API")
+Rel(Users, CaseBackend, "Accesses Analyst UI and case management", "HTTPS/REST")
+Rel(CaseBackend, RelationalStore, "Persists and retrieves case state", "PostgreSQL protocol")
+
+@enduml

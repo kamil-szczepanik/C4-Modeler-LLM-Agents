@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the WORM Audit Logging Service container
+
+Person(ComplianceOfficersAuditors, "Compliance Officers / Auditors", "Compliance officers and auditors who query and export audit logs for compliance reviews.")
+Container(ClinicalWorkspace, "Clinical Workspace", "Kubernetes", "Provides medical professionals tools for managing EMRs and patient care.")
+Container(BillingAdminSuite, "Billing & Admin Suite", "Kubernetes", "Handles patient admissions, scheduling, and billing operations.")
+Container_Ext(HardwareSecurityModuleHSM, "Hardware Security Module (HSM)", "FIPS 140-2 Hardware", "Provides FIPS 140-2 validated cryptographic operations and key management.")
+System_Ext(WORMObjectStorage, "WORM Object Storage", "AWS S3 Object Lock / MinIO", "Enforces Write-Once-Read-Many (WORM) compliance across hybrid cloud storage.")
+
+System_Boundary(WORMAuditLoggingService, "WORM Audit Logging Service") {
+    Component(IngestionAPIComponent, "Ingestion API Component", "Go, REST/gRPC", "Ingests asynchronous logs from clinical and billing workflows.")
+    Component(SecureMessageBroker, "Secure Message Broker", "Apache Kafka, TLS 1.3", "Provides durable, encrypted message brokering to prevent log loss during network partitions.")
+    Component(CryptographicSigningVerifierComponent, "Cryptographic Signing & Verifier Component", "Rust, OpenSSL", "Cryptographically signs and verifies audit logs for data integrity and non-repudiation.")
+    Component(WORMStorageWriterComponent, "WORM Storage Writer Component", "Go, AWS S3 Object Lock / MinIO", "Writes immutable logs to WORM object storage to ensure compliance and data retention.")
+    Component(AuditQueryExportComponent, "Audit Query & Export Component", "Go, GraphQL", "Enables compliant querying and exporting of audit logs for auditors.")
+}
+
+Rel(ClinicalWorkspace, IngestionAPIComponent, "gRPC over mTLS, SPIFFE/SPIRE")
+Rel(BillingAdminSuite, IngestionAPIComponent, "gRPC over mTLS, SPIFFE/SPIRE")
+Rel(IngestionAPIComponent, SecureMessageBroker, "Encrypted Apache Kafka / TLS 1.3")
+Rel(SecureMessageBroker, CryptographicSigningVerifierComponent, "Internal gRPC")
+Rel(CryptographicSigningVerifierComponent, HardwareSecurityModuleHSM, "FIPS 140-2 / PKCS#11")
+Rel(CryptographicSigningVerifierComponent, WORMStorageWriterComponent, "Internal gRPC")
+Rel(WORMStorageWriterComponent, WORMObjectStorage, "AWS S3 Object Lock / MinIO")
+Rel(ComplianceOfficersAuditors, AuditQueryExportComponent, "HTTPS / TLS 1.3, OAuth 2.0 / OIDC, MFA")
+
+@enduml

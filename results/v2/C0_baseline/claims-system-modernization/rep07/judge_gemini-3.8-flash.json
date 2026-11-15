@@ -1,0 +1,313 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 3,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "Web Frontend (SPA) serves 'End Customers & Brokers' (R-01) and 'Claims Adjusters' (R-02). 'Core Claims Service' and 'Claim Orchestrator Component' manage workflows and incremental migration (R-03). However, the platform lacks a dedicated persistent data store in the cloud, relying entirely on the legacy mainframe as the datastore.",
+   "performance_efficiency": "'State Caching Manager' (TanStack Query) provides client-side caching to achieve sub-2s screen loads (R-05), while 'Mainframe Anti-Corruption Layer' decouples backend operations asynchronously. However, there is no server-side read replica or query cache in 'Core Claims Service' to support adjusters loading uncached historical claims quickly.",
+   "compatibility": "Coexistence with 'Legacy COBOL/DB2 Mainframe' is well-supported via 'Mainframe Anti-Corruption Layer (ACL)', 'Protocol Adapter (Apache Camel)', and 'Schema & State Registry'. Connectivity via ExpressRoute/VPN respects mainframe interface limits and batch windows while integrating seamlessly with on-premises and cloud 'Active Directory (Entra ID)'.",
+   "usability": "'React SPA UI' directly addresses 'Claims Adjusters' and 'End Customers & Brokers' with dedicated workflows. 'Offline Draft Storage' improves submission usability during connectivity interruptions, while 'Operational Observability & Dead-Letter Container' provides tailored interfaces for 'Operations Managers & Migration Auditors'.",
+   "reliability": "Zero claim loss and duplicate prevention (R-04) are addressed by 'Idempotency & State Manager' using Redis, 'Mainframe Protocol Dispatcher' with Polly circuit breakers, and 'Operational Observability & Dead-Letter Container' featuring 'Dead-Letter Consumer Component' and 'Re-drive Engine Component' for resilient message recovery.",
+   "security": "'Authentication Manager' and 'Claims API Gateway' enforce SSO via 'Active Directory (Entra ID)' (R-07) with PKCE. 'Claims-Based Authorization Policy Component', 'mTLS & Secure Connector Component', and 'Centralized Audit Sink' using immutable blob storage guarantee confidentiality, RBAC, transport security, and immutable audit trails.",
+   "maintainability": "'Azure App Configuration' enables rapid claim-type rollback (R-06), and the ACL isolates legacy systems. However, introducing a disparate, highly polyglot stack (Java/Spring, Drools, .NET 8, Apache Camel, Kafka, Redis) creates significant cognitive overhead for a team explicitly constrained by having little cloud experience.",
+   "portability": "The hybrid topology effectively spans 'on-prem-mainframe' and 'azure-westeurope' using ExpressRoute and 'Azure Container Apps'. While containerized workloads provide component portability, high coupling to proprietary Azure platform services (Azure API Management, Azure Event Hubs, Azure Static Web Apps) limits portability to alternate environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 3,
+   "PERF-01": 2,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 5.0,
+   "Modifiability": 4.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "justification": "While the frontend includes TanStack Query caching, the architecture lacks a backend claims datastore or CQRS read replica. Uncached queries must fetch data synchronously across the hybrid link, exposing users to the 5-second mainframe latency.",
+    "elements": [
+     "Web Frontend (SPA)",
+     "State Caching Manager",
+     "Claims API Gateway",
+     "Core Claims Service"
+    ],
+    "sensitivity_points": [
+     "Client cache hit rates determine whether screen load times stay under 2 seconds"
+    ],
+    "tradeoffs": [
+     "Relying on client-side caching avoids backend replication complexity but fails on first-time reads"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Peak submission volumes are decoupled from the mainframe via Azure Event Hubs and the Integration Worker. Ingress rate limiting protects the gateway, and asynchronous queuing ensures submissions are buffered without exceeding the mainframe batch window.",
+    "elements": [
+     "Claims API Gateway",
+     "Rate Limiting & Throttling Component",
+     "Mainframe Anti-Corruption Layer (ACL)",
+     "Integration & Transformation Worker"
+    ],
+    "sensitivity_points": [
+     "Event Hubs buffer capacity and worker consumption rate govern peak load absorption"
+    ],
+    "tradeoffs": [
+     "Asynchronous event buffering ensures ingestion scalability at the expense of immediate consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Submissions are accepted by the Core Claims Service and buffered in the Mainframe ACL using Event Hubs. During the batch window, messages persist safely in queues and are dispatched once the mainframe becomes available.",
+    "elements": [
+     "Core Claims Service",
+     "Mainframe Anti-Corruption Layer (ACL)",
+     "Integration & Transformation Worker",
+     "Mainframe Protocol Dispatcher"
+    ],
+    "sensitivity_points": [
+     "Event Hubs message retention period during extended mainframe downtime"
+    ],
+    "tradeoffs": [
+     "Queuing requests protects the batch window but delays mainframe updates until batch completion"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Integration Worker leverages an Idempotency & State Manager backed by Redis, combined with Dead-Letter Queues and a Re-drive Engine to safely detect duplicates, manage failed syncs, and reconcile claims without data loss.",
+    "elements": [
+     "Integration & Transformation Worker",
+     "Idempotency & State Manager",
+     "Operational Observability & Dead-Letter Container",
+     "Dead-Letter Consumer Component",
+     "Re-drive Engine Component"
+    ],
+    "sensitivity_points": [
+     "Redis idempotency key expiration strategy and reliable dead-letter queue processing"
+    ],
+    "tradeoffs": [
+     "Maintaining Redis distributed state adds operational overhead but prevents duplicate claim processing"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Confluent Schema Registry stabilizes interface contracts to minimize mainframe changes. The Claims API Gateway evaluates dynamic feature flags via Azure App Configuration, enabling instant, configuration-driven switch-backs within the one-day requirement.",
+    "elements": [
+     "Claims API Gateway",
+     "Mainframe Anti-Corruption Layer (ACL)",
+     "Schema & State Registry (Confluent Schema Registry)",
+     "Claim Orchestrator Component"
+    ],
+    "sensitivity_points": [
+     "Schema compatibility rules and feature flag propagation delay across gateway nodes"
+    ],
+    "tradeoffs": [
+     "Strict schema governance limits change agility but preserves mainframe interface stability"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "The UI layer is decoupled from the mainframe by the API Gateway and Core Claims Service, preventing UI rewrites. However, the architecture fails to define a permanent system-of-record database within the new platform to replace DB2.",
+    "elements": [
+     "Web Frontend (SPA)",
+     "Claims API Gateway",
+     "Core Claims Service",
+     "Claim Domain Model Component"
+    ],
+    "sensitivity_points": [
+     "Absence of an independent, persistent cloud datastore in the Core Claims container"
+    ],
+    "tradeoffs": [
+     "Deferring cloud datastore design simplifies initial migration but requires later service architecture changes"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The Claims API Gateway enforces JWT validation, RBAC, and policy checks, while the Validation & Policy Engine enforces business authorization rules. All unauthorized access attempts are logged to the Centralized Audit Sink with immutable storage.",
+    "elements": [
+     "Claims API Gateway",
+     "JWT Validation Policy Component",
+     "Claims-Based Authorization Policy Component",
+     "Validation & Policy Engine Component",
+     "Centralized Audit Sink"
+    ],
+    "sensitivity_points": [
+     "Granularity of broker identity claims inside validated JWT tokens"
+    ],
+    "tradeoffs": [
+     "Comprehensive gateway policy evaluation adds minimal latency to guarantee zero unauthorized access"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Adjuster access is mediated through Azure Entra ID / Active Directory integrated via MSAL and API Management. Disabling the AD account revokes platform access, though token expiration and mainframe credential sync lack explicit continuous revocation details.",
+    "elements": [
+     "Identity Provider",
+     "Authentication Manager",
+     "Claims API Gateway",
+     "JWT Validation Policy Component"
+    ],
+    "sensitivity_points": [
+     "Access token lifetime and Continuous Access Evaluation (CAE) enforcement in APIM"
+    ],
+    "tradeoffs": [
+     "Short token lifetimes improve revocation speed but increase authentication token refresh traffic"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "full",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Legacy COBOL/DB2 Mainframe",
+     "Mainframe Anti-Corruption Layer (ACL)",
+     "Integration & Transformation Worker"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Mainframe Anti-Corruption Layer (ACL)",
+     "Schema & State Registry (Confluent Schema Registry)"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Ingress Event Router (Kafka Connect / Azure Functions)"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "End Customers & Brokers",
+     "Web Frontend (SPA)",
+     "React SPA UI",
+     "Claims API Gateway",
+     "Core Claims Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Web Frontend (SPA)",
+     "React SPA UI",
+     "Claims API Gateway",
+     "Core Claims Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Migration Product Owners",
+     "Claim Orchestrator Component",
+     "Claims API Gateway"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Idempotency & State Manager",
+     "Operational Observability & Dead-Letter Container",
+     "Dead-Letter Consumer Component",
+     "Re-drive Engine Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Web Frontend (SPA)",
+     "State Caching Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Migration Product Owners",
+     "Claims API Gateway",
+     "Claim Orchestrator Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Identity Provider",
+     "Azure Key Vault & Active Directory (Entra ID)",
+     "Authentication Manager",
+     "JWT Validation Policy Component",
+     "Claims API Gateway"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

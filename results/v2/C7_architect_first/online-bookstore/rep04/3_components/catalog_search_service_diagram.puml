@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Catalog & Search Service container
+
+Container_Boundary(catalog_search_service, "Catalog & Search Service") {
+    Component(SearchController, "Search Controller", "Node.js/Express", "Handles routing and invokes search queries or fetches product details.")
+    Component(SearchEngineClient, "Search Engine Client", "TypeScript", "Executes full-text search against Amazon OpenSearch.")
+    Component(ProductRepository, "Product Repository", "TypeScript/Prisma", "Reads and writes product data to Amazon Aurora PostgreSQL.")
+    Component(CacheManager, "Cache Manager", "ioredis", "Manages resilient caching layers via Amazon ElastiCache (Redis).")
+    Component(CatalogSyncWorker, "Catalog Sync Worker", "Node.js/BullMQ", "Processes asynchronous background jobs to update the search index.")
+}
+
+Component(AmazonOpenSearchService, "Amazon OpenSearch Service", "Amazon OpenSearch", "Provides sub-second full-text search and synonyms.")
+Component(AmazonAuroraPostgreSQL, "Amazon Aurora PostgreSQL", "Amazon Aurora PostgreSQL", "Provides ACID-compliant relational product metadata.")
+Component(AmazonElastiCacheRedis, "Amazon ElastiCache (Redis)", "Amazon ElastiCache", "Deployed for sub-2s hot-cache performance.")
+Component(AmazonSQSSNS, "Amazon SQS/SNS", "AWS SQS/SNS", "Pushes catalog events to the worker.")
+
+Rel(SearchController, SearchEngineClient, "Invokes search queries", "In-process / Function Call")
+Rel(SearchController, ProductRepository, "Fetches product details", "In-process / Function Call")
+Rel(SearchEngineClient, AmazonOpenSearchService, "Executes full-text search", "HTTPS / AWS SigV4")
+Rel(ProductRepository, AmazonAuroraPostgreSQL, "Reads/Writes product data", "TCP/PostgreSQL wire protocol")
+Rel(AmazonSQSSNS, CatalogSyncWorker, "Pushes catalog events", "HTTPS / SQS Polling")
+Rel(CatalogSyncWorker, AmazonOpenSearchService, "Updates search index", "HTTPS / AWS SigV4")
+
+@enduml

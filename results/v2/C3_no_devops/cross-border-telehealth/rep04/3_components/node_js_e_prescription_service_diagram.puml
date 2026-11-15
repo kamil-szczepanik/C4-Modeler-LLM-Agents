@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(Kong_API_Gateway, "Kong API Gateway", "External API Gateway routing traffic.")
+System_Ext(National_EPrescription_Gateways_and_Pharmacy_Networks, "National E-Prescription Gateways and Pharmacy Networks", "External national systems and pharmacy networks.")
+System_Ext(GCP_Cloud_Pub_Sub, "GCP Cloud Pub/Sub", "Messaging service for asynchronous event processing.")
+System_Ext(GCP_Cloud_SQL_PostgreSQL, "GCP Cloud SQL (PostgreSQL)", "Relational database with region-segregated CMEK encryption.")
+
+Container_Boundary(Node_js_EPrescription_Service, "Node.js E-Prescription Service") {
+    Component(Prescription_API_Controller, "Prescription API Controller", "Express.js / Fastify, Node.js & TypeScript", "Handles gRPC/HTTP traffic and routes e-prescription requests.")
+    Component(Prescription_Domain_Service, "Prescription Domain Service", "Node.js & TypeScript", "Invokes domain logic for prescription management.")
+    Component(Gateway_Integration_Adapter, "Gateway Integration Adapter", "Node.js & TypeScript", "Delegates external transmission to national gateways.")
+    Component(Outbox_Event_Publisher, "Outbox Event Publisher", "Node.js & TypeScript", "Persists events for asynchronous processing.")
+    Component(Prescription_Status_Component, "Prescription Status Component", "Node.js & TypeScript, Prisma / TypeORM", "Manages state and metadata.")
+}
+
+Rel(Kong_API_Gateway, Prescription_API_Controller, "Routes e-prescription requests", "gRPC / Anthos Service Mesh with mTLS")
+Rel(Prescription_API_Controller, Prescription_Domain_Service, "Invokes domain logic", "In-process, Function Call")
+Rel(Prescription_Domain_Service, Gateway_Integration_Adapter, "Delegates external transmission", "In-process")
+Rel(Gateway_Integration_Adapter, National_EPrescription_Gateways_and_Pharmacy_Networks, "Transmits prescriptions", "HL7 FHIR / National Standards over mTLS")
+Rel(Prescription_Domain_Service, Outbox_Event_Publisher, "Persists events for asynchronous processing", "In-process")
+Rel(Outbox_Event_Publisher, GCP_Cloud_Pub_Sub, "Publishes prescription events", "GCP Pub/Sub API")
+Rel(Prescription_Status_Component, GCP_Cloud_SQL_PostgreSQL, "Manages state and metadata", "PostgreSQL Protocol over TLS, CMEK encrypted")
+
+@enduml

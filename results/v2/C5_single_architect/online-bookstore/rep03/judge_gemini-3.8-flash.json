@@ -1,0 +1,341 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "SearchService and Amazon OpenSearch fulfill R-01; Order & Checkout Service covers R-02 cart and checkout; ReviewService with Amazon DynamoDB handles R-03; Recommendation Engine Core covers R-04. FulfillmentClient and PaymentClient integrate external shipping and multi-currency payment providers.",
+   "performance_efficiency": "High performance and 1M MAU scalability are supported by CloudFront caching for the Single-Page App, multi-tier Amazon ElastiCache (Redis) clusters, Amazon OpenSearch for fast queries, asynchronous AWS EventBridge & SQS decoupling, and PgBouncer connection pooling.",
+   "compatibility": "External interoperability is explicitly handled by PaymentClient connecting to Payment Gateway, FulfillmentClient integrating with Shipping Provider APIs and Tax API via REST/HTTPS, and API Gateway integrating with an external Identity Provider using standard OIDC/OAuth2.",
+   "usability": "The Single-Page App (SPA) with Router & View Controller and Global State Store caters to both Customer and Administrator personas. However, dedicated administrative interfaces or specialized accessibility support for varying end-user devices are not distinctly delineated.",
+   "reliability": "99.95% availability is supported by PaymentClient circuit breakers, SQS Dead Letter Queues, IdempotencyGuard, DynamoDB Replication Manager, and PostgreSQL Read Replica with PITR Component. However, multi-region failover orchestration across the required AWS regions is not detailed.",
+   "security": "Security constraints are addressed through API Gateway components for Authentication, Authorization, Rate Limiting, and Validation. IdempotencyGuard mitigates replay attacks, while pgAudit and Notification Preference Manager support GDPR/CCPA compliance, though encryption at rest is not explicitly defined.",
+   "maintainability": "Services exhibit high cohesion and loose coupling through microservices (Catalog Service, Order & Checkout Service, Recommendation Service) decoupled via AWS EventBridge. Internal components strictly segregate concerns using controllers, facades, repositories, and domain services.",
+   "portability": "NestJS microservices packaged for Amazon ECS/Fargate ensure container-level portability across environments. However, extensive architectural reliance on proprietary AWS managed services (DynamoDB, EventBridge, SQS, OpenSearch, RDS Proxy) impedes portability beyond AWS."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.625,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 2.0,
+   "Modifiability": 4.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront CDN, ElastiCache Redis, OpenSearch, and DynamoDB effectively offload read pressure from the relational database. However, auto-scaling policies for ECS Fargate tasks and database read replicas are not explicitly defined.",
+    "elements": [
+     "Single-Page App (SPA)",
+     "API Gateway",
+     "Catalog Service",
+     "Amazon ElastiCache (Redis)",
+     "Amazon OpenSearch",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios on Redis and CloudFront edge nodes"
+    ],
+    "tradeoffs": [
+     "High cache utilization improves throughput but risks serving stale catalog data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendation recomputation is completely decoupled from the browsing flow through SQS workers and precomputed caching in Redis and OpenSearch, ensuring background processing never degrades catalog browsing performance.",
+    "elements": [
+     "Recommendation Service",
+     "Event Consumer Worker",
+     "Recommendation Engine Core",
+     "Amazon ElastiCache (Redis)",
+     "AWS EventBridge & SQS"
+    ],
+    "sensitivity_points": [
+     "Asynchronous message consumption rates and Redis cache write latency"
+    ],
+    "tradeoffs": [
+     "Asynchronous batch recalculation saves runtime latency at the cost of eventual consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "OrderManager synchronously calls FulfillmentClient during checkout to coordinate shipping and taxes. Without an asynchronous outbox or fallback queue for fulfillment calls, a third-party shipping outage will directly block checkout completion.",
+    "elements": [
+     "Order & Checkout Service",
+     "CheckoutController",
+     "OrderManager",
+     "FulfillmentClient",
+     "Shipping Provider & Tax API"
+    ],
+    "sensitivity_points": [
+     "Synchronous integration with external shipping APIs during checkout orchestration"
+    ],
+    "tradeoffs": [
+     "Immediate shipping verification ensures validation but compromises checkout availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "While multiple AWS regions are listed in target cloud, the architecture lacks cross-region DNS failover (Route 53), cross-region data replication (standard RDS instead of Aurora Global Database), and DynamoDB Global Tables.",
+    "elements": [
+     "Amazon RDS (PostgreSQL)",
+     "Amazon DynamoDB",
+     "API Gateway",
+     "Order & Checkout Service"
+    ],
+    "sensitivity_points": [
+     "Cross-region database replication latency and DNS failover convergence time"
+    ],
+    "tradeoffs": [
+     "Active-passive cross-region failover introduces replica lag and potential data loss during outages"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Currency handling is cleanly segregated into Payment Gateway, PaymentClient, and Order & Checkout Service. Minimal modifications to the checkout logic and payment gateway configurations are required to introduce JPY.",
+    "elements": [
+     "Order & Checkout Service",
+     "PaymentClient",
+     "Payment Gateway",
+     "Catalog Service"
+    ],
+    "sensitivity_points": [
+     "Coupling between currency format logic and payment gateway configurations"
+    ],
+    "tradeoffs": [
+     "Relying on external gateways for currency conversion simplifies code but introduces provider dependency"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Recommendation logic is completely encapsulated within the Recommendation Service microservice behind REST APIs and asynchronous SQS event consumers, enabling algorithm replacement with zero impact on other services.",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Engine Core",
+     "Model Cache Manager",
+     "Event Consumer Worker"
+    ],
+    "sensitivity_points": [
+     "Internal domain contract boundaries within the Recommendation Service"
+    ],
+    "tradeoffs": [
+     "Strict microservice encapsulation increases operational overhead but maximizes modifiability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "API Gateway provides request validation and rate limiting, while ORM/repositories and NoSQL/search engines inherently mitigate SQL injection. However, AWS WAF is omitted at the ingress layer for centralized OWASP filtering.",
+    "elements": [
+     "API Gateway",
+     "Request Transformation & Validation Component",
+     "Catalog Service",
+     "Amazon OpenSearch",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "Strict input validation and payload sanitization at edge ingress"
+    ],
+    "tradeoffs": [
+     "Comprehensive input sanitization adds minor processing latency to every incoming request"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "Although pgAudit and opt-out preference stores exist, there is no centralized privacy orchestration mechanism or distributed event-driven workflow to coordinate and verify complete data deletion across RDS, DynamoDB, OpenSearch, and backups.",
+    "elements": [
+     "Amazon RDS (PostgreSQL)",
+     "Audit Component",
+     "Amazon DynamoDB",
+     "Email Service",
+     "Notification Preference Manager"
+    ],
+    "sensitivity_points": [
+     "Distributed user data propagation across heterogeneous persistence stores"
+    ],
+    "tradeoffs": [
+     "Thorough cross-service data deletion requires complex distributed sagas to maintain consistency"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Identity Provider",
+     "Audit Component",
+     "Notification Preference Manager"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Payment Gateway",
+     "PaymentClient"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Provider APIs",
+     "Shipping Provider",
+     "FulfillmentClient",
+     "Shipping Provider & Tax API"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog Service",
+     "Amazon OpenSearch",
+     "CatalogController",
+     "SearchService",
+     "Catalog Search Index",
+     "OpenSearch REST API Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Global State Store",
+     "Order & Checkout Service",
+     "CheckoutController",
+     "OrderManager",
+     "IdempotencyGuard",
+     "PaymentClient",
+     "Payment Gateway",
+     "Amazon RDS (PostgreSQL)"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Catalog Service",
+     "ReviewService",
+     "Amazon DynamoDB",
+     "Global Secondary Index (GSI) Manager"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Engine Core",
+     "Event Consumer Worker",
+     "Model Cache Manager",
+     "RecommendationCache",
+     "AWS EventBridge & SQS"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Catalog Service",
+     "Order & Checkout Service",
+     "Recommendation Service",
+     "Amazon ElastiCache (Redis)",
+     "Amazon DynamoDB",
+     "Connection Pooler",
+     "Read Replica",
+     "AWS EventBridge & SQS"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Single-Page App (SPA)",
+     "Amazon ElastiCache (Redis)",
+     "CatalogCache",
+     "RecommendationCache",
+     "CacheManager",
+     "Amazon OpenSearch"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Replication Manager",
+     "Read Replica",
+     "PaymentClient",
+     "SQS Dead Letter Queues (DLQs)",
+     "PITR Component"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Authentication & Authorization Component",
+     "Rate Limiting & Throttling Component",
+     "Request Transformation & Validation Component",
+     "IdempotencyGuard",
+     "Audit Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

@@ -1,0 +1,331 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively implemented: Patient & Scheduling Service with SchedulingEngine covers registration and clash checks, EMR Service with Clinical Record Manager addresses EMR management, and Billing & Claims Service handles claims and payment integration.",
+   "performance_efficiency": "The P95 < 1s target is directly supported by Clinical Cache Component, CacheManager with Redis, PgBouncer connection pooling for database load, and low-latency gRPC communications between the API Gateway and backend services.",
+   "compatibility": "Interoperability Service leverages Apache Camel, Data Transformer Component, and FHIR Outbound Connector to exchange standardized HL7 FHIR payloads with external Lab & Imaging Systems, while Payment Gateway and External IdP integrations are clearly defined.",
+   "usability": "Patient BFF and Staff BFF in API Gateway / BFF effectively isolate persona-specific workflows for Patients and Medical Staff, although dedicated frontend web or mobile client containers are omitted from Level 2.",
+   "reliability": "High availability is addressed via Patroni & etcd, Redis Sentinel, and Circuit Breaker Component, with Barman and Kafka Tiered Storage supporting retention. However, active-active cross-region database replication across hybrid sites is not fully detailed.",
+   "security": "Requirements are satisfied through External IdP multi-factor authentication, Auth Enforcement Filter, TLS/mTLS encryption in transit, AES-256 via PostgreSQL Security Modules, and immutable audit logging using pgaudit and AuditLogger.",
+   "maintainability": "Clean domain-driven modularity across Spring Boot, .NET Core, and Camel containers. KafkaEventPublisher with Transactional Outbox and asynchronous messaging via Apache Kafka decouple services, ensuring high maintainability and low coupling.",
+   "portability": "Components rely on container-compatible technologies (Spring Boot, .NET Core, Kong, PostgreSQL) capable of running on on-prem-k8s and cloud environments, though explicit deployment definitions for hybrid multi-region orchestration are omitted."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 2,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 3.0,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture combines a dedicated Clinical Cache Component with Redis, PgBouncer connection pooling, and gRPC internal routing to achieve sub-second P95 read latencies during morning peak loads.",
+    "elements": [
+     "API Gateway / BFF",
+     "Staff BFF",
+     "EMR Service",
+     "Clinical Cache Component",
+     "Redis",
+     "PgBouncer",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in Clinical Cache Component under concurrent read spikes",
+     "PgBouncer connection pool sizing under simultaneous clinician connections"
+    ],
+    "tradeoffs": [
+     "Cache freshness versus ultra-low latency during rapid medical record updates"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "justification": "The Interoperability Service is modeled only to push outbound FHIR payloads to external systems. Inbound FHIR ingestion endpoints, processing queues, and decoupled ingestion pipelines are missing from the architecture.",
+    "elements": [
+     "Interoperability Service",
+     "Lab & Imaging Systems",
+     "Apache Kafka",
+     "EMR Service"
+    ],
+    "sensitivity_points": [
+     "Absence of inbound FHIR API ingress and ingestion worker components"
+    ],
+    "tradeoffs": [
+     "Asynchronous ingestion buffers bursts but introduces eventual consistency delays for clinical viewing"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "Although the target platform specifies hybrid deployment, the architecture defines single-cluster PostgreSQL Patroni and Redis Sentinel instances without cross-region active-active synchronization or hybrid failover orchestration mechanisms.",
+    "elements": [
+     "PostgreSQL",
+     "Patroni & etcd",
+     "Apache Kafka",
+     "API Gateway / BFF"
+    ],
+    "sensitivity_points": [
+     "Hybrid WAN latency and replication lag between on-prem-k8s and eu-central-1",
+     "Absence of multi-region database and Kafka replication mechanisms"
+    ],
+    "tradeoffs": [
+     "Synchronous multi-region replication ensures zero data loss but degrades write latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Patroni and etcd deliver automated PostgreSQL failover within 30 seconds while PgBouncer maintains connection routing. The transactional outbox pattern and ACID ledger persistence prevent lost or duplicated claims.",
+    "elements": [
+     "Billing & Claims Service",
+     "Claims Processor Component",
+     "PostgreSQL",
+     "Patroni & etcd",
+     "PgBouncer"
+    ],
+    "sensitivity_points": [
+     "Patroni leader lease TTL and etcd failover detection latency",
+     "Idempotent transaction handling in Claims Processor during database reconnects"
+    ],
+    "tradeoffs": [
+     "Aggressive failover timeout settings increase the risk of false-positive failovers"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "External billing protocols are isolated within the Billing & Claims Service. Adding an insurance clearinghouse requires changes solely to the Claims Processor Component, keeping the EMR Service completely unaffected.",
+    "elements": [
+     "Billing & Claims Service",
+     "Claims Processor Component",
+     "EMR Service",
+     "Apache Kafka"
+    ],
+    "sensitivity_points": [
+     "Encapsulation of clearinghouse communication protocols inside Claims Processor Component"
+    ],
+    "tradeoffs": [
+     "Decoupled service boundaries introduce eventual consistency via messaging instead of synchronous transactions"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Modifications are confined to PatientController, PatientRepository, and the database schema. The AOP-based AuditLogger dynamically logs demographic modifications without requiring changes in external clinical components.",
+    "elements": [
+     "Patient & Scheduling Service",
+     "PatientController",
+     "PatientRepository",
+     "AuditLogger",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Spring AOP pointcut definitions capturing demographic mutations automatically"
+    ],
+    "tradeoffs": [
+     "Strict relational schemas guarantee data integrity but require coordinated database migration deployments"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "User authentication delegates to an external IdP enforcing MFA. Ingress Router and Auth Enforcement Filter block unauthenticated sessions, and the Audit & Compliance Interceptor records and flags unauthorized attempts.",
+    "elements": [
+     "External IdP",
+     "API Gateway / BFF",
+     "Ingress Router",
+     "Auth Enforcement Filter",
+     "Audit & Compliance Interceptor"
+    ],
+    "sensitivity_points": [
+     "Centralized token and MFA validation at the API Gateway perimeter"
+    ],
+    "tradeoffs": [
+     "Enforcing multi-factor auth on all edge endpoints adds slight authentication verification latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Audit Logger Component uses AOP to capture clinical record reads, while pgcrypto, Barman, and Kafka Tiered Storage ensure long-term retention. However, fine-grained relationship-based access control policies are not explicitly detailed.",
+    "elements": [
+     "EMR Service",
+     "Clinical Record Manager",
+     "Audit Logger Component",
+     "PostgreSQL",
+     "Security Modules",
+     "Barman"
+    ],
+    "sensitivity_points": [
+     "AOP pointcut coverage across all clinical query paths",
+     "Cryptographic integrity and retention guarantees of Barman backups and Tiered Storage"
+    ],
+    "tradeoffs": [
+     "Auditing every single read operation increases audit log volume and I/O consumption"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Interceptor",
+     "Audit Logger Component",
+     "AuditLogger",
+     "Security Modules"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Patroni & etcd",
+     "Redis Sentinel",
+     "Redis Master-Replica Cluster",
+     "KRaft Controller Quorum"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Barman",
+     "Kafka Tiered Storage",
+     "Financial Audit & Archive Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Service",
+     "PatientController",
+     "PatientRepository",
+     "Patient BFF"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Service",
+     "SchedulingEngine",
+     "CacheManager",
+     "Redis"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "Clinical Record Manager",
+     "Audit Logger Component",
+     "EMR Data Access Repository"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Service",
+     "Claims Processor Component",
+     "Payment Integration Component",
+     "Billing API Facade Component",
+     "Payment Gateway"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "External IdP",
+     "Auth Enforcement Filter",
+     "PostgreSQL",
+     "Security Modules"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Patroni & etcd",
+     "Redis Sentinel"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Clinical Cache Component",
+     "PgBouncer",
+     "Redis"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Interoperability Service",
+     "Data Transformer Component",
+     "FHIR Outbound Connector Component",
+     "Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

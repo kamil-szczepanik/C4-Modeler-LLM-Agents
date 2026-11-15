@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Transactional Database container
+
+Person(CaseManagementService, "Case Management Service", "External service calling the database")
+Person(AuditConsumerService, "Audit Consumer Service", "External service calling the database")
+System_Ext(AWSKMS, "Transparent Data Encryption (TDE) / KMS Integration", "AWS KMS")
+System_Ext(AWSBackup, "Backup and Retention Controller", "AWS Backup")
+
+Container_Boundary(TransactionalDatabase, "Transactional Database") {
+    Component(AmazonAuroraPostgreSQL, "Amazon Aurora PostgreSQL", "AWS RDS PostgreSQL, Multi-AZ, pgcrypto", "Primary relational database storing case management records, review states, workflow assignments, and an append-only audit ledger.")
+    Component(CaseManagementStoreSchema, "Case Management Store Schema", "Relational Tables", "Stores analyst cases, review states, and workflow assignments.")
+    Component(AuditLedgerSchema, "Audit Ledger Schema", "Append-only Tables with pgcrypto", "Maintains tamper-evident logs for compliance and auditing.")
+    Component(DatabaseConnectionPoolerPgBouncer, "Database Connection Pooler (PgBouncer)", "PgBouncer", "Manages high-concurrency connection spikes from ECS Fargate tasks.")
+    Component(RowLevelSecurityRLSPolicies, "Row-Level Security (RLS) Policies", "PostgreSQL RLS", "Enforces data isolation and least-privilege access at the database engine level.")
+    Component(DatabaseMigrationManager, "Database Migration Manager", "Flyway/Liquibase", "Manages automated schema evolution via CI/CD.")
+    Component(AuroraReadReplica, "Aurora Read Replica", "PostgreSQL Read Replica", "Hot standby instance used to offload read-heavy case searches.")
+}
+
+Rel(CaseManagementService, DatabaseConnectionPoolerPgBouncer, "Executes scoped CRUD operations and read-only queries", "TCP/TLS")
+Rel(AuditConsumerService, DatabaseConnectionPoolerPgBouncer, "Batch-writes decision audit logs into the Audit Ledger Schema", "TCP/TLS")
+Rel(AmazonAuroraPostgreSQL, AWSKMS, "Encrypts storage volumes and audit records", "AWS API")
+Rel(AmazonAuroraPostgreSQL, AWSBackup, "Triggers automated snapshots and PITR logs", "AWS API")
+
+@enduml

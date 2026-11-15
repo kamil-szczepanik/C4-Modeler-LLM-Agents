@@ -1,0 +1,309 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "R-01, R-02, and R-03 are met via React Frontend, ASP.NET Core API Backend, and Azure App Configuration for migration toggles. However, there is no distinct modern data store for newly migrated claims, relying heavily on the mainframe as the system of record.",
+   "performance_efficiency": "R-05 is directly addressed by UI Acceleration Cache in Azure Redis, isolating adjusters from 5-second mainframe latency. Asynchronous processing via Azure Service Bus decouples claim submissions, though batch window impacts on DB2/mainframe integration remain unspecified.",
+   "compatibility": "Mainframe Connector and Integration Service integrate with COBOL/DB2 using mTLS and CDC/read-replicas, accommodating the legacy system. Azure Active Directory / Entra ID handles external identity interoperability well.",
+   "usability": "Policyholders, Brokers, and Claims Adjusters interact through dedicated React Frontend interfaces routed by the API Gateway. Adjuster response requirements are supported, though external broker-specific vs. customer-specific interfaces are somewhat conflated in a single web app.",
+   "reliability": "R-04 consistency is preserved through Claim Reconciliation Service, Service Bus Dead-Letter Queues (DLQ), and Polly resilience in Mainframe Integration Adapter, preventing lost submissions and duplicate processing across the hybrid boundary.",
+   "security": "R-07 is fulfilled via Azure Active Directory / Entra ID SSO. The design incorporates end-to-end mTLS 1.3 with certificate pinning, Key Vault secrets management, WORM immutable storage in Azure Blob, and Azure Sentinel audit logging.",
+   "maintainability": "R-06 is handled via Azure App Configuration and Configuration Client enabling rapid claim type switchbacks within a day. Note that AKS plus containerized microservices introduces significant operational complexity for a team with little cloud experience.",
+   "portability": "The design satisfies the hybrid deployment requirement (Azure West Europe and on-premises mainframe), but is tightly coupled to proprietary Azure PaaS services (Service Bus, App Configuration, Azure Redis, Sentinel) without abstraction."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 3.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The UI Acceleration Cache in Redis decouples adjuster reads from slow mainframe queries. However, a cache miss on uncached legacy data may still incur the 5-second mainframe latency unless prefetching is explicitly implemented.",
+    "elements": [
+     "Claims Web App",
+     "Azure Redis",
+     "UI Acceleration Cache",
+     "ASP.NET Core API Backend",
+     "Mainframe Integration Adapter"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio for legacy claim reads",
+     "Cache prefetching and invalidation latency"
+    ],
+    "tradeoffs": [
+     "Data freshness versus meeting sub-2-second screen response requirements"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Azure Service Bus buffers peak online submissions asynchronously without overwhelming the mainframe. The decoupling allows integration workers to throttle messages, completely protecting the mainframe nightly batch window from sudden load spikes.",
+    "elements": [
+     "API Gateway",
+     "Claims Web App",
+     "Azure Service Bus",
+     "Claim Submission Topic",
+     "Integration Service"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue throughput capacity and message retention quotas"
+    ],
+    "tradeoffs": [
+     "Immediate claim submission confirmation versus delayed backend mainframe ingestion"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Submissions are decoupled via Azure Service Bus. During the nightly batch window, submissions remain durable in queues and topics while the Integration Service suspends mainframe dispatching, resuming processing seamlessly once the batch window concludes.",
+    "elements": [
+     "Claims Web App",
+     "Azure Service Bus",
+     "Claim Submission Topic",
+     "Claim Processing Subscription",
+     "Integration Service"
+    ],
+    "sensitivity_points": [
+     "Queue retention limits during extended mainframe downtimes"
+    ],
+    "tradeoffs": [
+     "High availability of intake versus eventual consistency of legacy record synchronization"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Azure Service Bus DLQs and the Claim Reconciliation Service provide discrepancy detection, CDC synchronization, and immutable audit logging. However, explicit deduplication keys and idempotent processing logic on mainframe calls are not fully specified in the components.",
+    "elements": [
+     "Claim Reconciliation Service",
+     "Reconciliation Worker",
+     "Azure Service Bus",
+     "Dead-Letter Queue (DLQ)",
+     "Integration Service"
+    ],
+    "sensitivity_points": [
+     "Reconciliation frequency and accuracy of change data capture (CDC)",
+     "DLQ replay policies"
+    ],
+    "tradeoffs": [
+     "Immediate consistency versus asynchronous reconciliation overhead"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Azure App Configuration provides centralized runtime feature flags enabling instant rollback without code deployment. However, the model lacks details on how mainframe data structures and interface contracts evolve within the constraint of one small change per quarter.",
+    "elements": [
+     "Azure App Configuration",
+     "Configuration Client",
+     "Mainframe Integration Adapter",
+     "Integration Service"
+    ],
+    "sensitivity_points": [
+     "Granularity of dynamic feature toggles per claim type"
+    ],
+    "tradeoffs": [
+     "Dynamic routing flexibility versus increased configuration complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The architecture does not model a primary transactional persistent datastore (such as SQL or NoSQL) in Azure to replace the DB2 database. Shutting down the mainframe leaves the platform with only Redis cache and Service Bus, lacking a system of record.",
+    "elements": [
+     "Claims Web App",
+     "ASP.NET Core API Backend",
+     "Integration Service",
+     "COBOL/DB2 Mainframe"
+    ],
+    "sensitivity_points": [
+     "Absence of an Azure-native persistent database for migrated claims"
+    ],
+    "tradeoffs": [
+     "Simpler hybrid bridge versus inability to retire mainframe storage"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The API Gateway and backend enforce RBAC and route logging to Azure Sentinel. However, fine-grained object-level authorization (preventing cross-broker data access) is not explicitly defined in the components or schemas, introducing risk of unauthorized horizontal privilege escalation.",
+    "elements": [
+     "API Gateway",
+     "Schema Validator",
+     "ASP.NET Core API Backend",
+     "Audit Logger"
+    ],
+    "sensitivity_points": [
+     "Strict object-level access control enforcement in backend APIs"
+    ],
+    "tradeoffs": [
+     "Fine-grained tenant/broker boundary checks versus API latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Authentication is centralized in Entra ID, and active sessions are managed in Azure Redis. Revoking an account in Active Directory and terminating cached sessions promptly removes adjuster access to the web app, though mainframe session propagation relies entirely on modern gateway enforcement.",
+    "elements": [
+     "Azure Active Directory / Entra ID",
+     "Azure Redis",
+     "Session Management Store",
+     "API Gateway",
+     "Claims Web App"
+    ],
+    "sensitivity_points": [
+     "Session token TTLs and immediate cache invalidation triggers"
+    ],
+    "tradeoffs": [
+     "Immediate revocation overhead versus session token longevity"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.6363636363636364,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "COBOL/DB2 Mainframe",
+     "Integration Service",
+     "Claim Reconciliation Service"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Policyholders",
+     "Brokers",
+     "API Gateway",
+     "Claims Web App",
+     "React Frontend",
+     "Azure Service Bus"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Claims Web App",
+     "React Frontend",
+     "ASP.NET Core API Backend"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Azure App Configuration",
+     "Configuration Client"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Azure Service Bus",
+     "Claim Reconciliation Service",
+     "Reconciliation Worker",
+     "Dead-Letter Queue (DLQ)"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Azure Redis",
+     "UI Acceleration Cache",
+     "Claims Web App"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Azure App Configuration",
+     "Configuration Client",
+     "Mainframe Integration Adapter"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Azure Active Directory / Entra ID",
+     "API Gateway"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

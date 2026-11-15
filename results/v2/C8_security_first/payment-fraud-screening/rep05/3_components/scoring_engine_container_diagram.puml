@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container_Boundary("Scoring Engine Container", "Scoring Engine Container") {
+    Component(API_Listener_Component, "API Listener Component", "Tonic gRPC server (Rust)", "Tonic gRPC server handling inbound TLS/mTLS traffic and zero-copy parsing.")
+    Component(Rule_Engine_Component, "Rule Engine Component", "WebAssembly (Wasm) (Rust)", "In-memory WebAssembly (Wasm) evaluation engine for low-latency fraud scoring.")
+    Component(Fallback_Heuristics_Component, "Fallback Heuristics Component", "Rust", "Embedded static ruleset executing securely upon primary engine failure.")
+    Component(Model_Manager_Component, "Model Manager Component", "Rust, AWS S3 API", "Background worker handling zero-downtime model hot-reloads from AWS S3.")
+    Component(Telemetry_Version_Injector_Component, "Telemetry & Version Injector Component", "OpenTelemetry, Rust", "Injects model version metadata and OpenTelemetry traces.")
+    Component(Audit_Dispatcher_Component, "Audit Dispatcher Component", "Buffered channel, AWS SDK / SQS", "Non-blocking, buffered channel pushing events to Amazon SQS.")
+    Component(AWS_ECS_Fargate, "AWS ECS Fargate", "AWS ECS Fargate, AWS Application Auto Scaling, Fargate Spot", "Compute environment running containers with AWS Application Auto Scaling and Fargate Spot.")
+}
+
+System_Ext(S3_Model_Registry_S3_Object_Lock, "S3 Model Registry & S3 Object Lock", "External storage for fraud scoring models with tamper-evident retention.")
+System_Ext(Amazon_SQS_Audit_Queue, "Amazon SQS (Audit Queue)", "Handles reliable, asynchronous audit event decoupling.")
+System_Ext(AWS_KMS_AWS_Secrets_Manager, "AWS KMS & AWS Secrets Manager", "Retrieves secrets and encryption config.")
+System_Ext(AWS_X_Ray, "AWS X-Ray", "Exports OpenTelemetry traces.")
+
+Rel(API_Listener_Component, Rule_Engine_Component, "Evaluates requests via In-memory function call", "Rust/gRPC")
+Rel(API_Listener_Component, Fallback_Heuristics_Component, "Evaluates requests via In-memory function call", "Rust/gRPC")
+Rel(Rule_Engine_Component, Telemetry_Version_Injector_Component, "Passes scoring results and metadata", "In-memory")
+Rel(Fallback_Heuristics_Component, Telemetry_Version_Injector_Component, "Passes scoring results and metadata", "In-memory")
+Rel(Audit_Dispatcher_Component, Amazon_SQS_Audit_Queue, "Pushes audit events asynchronously", "AWS SDK / SQS")
+Rel(Model_Manager_Component, S3_Model_Registry_S3_Object_Lock, "Retrieves fraud scoring models", "AWS S3 API")
+Rel(API_Listener_Component, AWS_KMS_AWS_Secrets_Manager, "Retrieves secrets and encryption config", "AWS IAM / TLS")
+Rel(Telemetry_Version_Injector_Component, AWS_X_Ray, "Exports OpenTelemetry traces", "gRPC")
+
+@enduml

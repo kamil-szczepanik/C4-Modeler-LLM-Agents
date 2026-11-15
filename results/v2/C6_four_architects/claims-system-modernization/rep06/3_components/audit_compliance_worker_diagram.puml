@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Audit & Compliance Worker container
+
+System_Ext(Azure_Service_Bus, "Azure Service Bus", "External message broker")
+System_Ext(Azure_Blob_Storage, "Azure Blob Storage", "External cloud storage")
+System_Ext(Azure_SQL_Database, "Azure SQL Database", "External relational database")
+System_Ext(Audit_Compliance_System, "Audit & Compliance System", "External compliance system")
+
+Container_Boundary(audit_compliance_worker, "Audit & Compliance Worker") {
+    Component(Event_Consumer_Component, "Event Consumer Component", ".NET 8 Hosted Service / MassTransit", "Consumes domain events from Azure Service Bus via AMQP.")
+    Component(Compliance_Validator_Component, "Compliance Validator Component", ".NET 8", "Evaluates events, routing valid data to Audit Repository Access Component and failures to Dead Letter Manager Component.")
+    Component(Dead_Letter_Manager_Component, "Dead Letter Manager Component", ".NET 8", "Stores poisoned messages in Azure Blob Storage.")
+    Component(Audit_Repository_Access_Component, "Audit Repository Access Component", "Entity Framework Core", "Persists compliance logs in Azure SQL Database.")
+    Component(Mainframe_Sync_Component, "Mainframe Sync Component", ".NET 8 BackgroundService with native PeriodicTimer", "Pushes compliance packages to the Audit & Compliance System via HTTPS/REST.")
+}
+
+Rel(Azure_Service_Bus, Event_Consumer_Component, "Consumes domain events from via AMQP", "AMQP")
+Rel(Event_Consumer_Component, Compliance_Validator_Component, "Forwards consumed domain events for validation")
+Rel(Compliance_Validator_Component, Audit_Repository_Access_Component, "Routes valid data")
+Rel(Compliance_Validator_Component, Dead_Letter_Manager_Component, "Routes failures")
+Rel(Dead_Letter_Manager_Component, Azure_Blob_Storage, "Stores poisoned messages in")
+Rel(Audit_Repository_Access_Component, Azure_SQL_Database, "Persists compliance logs in")
+Rel(Mainframe_Sync_Component, Audit_Compliance_System, "Pushes compliance packages to via HTTPS/REST", "HTTPS/REST")
+
+@enduml

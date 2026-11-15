@@ -1,0 +1,350 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively addressed by dedicated elements: Patient Service for demographic capture (R-01), Scheduling Service with Resource Clash Checker (R-02), EMR Service with Audit Trail Publisher (R-03), and Billing Service with Claim Management Engine for insurance claims (R-04).",
+   "performance_efficiency": "The sub-second EMR load target is achieved via Clinical Record Manager using a local Caffeine cache, PgBouncer connection pooling, PostgreSQL partitioning with pg_partman, and asynchronous event streaming via Message Broker Container to offload processing.",
+   "compatibility": "Interoperability is thoroughly supported through the Integration Service's FHIR Translator, the API Gateway's Interoperability & FHIR Proxy Component, and the Insurance Integration Adapter connecting securely to External Lab & Imaging Systems and Insurance Clearinghouses.",
+   "usability": "Hospital Staff are well served by the Web Application Frontend (React SPA). While the Patient Portal is identified as an external system in context, no dedicated user-facing container or interface details for patient self-service are provided.",
+   "reliability": "High availability mechanisms include MirrorMaker 2, Redis distributed locking, and circuit breakers. However, the brief requires active-active 99.99% availability, whereas the Failover Orchestrator (Patroni) in the Data Persistence Layer explicitly specifies active-passive failover.",
+   "security": "Meets strict HIPAA/GDPR constraints with MFA and OIDC via JWT/OAuth2 Authentication Filter, AES-256 at rest with HSM column encryption in Data Persistence Layer, universal mTLS service mesh, and tamper-proof auditing via EMR Audit Repository and Audit Interceptor.",
+   "maintainability": "Strong microservice modularity separates Patient, Scheduling, EMR, Billing, and Integration services. Domain logic is decoupled using Kafka events, Spring Data JPA abstractions, and Spring AOP audit interceptors, ensuring clear separation of concerns and high testability.",
+   "portability": "Deployments cleanly support hybrid on-prem-k8s and eu-central-1 targets using containerized Kubernetes workloads, Strimzi Operator for Kafka, PgBouncer, and cross-region synchronization handled by Barman and MirrorMaker 2."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.96875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "In-memory Caffeine caching with envelope encryption in the EMR Service and PgBouncer connection pooling effectively eliminate database bottlenecks during morning rounds, fulfilling the sub-second P95 requirement.",
+    "elements": [
+     "Web Application Frontend",
+     "API Gateway & Edge Router",
+     "EMR Service",
+     "Clinical Record Manager",
+     "Transaction Coordinator",
+     "Data Persistence Layer"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in Clinical Record Manager",
+     "Connection pool saturation in PgBouncer"
+    ],
+    "tradeoffs": [
+     "Encrypted in-memory cache increases pod RAM usage to ensure low-latency reads"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Asynchronous ingestion via Camel in the Integration Service and Kafka message buffering prevents backend saturation, allowing 10,000 FHIR records to be processed without degrading concurrent EMR read latency.",
+    "elements": [
+     "Integration Service",
+     "FHIR Translator",
+     "Message Router",
+     "Message Broker Container",
+     "Broker Node Cluster",
+     "EMR Service"
+    ],
+    "sensitivity_points": [
+     "Kafka partition throughput and consumer concurrency",
+     "Camel FHIR translation processing latency"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of lab results in EMR in exchange for read latency isolation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Patroni and MirrorMaker 2 enable automated cross-region failover between eu-central-1 and on-prem within 1 minute, but cross-region asynchronous database replication presents minor edge-case RPO risks.",
+    "elements": [
+     "API Gateway & Edge Router",
+     "Edge Router & TLS Termination Plugin",
+     "Failover Orchestrator",
+     "Replication & Backup Manager",
+     "MirrorMaker 2",
+     "Data Persistence Layer"
+    ],
+    "sensitivity_points": [
+     "Replication lag between on-prem-k8s and eu-central-1",
+     "Patroni leader election timeout configuration"
+    ],
+    "tradeoffs": [
+     "Asynchronous cross-region replication avoids latency overhead at the cost of potential slight data loss"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Transactional outbox pattern in the Billing Service combined with Patroni automated failover and PgBouncer pooling ensures atomic claim storage, deduplication, and safe retries within 30 seconds.",
+    "elements": [
+     "Billing Service",
+     "Claim Management Engine",
+     "Billing Data Repository",
+     "Message Broker Container",
+     "Failover Orchestrator",
+     "Transaction Coordinator"
+    ],
+    "sensitivity_points": [
+     "Patroni node failover detection and promotion time",
+     "Transactional outbox polling and publishing frequency"
+    ],
+    "tradeoffs": [
+     "Outbox polling overhead on database in exchange for guaranteed at-least-once claim delivery"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Insurance Integration Adapter in the Billing Service encapsulates external clearinghouse protocol logic, allowing new integrations via Apache Camel without impacting the EMR Service or billing core domain.",
+    "elements": [
+     "Billing Service",
+     "Insurance Integration Adapter",
+     "External Insurance Clearinghouses"
+    ],
+    "sensitivity_points": [
+     "Camel routing flexibility and clearinghouse protocol abstraction",
+     "Loose coupling via service boundaries"
+    ],
+    "tradeoffs": [
+     "Adapter abstraction complexity traded for zero modifications to surrounding clinical services"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Modifications are restricted to UI views, Patient Service domain/repository, and the partitioned PostgreSQL store. Spring AOP Audit Interceptor automatically captures demographic modifications without code changes to auditing logic.",
+    "elements": [
+     "SPA Router and Views",
+     "Patient Domain Manager",
+     "Patient Repository",
+     "Patient Data Store",
+     "Audit Interceptor"
+    ],
+    "sensitivity_points": [
+     "Coupling between patient schema changes and UI view rendering",
+     "AOP reflection overhead on domain entities"
+    ],
+    "tradeoffs": [
+     "Relational schema migration overhead traded for strict audit compliance and normalization"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The Edge Gateway's JWT/OAuth2 Authentication Filter enforces multi-factor authentication with the enterprise IdP on all requests, rejecting password-only logins and dispatching audit events to SIEM instantly.",
+    "elements": [
+     "API Gateway & Edge Router",
+     "JWT/OAuth2 Authentication Filter",
+     "Identity Provider (IdP)",
+     "Regulatory Audit System",
+     "Database Observability Agent"
+    ],
+    "sensitivity_points": [
+     "IdP token introspection availability and response latency",
+     "SIEM alerting pipeline latency"
+    ],
+    "tradeoffs": [
+     "MFA introspection network overhead at gateway traded for zero-trust identity enforcement"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "ABAC in the Clinical Record Manager evaluates relationship policies, while Audit Trail Publisher with durable write-ahead logging and PostgreSQL immutable append-only tables guarantees 10-year tamper-evident audit records.",
+    "elements": [
+     "EMR Service",
+     "Clinical Record Manager",
+     "Audit Trail Publisher",
+     "EMR Audit Repository",
+     "Kafka Connect Cluster",
+     "Regulatory Audit System"
+    ],
+    "sensitivity_points": [
+     "ABAC policy evaluation overhead on read operations",
+     "WAL durable disk throughput during audit bursts"
+    ],
+    "tradeoffs": [
+     "Storage growth and write amplification traded for non-repudiation and 10-year retention"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit Interceptor",
+     "Audit Event Buffer",
+     "EMR Audit Repository",
+     "Regulatory Audit System",
+     "Observability & Archival Agents",
+     "Patient Security Filter"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Failover Orchestrator",
+     "Replication & Backup Manager",
+     "MirrorMaker 2",
+     "Edge Router & TLS Termination Plugin",
+     "Rate Limiting & Circuit Breaker"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Data Persistence Layer",
+     "Observability & Archival Agents"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Service",
+     "Patient API Controller",
+     "Patient Domain Manager",
+     "Patient Repository",
+     "Patient Data Store"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Service",
+     "Appointment Controller",
+     "Scheduling Engine",
+     "Resource Clash Checker",
+     "Distributed Lock Manager",
+     "Scheduling Repository"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "Clinical Record Manager",
+     "Audit Trail Publisher",
+     "EMR Audit Repository"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service",
+     "Billing API Controller",
+     "Claim Management Engine",
+     "Insurance Integration Adapter",
+     "Billing Data Repository",
+     "External Insurance Clearinghouses"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "JWT/OAuth2 Authentication Filter",
+     "Data Persistence Layer",
+     "Patient Repository",
+     "Clinical Record Manager",
+     "Broker Node Cluster"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Edge Router & TLS Termination Plugin",
+     "MirrorMaker 2",
+     "Failover Orchestrator",
+     "Replication & Backup Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Clinical Record Manager",
+     "Transaction Coordinator",
+     "Web Server Container",
+     "EMR API Controller"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Service",
+     "FHIR Translator",
+     "Interoperability & FHIR Proxy Component",
+     "External Lab & Imaging Systems",
+     "mTLS Client"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ },
+ "tag": "retest"
+}

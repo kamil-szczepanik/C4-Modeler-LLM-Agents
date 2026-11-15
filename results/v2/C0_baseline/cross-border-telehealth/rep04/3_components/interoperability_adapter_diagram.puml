@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Interoperability Adapter container
+
+Component(api_gateway, "API Gateway / Core Backend", "Go / Cloud Run", "Triggers e-prescription routing via mTLS and Internal API.")
+Component(eu_gateways, "EU E-Prescription Gateways", "REST, SOAP, HL7 FHIR over mTLS", "External EU gateway for transmitting prescriptions.")
+Component(us_networks, "US Pharmacy Networks", "REST, SOAP, HL7 FHIR over mTLS", "External US network for transmitting prescriptions.")
+
+Container_Boundary(interoperability_adapter, "Interoperability Adapter") {
+    Component(interoperability_adapter_container, "Interoperability Adapter Container", "Go", "Manages cross-border prescription routing and external gateway communication.")
+    Component(eu_gateway_plugin, "EU Gateway Plugin", "Go", "Translates core payloads to national EU standards using Go.")
+    Component(us_fhir_translator, "US FHIR Translator", "Go, HAPI FHIR Java", "Maps payloads to US HL7 FHIR resources using Go and HAPI FHIR Java.")
+    Component(regional_routing_engine, "Regional Routing Engine", "Go", "Enforces data residency by directing traffic to regional endpoints.")
+    Component(delivery_status_notifier, "Delivery Status Notifier", "GCP Pub/Sub, Go", "Asynchronously pushes delivery acknowledgements via GCP Pub/Sub.")
+    Component(audit_ledger, "Audit Ledger & Receipt Signer", "Google Cloud KMS, Go", "Signs payloads and receipts using Google Cloud KMS.")
+}
+
+Rel(api_gateway, interoperability_adapter_container, "Triggers e-prescription routing", "mTLS and Internal API")
+Rel(regional_routing_engine, eu_gateway_plugin, "Delegates payload transformation", "in-memory / gRPC")
+Rel(regional_routing_engine, us_fhir_translator, "Delegates payload transformation", "in-memory / gRPC")
+Rel(eu_gateway_plugin, audit_ledger, "Requests cryptographic signatures", "in-memory / gRPC")
+Rel(us_fhir_translator, audit_ledger, "Requests cryptographic signatures", "in-memory / gRPC")
+Rel(delivery_status_notifier, api_gateway, "Publishes signed delivery receipts", "GCP Pub/Sub")
+Rel(interoperability_adapter_container, eu_gateways, "Transmits EU prescriptions", "REST, SOAP, HL7 FHIR over mTLS")
+Rel(interoperability_adapter_container, us_networks, "Transmits US prescriptions", "REST, SOAP, HL7 FHIR over mTLS")
+
+@enduml

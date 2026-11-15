@@ -1,0 +1,55 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Online Bookstore System
+
+Person(customers, "Customers (Shoppers)", "End users browsing books, managing carts, and completing checkouts via web and mobile interfaces.")
+Person(authors, "Book Authors/Publishers", "Stakeholders who provide content and manage book listings within the ecosystem.")
+Person(admins, "Store Administrators", "System managers accessing the platform to oversee operations using strict security protocols.")
+
+System_Ext(stripe, "Stripe/PayPal", "External payment gateway handling secure checkout and financial transactions.")
+System_Ext(fedex, "FedEx/DHL", "External shipping providers handling physical book delivery.")
+System_Ext(auth0, "Auth0/AWS Cognito", "Identity provider managing authentication and user identity.")
+System_Ext(sendgrid, "SendGrid/Twilio", "Notification provider sending alerts and messages to users.")
+System_Ext(segment, "Segment/Snowflake", "Analytics and BI tools processing event streams for business intelligence.")
+
+System_Boundary(bookstore, "Online Bookstore System") {
+    Container(spa, "Single Page App (SPA)", "React, Amazon CloudFront, S3", "Frontend container for static asset delivery and low-latency global rendering.")
+    Container(apigw, "Amazon API Gateway", "Amazon API Gateway", "Routing container for rate limiting, SSL termination, and OAuth2/JWT authentication.")
+    Container(bff, "Node.js BFF", "Node.js, AWS ECS (Fargate)", "Backend for Frontend service coordinating client requests.")
+    Container(checkout, "Checkout Service", "Java, Spring Boot, AWS ECS (Fargate)", "Backend service handling secure payment processing and orders.")
+    Container(recommendations, "Recommendations Service", "Python, FastAPI, AWS ECS (Fargate)", "Backend service providing personalized book recommendations.")
+    Container(notifications, "Notification Service", "Node.js, AWS ECS (Fargate)", "Dedicated service running on AWS ECS to send user alerts.")
+    
+    ContainerDb(aurora, "Amazon Aurora (PostgreSQL)", "Amazon Aurora PostgreSQL", "Transactional data store with Aurora Global Databases.")
+    ContainerDb(redis, "Amazon ElastiCache (Redis)", "Amazon ElastiCache Redis", "In-memory data store for sessions and caching.")
+    ContainerDb(dynamodb, "Amazon DynamoDB", "Amazon DynamoDB", "NoSQL data store for recommendations.")
+    
+    Container(eventbroker, "Amazon EventBridge / SQS", "Amazon EventBridge, SQS", "Event broker for asynchronous event publishing and consumption.")
+}
+
+Rel(customers, spa, "Browses store, manages cart, and views recommendations", "HTTPS")
+Rel(admins, apigw, "Accesses management operations", "HTTPS with mTLS")
+Rel(spa, apigw, "Client-to-backend communication", "HTTPS / REST")
+Rel(apigw, bff, "Routes client requests", "mTLS via AWS App Mesh and internal VPC endpoints")
+Rel(apigw, checkout, "Routes checkout requests", "mTLS via AWS App Mesh and internal VPC endpoints")
+Rel(apigw, recommendations, "Routes recommendation requests", "mTLS via AWS App Mesh and internal VPC endpoints")
+Rel(apigw, auth0, "Authenticates requests via OAuth2/JWT", "HTTPS / OpenID Connect")
+
+Rel(checkout, stripe, "Secure payment processing", "Synchronous HTTPS")
+Rel(checkout, fedex, "Coordinates physical book fulfillment", "REST / HTTPS")
+Rel(checkout, segment, "Pushes event data for analytics", "Kinesis / Kafka / HTTPS")
+
+Rel(bff, eventbroker, "Publishes asynchronous events", "AMQP / Event Stream")
+Rel(checkout, eventbroker, "Publishes order events", "AMQP / Event Stream")
+Rel(recommendations, eventbroker, "Consumes and publishes recommendation events", "AMQP / Event Stream")
+Rel(notifications, eventbroker, "Consumes notification events", "AMQP / Event Stream")
+
+Rel(checkout, aurora, "Reads and writes transactional data", "TLS-encrypted connection")
+Rel(bff, redis, "Reads and writes session data and cache", "TLS-encrypted connection")
+Rel(recommendations, dynamodb, "Reads and writes recommendation data", "TLS-encrypted connection")
+
+Rel(notifications, sendgrid, "Sends notifications to users", "REST / HTTPS")
+
+@enduml

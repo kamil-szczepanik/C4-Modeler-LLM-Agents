@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Billing Service container
+
+System_Ext(ExternalPaymentGateways, "External Payment Gateways", "HTTPS", "Process credit card and insurance transactions.")
+System_Ext(PostgreSQL, "PostgreSQL", "PostgreSQL", "Relational database providing encrypted storage for financial ledger data.")
+System_Ext(Redis, "Redis", "Redis", "Manages task queues via TLS and SCRAM-SHA-512.")
+
+Container_Boundary(BillingService, "Billing Service") {
+    Component(ClaimProcessor, "ClaimProcessor", "Python, FastAPI", "Validates incoming claims and handles RBAC/OAuth2 entry points.")
+    Component(PaymentOrchestrator, "PaymentOrchestrator", "Python, Celery, Redis", "Manages asynchronous payment tasks and gateway retries.")
+    Component(InvoiceManager, "InvoiceManager", "Python, SQLAlchemy", "Executes double-entry bookkeeping and persistence.")
+    Component(ReconciliationEngine, "ReconciliationEngine", "Python, Kubernetes CronJob", "Performs batch financial reconciliation.")
+}
+
+Rel(ClaimProcessor, InvoiceManager, "Invokes internal Python function calls", "In-memory")
+Rel(ClaimProcessor, PaymentOrchestrator, "Dispatches asynchronous jobs", "Celery/mTLS")
+Rel(PaymentOrchestrator, ExternalPaymentGateways, "Processes payments", "REST/JSON over HTTPS")
+Rel(InvoiceManager, PostgreSQL, "Persists and queries data", "Encrypted TCP (AES-256)")
+Rel(ReconciliationEngine, PostgreSQL, "Persists and queries data", "Encrypted TCP (AES-256)")
+Rel(ClaimProcessor, Redis, "Manages task queues", "TLS and SCRAM-SHA-512")
+Rel(PaymentOrchestrator, Redis, "Manages task queues", "TLS and SCRAM-SHA-512")
+Rel(InvoiceManager, Redis, "Manages task queues", "TLS and SCRAM-SHA-512")
+Rel(ReconciliationEngine, Redis, "Manages task queues", "TLS and SCRAM-SHA-512")
+
+@enduml

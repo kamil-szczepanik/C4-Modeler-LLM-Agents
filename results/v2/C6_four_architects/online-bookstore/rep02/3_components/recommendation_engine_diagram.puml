@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Recommendation Engine container
+
+Container_Boundary(recommendation_engine, "Recommendation Engine") {
+    Component(API_Controller, "API Controller", "FastAPI (Python)", "Service handling incoming requests.")
+    Component(Model_Inference_Worker, "Model Inference Worker", "PyTorch (Python)", "Worker executing scoring logic.")
+    Component(Feature_Cache_Client, "Feature Cache Client", "Redis-py", "Client fetching pre-computed user/item embeddings.")
+    Component(Data_Ingestion_Consumer, "Data Ingestion Consumer", "Kafka Python", "Consumer consuming clickstream and purchase events.")
+    Component(Fallback_Engine, "Fallback Engine", "Heuristic rule component", "Component for handling timeouts.")
+    Component(Model_Registry_Client, "Model Registry Client", "AWS SageMaker", "Client for dynamic weight hot-reloading.")
+}
+
+System_Ext(Amazon_DynamoDB, "Amazon DynamoDB", "Database for fallback recommendation metadata and processed interaction features.")
+System_Ext(Amazon_MSK, "Amazon MSK", "Streaming service for real-end user interaction events.")
+
+Rel(API_Controller, Model_Inference_Worker, "Invokes scoring logic", "In-process / Asyncio")
+Rel(Model_Inference_Worker, Feature_Cache_Client, "Retrieves user preference vectors", "TCP / Redis Protocol")
+Rel(Model_Inference_Worker, Amazon_DynamoDB, "Fetches fallback recommendation metadata", "TLS")
+Rel(Amazon_MSK, Data_Ingestion_Consumer, "Streams real-end user interaction events", "TCP / Kafka Protocol")
+Rel(API_Controller, Fallback_Engine, "Queries fallback rules on cache/inference timeout", "In-process")
+Rel(Model_Inference_Worker, Model_Registry_Client, "Polls/fetches updated model artifacts", "HTTPS / S3")
+Rel(Data_Ingestion_Consumer, Amazon_DynamoDB, "Persists processed interaction features", "TLS")
+@enduml

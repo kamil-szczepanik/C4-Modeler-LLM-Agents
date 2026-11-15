@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalystsAndMerchantRiskManagers, "Fraud Analysts and Merchant Risk Managers", "Internal users who access the secure case management interface for fraud review and compliance tasks.")
+
+System_Ext(PaymentProcessor, "Payment Processor", "External API Consumer sending card-not-present authorizations.")
+System_Ext(ModelRegistryFeatureStore, "Model Registry / Feature Store", "AWS SageMaker / S3 with AWS Signer providing dynamic rule and model fetching.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(AWSPAPIGatewayEnvoy, "AWS API Gateway / Envoy", "AWS API Gateway / Envoy", "Ingestion layer handling incoming payment authorizations securely.")
+    Container(ScoringEngineContainer, "Scoring Engine Container", "Go/Rust on AWS ECS Fargate", "Processes payment scoring to guarantee sub-50ms P99 decision latency.")
+    Container(CaseManagementBackend, "Case Management Backend", "Node.js/Python on ECS Fargate", "Manages analyst reviews and case management APIs.")
+    Container(CaseManagementUI, "Case Management UI", "React on AWS S3 + CloudFront", "Delivers zero-infrastructure-overhead frontend for case management.")
+    Container(RuleModelDistributionService, "Rule & Model Distribution Service", "AWS SQS + S3", "Distributes rules and models for zero-downtime config updates.")
+    Container(AuditWriterSidecarAsyncWorker, "Audit Writer Sidecar / Async Worker", "Go/Lambda", "Handles asynchronous event streaming and decision logging.")
+    ContainerDb(AmazonElastiCache, "Amazon ElastiCache", "Redis Feature Store", "Enables low-latency in-memory feature lookups.")
+    ContainerDb(AWSQLDBS3ObjectLock, "AWS QLDB / S3 Object Lock", "AWS QLDB / S3 Object Lock", "Immutable Audit Storage providing tamper-evident storage to satisfy 7-year auditability requirements.")
+}
+
+Rel(PaymentProcessor, AWSPAPIGatewayEnvoy, "Sends card-not-present authorizations for screening", "HTTPS/gRPC")
+Rel(FraudAnalystsAndMerchantRiskManagers, CaseManagementUI, "Accesses secure case management interface for fraud review", "HTTPS")
+Rel(CaseManagementUI, CaseManagementBackend, "Sends API requests for case management operations", "HTTPS/REST")
+Rel(ScoringEngineContainer, AmazonElastiCache, "Performs feature lookups via VPC peering", "TCP/Redis")
+Rel(ScoringEngineContainer, AWSQLDBS3ObjectLock, "Sends asynchronous event streaming for decision logging", "Amazon SQS")
+Rel(RuleModelDistributionService, ScoringEngineContainer, "Performs zero-downtime config updates", "gRPC/S3")
+@enduml

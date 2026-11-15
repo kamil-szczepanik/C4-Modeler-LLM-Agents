@@ -1,0 +1,344 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "R-01 (Real-Time Scoring Engine), R-02 (Case Management App), and R-03 (Model Registry via EventBridge notifications) are addressed. However, the exact mechanism for routing flagged transactions directly from scoring into the Case Management App/Database is not explicitly modeled in data flows.",
+   "performance_efficiency": "Sub-50ms P99 at 3,000 rps is supported by Go on Fargate, local ONNX Runtime inference, ElastiCache Redis feature store, and async SQS auditing. However, passing 3,000 rps through Amazon API Gateway may hit concurrency limits and incur substantial budget overhead.",
+   "compatibility": "Interfaces with Payment Gateway / Merchants via mTLS (gRPC/HTTPS) and external Card Tokenization Vault. However, the container and component levels do not show the outbound interaction between the scoring engine and the Card Tokenization Vault.",
+   "usability": "Case Management App provides dedicated interfaces (API Controller, Dashboard & Metrics Component) for Fraud Analysts and Risk/Compliance Officers to manage suspicious transactions. Data Scientists and Risk Officers also have distinct Model Registry governance channels.",
+   "reliability": "Circuit breaking and fallback via Amazon CloudWatch & Route 53 address R-07's requirement to not block authorizations beyond 1 minute. SQS provides fault isolation. However, specific fail-open fallback paths within the Real-Time Scoring Engine component flow are omitted.",
+   "security": "PCI-DSS Level 1 is supported by AWS WAF, mTLS, VPC Security Groups, AWS KMS, and Secrets Manager. Audit immutability (R-06) is enforced via S3 Object Lock in WORM compliance mode with KMS CMK encryption.",
+   "maintainability": "Good modular decomposition separating scoring, case review, caching, and model lifecycle. Managed AWS services suit a 3-engineer team well. Component diagrams for Database and Network & Security, however, mischaracterize managed infrastructure/subnets as internal components.",
+   "portability": "Target cloud AWS (eu-west-1) is fully utilized via ECS Fargate, Aurora Serverless, and S3. Although proprietary AWS service coupling reduces cross-cloud portability, it directly aligns with the stated brief and target environment constraints."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 3,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 4.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "In-memory Go runtime, embedded ONNX engine, and ElastiCache Redis feature store support low latencies. However, routing 3,000 rps via AWS API Gateway introduces latency jitter and heavy cost risks under the fixed budget.",
+    "elements": [
+     "AWS WAF & API Gateway",
+     "Real-Time Scoring Engine",
+     "HTTP Request Handler",
+     "Fraud Scoring Orchestrator",
+     "Model Inference Engine",
+     "Feature Store & Cache"
+    ],
+    "sensitivity_points": [
+     "API Gateway proxy overhead directly impacting sub-50ms P99 latency target",
+     "In-process ONNX model inference avoiding cross-network evaluation delays"
+    ],
+    "tradeoffs": [
+     "Managed API Gateway convenience traded against latency overhead and high transactional cost"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Scoring and case review workflows are completely segregated across separate compute containers and databases. Analyst activity hits Aurora PostgreSQL via PgBouncer, leaving the Scoring Engine, Redis, and message queues entirely unimpacted.",
+    "elements": [
+     "Case Management App",
+     "Database",
+     "PgBouncer Connection Pooler",
+     "Relational Storage Engine",
+     "Real-Time Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Physical isolation of analytical querying from real-time scoring data stores",
+     "Connection pooling to prevent Aurora connection exhaustion during peak reviews"
+    ],
+    "tradeoffs": [
+     "Maintaining dual datastores (Redis and Aurora) increases operational complexity"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Route 53 and CloudWatch health checks monitor the boundary, but the architecture lacks an explicit fallback executor container or service to evaluate authorizations and record audited fallback decisions when the engine crashes.",
+    "elements": [
+     "Amazon CloudWatch & Route 53",
+     "AWS WAF & API Gateway",
+     "Real-Time Scoring Engine",
+     "Messaging & Audit Pipeline"
+    ],
+    "sensitivity_points": [
+     "DNS failover convergence time potentially exceeding the 1-minute blocking threshold",
+     "Absence of an explicit fallback scoring worker to process and log decisions"
+    ],
+    "tradeoffs": [
+     "Fast fail-open approval protects payment flow but increases undetected fraud risk"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Scoring Engine decouples audit emission asynchronously using Amazon SQS. Outages or latency spikes in S3 Object Lock or downstream audit writers are absorbed by queue buffers without impacting the real-time scoring path.",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Messaging & Audit Pipeline",
+     "Message Queue",
+     "Audit Logger",
+     "Immutable Audit Sink"
+    ],
+    "sensitivity_points": [
+     "SQS queue retention buffer capacity during prolonged S3 audit sink outages",
+     "Asynchronous fire-and-forget logging isolation preventing latency propagation"
+    ],
+    "tradeoffs": [
+     "Asynchronous decoupling sacrifices immediate consistency of audit logs for decision latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Model updates are orchestrated through SageMaker Model Registry, signed with KMS, and broadcast via EventBridge/SNS to the scoring engine. In-process ONNX allows hot reloading models and immediate rollbacks without service downtime.",
+    "elements": [
+     "Model Registry",
+     "Amazon SageMaker Model Registry",
+     "Artifact Cryptographic Signer",
+     "Model Event Dispatcher",
+     "Model Inference Engine",
+     "Real-Time Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Automated event notification propagation time to all active ECS Fargate scoring tasks",
+     "Memory overhead of loading concurrent model versions for seamless hot-swapping"
+    ],
+    "tradeoffs": [
+     "In-process model execution simplifies latency but requires memory capacity for concurrent versions"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "Dynamic rules are stored in Aurora, but there is no documented synchronization mechanism to propagate updated rules into the Scoring Engine or Redis feature store without introducing direct synchronous relational queries into the hot path.",
+    "elements": [
+     "Database",
+     "Relational Storage Engine",
+     "Real-Time Scoring Engine",
+     "Fraud Scoring Orchestrator",
+     "Feature Store & Cache"
+    ],
+    "sensitivity_points": [
+     "Latency penalty if the scoring engine queries Aurora directly for dynamic rules",
+     "Lack of a dynamic rule invalidation or broadcast mechanism to runtime nodes"
+    ],
+    "tradeoffs": [
+     "Storing dynamic rules in relational storage eases management but complicates low-latency ingestion"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Payment card tokens isolate primary account numbers completely from fraud analysts via external token vaulting and RBAC. However, the architecture mentions CloudWatch metrics but does not detail automated behavioral anomaly detection for compromised credentials.",
+    "elements": [
+     "Case Management App",
+     "Card Tokenization Vault",
+     "Identity Provider",
+     "Network & Security",
+     "AWS KMS & Secrets Manager"
+    ],
+    "sensitivity_points": [
+     "Strict adherence to tokenization boundaries preventing clear-text PAN exposure to Case Management",
+     "Sensitivity of RBAC claims enforcement on API Gateway and Case Management App"
+    ],
+    "tradeoffs": [
+     "Restricting PAN access prevents data leaks but limits analyst context during deep manual reviews"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Both decision logs and model artifacts are retained in Amazon S3 with Object Lock in Compliance Mode for 7 years, accompanied by KMS signing. Historical decisions with model versions and explanations can be retrieved within one working day.",
+    "elements": [
+     "Immutable Audit Sink",
+     "Messaging & Audit Pipeline",
+     "Audit Logger",
+     "Model Registry",
+     "Object Lock Storage"
+    ],
+    "sensitivity_points": [
+     "S3 Object Lock Compliance Mode immutability configuration preventing early deletion",
+     "Deterministic correlation between logged decision inputs, model version, and explanation records"
+    ],
+    "tradeoffs": [
+     "Enforcing S3 WORM Compliance Mode eliminates data purging capability even for operational cleanup"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Card Tokenization Vault",
+     "Network & Security",
+     "AWS KMS & Secrets Manager",
+     "AWS VPC Security Groups",
+     "AWS WAF & API Gateway"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Immutable Audit Sink",
+     "Messaging & Audit Pipeline",
+     "Audit Logger",
+     "Audit Client Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Database",
+     "PgBouncer Connection Pooler",
+     "Relational Storage Engine"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Case Management App",
+     "Feature Store & Cache",
+     "Database",
+     "Model Registry"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "HTTP Request Handler",
+     "Fraud Scoring Orchestrator",
+     "Model Inference Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Fraud Analyst & Risk/Compliance Officer",
+     "Case Management App",
+     "API Controller Component",
+     "Case Service Component",
+     "Data Repository Component",
+     "Dashboard & Metrics Component",
+     "Database"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model Registry",
+     "Model Governance API",
+     "Amazon SageMaker Model Registry",
+     "Model Event Dispatcher",
+     "Artifact Cryptographic Signer",
+     "Relational Storage Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Fraud Scoring Orchestrator",
+     "Model Inference Engine",
+     "Feature Store & Cache",
+     "Feature Retrieval API / Client Layer",
+     "In-Memory Cache & Store"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Card Tokenization Vault",
+     "Network & Security",
+     "AWS KMS & Secrets Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Immutable Audit Sink",
+     "Messaging & Audit Pipeline",
+     "Message Queue",
+     "Audit Logger"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Amazon CloudWatch & Route 53",
+     "Real-Time Scoring Engine"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

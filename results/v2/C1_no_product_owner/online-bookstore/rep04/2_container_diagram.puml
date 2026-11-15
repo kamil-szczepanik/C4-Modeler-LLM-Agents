@@ -1,0 +1,38 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Online Bookstore System
+
+Person(Customer, "Customer", "End-user browsing, purchasing, and reviewing books.")
+
+System_Ext(Identity_Provider, "Identity Provider", "AWS Cognito or Auth0 for authentication and MFA.")
+System_Ext(Shipping_Provider_APIs, "Shipping Provider APIs", "FedEx or UPS for order fulfillment.")
+
+System_Boundary(Online_Bookstore_System, "Online Bookstore System") {
+    Container(Amazon_CloudFront_AWS_S3, "Amazon CloudFront & AWS S3", "React / TypeScript SPA, AWS CloudFront, AWS S3", "SPA hosting CDN providing fast client-side rendering for catalog browsing, shopping cart/checkout, recommendations, and reviews.")
+    Container(AWS_API_Gateway, "AWS API Gateway", "AWS API Gateway with WAF", "Entry point providing secure routing and web application firewall protection.")
+    Container(Core_E_Commerce_Service, "Core E-Commerce Service", "Node.js, TypeScript, AWS ECS Fargate", "Handles core business logic, shopping cart, checkout, and order fulfillment integration.")
+    Container(Recommendation_Search_Service, "Recommendation & Search Service", "Python, FastAPI, AWS ECS, Amazon OpenSearch", "Provides product search and personalized recommendations.")
+    Container(Background_Worker_Service, "Background Worker Service", "Node.js, TypeScript, AWS ECS", "Processes asynchronous tasks and third-party shipping/payment integrations.")
+    ContainerDb(Amazon_Aurora_PostgreSQL_Global_Database, "Amazon Aurora PostgreSQL Global Database", "Amazon Aurora PostgreSQL", "Multi-region transactional database ensuring high availability and low-latency failover.")
+    ContainerDb(Amazon_ElastiCache_Redis, "Amazon ElastiCache Redis", "Amazon ElastiCache Redis", "In-memory session and cart state management.")
+    ContainerDb(Amazon_OpenSearch, "Amazon OpenSearch", "Amazon OpenSearch", "Queries book catalog and search indexes.")
+    Container(Amazon_SQS_SNS, "Amazon SQS / SNS", "Amazon SQS, Amazon SNS with DLQs", "Asynchronous messaging backbone for decoupled processing.")
+    Container(AWS_Secrets_Manager_KMS, "AWS Secrets Manager & KMS", "AWS Secrets Manager, AWS KMS", "Manages credentials, secrets, and encryption keys securely.")
+}
+
+Rel(Customer, Amazon_CloudFront_AWS_S3, "Browses and interacts with the SPA", "HTTPS")
+Rel(Amazon_CloudFront_AWS_S3, AWS_API_Gateway, "Makes API requests with JWT validation", "HTTPS/REST")
+Rel(AWS_API_Gateway, Core_E_Commerce_Service, "Routes core business and checkout requests", "gRPC over internal VPC")
+Rel(AWS_API_Gateway, Recommendation_Search_Service, "Routes search and recommendation queries", "gRPC over internal VPC")
+Rel(Core_E_Commerce_Service, Amazon_SQS_SNS, "Publishes asynchronous messages for background tasks and shipping", "TLS / IAM authenticated messaging")
+Rel(Background_Worker_Service, Amazon_SQS_SNS, "Consumes asynchronous messages and handles DLQs", "TLS / IAM authenticated messaging")
+Rel(Core_E_Commerce_Service, Amazon_Aurora_PostgreSQL_Global_Database, "Reads and writes transactional data", "mTLS with IAM least-privilege roles")
+Rel(Core_E_Commerce_Service, Amazon_ElastiCache_Redis, "Manages session and cart state", "mTLS with IAM least-privilege roles")
+Rel(Recommendation_Search_Service, Amazon_OpenSearch, "Queries book catalog and search indexes", "mTLS with IAM least-privilege roles")
+Rel(Core_E_Commerce_Service, Identity_Provider, "Validates and authenticates user sessions", "HTTPS / JWT")
+Rel(Core_E_Commerce_Service, AWS_Secrets_Manager_KMS, "Retrieves secrets and encryption keys", "AWS API / TLS")
+Rel(Background_Worker_Service, Shipping_Provider_APIs, "Integrates with third-party shipping providers", "REST/JSON over HTTPS")
+
+@enduml

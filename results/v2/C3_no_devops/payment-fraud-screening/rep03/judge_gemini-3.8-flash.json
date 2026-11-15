@@ -1,0 +1,318 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "Addresses R-01 via 'Scoring Engine', R-02 via 'Case Management App', and R-03 via 'Model & Rule Management Service' with 'Hot-Reload Coordinator'. However, the flow from the rule management service to S3 or the scoring engine lacks explicit inter-container linkage.",
+   "performance_efficiency": "Low-latency Rust implementation with 'In-Memory Rule & Model Evaluator' using Wasmtime and asynchronous audit logging through 'Amazon SQS' and 'AWS Lambda' targets 50ms P99. However, SQS FIFO standard quotas might constrain achieving 3,000 TPS without specific partition grouping designs.",
+   "compatibility": "'Payment Gateway / Processor Systems' interfaces smoothly via REST/gRPC and mTLS. External integration with IdP (OIDC/SAML), 'Notification Service' (SES), and 'Audit Ledger' (QLDB/S3 WORM) are well defined with standard protocols and serialization formats.",
+   "usability": "Fraud Analysts and Risk Officers are served through the 'Analyst SPA Frontend' and 'Case Management App'. Fraud Engineers have API access via 'Rule API Router', though no dedicated user interface is provided for non-technical rule management.",
+   "reliability": "Multi-AZ Aurora and SQS DLQs provide resilience. However, the system completely lacks a fail-open, circuit-breaking, or bypass mechanism to satisfy R-07 (ensuring payments are not blocked for over 1 minute if scoring becomes unavailable).",
+   "security": "Strong security controls including AWS WAF/Shield, mTLS, TLS 1.3, and 'Crypto Signer Component' using KMS for payload encryption. However, tokenization mechanisms are not explicitly detailed to ensure analysts never see full card numbers under PCI-DSS Level 1.",
+   "maintainability": "Containers exhibit clear separation of concerns (Scoring, Rules, Case Management). Dynamic updates via signed Wasm hot-reloading minimize operational complexity for the three-engineer team. Serverless managed services keep the small team's operational maintenance overhead low.",
+   "portability": "The architecture is tightly coupled to AWS-native services (SQS, Lambda, Aurora, ALB, QLDB/S3) matching the target cloud constraint in eu-west-1, with core business logic kept portable inside Rust, Node.js, and Python containers on ECS Fargate."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "Scoring Engine uses compiled Rust and in-memory Wasm evaluation with async SQS audit dispatch, but synchronous reads/writes to Aurora PostgreSQL on the critical path at 3,000 TPS risk violating the 50 ms P99 latency SLA.",
+    "elements": [
+     "API Gateway / Application Load Balancer",
+     "Scoring Engine",
+     "In-Memory Rule & Model Evaluator",
+     "Amazon Aurora PostgreSQL",
+     "Amazon SQS"
+    ],
+    "sensitivity_points": [
+     "Synchronous Aurora PostgreSQL database queries on the scoring critical path",
+     "Wasm sandbox execution overhead under 3,000 requests per second"
+    ],
+    "tradeoffs": [
+     "Persisting state synchronously to Aurora ensures consistency but risks violating 50ms P99"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case Management and Scoring Engine run in separate ECS containers. Aurora includes primary and read-replica instances, ensuring analyst queries do not contend with scoring operations or degrade critical path performance.",
+    "elements": [
+     "Scoring Engine",
+     "Case Management App",
+     "Amazon Aurora PostgreSQL",
+     "Aurora PostgreSQL Instance",
+     "Storage Volume"
+    ],
+    "sensitivity_points": [
+     "Read replica offloading for case management queries",
+     "Container isolation on separate ECS Fargate services"
+    ],
+    "tradeoffs": [
+     "Using Aurora read replicas introduces minor replication lag for analysts to protect scoring throughput"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture provides no automated fallback path, bypass logic, or circuit-breaking proxy at the ALB level when the Scoring Engine crashes, risking blocked payment authorizations beyond the one-minute requirement.",
+    "elements": [
+     "API Gateway / Application Load Balancer",
+     "Scoring Engine",
+     "Payment Gateway / Processor Systems"
+    ],
+    "sensitivity_points": [
+     "Absence of an automated fallback/standby scoring engine or circuit breaker at ALB",
+     "Queueing or dead-lettering ingress requests during total engine failure"
+    ],
+    "tradeoffs": [
+     "Failing closed maintains security but blocks payments exceeding the one-minute tolerance window"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The latency-critical path offloads audit logs asynchronously via Amazon SQS. If the Audit Ledger or Lambda consumer experiences degradation, messages buffer safely in SQS and DLQs without impacting scoring latency or dropping logs.",
+    "elements": [
+     "Scoring Engine",
+     "Audit Dispatcher",
+     "Amazon SQS",
+     "AWS Lambda",
+     "Audit Ledger"
+    ],
+    "sensitivity_points": [
+     "SQS queue retention period during extended downstream Audit Ledger downtime",
+     "Lambda error handling and dead-letter queue buffering"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit dispatch trades immediate read-after-write ledger consistency for scoring availability"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Hot-Reload Coordinator fetches signed Wasm modules and model weights dynamically from S3 into the Wasmtime runtime without container restarts, enabling immediate rollbacks and tagging each evaluation with its model version.",
+    "elements": [
+     "Model & Rule Management Service",
+     "Hot-Reload Coordinator",
+     "In-Memory Rule & Model Evaluator",
+     "Scoring Engine",
+     "Amazon S3"
+    ],
+    "sensitivity_points": [
+     "Atomic hot-swapping of in-memory WebAssembly modules without request disruption",
+     "Versioning metadata tagged onto emitted decision payloads"
+    ],
+    "tradeoffs": [
+     "Dynamic in-memory reloading avoids deployment downtime but requires strict memory bounds during swaps"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The Model & Rule Management Service and Hot-Reload Coordinator allow fast updates and auditable rule names. However, implementing velocity checks purely in-memory across distributed Fargate instances lacks an explicit distributed cache or state sync mechanism.",
+    "elements": [
+     "Model & Rule Management Service",
+     "Rule Management Engine",
+     "Hot-Reload Coordinator",
+     "In-Memory Rule & Model Evaluator"
+    ],
+    "sensitivity_points": [
+     "Hot-reload latency across distributed ECS Fargate instances",
+     "State synchronization for cross-transaction velocity rules without a distributed cache"
+    ],
+    "tradeoffs": [
+     "In-memory rule execution ensures low latency but complicates cross-node velocity tracking"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The architecture uses tokenization and cryptographic signing to conceal PAN data, supported by IdP MFA. However, no SIEM, GuardDuty, or specific anomaly detection mechanism is specified to alert on compromised analyst accounts within 15 minutes.",
+    "elements": [
+     "Case Management App",
+     "Identity Provider (IdP)",
+     "AWS Lambda",
+     "Crypto Signer Component",
+     "AWS Application Load Balancer (ALB) with AWS WAF and AWS Shield"
+    ],
+    "sensitivity_points": [
+     "Tokenization and PAN masking implementation in Case Management App",
+     "Absence of dedicated behavioral analytics or SIEM for sub-15-minute anomaly alerting"
+    ],
+    "tradeoffs": [
+     "Masking PAN protects cardholder data but limits analyst investigation context"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Decisions, inputs, model versions, and explanations are cryptographically signed and stored in a 7-year WORM S3 or QLDB Audit Ledger, allowing compliance officers to retrieve tamper-evident historical explanations well within one working day.",
+    "elements": [
+     "Audit Ledger",
+     "AWS Lambda",
+     "Crypto Signer Component",
+     "Ledger Writer Component",
+     "Case Management App"
+    ],
+    "sensitivity_points": [
+     "WORM immutability and retention policies configured for at least 7 years",
+     "Storage of complete input context, model version, and explanation in ledger payloads"
+    ],
+    "tradeoffs": [
+     "Storing full decision contexts in immutable ledgers increases long-term storage costs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "none"
+  },
+  "coverage": 0.5454545454545454,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Edge Request Sanitization Component",
+     "Crypto Signer Component",
+     "Listener & TLS Terminator Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Audit Ledger",
+     "Aurora PostgreSQL Instance",
+     "Audit Dispatcher",
+     "Ledger Writer Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "API Router / HTTP Listener",
+     "In-Memory Rule & Model Evaluator",
+     "API Gateway / Application Load Balancer"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management App",
+     "Analyst SPA Frontend",
+     "Case Business Logic Component",
+     "API Router & Auth Middleware"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model & Rule Management Service",
+     "Rule API Router",
+     "Rule Management Engine",
+     "Hot-Reload Coordinator",
+     "In-Memory Rule & Model Evaluator"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "In-Memory Rule & Model Evaluator",
+     "Amazon SQS",
+     "AWS Application Load Balancer (ALB) with AWS WAF and AWS Shield"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Crypto Signer Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit Dispatcher",
+     "Crypto Signer Component",
+     "Ledger Writer Component",
+     "Audit Ledger",
+     "Amazon SQS FIFO Queue"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

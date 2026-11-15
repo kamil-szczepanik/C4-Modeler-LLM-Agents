@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Analytics Ingestion container
+
+System_Ext(api_management, "API Management", "External API Management layer forwarding requests.")
+System_Ext(amazon_kinesis, "Amazon Kinesis", "Receives real-time event streaming and clickstream processing data.", "AWS Streaming Service")
+System_Ext(aws_sqs, "AWS SQS", "Acts as a dead-letter queue fallback to store overflow events during prolonged outages.", "AWS SQS")
+
+Container_Boundary(analytics_ingestion, "Analytics Ingestion") {
+    Component(ingestion_api_handler, "Ingestion API Handler", "Go, HTTP/JSON", "Handles incoming HTTP/JSON clickstream requests.")
+    Component(sanitization_validation_middleware, "Sanitization & Validation Middleware", "Go", "Sanitizes and validates raw event payloads to enforce GDPR/CCPA compliance and prevent PII leakage.")
+    Component(buffer_retry_manager, "Buffer & Retry Manager", "Go, In-memory ring-buffer", "Manages in-memory ring-buffer and channels to offload validated events during throttling and execute exponential backoff.")
+    Component(kinesis_producer_client, "Kinesis Producer Client", "Go, AWS SDK for Go", "Publishes event streams to Amazon Kinesis using the AWS SDK.")
+}
+
+Rel(api_management, ingestion_api_handler, "Forwards clickstream requests", "HTTPS/JSON")
+Rel(ingestion_api_handler, sanitization_validation_middleware, "Passes raw event payloads", "In-memory Go structs")
+Rel(sanitization_validation_middleware, buffer_retry_manager, "Offloads validated events during throttling", "In-memory Go channels")
+Rel(buffer_retry_manager, amazon_kinesis, "Publishes event streams with exponential backoff", "AWS Kinesis API over HTTPS/TCP")
+Rel(buffer_retry_manager, aws_sqs, "Stores overflow events during prolonged outages", "AWS SQS API over HTTPS")
+
+@enduml

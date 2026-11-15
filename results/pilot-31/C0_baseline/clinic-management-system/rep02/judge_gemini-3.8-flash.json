@@ -1,0 +1,338 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "While 'Patient Record Manager', 'Scheduling Engine', and 'Resource Orchestrator' address R-01 to R-03, R-04 (Billing & insurance claim submission) is missing from Level 2 and Level 3 containers after only appearing superficially in Level 1.",
+   "performance_efficiency": "Sub-second P95 loads are supported via 'Redis Cluster' with 'Debezium CDC' invalidation, 'PgBouncer' connection pooling, and non-blocking logging via 'Audit Logging Sidecar' with 'RocksDB' local buffers.",
+   "compatibility": "Interoperability is thoroughly addressed using the 'HL7 FHIR Integration Engine', 'FHIR Facade', 'FHIR Transformation Component', and Kafka 'Schema Registry' enforcing FHIR payloads for clinical exchange.",
+   "usability": "Each user persona has tailored access points ('Clinical API Gateway', 'Patient-Facing API Gateway', 'Query Builder/DSL Engine'). However, the patient frontend ('Patient Portal' from Level 1) is omitted from the Level 2 container architecture.",
+   "reliability": "Active-active 99.99% availability is reinforced by 'Patroni' and 'etcd' failover, 'pgBackRest' continuous WAL archiving, 'Circuit-Breaker Fallback Handler', Kafka replication, and 'Temporal.io' fault-tolerant workflows.",
+   "security": "Extensive security controls include 'Identity Provider' MFA, 'Contextual Policy Engine' (ABAC/break-glass), 'ReBAC Resolver', 'HashiCorp Vault', 'Data Masking Engine', and 'Cryptographic Signer' streaming tamper-proof audit trails to 'WORM Storage'.",
+   "maintainability": "Decomposition into focused containers ('EMR/Scheduling Services', 'Reporting & Compliance Service', 'Audit Logging Sidecar') and independent components using loose coupling via 'Message Broker' and Istio provides high modularity.",
+   "portability": "The hybrid topology (on-prem k8s and eu-central-1) is well supported by 'Global Traffic Manager', containerized open-source runtimes, and S3-compatible APIs, though specific cross-region data synchronization semantics remain slightly generalized."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 2,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 3.5,
+   "Modifiability": 3.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "In-memory caching via Redis Cluster fronting the Patient Record Manager, combined with PgBouncer connection pooling and edge-level token caching, directly satisfies the sub-second P95 retrieval requirement under concurrent morning load.",
+    "elements": [
+     "Clinical API Gateway",
+     "Ingress Controller",
+     "Redis Cache",
+     "EMR/Scheduling Services",
+     "Patient Record Manager",
+     "PgBouncer",
+     "PostgreSQL Cluster"
+    ],
+    "sensitivity_points": [
+     "Redis cache hit ratio for active patient schedules",
+     "PgBouncer pool exhaustion under burst concurrency"
+    ],
+    "tradeoffs": [
+     "Memory overhead for caching vs sub-second read performance"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Kafka broker federation and asynchronous messaging decouple high-throughput FHIR ingestion from synchronous clinical queries. Schema validation and transformation at the gateway shield the database from sudden spikes, ensuring clinical read latencies remain sub-second.",
+    "elements": [
+     "Clinical API Gateway",
+     "WAF Module",
+     "FHIR Transformation Component",
+     "Message Broker",
+     "Kafka Broker Cluster",
+     "Schema Registry",
+     "FHIR Facade",
+     "Redis Cache"
+    ],
+    "sensitivity_points": [
+     "Kafka partition capacity and consumer group parallelism",
+     "Edge FHIR transformation throughput"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of ingested records vs immediate synchronous query availability"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "While Global Traffic Manager routes hybrid traffic and Patroni manages failover, the architecture uses a single Patroni/etcd cluster across on-prem and cloud. WAN latency makes synchronous cross-site replication impractical, risking RPO > 0 or split-brain during a cloud outage.",
+    "elements": [
+     "Global Traffic Manager",
+     "PostgreSQL Cluster",
+     "Patroni",
+     "etcd",
+     "Redis Cluster"
+    ],
+    "sensitivity_points": [
+     "etcd consensus stability across hybrid cloud WAN links",
+     "PostgreSQL cross-site replication lag"
+    ],
+    "tradeoffs": [
+     "Strict consistency without data loss vs cross-site write latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Patroni and etcd provide automated database failover within 30 seconds. Temporal.io workflow orchestration in the scheduling engine and Kafka DLQ reconciliation handle retries and idempotency, though dedicated billing claim transactional mechanics are minimally detailed.",
+    "elements": [
+     "PostgreSQL Cluster",
+     "Patroni",
+     "etcd",
+     "PgBouncer",
+     "Scheduling Engine",
+     "Message Broker",
+     "Reconciliation Controller"
+    ],
+    "sensitivity_points": [
+     "Patroni failover timeout thresholds",
+     "Temporal workflow retry policies for financial transactions"
+    ],
+    "tradeoffs": [
+     "Failover detection sensitivity vs false-positive leader elections"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "The Billing Service specified in Level 1 is omitted in Level 2 and Level 3, with billing responsibilities bundled into EMR/Scheduling Services and PostgreSQL. Changing a clearinghouse gateway requires altering the monolithic core service, violating component isolation.",
+    "elements": [
+     "Clearinghouse Gateway",
+     "EMR/Scheduling Services",
+     "Clinical API Gateway"
+    ],
+    "sensitivity_points": [
+     "Coupling between billing adapters and clinical record logic",
+     "Absence of an isolated billing integration service"
+    ],
+    "tradeoffs": [
+     "Simpler deployment architecture vs independent service modifiability"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Adding an audited demographic field is restricted to PostgreSQL, the Patient Record Manager component, and the UI. Because audit logging captures events automatically via logical decoding sidecars and Fluent Bit, the audit trail updates without modifying audit infrastructure.",
+    "elements": [
+     "Patient Record Manager",
+     "PostgreSQL Instance",
+     "Schema Registry",
+     "Audit Logging Sidecar"
+    ],
+    "sensitivity_points": [
+     "Schema Registry evolution compatibility mode",
+     "PostgreSQL schema migration procedures"
+    ],
+    "tradeoffs": [
+     "Dynamic CDC audit logging vs explicit application-level audit instrumentation"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Mandatory MFA delegation to the external Identity Provider prevents single-password access. Failed attempts and anomalies are intercepted by gateway authenticators and streamed via Fluent Bit directly to the SIEM and Anomaly Detection Service for immediate alerting.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Ingress Controller",
+     "Authentication Interceptor",
+     "Audit Logging Sidecar",
+     "Fluent Bit Forwarder",
+     "Anomaly Detection Service"
+    ],
+    "sensitivity_points": [
+     "Token introspection latency at gateways",
+     "SIEM ingestion pipeline reliability"
+    ],
+    "tradeoffs": [
+     "Strict synchronous authentication validation vs edge gateway latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Contextual Policy Engine (ABAC) and ReBAC Resolver validate access policies before data retrieval. Every request is captured by the Rust-based Local Rule Engine sidecar, signed via HSM Nitro Enclave, and persisted to WORM Storage with S3 Object Lock for 10-year retention.",
+    "elements": [
+     "Contextual Policy Engine",
+     "ReBAC Resolver",
+     "Audit Logging Sidecar",
+     "Local Rule Engine",
+     "Cryptographic Signer",
+     "WORM Storage",
+     "Retention Manager"
+    ],
+    "sensitivity_points": [
+     "WORM storage S3 Object Lock retention compliance enforcement",
+     "Local disk buffer durability during network partitions"
+    ],
+    "tradeoffs": [
+     "Immutable WORM storage cost vs regulatory legal hold compliance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Contextual Policy Engine",
+     "ReBAC Resolver",
+     "Reporting & Compliance Service",
+     "Data Masking Engine",
+     "Audit Logging Sidecar",
+     "WORM Storage"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Global Traffic Manager",
+     "Patroni",
+     "etcd",
+     "PostgreSQL Cluster",
+     "Redis Cluster",
+     "Circuit-Breaker Fallback Handler",
+     "Kafka Broker Cluster"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "WORM Storage",
+     "Retention Manager",
+     "pgBackRest"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Patient-Facing API Gateway",
+     "Patient Record Manager",
+     "PostgreSQL Cluster"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Engine",
+     "Resource Orchestrator",
+     "EMR/Scheduling Services"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR/Scheduling Services",
+     "Patient Record Manager",
+     "Audit Logging Sidecar",
+     "WORM Storage",
+     "PostgreSQL Cluster"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Billing Service",
+     "Clearinghouse Gateway",
+     "PostgreSQL Cluster"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Authentication Interceptor",
+     "Redis Cache"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Global Traffic Manager",
+     "Redis Cluster",
+     "Patroni",
+     "etcd",
+     "Circuit-Breaker Fallback Handler"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Redis Cache",
+     "Redis Cluster",
+     "Patient Record Manager",
+     "PgBouncer",
+     "Debezium CDC"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "HL7 FHIR Integration Engine",
+     "FHIR Transformation Component",
+     "FHIR Facade",
+     "Schema Registry"
+    ]
+   }
+  }
+ }
+}

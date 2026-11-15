@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(FinanceComplianceAuditors, "Finance/Compliance Auditors", "User / External Actor", "External users querying audit reports via HTTPS with Azure Active Directory SSO.")
+System_Ext(ClaimsDomainServices, "Claims Domain Services", "Microservice", "External system or container representing the domain services writing claims events.")
+
+Container_Boundary(ClaimsAuditStore, "Claims Audit Store") {
+    Component(AuditEventWriter, "Audit Event Writer", ".NET Core / Cosmos SDK", "Component handling PII tokenization and persistence into the immutable database container.")
+    Component(ComplianceQueryService, "Compliance Query Service", ".NET Core", "Component providing secure, role-based query endpoints for auditors.")
+    Component(CosmosDBChangeFeedProcessor, "Cosmos DB Change Feed Processor", ".NET Core", "Component powering asynchronous projections and archival triggers.")
+    Component(AuditArchivalWorker, "Audit Archival Worker", "Azure Function / .NET Core", "Component moving historical logs to cold storage.")
+    Component(ClaimsAuditDatabase, "Claims Audit Database", "Azure Cosmos DB", "Append-only, immutable database container for audit events.")
+    Component(AzureBlobStorage, "Azure Blob Storage", "Azure Blob Storage (WORM)", "Long-term WORM-compliant storage tier for 7-year retention.")
+    Component(AzureKeyVault, "Azure Key Vault", "Azure Key Vault", "Manages Customer-Managed Keys (CMK) and encryption keys.")
+}
+
+Rel(ClaimsDomainServices, AuditEventWriter, "Writes domain events via HTTPS (Document API)", "HTTPS")
+Rel(FinanceComplianceAuditors, ComplianceQueryService, "Queries audit reports via HTTPS with Azure Active Directory SSO (R-07)", "HTTPS / Azure AD")
+Rel(CosmosDBChangeFeedProcessor, AuditArchivalWorker, "Triggers historical data offloading via internal Azure messaging", "Azure Messaging")
+Rel(AuditArchivalWorker, AzureBlobStorage, "Archives immutable logs via HTTPS (Blob REST API)", "HTTPS")
+Rel(AuditEventWriter, ClaimsAuditDatabase, "Persists tokenized audit events", "Cosmos SDK")
+Rel(ComplianceQueryService, ClaimsAuditDatabase, "Queries audit logs", "Cosmos SDK")
+Rel(AuditEventWriter, AzureKeyVault, "Retrieves encryption keys and CMK", "HTTPS / REST")
+
+@enduml

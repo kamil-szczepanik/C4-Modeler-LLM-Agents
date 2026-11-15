@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the WORM Audit Log Store container
+
+Person_Ext(Microservices, "Microservices", "System components generating audit logs")
+
+Container_Boundary(worm_audit_log_store, "WORM Audit Log Store") {
+    Component(IngestionAPIrouter, "Ingestion API Router", "Go / Gin", "High-performance routing and schema validation for incoming audit logs.")
+    Component(EncryptionHashingEngine, "Encryption & Hashing Engine", "Tink / OpenSSL with PKCS#11 / HSM", "Performs AES-256 envelope encryption and Merkle tree generation for cryptographic sealing.")
+    Component(ImmutabilityEnforcer, "Immutability Enforcer", "AWS Object Lock / MinIO WORM mode", "Enforces 10-year immutable storage retention on sealed logs.")
+    Component(AuditQueryService, "Audit Query Service", "Go / Elasticsearch with ILM tiers", "Provides search indexing with hot-warm-cold-frozen ILM tiers for audit queries.")
+    Component(ReplicationSynchronizer, "Replication Synchronizer", "MinIO / S3 Cross-Region Replication", "Replicates immutable objects securely across regions.")
+}
+
+Rel(Microservices, IngestionAPIrouter, "Stream audit logs", "gRPC over mTLS / SPIFFE/SPIRE")
+Rel(IngestionAPIrouter, EncryptionHashingEngine, "Passes payloads for cryptographic sealing", "In-memory")
+Rel(EncryptionHashingEngine, ImmutabilityEnforcer, "Writes sealed logs", "S3 API with Object Lock")
+Rel(ImmutabilityEnforcer, ReplicationSynchronizer, "Replicates immutable objects", "Encrypted IPsec/WireGuard tunnels")
+Rel(AuditQueryService, ImmutabilityEnforcer, "Reads objects strictly via WORM-compliant APIs", "GET/LIST")
+
+@enduml

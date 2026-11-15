@@ -1,0 +1,36 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Core Telehealth Service container
+
+Container_Ext(api_gateway, "API Gateway", "API Gateway", "Routes incoming client requests.")
+System_Ext(video_consultation_service, "Video Consultation Service", "External Service", "Initiates video consultation rooms.")
+ContainerDb(cloud_sql, "Cloud SQL", "PostgreSQL", "Region-isolated relational data persistence.")
+ContainerDb(pub_sub, "Pub/Sub", "Google Cloud Pub/Sub", "Asynchronous messaging and telemetry streaming.")
+
+Container_Boundary(core_telehealth_service, "Core Telehealth Service") {
+    Component(patient_management_component, "Patient Management Component", "Go", "Handles patient data management and records.")
+    Component(consultation_orchestrator_component, "Consultation Orchestrator Component", "Go", "Orchestrates video consultations and manages low-bandwidth state.")
+    Component(prescription_coordinator_component, "Prescription Coordinator Component", "Node.js", "Coordinates e-prescriptions and integration flexibility.")
+    Component(data_residency_enforcement_middleware, "Data Residency Enforcement Middleware", "Go", "Wraps database queries to enforce strict regional data residency.")
+    Component(audit_logging_interceptor_component, "Audit Logging Interceptor Component", "Go", "Dispatches compliance events and publishes audit streams.")
+    Component(consent_verification_interceptor, "Consent Verification Interceptor", "Go", "Evaluates initial inbound requests for consent verification.")
+    Component(resilience_fallback_handler_component, "Resilience & Fallback Handler Component", "Go/Node.js", "Manages low-bandwidth state and deferred events.")
+}
+
+Rel(api_gateway, consent_verification_interceptor, "Initial inbound request evaluation", "gRPC over mTLS")
+Rel(consent_verification_interceptor, patient_management_component, "Forwards validated requests", "In-process function calls")
+Rel(consent_verification_interceptor, consultation_orchestrator_component, "Forwards validated requests", "In-process function calls")
+Rel(consultation_orchestrator_component, video_consultation_service, "Initiates rooms", "gRPC")
+Rel(consultation_orchestrator_component, audit_logging_interceptor_component, "Dispatches compliance events", "In-process function calls")
+Rel(prescription_coordinator_component, audit_logging_interceptor_component, "Dispatches compliance events", "In-process function calls")
+Rel(consultation_orchestrator_component, resilience_fallback_handler_component, "Manages low-bandwidth state", "In-process function calls")
+Rel(patient_management_component, data_residency_enforcement_middleware, "Wraps database queries", "In-process middleware")
+Rel(consultation_orchestrator_component, data_residency_enforcement_middleware, "Wraps database queries", "In-process middleware")
+Rel(prescription_coordinator_component, data_residency_enforcement_middleware, "Wraps database queries", "In-process middleware")
+Rel(data_residency_enforcement_middleware, cloud_sql, "Data access via region-pinned connection pools", "PostgreSQL Wire Protocol over TLS")
+Rel(audit_logging_interceptor_component, pub_sub, "Publishes audit streams and deferred events", "Cloud Pub/Sub API over TLS")
+Rel(resilience_fallback_handler_component, pub_sub, "Publishes audit streams and deferred events", "Cloud Pub/Sub API over TLS")
+
+@enduml

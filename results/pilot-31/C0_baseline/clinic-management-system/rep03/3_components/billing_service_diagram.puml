@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+System_Ext(EMR_Service, "EMR Service", "gRPC", "External system for electronic medical records.")
+System_Ext(Payment_Gateway, "Payment Gateway", "HTTPS", "External payment provider accessed via egress proxy.")
+
+Container_Boundary(Billing_Service, "Billing Service") {
+    Component(Invoice_Orchestrator, "Invoice Orchestrator", "Go", "Manages the lifecycle of clinical financial invoices and coordinates distributed transactions.")
+    Component(Claim_Processor, "Claim Processor", "Go", "Handles asynchronous insurance claim processing and validation logic.")
+    Component(Payment_Gateway_Adapter, "Payment Gateway Adapter", "Go", "Interfaces with external payment gateways using circuit breakers and egress proxies.")
+}
+
+Container(Reporting_Engine, "Reporting & Reconciliation Engine", "Go", "Dedicated component for analytical queries and financial snapshots.")
+Container(Audit_Log_Aggregator, "Audit Log Aggregator", "Go", "Captures, signs, and streams immutable financial audit trails.")
+ContainerDb(PostgreSQL, "PostgreSQL", "PostgreSQL", "Primary transactional database with read-replicas and TDE encryption.")
+Container(NATS_JetStream, "NATS JetStream", "NATS", "Message broker for asynchronous claim processing.")
+Container(Immutable_Event_Store, "Immutable Event Store", "S3 Glacier", "Encrypted, long-term storage for audit logs.")
+
+Rel(Invoice_Orchestrator, Claim_Processor, "Orchestrates claim flow", "Internal")
+Rel(Claim_Processor, NATS_JetStream, "Publishes claim events", "NATS")
+Rel(Payment_Gateway_Adapter, Payment_Gateway, "Sends outbound traffic via egress proxy", "HTTPS")
+Rel(Billing_Service, EMR_Service, "Communicates via Saga pattern and mTLS/gRPC", "gRPC/mTLS")
+Rel(Billing_Service, PostgreSQL, "Executes parameterized SQL queries", "SQL")
+Rel(Billing_Service, Audit_Log_Aggregator, "Streams logs via gRPC with cryptographic signing", "gRPC")
+Rel(Reporting_Engine, PostgreSQL, "Reads from read-replica via database proxies", "SQL")
+Rel(Audit_Log_Aggregator, Immutable_Event_Store, "Archives immutable audit trails", "HTTPS")
+
+@enduml

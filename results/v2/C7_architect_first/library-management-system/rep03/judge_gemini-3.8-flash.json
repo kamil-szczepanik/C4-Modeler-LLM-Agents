@@ -1,0 +1,245 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies functional requirements via the 'Catalog Management Component' for cataloguing items, the 'Circulation Engine Component' for loan operations, and the 'Web Application SPA' and 'Search Service' providing patron self-service portals and search functionality.",
+   "performance_efficiency": "To meet the <800ms search target (R-05), the architecture employs a dedicated 'Search Service' backed by 'Elasticsearch Client', edge caching in 'CDN / Edge Caching Layer', 'Caching & Compression Component', connection pooling via 'PgBouncer', and asynchronous offloading via 'Redis'.",
+   "compatibility": "The architecture cleanly integrates with external systems specified in context diagrams using standards like SAML 2.0/OIDC for 'Third-Party IdP / Academic SSO', REST/HTTPS for 'National Library Registry', 'Notification System', and tokenized PAN processing with 'Payment Gateway'.",
+   "usability": "Both 'Library Patron' and 'Librarian / Staff' user groups are accommodated through the 'Web Application SPA', which includes an 'Accessibility & Localization Provider' supporting WCAG 2.1 AA and i18n alongside a reactive 'Search & Catalog UI Component'.",
+   "reliability": "Reliability is well-supported by 'Telemetry & Resilience Middleware' (circuit breakers), 'PgBouncer' connection limits, and a 'Dead-Letter Queue' handled by 'Task Router & DLQ Handler'. Explicit multi-region or automated database replication across EU zones is not fully detailed.",
+   "security": "EU-only residency is enforced at 'Kubernetes Cloud Load Balancer' and 'Database'. Security mechanisms include 'pgcrypto' column encryption, 'pgaudit', 'Web Application Firewall (WAF) Layer', 'Authentication & Authorization Filter', and internal communication secured via gRPC with mTLS.",
+   "maintainability": "The design exhibits high modularity and separation of concerns across 'Core Domain Service', 'Search Service', and 'Background Worker'. Container internal components like 'Catalog Management Component' and 'Domain Event Publisher' maintain loose coupling using event-driven communication.",
+   "portability": "Portability is supported through containerized stacks and 'Kubernetes Deployment Infrastructure'. While cloud vendor neutrality is largely maintained across standard open technologies (PostgreSQL, Redis, FastAPI, React), deployment manifests and multi-cloud migration strategies are not explicitly specified."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 5,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 2.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture incorporates a multi-tier caching and search pipeline specifically designed for this latency target, including edge CDN caching, API Gateway caching/compression, and a dedicated Search Service backed by Elasticsearch.",
+    "elements": [
+     "CDN / Edge Caching Layer",
+     "API Gateway",
+     "Caching & Compression Component",
+     "Search Service",
+     "Elasticsearch Client"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch index sizing and shard query latency",
+     "Edge and API gateway cache hit ratios"
+    ],
+    "tradeoffs": [
+     "Aggressive caching improves response time but introduces eventual consistency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Catalogue mutations are isolated in the Core Domain Service and database, then propagated asynchronously via Redis to the Search Service Index Sync Listener, decoupling index updates from client search latency.",
+    "elements": [
+     "Catalog Management Component",
+     "Domain Event Publisher",
+     "Asynchronous Broker",
+     "Index Sync Listener",
+     "Search Service",
+     "Elasticsearch Client"
+    ],
+    "sensitivity_points": [
+     "Redis event throughput under concurrent catalog mutation spikes",
+     "Index refresh interval in Elasticsearch"
+    ],
+    "tradeoffs": [
+     "Asynchronous index updates guarantee write performance at the cost of immediate catalog consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Loan transactions are executed by the Core Domain Service against PostgreSQL, keeping circulation fully operational during search failures. Search index failover is supported by Elasticsearch clustering, though node recovery automation is not explicitly detailed.",
+    "elements": [
+     "Circulation Engine Component",
+     "Database",
+     "Search Service",
+     "Elasticsearch Client"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster replica count and automatic shard rebalancing",
+     "Search client circuit-breaking configuration"
+    ],
+    "tradeoffs": [
+     "Decoupling search storage from the primary database protects circulation but complicates availability management"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Web Application SPA is a client-side bundle distributed via CDN, while backend traffic passes through cloud load balancers and autoscaled Kubernetes infrastructure. The failure of a single frontend instance or gateway pod causes zero transaction loss.",
+    "elements": [
+     "CDN / Edge Caching Layer",
+     "Kubernetes Cloud Load Balancer",
+     "Kubernetes Deployment Infrastructure",
+     "Routing & Load Balancing Component",
+     "Database"
+    ],
+    "sensitivity_points": [
+     "Load balancer health check intervals and failover latency",
+     "Stateless session handling via JWTs"
+    ],
+    "tradeoffs": [
+     "Redundant load balancing increases infrastructure cost to achieve transparent failover"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "The system lacks a defined digital provider abstraction layer. Adding an e-book vendor requires modifying the Catalog Management Component, extending data models, and adding ingestion workflows in the Background Worker.",
+    "elements": [
+     "Catalog Management Component",
+     "Background Worker",
+     "Data Sync Processor",
+     "Database"
+    ],
+    "sensitivity_points": [
+     "Catalog domain model extensibility for heterogeneous digital resource schemas"
+    ],
+    "tradeoffs": [
+     "Hardcoded domain adapters simplify initial design but penalize modifiability for third-party integrations"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The Circulation Engine is implemented as a compiled Spring Service without an external rules engine, dynamic configuration store, or policy runtime. Changing loan rules between institution types requires code changes and deployment.",
+    "elements": [
+     "Circulation Engine Component",
+     "Core Domain Service"
+    ],
+    "sensitivity_points": [
+     "Coupling of circulation rule policies to compiled service business logic"
+    ],
+    "tradeoffs": [
+     "Embedding circulation rules in application code simplifies unit testing but requires redeployment for policy updates"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The architecture strictly designates EU-only traffic ingress, EU-hosted API Gateways, and EU-only residency on the PostgreSQL database. However, governance controls over external integrations like notification providers and federated SSO lack explicit regional pinning.",
+    "elements": [
+     "Kubernetes Cloud Load Balancer",
+     "API Gateway",
+     "Database",
+     "PostgreSQL Core (Relational Data Engine)",
+     "pgcrypto Extension"
+    ],
+    "sensitivity_points": [
+     "Regional routing configuration of ingress load balancers",
+     "Data export boundaries across third-party SaaS integrations"
+    ],
+    "tradeoffs": [
+     "Restricting compute and storage exclusively to EU regions limits deployment flexibility"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Access control is enforced at multiple layers: JWT authorization filters at the gateway, access control filters in the search pipeline, and row-level security (RLS) in PostgreSQL. Unauthorized queries are blocked and recorded via pgaudit and OpenTelemetry interceptors.",
+    "elements": [
+     "Authentication & Authorization Filter",
+     "Access Control Filter",
+     "PostgreSQL Core (Relational Data Engine)",
+     "pgaudit Extension",
+     "Telemetry & Audit Interceptor"
+    ],
+    "sensitivity_points": [
+     "PostgreSQL row-level security policy correctness",
+     "Granularity and tamper-resistance of pgaudit logs"
+    ],
+    "tradeoffs": [
+     "Fine-grained row-level security and pervasive database auditing incur CPU and query latency overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.6666666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Database",
+     "Kubernetes Cloud Load Balancer"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Core Domain Service",
+     "Catalog Management Component",
+     "Search & Catalog UI Component",
+     "Data Sync Processor"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "CDN / Edge Caching Layer",
+     "Search Service",
+     "Elasticsearch Client",
+     "Query Builder",
+     "Index Sync Listener",
+     "Caching & Compression Component",
+     "Search & Catalog UI Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

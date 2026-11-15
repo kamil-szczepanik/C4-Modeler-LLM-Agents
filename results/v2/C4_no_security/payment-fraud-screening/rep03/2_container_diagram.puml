@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening
+
+Person(FraudAnalyst, "Fraud Analyst & Risk Manager", "Internal users handling case management, reviewing suspicious payments, and monitoring false positive rates.")
+System_Ext(PaymentGateway, "Payment Gateway", "External system initiating payment authorization requests.")
+System_Ext(TokenizationService, "Tokenization / Vault Service", "External system handling card data encryption and tokenization.")
+
+System_Boundary(FraudScreeningSystem, "Real-Time Payment Fraud Screening") {
+    Container(AWSALB, "AWS ALB", "AWS Application Load Balancer", "Ingress layer with circuit breaker logic and AWS X-Ray distributed tracing.")
+    Container(ScoringEngine, "Scoring Engine Container", "Go / Rust, AWS ECS Fargate", "Processes real-time scoring for payment authorization requests.")
+    Container(CaseManagement, "Case Management & Reporting Container", "Node.js, AWS ECS Fargate", "Provides interface for fraud analysts and risk managers to manage cases and monitor false positive rates.")
+    ContainerDb(ElastiCacheRedis, "ElastiCache Redis", "Amazon ElastiCache Redis", "In-memory cache for ultra-low latency rules evaluation and zero-downtime hot-reloads via pub/sub.")
+    Container(SQSKinesis, "Amazon SQS / Kinesis Data Firehose", "Amazon SQS / Kinesis Data Firehose", "Buffering service for batching high-throughput audit events.")
+    ContainerDb(S3ObjectLock, "Amazon S3 Object Lock", "Amazon S3", "WORM-compliant tamper-evident storage for 7-year audit retention.")
+    Container(AmazonAthena, "Amazon Athena", "Amazon Athena", "Query engine for analyzing audit logs in S3.")
+    Container(CloudWatchPagerDuty, "AWS CloudWatch & PagerDuty", "AWS CloudWatch, PagerDuty", "Monitoring, composite alarms, and alerting for scoring outages.")
+}
+
+Rel(PaymentGateway, AWSALB, "Routes authorization requests", "HTTPS")
+Rel(AWSALB, ScoringEngine, "Forwards requests while applying circuit breaker fallback", "HTTP/gRPC")
+Rel(ScoringEngine, TokenizationService, "Requests tokenized card references", "Secure APIs")
+Rel(ScoringEngine, ElastiCacheRedis, "Fetches cached rules and scoring models in-memory", "Redis Protocol")
+Rel(ScoringEngine, SQSKinesis, "Streams transaction inputs, model versions, and explanations asynchronously", "HTTP")
+Rel(SQSKinesis, S3ObjectLock, "Batches and persists tamper-evident audit records", "AWS API")
+Rel(FraudAnalyst, CaseManagement, "Reviews suspicious payments and monitors false positive rates via UI", "HTTPS")
+Rel(AmazonAthena, S3ObjectLock, "Queries historical audit data for compliance audits", "SQL / AWS API")
+
+@enduml

@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Feature/Routing Service container
+
+Component(Claims_API_Gateway, "Claims API Gateway", "API Gateway", "External entry point routing API requests.")
+Component_Ext(Azure_App_Configuration, "Azure App Configuration", "Azure App Configuration with Managed Identity", "Stores migration flags using Managed Identity sync.")
+Component_Ext(Claims_Core_Services, "Claims Core Services", "Microservices", "Downstream processing target for modern claims.")
+Component_Ext(Integration_Anti_Corruption_Layer_ACA_Worker, "Integration / Anti-Corruption Layer (ACA Worker)", "Worker Service", "Downstream processing target for legacy claims.")
+
+Container_Boundary(Feature_Routing_Service, "Feature/Routing Service") {
+    Component(Routing_Controller, "Routing Controller", ".NET 8 / C# REST API", "REST API entry point handling inbound API Gateway requests, JSON schema validation, and audit logging.")
+    Component(Feature_Toggle_Engine, "Feature Toggle Engine", ".NET 8 / C# In-Memory Cache", "In-memory cache evaluating claim types against migration flags.")
+    Component(Routing_Dispatcher, "Routing Dispatcher", ".NET 8 / C# with Polly", "Forwards requests using Polly policies and circuit breakers.")
+    Component(Audit_Logger_Component, "Audit Logger Component", ".NET 8 / C# Middleware", "Middleware emitting routing decisions to Azure Monitor.")
+}
+
+Rel(Claims_API_Gateway, Routing_Controller, "Routes API requests", "HTTPS / JSON, TLS 1.3, JWT")
+Rel(Routing_Controller, Feature_Toggle_Engine, "Checks claim status", "In-Process")
+Rel(Feature_Toggle_Engine, Azure_App_Configuration, "Syncs migration flags", "HTTPS, Managed Identity")
+Rel(Routing_Dispatcher, Claims_Core_Services, "Forwards modern claims", "HTTPS / JSON, mTLS")
+Rel(Routing_Dispatcher, Integration_Anti_Corruption_Layer_ACA_Worker, "Forwards legacy claims", "HTTPS / JSON, mTLS")
+Rel(Routing_Controller, Audit_Logger_Component, "Emits routing decisions", "In-Process")
+
+@enduml

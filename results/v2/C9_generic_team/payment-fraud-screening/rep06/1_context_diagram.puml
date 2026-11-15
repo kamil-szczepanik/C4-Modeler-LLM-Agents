@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening
+
+Person(FraudAnalysts, "Fraud Analysts", "Fraud analysts who access the case management interface to review suspicious transactions.")
+System_Ext(PaymentGateway, "Payment Gateway", "External system that invokes the payment fraud screening system for card-not-present authorizations.")
+
+System_Boundary(RealTimePaymentFraudScreening, "Real-Time Payment Fraud Screening") {
+    Container(APIGatewaywithFailOpenCircuitBreaker, "API Gateway with Fail-Open Circuit Breaker", "HTTPS, OpenAPI", "Gateway routing incoming synchronous scoring requests with fail-open capabilities.")
+    Container(StatelessScoringService, "Stateless Scoring Service", "Rust/Go, ONNX, gRPC/HTTP", "Stateless service using Rust/Go and embedded ONNX model runtimes for scoring.")
+    Container(CaseManagementandAuditService, "Case Management and Audit Service", "HTTPS", "Service providing case management interface and audit handling.")
+    Container(DecoupledConfigurationStore, "Decoupled Configuration Store", "Managed Store", "Store for rules and model weights.")
+    Container(ManagedDatabaseWORMBjectStorage, "Managed Database / WORM Object Storage", "DynamoDB / Aurora Serverless / S3 WORM", "Storage for 7-year tamper-evident audit logs.")
+    Container(DeadLetterQueuesDLQs, "Dead-Letter Queues (DLQs)", "AWS SQS", "Queues for asynchronous isolation of audit events and case data.")
+}
+
+Rel(PaymentGateway, APIGatewaywithFailOpenCircuitBreaker, "Invokes payment gateway via versioned OpenAPI contracts", "HTTPS")
+Rel(APIGatewaywithFailOpenCircuitBreaker, StatelessScoringService, "Routes synchronous scoring requests", "gRPC/HTTP")
+Rel(StatelessScoringService, DecoupledConfigurationStore, "Reads models and rules", "Internal API")
+Rel(StatelessScoringService, DeadLetterQueuesDLQs, "Asynchronously pushes audit events and case data", "AWS SDK")
+Rel(StatelessScoringService, ManagedDatabaseWORMBjectStorage, "Persists audit logs and case data", "AWS SDK")
+Rel(FraudAnalysts, CaseManagementandAuditService, "Accesses case management interface", "HTTPS")
+
+@enduml

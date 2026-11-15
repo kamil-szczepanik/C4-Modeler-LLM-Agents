@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening system
+
+Person(FraudAnalystComplianceOfficer, "Fraud Analyst & Compliance Officer", "Internal users reviewing suspicious transactions and auditing historical decisions.")
+Person(MerchantOperationsManagerEndCustomer, "Merchant Operations Manager & End-Customer", "Secondary business stakeholders monitoring false positives and ensuring transaction privacy.")
+
+System_Ext(MerchantPaymentGateway, "Merchant / Payment Gateway", "Sends payment authorizations for real-time fraud screening.")
+
+System_Boundary(RealTimePaymentFraudScreeningsystem, "Real-Time Payment Fraud Screening system") {
+    Container(AWSAPIGatewayIngress, "AWS API Gateway / Ingress", "AWS API Gateway, AWS ACM Private CA", "Handles ingress traffic with mTLS via AWS ACM Private CA and circuit breaking.")
+    Container(FraudScreeningEngine, "Fraud Screening Engine", "Go/Rust, Amazon ECS on EC2", "Containerized stateless service performing high-throughput scoring.")
+    Container(CaseManagementReportingFrontend, "Case Management & Reporting Frontend", "Amazon React SPA, Amazon CloudFront, Amazon S3", "Single-page application for fraud analysts to review cases and query compliance reports.")
+    Container(CaseManagementReportingBackend, "Case Management & Reporting Backend", "Python FastAPI", "Backend service supporting case management workflows and compliance queries.")
+    Container(AuditComplianceWorker, "Audit & Compliance Worker", "Python, Amazon SQS", "Asynchronous worker processing events for tamper-evident logging.")
+    ContainerDb(AmazonElastiCacheforRedis, "Amazon ElastiCache for Redis", "Redis, Amazon ElastiCache", "In-memory data store for low-latency feature queries.")
+    ContainerDb(AWSS3ObjectLock, "AWS S3 Object Lock", "AWS S3 Object Lock, AWS KMS", "Cryptographically signed audit log storage ensuring 7-year retention.")
+    Container(AmazonAthena, "Amazon Athena", "Amazon Athena", "Serverless analytics for compliance queries and merchant reporting.")
+    Container(AWSSecretsManager, "AWS Secrets Manager", "AWS Secrets Manager", "Manages dynamic credentials and secrets securely.")
+    Container(AmazonECR, "Amazon ECR", "Amazon ECR", "Container registry for storing service images.")
+}
+
+Rel(MerchantPaymentGateway, AWSAPIGatewayIngress, "Forwards authorization requests", "HTTPS/REST")
+Rel(FraudAnalystComplianceOfficer, CaseManagementReportingFrontend, "Reviews suspicious transactions and audits historical decisions", "HTTPS")
+Rel(CaseManagementReportingFrontend, CaseManagementReportingBackend, "API calls for case management and reports", "HTTPS/REST")
+Rel(AWSAPIGatewayIngress, FraudScreeningEngine, "Invokes real-time scoring", "mTLS over private VPC subnets")
+Rel(FraudScreeningEngine, AmazonElastiCacheforRedis, "Queries cached features in-memory", "Redis Protocol")
+Rel(FraudScreeningEngine, AmazonElastiCacheforRedis, "Reads/Writes cached features", "Redis Protocol")
+Rel(FraudScreeningEngine, AuditComplianceWorker, "Publishes decision events asynchronously", "AWS SDK / SQS API")
+Rel(AuditComplianceWorker, AWSS3ObjectLock, "Stores cryptographically signed audit logs", "AWS SDK / S3 API with AWS KMS")
+Rel(CaseManagementReportingBackend, AmazonAthena, "Queries historical audit logs for compliance and reporting", "AWS SDK / Athena API")
+
+@enduml

@@ -1,0 +1,336 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 5,
+   "security": 4,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All functional requirements are explicitly addressed by dedicated components: 'Registration Component' (R-01), 'Scheduling Component' with 'Distributed Locking Manager' (R-02), 'EMR Component' with audit pipelines (R-03), and 'Billing Component' with 'Background Worker Container' for insurance claims (R-04).",
+   "performance_efficiency": "Sub-second P95 latency is directly enabled by the 'Read-Model / Query Container' implementing CQRS, the 'Cache Manager' utilizing Redis cache-aside, and heavy task offloading via the 'Asynchronous Message Broker' and 'Background Worker Container'.",
+   "compatibility": "Interoperability is thoroughly handled by the 'Integration / Adapter Container', which provides an 'HL7 FHIR REST Adapter' and 'Schema Translation Engine' specifically for exchanging data with 'External Labs/Imaging' and external 'Insurance Providers'.",
+   "usability": "Although 'Patients', 'Practitioners', and 'Administrators' are defined as actors routing through 'API Gateway Container', no frontend applications, user interfaces, or clinical portals are modeled to serve their distinct interaction needs.",
+   "reliability": "Active-active 99.99% availability is backed by 'Active-Active Replication Engine' spanning 'On-Premises Kubernetes' and 'AWS eu-central-1 Region'. Circuit breaking in 'Envoy Sidecars' and 10-year retention workflows in 'Data Archival & Migration Container' guarantee robust fault tolerance and recovery.",
+   "security": "MFA and authentication are governed via 'IAM' and 'API Gateway Container', mTLS is enforced by 'Envoy Sidecars', and 'Audit Emission Component' ensures accountability. However, concrete implementation details for AES-256 encryption at rest are omitted.",
+   "maintainability": "High maintainability is achieved through loosely coupled services within 'Core Domain Containers', asynchronous integration via 'Asynchronous Message Broker', contract governance through 'Schema Registry', and clear CQRS segregation in 'Read-Model / Query Container'.",
+   "portability": "Deployment across the required hybrid targets ('On-Premises Kubernetes' and 'AWS eu-central-1 Region') is fully enabled through standard containerization, service mesh sidecars ('Envoy Sidecars'), and cross-environment replication mechanisms."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 3.0,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture separates read traffic using a dedicated Read-Model / Query Container implementing CQRS and a Redis Cache Manager. This decouples peak morning read queries from transactional microservices, ensuring sub-second response times.",
+    "elements": [
+     "API Gateway Container",
+     "Envoy Proxy Router",
+     "Read-Model / Query Container",
+     "Query Controller",
+     "Query Service",
+     "Cache Manager"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in Redis under concurrent query bursts",
+     "Read-model synchronization latency from Kafka events"
+    ],
+    "tradeoffs": [
+     "Eventual consistency in EMR views versus high-throughput sub-second read performance"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "HL7 FHIR results are accepted by the Integration / Adapter Container and published to Kafka via transactional outbox. Asynchronous message buffering prevents ingest traffic from impacting the Read-Model queries, easily meeting throughput and latency requirements.",
+    "elements": [
+     "Integration / Adapter Container",
+     "HL7 FHIR REST Adapter",
+     "Schema Translation Engine",
+     "Outbox Event Publisher",
+     "Asynchronous Message Broker",
+     "Background Worker Container"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer throughput and worker concurrency",
+     "Schema translation processing latency per HL7 payload"
+    ],
+    "tradeoffs": [
+     "Asynchronous ingestion latency versus complete isolation of query screen performance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "The architecture defines active-active hybrid regions and Redis replication, but cross-site data synchronization relies on asynchronous message brokers. In an abrupt cloud outage, asynchronous replication cannot strictly guarantee zero data loss without explicit synchronous persistence or distributed consensus.",
+    "elements": [
+     "AWS eu-central-1 Region",
+     "On-Premises Kubernetes",
+     "Asynchronous Event Broker",
+     "Session & State Management Container",
+     "Active-Active Replication Engine"
+    ],
+    "sensitivity_points": [
+     "Cross-site replication lag between cloud and on-premises",
+     "Failover detection and dynamic DNS or BGP traffic redirection"
+    ],
+    "tradeoffs": [
+     "Zero data loss guarantees versus low inter-region write latencies"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "While Kafka manual commits, transactional outbox, and Redis distributed locks support idempotency, operational relational databases are not modeled in the container tier. The absence of concrete database failover and transactional semantics leaves failover recovery within 30 seconds partially unverified.",
+    "elements": [
+     "Core Domain Containers",
+     "Billing Component",
+     "Distributed Locking Manager",
+     "Outbox Event Publisher",
+     "Background Worker Container"
+    ],
+    "sensitivity_points": [
+     "Database cluster failover time and connection pool recovery",
+     "Idempotent claim deduplication state handling"
+    ],
+    "tradeoffs": [
+     "Strict transactional consistency versus service availability during database failover"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Integration with external insurance clearinghouses is isolated within the Integration / Adapter Container using the Schema Translation Engine and REST adapters. Core domain services and EMR components remain decoupled and completely untouched.",
+    "elements": [
+     "Integration / Adapter Container",
+     "HL7 FHIR REST Adapter",
+     "Schema Translation Engine",
+     "Outbox Event Publisher",
+     "Insurance Providers"
+    ],
+    "sensitivity_points": [
+     "Expressiveness and maintainability of declarative transformation templates",
+     "Compatibility of external provider interfaces with FHIR/REST adapter"
+    ],
+    "tradeoffs": [
+     "Runtime transformation engine overhead versus decoupling domain microservices from external formats"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Adding an audited demographic field modifies the Registration Component, Schema Registry contracts, and the downstream audit logger. The modular microservice design and declarative event schema governance constrain modifications well within the three-component limit.",
+    "elements": [
+     "Core Domain Containers",
+     "Registration Component",
+     "Schema Registry",
+     "Centralized Audit Logging"
+    ],
+    "sensitivity_points": [
+     "Schema Registry backward and forward compatibility policies",
+     "Decoupled audit schema propagation across services"
+    ],
+    "tradeoffs": [
+     "Schema validation overhead across boundaries versus localized service changes"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The API Gateway, external IAM, and Policy Enforcement Point enforce mandatory MFA and TLS 1.3 encryption on edge ingress. Failed authentication attempts are intercepted before reaching domain services and emitted to centralized audit logging.",
+    "elements": [
+     "API Gateway Container",
+     "Identity & Access Management (IAM)",
+     "Policy Enforcement Point",
+     "Centralized Audit Logging Service",
+     "Envoy Proxy Router"
+    ],
+    "sensitivity_points": [
+     "Strict enforcement of multi-factor authentication at API Gateway edge",
+     "Real-time processing latency of security alert sinks"
+    ],
+    "tradeoffs": [
+     "Stringent authentication validation overhead versus rapid edge threat mitigation"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "The system includes Policy Enforcement Points and 10-year archival via the Data Archival & Migration Container. However, the Read-Model / Query Container lacks an explicit audit emission component, risking unlogged EMR screen reads during direct query retrieval.",
+    "elements": [
+     "Read-Model / Query Container",
+     "Query Controller",
+     "Policy Enforcement Point",
+     "Centralized Audit Logging",
+     "Data Archival & Migration Container",
+     "DR Storage Targets"
+    ],
+    "sensitivity_points": [
+     "Synchronous policy evaluation and audit emission on fast read paths",
+     "Tamper resistance and retention enforcement in long-term archival storage"
+    ],
+    "tradeoffs": [
+     "Strict audit logging on every read operation versus sub-second query latency"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "EMR Component",
+     "Centralized Audit Logging",
+     "Audit Emission Component",
+     "Audit Dispatcher Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "AWS eu-central-1 Region",
+     "On-Premises Kubernetes",
+     "Active-Active Replication Engine",
+     "Envoy Sidecars",
+     "Proxy Instance"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Data Archival & Migration Container",
+     "Archival Controller",
+     "Migration Processor",
+     "DR Storage"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Registration Component",
+     "Core Domain Containers"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Scheduling Component",
+     "Distributed Locking Manager"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Component",
+     "Centralized Audit Logging",
+     "Audit Emission Component",
+     "Audit Dispatcher Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Component",
+     "Background Worker Container",
+     "Insurance Providers"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Patients",
+     "Practitioners",
+     "IAM",
+     "API Gateway Container"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "AWS eu-central-1 Region",
+     "On-Premises Kubernetes",
+     "Active-Active Replication Engine",
+     "Envoy Sidecars",
+     "Session & State Management Container"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Read-Model / Query Container",
+     "Query Controller",
+     "Query Service",
+     "Cache Manager"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "External Labs/Imaging",
+     "Integration / Adapter Container",
+     "HL7 FHIR REST Adapter"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

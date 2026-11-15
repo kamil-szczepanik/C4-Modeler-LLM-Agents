@@ -1,0 +1,269 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.875,
+  "justifications": {
+   "functional_suitability": "R-01 is covered by Catalog Management Component (physical and digital items), Catalog Schema, Search Service, and the DRM Worker for digital content. Circulation Workflow and Patron Account & Policy Engine add scope. Minor gaps: no explicit digital item storage and no librarian-specific catalogue UI.",
+   "performance_efficiency": "Dedicated Search Service (OpenSearch) fed asynchronously by Kafka, Response Caching Component, Redis Cache Manager, Search Analytics & Caching Interceptor, PgBouncer pooling and async workers target the 800ms p99. Gaps: no horizontal scaling or autoscaling, no load-test evidence, and a cache stampede lock.",
+   "compatibility": "Integrates EU-Tenant IdP (OIDC via oidc-client-ts), EU Payment Gateway, Notification Service and DRM Provider over REST/HTTPS, isolated in Notification & Payment Worker / DRM Worker. Schema Registry gives contract compatibility. Gaps: no library standards (MARC, Z39.50, SIP2), and no adapter abstraction.",
+   "usability": "Web Application (SPA) serves patrons and staff with UI Presentation Layer, Router & State Management and OIDC login. Gaps: no separate staff interface, no accessibility or multilingual mechanisms, and no mobile or kiosk channels.",
+   "reliability": "Primary/Standby Node with streaming replication and Barman PITR, Kafka Partition Replicas Manager, Worker DLQ & Retry Handler, idempotency keys in Worker State Cache Manager, and health actuators. Gaps: Redis, API Gateway and OpenSearch redundancy are unspecified, and no failover automation is described.",
+   "security": "TLS 1.3 throughout, API Gateway JWT validation with Spring Security RBAC, rate limiting, Kafka ACL Authorizer, Tenant Security Context Filter, Row-Level Security, pgcrypto/pgaudit encryption, Audit Schema, Data Governance & Audit Interceptor, and EU-restricted endpoints address EU residency and GDPR.",
+   "maintainability": "Clear decomposition into gateway, domain service, search, workers and broker, with decoupled Kafka events, Schema Registry contracts, Flyway Database Migration Component and OpenTelemetry. Gaps: the Core Domain Service is a monolith containing catalogue and circulation, and some component diagrams contain inconsistencies and mixed responsibilities.",
+   "portability": "Open-source, standard technologies (PostgreSQL, Kafka, OpenSearch, Redis) with a Kubernetes Platform Monitor imply containerisation. Gaps: no deployment view, no named hosting or EU cloud region, no IaC, and vendor-neutrality for the external services is not shown."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 2,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.5,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 2.5,
+   "Modifiability": 2.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "elements": [
+     "API Gateway",
+     "Response Caching Component",
+     "Search Service",
+     "OpenSearch",
+     "Caching Layer",
+     "Query Parser & Router"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio for search queries",
+     "OpenSearch cluster sizing under 2,000 concurrent queries"
+    ],
+    "tradeoffs": [
+     "Caching improves latency but risks stale results",
+     "Rate limiting may throttle legitimate peak load"
+    ],
+    "justification": "Dedicated OpenSearch, gateway and Redis caching, and rate limiting directly support the P99 target. However, no capacity sizing, replica or shard configuration, or load-test evidence is given, so the target is plausible but unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "elements": [
+     "Core Domain Service",
+     "Domain Event Publisher",
+     "Message Broker",
+     "Index Synchronization Worker",
+     "Search Service",
+     "Cache Invalidation Listener"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer lag against the 5-minute freshness limit",
+     "Index refresh interval versus indexing load"
+    ],
+    "tradeoffs": [
+     "Async indexing isolates search latency but adds eventual consistency",
+     "Cache invalidation lowers staleness but costs cache hit ratio"
+    ],
+    "justification": "Event-driven indexing via Kafka decouples writes from search, and invalidation limits staleness. Lag monitoring exists. Dual paths (Search Integration Facade, Domain Event Publisher) are ambiguous, and no explicit freshness guarantee is stated."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "elements": [
+     "Search Service",
+     "OpenSearch",
+     "Message Broker",
+     "Database",
+     "Backup & Replication Manager",
+     "Index Lifecycle Manager"
+    ],
+    "sensitivity_points": [
+     "OpenSearch replica and shard allocation",
+     "Failover time of the PostgreSQL standby"
+    ],
+    "tradeoffs": [
+     "Replicas improve availability but increase cost and indexing overhead",
+     "Async replication risks losing recent transactions"
+    ],
+    "justification": "Kafka replay and PostgreSQL standby support recovery and avoid lost loans. But no OpenSearch multi-node cluster or replica is shown, and no automatic DB failover is specified. A search node failure's impact is unaddressed."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Web Application (SPA)",
+     "API Gateway",
+     "Core Domain Service",
+     "Routing & Load Balancing Filter"
+    ],
+    "sensitivity_points": [
+     "Number of SPA and gateway instances deployed",
+     "Health-check detection time"
+    ],
+    "tradeoffs": [
+     "Stateless SPA simplifies redundancy but needs an external load balancer",
+     "Redundancy raises hosting cost"
+    ],
+    "justification": "The SPA is stateless, which helps, but no multiple instances, external load balancer, or deployment topology is modelled for the portal. The gateway's load balancing is downstream only. Redundancy is therefore implied, not demonstrated."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Notification & Payment Worker / DRM Worker",
+     "DRM License Manager",
+     "Catalog Management Component",
+     "Digital Content Repository / DRM Provider"
+    ],
+    "sensitivity_points": [
+     "Provider-specific logic leaking into catalogue schema",
+     "Abstraction of the DRM License Manager"
+    ],
+    "tradeoffs": [
+     "Shared worker container couples providers' deployment and failure",
+     "Isolating integrations aids change but adds services"
+    ],
+    "justification": "DRM License Manager isolates provider access, but it handles licensing, not catalogue ingestion. No catalogue import or provider adapter abstraction exists, so adding a provider's items likely touches Catalog Management and the worker."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "elements": [
+     "Patron Account & Policy Engine Component",
+     "Circulation Workflow Component",
+     "Database"
+    ],
+    "sensitivity_points": [
+     "Whether policy rules are stored as data or code",
+     "Per-library tenant configuration model"
+    ],
+    "tradeoffs": [
+     "Configurable rules add flexibility but increase validation complexity",
+     "Spring-coded policies are simple but need redeployment"
+    ],
+    "justification": "A policy engine exists but is a Spring service in Java, with no stated externalized rule configuration, per-library tenancy, or runtime admin interface. Rule changes would likely require code redeployment."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "EU-Tenant Identity Provider (IdP)",
+     "EU-Hosted Payment Gateway",
+     "Data Governance & Audit Interceptor",
+     "Database",
+     "Notification Service",
+     "Digital Content Repository / DRM Provider"
+    ],
+    "sensitivity_points": [
+     "Notification Service lacks an explicit EU restriction at container level",
+     "Cloud region pinning is not modelled"
+    ],
+    "tradeoffs": [
+     "EU-only providers limit vendor choice",
+     "Strict residency may raise cost and complicate global tooling"
+    ],
+    "justification": "EU-restricted externals and a governance interceptor help. However, no deployment or region mechanism enforces residency, and the container-level Notification Service lacks the EU constraint. The interceptor is described vaguely, so prevention by design is not shown."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Authentication & Authorization Filter",
+     "API Gateway",
+     "User Management Schema",
+     "Audit Schema",
+     "Data Governance & Audit Interceptor",
+     "Circulation Workflow Component"
+    ],
+    "sensitivity_points": [
+     "Ownership check in Circulation Workflow",
+     "Audit logging of denied attempts"
+    ],
+    "tradeoffs": [
+     "Row-level security strengthens isolation but adds query overhead",
+     "Detailed audit logging increases storage and GDPR burden"
+    ],
+    "justification": "The gateway enforces RBAC, Row-Level Security exists on user schema, and audit components exist. But no explicit object-level ownership check on loan history is described, and logging of denied attempts is not explicit."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "EU-Tenant Identity Provider (IdP)",
+     "EU-Hosted Payment Gateway",
+     "Database",
+     "Data Governance & Audit Interceptor",
+     "Index Lifecycle Manager",
+     "Database Audit & Encryption Manager",
+     "Backup & Replication Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Core Domain Service",
+     "Catalog Management Component",
+     "Catalog Schema",
+     "Database",
+     "Digital Content Repository / DRM Provider",
+     "DRM License Manager",
+     "Search Service"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Service",
+     "Query Parser & Router",
+     "Search Analytics & Caching Interceptor",
+     "Index Synchronization Worker",
+     "Response Caching Component",
+     "Caching Layer",
+     "Message Broker",
+     "API Gateway"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

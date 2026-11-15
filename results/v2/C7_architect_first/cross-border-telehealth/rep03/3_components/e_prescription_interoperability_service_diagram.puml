@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the E-Prescription & Interoperability Service container
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway")
+System_Ext(external_pharmacies, "External Pharmacies", "External pharmacies and national gateways")
+
+Container_Boundary(eprescription_service, "E-Prescription & Interoperability Service") {
+    Component(Prescription_Orchestrator_Component, "Prescription Orchestrator Component", "Java / Spring Boot", "Manages prescription lifecycles and coordinates regional delegation.")
+    Component(US_FHIR_Adapter_Component, "US FHIR Adapter Component", "Java / Spring Boot, Resilience4j, HL7 FHIR", "Handles US regional format translations and external pharmacy communication.")
+    Component(EU_National_Gateway_Adapter_Component, "EU National Gateway Adapter Component", "Java / Spring Boot, Resilience4j", "Handles EU national gateway integrations and payload transformations.")
+    Component(Prescription_Status___Audit_Component, "Prescription Status & Audit Component", "Java / Spring Boot, GCP KMS, Cloud Storage WORM", "Manages prescription status updates, immutable audit logging, and secure data protection.")
+    Component(Google_Cloud_Pub_Sub, "Google Cloud Pub/Sub", "Google Cloud Pub/Sub", "At-least-once asynchronous event delivery with partition ordering for delivery status updates.")
+    Component(Cloud_SQL_PostgreSQL, "Cloud SQL PostgreSQL", "Cloud SQL PostgreSQL", "Persists operational data and status changes via SSL-enforced TCP.")
+    Component(GCP_KMS___Cloud_Storage_WORM, "GCP KMS & Cloud Storage WORM", "GCP KMS, Cloud Storage WORM", "Provides envelope encryption for secure data-at-rest and tamper-resistant immutable audit logging.")
+}
+
+Rel(api_gateway, Prescription_Orchestrator_Component, "Invokes prescription creation", "gRPC")
+Rel(Prescription_Orchestrator_Component, US_FHIR_Adapter_Component, "Delegates payload transformation", "Internal Java Interfaces")
+Rel(Prescription_Orchestrator_Component, EU_National_Gateway_Adapter_Component, "Delegates payload transformation", "Internal Java Interfaces")
+Rel(US_FHIR_Adapter_Component, external_pharmacies, "Dispatches messages", "HTTPS, REST, HL7 FHIR over mTLS")
+Rel(EU_National_Gateway_Adapter_Component, external_pharmacies, "Dispatches messages", "HTTPS, REST, HL7 FHIR over mTLS")
+Rel(US_FHIR_Adapter_Component, Prescription_Status___Audit_Component, "Publishes delivery status updates", "Google Cloud Pub/Sub")
+Rel(EU_National_Gateway_Adapter_Component, Prescription_Status___Audit_Component, "Publishes delivery status updates", "Google Cloud Pub/Sub")
+Rel(Prescription_Status___Audit_Component, Cloud_SQL_PostgreSQL, "Persists audit logs and status changes", "SSL-enforced TCP, PostgreSQL")
+@enduml

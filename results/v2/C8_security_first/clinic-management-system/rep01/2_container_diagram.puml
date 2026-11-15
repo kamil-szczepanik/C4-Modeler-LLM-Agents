@@ -1,0 +1,56 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Receptionist, "Clinic Receptionist / Admin", "Manages patient admissions, scheduling, and front-desk workflows.")
+Person(Clinician, "Clinician (Doctor / Nurse)", "Accesses and updates electronic medical records (EMR) and clinical workflows.")
+Person(BillingSpecialist, "Billing Specialist", "Handles billing, payments, and financial interactions.")
+Person(Patient, "Patient", "Interacts with the clinic for appointments, care, and billing.")
+Person(Admin, "Hospital / Clinic Administrator", "Oversees system administration and clinic operations.")
+Person(Auditor, "External Auditors / Compliance Officers", "Reviews system logs and compliance data for regulatory standards.")
+
+System_Ext(LabSystem, "External Lab & Imaging Systems", "Provides laboratory results and medical imaging data.")
+System_Ext(PaymentGateway, "Insurance Claim Processors / Payment Gateways", "Processes insurance claims and electronic payments.")
+System_Ext(IdP, "Identity Provider (IdP) with local on-premise cache proxy", "Handles authentication, authorization, and token caching.")
+
+System_Boundary(ClinicSystem, "Clinic Management System") {
+    Container(Gateway, "Envoy / NGINX API Gateway", "Envoy / NGINX", "Acts as the primary entry point, terminating TLS and routing incoming client requests.")
+    Container(IntakeContainer, "Patient Intake Container", "Python / FastAPI", "Handles patient registration and intake workflows.")
+    Container(SchedulingContainer, "Scheduling Engine Container", "Java / Spring Boot", "Manages appointment bookings, calendars, and scheduling logic.")
+    Container(EMRContainer, "EMR Workspace Container", "Go / gRPC", "Manages electronic medical records with high performance and sub-second loads.")
+    Container(BillingContainer, "Billing & Claims Container", "Node.js / TypeScript", "Processes billing, invoices, and insurance claims.")
+    Container(FHIRMediator, "Integration & FHIR Mediator", "Apache Camel K / Java", "Mediates and standardizes data exchange using HL7 FHIR APIs.")
+    ContainerDb(PrimaryDB, "Primary Database", "PostgreSQL with Citus", "Stores core relational and distributed operational data.")
+    Container(EventBroker, "Event Broker", "Redpanda", "Handles asynchronous event streaming across microservices.")
+    Container(Observability, "Observability Stack", "OpenTelemetry, Grafana Mimir/Tempo, Falco", "Provides monitoring, metrics, tracing, and runtime security.")
+}
+
+Rel(Receptionist, Gateway, "Manages admissions and scheduling", "HTTPS / TLS 1.3")
+Rel(Clinician, Gateway, "Accesses and updates EMR and clinical workflows", "HTTPS / TLS 1.3")
+Rel(BillingSpecialist, Gateway, "Manages billing and financial processes", "HTTPS / TLS 1.3")
+Rel(Patient, Gateway, "Views appointments and health records", "HTTPS / TLS 1.3")
+Rel(Admin, Gateway, "Administers platform operations", "HTTPS / TLS 1.3")
+Rel(Auditor, Gateway, "Audits compliance and logs", "HTTPS / TLS 1.3")
+
+Rel(Gateway, IntakeContainer, "Routes intake requests", "HTTP/2 / gRPC over mTLS")
+Rel(Gateway, SchedulingContainer, "Routes scheduling requests", "HTTP/2 / gRPC over mTLS")
+Rel(Gateway, EMRContainer, "Routes EMR requests", "HTTP/2 / gRPC over mTLS")
+Rel(Gateway, BillingContainer, "Routes billing requests", "HTTP/2 / gRPC over mTLS")
+Rel(Gateway, IdP, "Validates authentication and tokens", "OAuth 2.0/OIDC")
+
+Rel(IntakeContainer, PrimaryDB, "Reads and writes patient intake data", "Encrypted internal TCP")
+Rel(SchedulingContainer, PrimaryDB, "Reads and writes appointment data", "Encrypted internal TCP")
+Rel(EMRContainer, PrimaryDB, "Reads and writes EMR data", "Encrypted internal TCP")
+Rel(BillingContainer, PrimaryDB, "Reads and writes billing data", "Encrypted internal TCP")
+
+Rel(IntakeContainer, EventBroker, "Publishes intake events", "Encrypted internal TCP")
+Rel(SchedulingContainer, EventBroker, "Publishes scheduling events", "Encrypted internal TCP")
+Rel(EMRContainer, EventBroker, "Publishes EMR events", "Encrypted internal TCP")
+Rel(BillingContainer, EventBroker, "Publishes billing events", "Encrypted internal TCP")
+
+Rel(EMRContainer, LabSystem, "Exchanges lab and imaging data", "HL7 FHIR APIs over HTTPS")
+Rel(BillingContainer, PaymentGateway, "Submits insurance claims and processes payments", "HTTPS")
+
+@enduml

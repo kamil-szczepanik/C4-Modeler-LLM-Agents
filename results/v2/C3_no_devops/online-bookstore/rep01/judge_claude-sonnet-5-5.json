@@ -1,0 +1,355 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.625,
+  "justifications": {
+   "functional_suitability": "Catalog & Search Container (Search Controller, OpenSearch), Cart Management and Checkout Orchestrator, Review Controller & Service, and Recommendation Controller & Service cover R-01 to R-04. Gaps: the rating aggregation is unclear, and the recommendations depend on an external engine, with no 'also bought' logic.",
+   "performance_efficiency": "CloudFront caching, ElastiCache Redis via Cache Manager, OpenSearch, DynamoDB carts, Aurora readers, SQS/SNS async notifications and TanStack Query client caching target R-05/R-06. Gaps: no explicit autoscaling or compute scaling mechanism, and no 3G payload optimization.",
+   "compatibility": "Payment Gateway, Shipping APIs and Tax Service are integrated via REST/JSON over HTTPS in Fulfillment & Tax Component and Payment Integration Component. Multi-currency is only handled through Aurora decimal types, and there is no shipping abstraction. The recommendation engine's integration is inconsistent (SQS/SNS vs gRPC).",
+   "usability": "React SPA serves customers and admins, with localized headers and a multi-currency preference in State & Cache Manager. Authors/Publishers have no distinct interface or container. There is no accessibility or mobile-specific design, and the admin UI is bundled into the SPA.",
+   "reliability": "Aurora multi-AZ storage and Global Database, DynamoDB Global Tables, Redis Multi-AZ failover, SQS decoupling, retries with backoff in Provider Adapter, and idempotent payments support 99.95%. Gaps: no explicit circuit breakers, compute redundancy or health checks, and no stated DR/RTO.",
+   "security": "AWS WAF for OWASP Top-10, Cognito OAuth2/OIDC, mTLS via VPC links, TLS 1.3, RBAC in Admin Catalog Controller, Secrets Manager, audit logging aspects and consent manager for GDPR/CCPA. Gaps: Cognito isn't linked to components, there are no data deletion/erasure flows, and no PCI scoping.",
+   "maintainability": "Clear domain decomposition into Catalog, Order, Recommendation & Review and Notification containers, with in-process components of single responsibility and event-driven decoupling via SQS/SNS. Minor gaps: shared Aurora/DynamoDB across services, a mixed tech stack, and inconsistencies in component models (e.g. Redis cart duplication).",
+   "portability": "Three AWS regions are targeted via Aurora Global Database and DynamoDB Global Tables, with Flyway/Liquibase migrations. Heavy lock-in to AWS managed services, no containerization or IaC is shown, and there is no abstraction layer for replacing infrastructure."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 3,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.46875,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 2.5,
+   "Modifiability": 3.5,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Amazon CloudFront",
+     "Amazon ElastiCache Redis",
+     "Amazon OpenSearch",
+     "Catalog & Search Container",
+     "Amazon API Gateway"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio under 10x load",
+     "No autoscaling defined for containers",
+     "Search cluster sizing"
+    ],
+    "tradeoffs": [
+     "Caching speeds reads but risks stale catalog data",
+     "Global replication adds cost"
+    ],
+    "justification": "CloudFront, Redis caching and OpenSearch support fast reads, and the SPA has client caching. But autoscaling, 3G payload optimisation and product-page caching are not explicit, and Aurora is read by the catalog. Load handling is plausible but unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Recommendation & Review Container",
+     "External Recommendation Engine",
+     "AWS SQS/SNS",
+     "Catalog & Search Container"
+    ],
+    "sensitivity_points": [
+     "Recommendation fetch is a synchronous gRPC call",
+     "No precomputed recommendation store"
+    ],
+    "tradeoffs": [
+     "External engine isolates batch load but adds latency dependency"
+    ],
+    "justification": "Recommendations come from an external engine in a separate container, so batch recompute is largely isolated from catalog browsing. However, the model has no precomputed store or cache and the Recommendation container's compute and scaling are unspecified, so isolation is only partial."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "Order & Checkout Container",
+     "Fulfillment & Tax Component",
+     "Third-Party Shipping APIs",
+     "Checkout Orchestrator Component"
+    ],
+    "sensitivity_points": [
+     "Shipping call is synchronous in the checkout path",
+     "No circuit breaker or retry queue"
+    ],
+    "tradeoffs": [
+     "Synchronous shipping gives immediate confirmation but couples checkout to the outage"
+    ],
+    "justification": "Shipping is invoked synchronously by the orchestrator via async/await, with no queue, retry or circuit breaker for deferral. SQS exists but is used only for notifications. A shipping outage could fail orders, so it needs significant changes."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Aurora Global Database",
+     "DynamoDB Global Tables",
+     "Amazon Route 53",
+     "Amazon CloudFront",
+     "Amazon ElastiCache Redis"
+    ],
+    "sensitivity_points": [
+     "Aurora Global writer failover is promotion-based with RPO",
+     "Compute deployment across regions is not shown",
+     "Replication lag may lose orders"
+    ],
+    "tradeoffs": [
+     "Multi-region data raises cost and consistency complexity"
+    ],
+    "justification": "Aurora Global Database, DynamoDB Global Tables and Route 53 give a data and DNS basis for regional failover. But there is no multi-region compute, no health-check failover, and no explicit RPO/RTO. Possible order loss from async replication remains unaddressed."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Order & Checkout Container",
+     "Payment Integration Component",
+     "Fulfillment & Tax Component",
+     "Database Migration Manager",
+     "State & Cache Manager"
+    ],
+    "sensitivity_points": [
+     "Currency handling is spread across SPA, DB and payment",
+     "No dedicated pricing or currency component"
+    ],
+    "tradeoffs": [
+     "Payment isolation helps, but no pricing service means changes cross components"
+    ],
+    "justification": "Payment Integration is isolated and the DB handles multi-currency decimals, with SPA currency preferences. However, no explicit pricing or currency conversion component exists, so JPY (zero-decimal) changes would touch the SPA, DB schema and checkout, exceeding the stated limit."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "elements": [
+     "Recommendation Controller & Service",
+     "External Recommendation Engine",
+     "Recommendation & Review Container"
+    ],
+    "sensitivity_points": [
+     "The gRPC contract with the engine",
+     "Review and recommendation share one container"
+    ],
+    "tradeoffs": [
+     "External engine eases swapping but couples to its interface"
+    ],
+    "justification": "Recommendations are encapsulated in one service component behind an external engine over a defined interface, so replacing the algorithm stays inside this container. The shared container with reviews and an unspecified 'also bought' data source are minor risks."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "AWS WAF",
+     "Amazon API Gateway",
+     "Search Controller",
+     "Review Controller & Service",
+     "Audit Logging Aspect"
+    ],
+    "sensitivity_points": [
+     "WAF rule configuration",
+     "Input validation and output encoding not shown in the SPA or services",
+     "No parameterised query mention"
+    ],
+    "tradeoffs": [
+     "Edge filtering is cheap but cannot replace in-app validation"
+    ],
+    "justification": "WAF mitigates OWASP Top-10 at the edge, with TLS and mTLS in place. But the model shows no input validation, XSS output encoding, or parameterised queries in search and reviews, and WAF logging/alerting is not explicit; audit logging covers only catalog modifications."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "elements": [
+     "Consent & Preference Manager Component",
+     "Amazon Aurora PostgreSQL",
+     "Amazon DynamoDB",
+     "Amazon OpenSearch",
+     "Amazon ElastiCache Redis",
+     "Audit Logger Component"
+    ],
+    "sensitivity_points": [
+     "PII spread across Aurora, DynamoDB, OpenSearch, Redis and external services",
+     "No deletion workflow or orchestration"
+    ],
+    "tradeoffs": [
+     "Polyglot storage aids performance but complicates erasure"
+    ],
+    "justification": "Consent management and DynamoDB TTL exist, but there is no erasure request component or orchestration across data stores and third parties such as the payment and notification providers. No verification mechanism is shown, so deletion within 30 days is unaddressed."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Consent & Preference Manager Component",
+     "UserSessions Table",
+     "Amazon DynamoDB",
+     "Audit Logger Component",
+     "Audit Logging Aspect"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Payment Gateway",
+     "State & Cache Manager",
+     "Database Migration Manager",
+     "Tax Calculation Service"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Third-Party Shipping APIs",
+     "Fulfillment & Tax Component",
+     "Order & Checkout Container"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Container",
+     "Search Controller",
+     "Search Indexer",
+     "Amazon OpenSearch",
+     "Catalog Service",
+     "Cache Manager",
+     "Amazon ElastiCache Redis"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Order & Checkout Container",
+     "Cart Management Component",
+     "Checkout Orchestrator Component",
+     "Payment Integration Component",
+     "Amazon DynamoDB",
+     "Amazon Aurora PostgreSQL",
+     "Payment Gateway"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Recommendation & Review Container",
+     "Review Controller & Service",
+     "Helpfulness Service",
+     "Order Verification Client",
+     "Amazon DynamoDB"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Recommendation & Review Container",
+     "Recommendation Controller & Service",
+     "External Recommendation Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Replica DB Instances (Readers)",
+     "Amazon DynamoDB",
+     "DynamoDB Global Tables",
+     "Amazon ElastiCache Redis",
+     "Amazon OpenSearch",
+     "AWS SQS/SNS",
+     "Amazon CloudFront"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Amazon CloudFront",
+     "Amazon ElastiCache Redis",
+     "Catalog Cache Component",
+     "State & Cache Manager",
+     "React SPA",
+     "Router & View Controller"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Aurora Global Database",
+     "Aurora Storage Volume",
+     "Replication & Persistence Manager",
+     "DynamoDB Global Tables",
+     "Replica DB Instances (Readers)",
+     "AWS SQS/SNS"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "AWS WAF",
+     "Amazon API Gateway",
+     "AWS Cognito",
+     "AWS Secrets Manager",
+     "Admin Catalog Controller",
+     "Amazon CloudFront"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

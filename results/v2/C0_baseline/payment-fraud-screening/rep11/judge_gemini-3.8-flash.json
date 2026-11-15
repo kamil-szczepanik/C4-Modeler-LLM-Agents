@@ -1,0 +1,334 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "Fraud Screening Engine handles scoring (R-01) and Case Management Backend/Frontend supports analyst workflows (R-02). However, a dedicated mechanism to update rules and models without downtime (R-03) is not explicitly detailed beyond general container deployments.",
+   "performance_efficiency": "The Go/Rust Fraud Screening Engine, ElastiCache for Redis in-memory feature retrieval, and asynchronous SQS offloading for audit writing directly address the sub-50ms P99 latency target at 3,000 req/sec, though API Gateway latency overhead remains a factor.",
+   "compatibility": "The system cleanly interfaces with Merchant / Payment Gateway via mTLS (HTTPS/REST/gRPC), integrates with external Tokenization Provider APIs, and leverages standard AWS service integrations throughout.",
+   "usability": "Fraud Analysts and Compliance Officers are well catered to via Case Management & Reporting Frontend (React SPA) and Athena for compliance reporting, with Tokenization Gateway Client ensuring masked card presentations.",
+   "reliability": "ElastiCache Multi-AZ and SQS buffering provide solid resilience. However, the critical requirement (R-07) to avoid blocking payments for over 1 minute during scoring outages lacks an explicit fail-open or bypass fallback mechanism.",
+   "security": "PCI-DSS requirements are met through ACM Private CA mTLS, WAF, Secrets Manager rotation, tokenization masking, AWS KMS encryption, and tamper-evident WORM audit logging using AWS S3 Object Lock and Cryptographic Signer Component.",
+   "maintainability": "Clean separation of concerns across ingestion, scoring, case management, and audit logging. Decoupling via SQS and relying on managed AWS services aligns well with the operational capacity of a three-engineer team.",
+   "portability": "The architecture satisfies target deployment in AWS eu-west-1, but heavily locks into proprietary AWS services (Athena, S3 Object Lock, ACM Private CA, SQS) with minimal abstraction for multi-cloud or on-premise portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.65625,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 2.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The stateless Go/Rust engine with in-memory Redis feature lookups and asynchronous SQS audit publishing satisfies low latency. However, AWS API Gateway under 3,000 RPS can introduce tail-latency overhead that challenges the strict 50 ms P99 target.",
+    "elements": [
+     "AWS API Gateway / Ingress",
+     "Fraud Screening Engine",
+     "Scoring Engine Worker",
+     "Feature Retrieval Component",
+     "Amazon ElastiCache for Redis",
+     "Event Publisher",
+     "Amazon SQS"
+    ],
+    "sensitivity_points": [
+     "API Gateway gateway routing and mTLS termination latency at 3000 RPS",
+     "Redis cluster network latency and concurrency under peak feature query load"
+    ],
+    "tradeoffs": [
+     "Using managed API Gateway simplifies mTLS but adds network latency hops compared to ALB"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The analyst case management workloads are completely decoupled across separate containers and database layers (Python FastAPI, RDS PostgreSQL, CloudFront) from the real-time scoring engine and Redis cache, preventing UI queries from impacting payment scoring.",
+    "elements": [
+     "Case Management & Reporting Frontend",
+     "Case Management & Reporting Backend",
+     "Amazon RDS PostgreSQL",
+     "Fraud Screening Engine"
+    ],
+    "sensitivity_points": [
+     "Total isolation between the analytical reporting database and the scoring feature store"
+    ],
+    "tradeoffs": [
+     "Operating separate datastores increases operational overhead for a three-person team"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "Although API Gateway mentions circuit breaking, there is no defined fallback scoring component, degraded-mode rule engine, or fallback decision publisher to resolve transactions within 1 minute and audit fallback decisions when the engine crashes.",
+    "elements": [
+     "AWS API Gateway / Ingress",
+     "Fraud Screening Engine"
+    ],
+    "sensitivity_points": [
+     "Absence of an automated fail-open or static fallback scoring path in API Gateway"
+    ],
+    "tradeoffs": [
+     "Failing closed protects against fraud but violates payment processing availability SLAs"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Decoupling audit persistence using an asynchronous SQS queue between the Fraud Screening Engine and the Audit Worker ensures that slow or unavailable S3 storage does not degrade scoring latency or drop audit records.",
+    "elements": [
+     "Fraud Screening Engine",
+     "Event Publisher",
+     "Amazon SQS",
+     "Audit & Compliance Worker",
+     "AWS S3 Object Lock"
+    ],
+    "sensitivity_points": [
+     "SQS retention limits and queue depth monitoring during extended S3 or worker outages"
+    ],
+    "tradeoffs": [
+     "Asynchronous buffering guarantees low scoring latency but sacrifices immediate read consistency for audits"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "ECS and ECR support immutable container deployments and rolling updates with zero downtime. However, the model is baked into compiled Go/Rust containers without a dynamic model registry or automated 5-minute rollback mechanism specified.",
+    "elements": [
+     "Amazon ECR",
+     "Fraud Screening Engine",
+     "Scoring Engine Worker"
+    ],
+    "sensitivity_points": [
+     "Container image pull and deployment orchestration duration during emergency rollbacks"
+    ],
+    "tradeoffs": [
+     "Compiling models into Go/Rust binaries maximizes execution speed but slows deployment flexibility"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The screening engine runs compiled Go/Rust code with no dynamic rule engine, externalized policy repository, or hot-reloading mechanism. Adding velocity rules requires manual code updates, CI/CD builds, and full container deployments, risking the 1-hour requirement.",
+    "elements": [
+     "Fraud Screening Engine",
+     "Scoring Engine Worker",
+     "Amazon ECR"
+    ],
+    "sensitivity_points": [
+     "Lack of a dynamic rules management system or runtime configuration mechanism"
+    ],
+    "tradeoffs": [
+     "Static compiled code guarantees type safety and performance but limits runtime modifiability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "PAN exposure is prevented because the frontend and backend only interact with tokenized and masked data via Tokenization Gateway Client. However, the architecture specifies no automated anomaly detection, SIEM, or alerting system to detect compromised accounts within 15 minutes.",
+    "elements": [
+     "Case Management & Reporting Frontend",
+     "Case Management & Reporting Backend",
+     "Tokenization Gateway Client",
+     "Tokenization Provider"
+    ],
+    "sensitivity_points": [
+     "Strict enforcement of tokenization and absence of PAN storage in RDS",
+     "Missing behavioral monitoring and automated threat detection on analyst sessions"
+    ],
+    "tradeoffs": [
+     "Masking card data limits analyst context but guarantees compliance and breach containment"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Audit payloads are cryptographically signed, partitioned in Parquet, and stored in AWS S3 Object Lock in Compliance Mode for 7-year WORM retention. Athena and Glue Data Catalog allow fast, serverless reproduction of historic decision explanations well within one day.",
+    "elements": [
+     "AWS S3 Object Lock",
+     "Amazon Athena",
+     "Audit & Compliance Worker",
+     "Cryptographic Signer Component",
+     "Compliance & Audit Service"
+    ],
+    "sensitivity_points": [
+     "Immutability enforcement in S3 Object Lock and integrity of KMS cryptographic signatures",
+     "Athena query partition design across multi-year audit logs"
+    ],
+    "tradeoffs": [
+     "Object Lock compliance mode prevents any deletion even for testing but guarantees regulatory auditability"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Tokenization Provider",
+     "Tokenization Gateway Client",
+     "AWS ACM Private CA",
+     "AWS WAF",
+     "AWS Secrets Manager",
+     "Custom Parameter Group"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "AWS S3 Object Lock",
+     "Immutable Audit Log Storage",
+     "Audit & Compliance Worker",
+     "Amazon Athena",
+     "Compliance & Audit Service"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Amazon Athena",
+     "AWS S3 Object Lock",
+     "Amazon ElastiCache for Redis"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "AWS API Gateway / Ingress",
+     "Amazon ElastiCache for Redis",
+     "Amazon Athena",
+     "AWS Secrets Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Fraud Screening Engine",
+     "Scoring Engine Worker",
+     "API Routing and Auth Handler",
+     "AWS API Gateway / Ingress"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management & Reporting Frontend",
+     "Fraud Dashboard Views",
+     "Case Management UI Router",
+     "Case Management & Reporting Backend",
+     "Case API Controller",
+     "Case Service & Business Logic Layer",
+     "Case Repository",
+     "Amazon RDS PostgreSQL"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Fraud Screening Engine",
+     "Amazon ECR"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Fraud Screening Engine",
+     "Scoring Engine Worker",
+     "Feature Retrieval Component",
+     "Amazon ElastiCache for Redis",
+     "In-Memory Data Store Engine",
+     "Event Publisher",
+     "AWS API Gateway / Ingress"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Tokenization Provider",
+     "Tokenization Gateway Client",
+     "Case Service & Business Logic Layer",
+     "AWS Secrets Manager",
+     "AWS ACM Private CA"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Worker",
+     "Event Consumer Component",
+     "Canonical Formatter Component",
+     "Cryptographic Signer Component",
+     "S3 Batch Writer Component",
+     "AWS S3 Object Lock",
+     "Immutable Audit Log Storage"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "AWS API Gateway / Ingress"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

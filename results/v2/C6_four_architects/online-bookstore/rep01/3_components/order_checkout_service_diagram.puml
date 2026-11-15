@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(AWS_API_Gateway, "AWS API Gateway", "AWS API Gateway", "External system routing internal traffic.")
+System_Ext(Redis_ElastiCache, "Redis ElastiCache", "Redis ElastiCache", "Delivers low-latency session caching and atomic idempotency checks.")
+System_Ext(Payment_Gateway, "Payment Gateway", "HTTPS / REST", "Authorizes and captures payments.")
+System_Ext(Tax_Calculation_Service, "Tax Calculation Service", "HTTPS / REST", "Calculates dynamic taxes.")
+System_Ext(Shipping_Provider_APIs, "Shipping Provider APIs", "HTTPS / REST", "Generates shipping labels.")
+System_Ext(Amazon_Aurora_PostgreSQL, "Amazon Aurora PostgreSQL", "Amazon Aurora PostgreSQL", "Persists order data.")
+System_Ext(Amazon_EventBridge_SQS, "Amazon EventBridge & SQS", "Amazon EventBridge & SQS", "Messaging and event distribution system.")
+
+Container_Boundary(Order_Checkout_Service, "Order & Checkout Service") {
+    Component(API_Controller_Component, "API Controller Component", "NestJS", "Enforces strict DTO validation, modular architecture, and OWASP Top-10 security postures.")
+    Component(Idempotency_Manager_Component, "Idempotency Manager Component", "Node.js / TypeScript", "Validates request tokens synchronously and interacts with Redis for cryptographic request hashes.")
+    Component(Cart_Manager_Component, "Cart Manager Component", "TypeScript", "Manages session and cart state and snapshots cart data upon checkout.")
+    Component(Checkout_Orchestrator_Component, "Checkout Orchestrator Component", "TypeScript with Saga pattern", "Coordinates distributed transactions across third-party services using resilience patterns.")
+    Component(Order_Repository_Component, "Order Repository Component", "TypeORM / Prisma", "Encapsulates ACID-compliant data access patterns to PostgreSQL.")
+    Component(Event_Publisher_Component, "Event Publisher Component", "AWS SDK", "Dispatches domain events to messaging infrastructure.")
+}
+
+Rel(AWS_API_Gateway, API_Controller_Component, "Routes internal traffic", "gRPC over TLS / HTTPS")
+Rel(API_Controller_Component, Idempotency_Manager_Component, "Validates request tokens synchronously", "In-memory TypeScript")
+Rel(Idempotency_Manager_Component, Redis_ElastiCache, "Checks/stores cryptographic request hashes", "Redis Protocol over VPC")
+Rel(Cart_Manager_Component, Redis_ElastiCache, "Manages session and cart state", "Redis Protocol over VPC")
+Rel(Cart_Manager_Component, Order_Repository_Component, "Snapshots cart data upon checkout", "TypeORM / Prisma")
+Rel(Checkout_Orchestrator_Component, Payment_Gateway, "Authorizes and captures payments", "HTTPS / REST with Opossum Circuit Breaker")
+Rel(Checkout_Orchestrator_Component, Tax_Calculation_Service, "Calculates dynamic taxes", "HTTPS / REST with Opossum Circuit Breaker")
+Rel(Checkout_Orchestrator_Component, Shipping_Provider_APIs, "Generates shipping labels", "HTTPS / REST with Opossum Circuit Breaker")
+Rel(Order_Repository_Component, Amazon_Aurora_PostgreSQL, "Persists order data", "Native Database Protocol over VPC")
+Rel(Event_Publisher_Component, Amazon_EventBridge_SQS, "Dispatches domain events", "AWS SDK / API")
+
+@enduml

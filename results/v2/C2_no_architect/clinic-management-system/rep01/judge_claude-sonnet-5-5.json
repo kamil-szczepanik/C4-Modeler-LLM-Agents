@@ -1,0 +1,327 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 2,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.375,
+  "justifications": {
+   "functional_suitability": "Scheduling Container with Reservation Service (atomic locks), EMR Container, Billing Container and Immutable Audit Storage Sink cover R-02 to R-04. But no patient registration/admission component exists for R-01, the EMR audit trail is indirect, and Patient Portal is thin.",
+   "performance_efficiency": "Event Broker gives asynchronous decoupling, PgBouncer Connection Pooler and Gateway Cache Client (Redis) help efficiency. But there is no EMR read cache, no autoscaling or replicas, no explicit <1s P95 mechanism, and synchronous audit writes and WAF redaction add latency.",
+   "compatibility": "FHIR Interoperability Adapter in EMR Container handles HL7 FHIR with External Labs/Imaging Vendors over TLS; Billing Container uses secure REST to Insurance Clearinghouses. Schema Registry Validator helps event contracts. Minor gaps: no FHIR server or API versioning details.",
+   "usability": "All five personas have web/mobile access via WAF Container and Patient Portal Container, and Notification Container supports multi-channel alerts. But there are no dedicated staff UIs, no role-specific interfaces, no accessibility mechanisms, and the Patient Portal is the only frontend.",
+   "reliability": "Patroni/etcd gives database failover and Event Broker decouples services. However the database is active-passive, contradicting the active-active 99.99% requirement. No multi-region deployment, replicas, backup/DR, circuit breakers, or HA for the WAF, Gateway and Vault is shown.",
+   "security": "MFA with OIDC via Auth Validator, WAF Engine, mTLS via SPIFFE/SPIRE, Vault Transit (AES-256) and Database Secrets Engine, field-level PHI encryption, pgaudit, WORM Storage Controller with 10-year retention, Data Masking Engine and row-level security match HIPAA/GDPR needs.",
+   "maintainability": "Clear microservice decomposition (EMR, Scheduling, Billing, Notification, Analytics) with event-driven low coupling and an Event Broker with Schema Registry Validator. Minor issues: shared PostgreSQL Databases across services, Billing component duplicates its container, and Kafka/RabbitMQ is left undecided.",
+   "portability": "Kubernetes-based containers, Vault, MinIO/S3 Object Lock, and cert-manager suit on-prem-k8s and eu-central-1. But there are no explicit deployment views, no hybrid replication or failover across environments, and some choices stay undecided (Kafka/RabbitMQ, S3/MinIO)."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 1,
+   "AVAIL-02": 3,
+   "MOD-01": 3,
+   "MOD-02": 3,
+   "PERF-01": 2,
+   "PERF-02": 3,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.4375,
+  "by_quality_attribute": {
+   "Performance": 2.5,
+   "Availability": 2.0,
+   "Modifiability": 3.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "elements": [
+     "API Gateway",
+     "EMR Container",
+     "PostgreSQL Databases",
+     "Gateway Cache Client",
+     "PgBouncer Connection Pooler"
+    ],
+    "sensitivity_points": [
+     "No EMR data cache; every screen hits PostgreSQL",
+     "Field-level encryption via Vault adds latency per read"
+    ],
+    "tradeoffs": [
+     "Field-level PHI encryption and WAF redaction versus latency",
+     "Single active database node limits read scaling"
+    ],
+    "justification": ""
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "FHIR Interoperability Adapter",
+     "EMR Container",
+     "Event Broker",
+     "PostgreSQL Databases"
+    ],
+    "sensitivity_points": [
+     "FHIR ingestion is synchronous in EMR, competing with screen loads",
+     "Single active database writer under bulk load"
+    ],
+    "tradeoffs": [
+     "Broker decoupling helps but ingestion is not isolated from EMR reads"
+    ],
+    "justification": "FHIR adapter and broker exist, but ingestion runs inside the EMR container with no separate ingest path, no read replicas and no throttling. Isolation from screen load is unaddressed."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 1,
+    "elements": [
+     "PostgreSQL Databases",
+     "Patroni/etcd Clustering Engine",
+     "API Gateway",
+     "WAF Container"
+    ],
+    "sensitivity_points": [
+     "Active-passive database; no cross-site replication or global traffic routing described",
+     "Failover time of 1 minute unproven"
+    ],
+    "tradeoffs": [
+     "Active-passive simplicity versus zero data loss and active-active requirement"
+    ],
+    "justification": "No multi-site deployment, global load balancer or cross-site synchronous replication is modelled. Patroni is active-passive and the brief demands active-active. Zero data loss and 1 minute restoration are not supported."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Billing Container",
+     "PostgreSQL Databases",
+     "Patroni/etcd Clustering Engine",
+     "PgBouncer Connection Pooler",
+     "Event Broker"
+    ],
+    "sensitivity_points": [
+     "Patroni failover time versus 30 s target",
+     "No idempotency or claim retry mechanism modelled"
+    ],
+    "tradeoffs": [
+     "Asynchronous replication risks data loss versus synchronous latency"
+    ],
+    "justification": "Patroni provides automated failover, and the broker can support retries. However, no idempotency keys, outbox or transactional claim handling is shown, so duplicates or losses are possible. Failover under 30 s is unverified."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Billing Container",
+     "Insurance Clearinghouses"
+    ],
+    "sensitivity_points": [
+     "Billing component is monolithic; clearinghouse integration is not separated",
+     "No adapter or anti-corruption layer"
+    ],
+    "tradeoffs": [
+     "Billing microservice isolates EMR but couples integrations inside billing"
+    ],
+    "justification": "EMR is isolated from Billing, so EMR stays unchanged. But Billing is one undifferentiated component with no clearinghouse adapter abstraction, so the change is confined to the container, not one integration component."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "elements": [
+     "EMR Container",
+     "Clinical Data Manager",
+     "PostgreSQL Databases",
+     "Patient Portal Container",
+     "pgaudit Module"
+    ],
+    "sensitivity_points": [
+     "Schema migration across shared PostgreSQL",
+     "Event schemas in registry need updating too"
+    ],
+    "tradeoffs": [
+     "Shared database eases change but couples services"
+    ],
+    "justification": "Change touches the EMR data manager, database schema, frontend and event schema, which is plausible within three or four components. pgaudit captures DML automatically, helping the audit trail. No registration or demographics component exists, though, and migration tooling is absent."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "elements": [
+     "WAF Container",
+     "API Gateway",
+     "Auth Validator",
+     "Analytics & Reporting Container"
+    ],
+    "sensitivity_points": [
+     "MFA enforcement point and identity provider not explicit",
+     "No alerting component for failed attempts within 1 minute"
+    ],
+    "tradeoffs": [
+     "Strong perimeter checks add request latency"
+    ],
+    "justification": "Flows specify OAuth2/OIDC with MFA and token validation at the gateway, denying access without the second factor. Failed attempts are logged, but no identity provider or security alerting mechanism is modelled, so the 1-minute alert is unaddressed."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "EMR Container",
+     "Clinical Data Manager",
+     "pgaudit Module",
+     "Immutable Audit Storage Sink",
+     "WORM Storage Controller"
+    ],
+    "sensitivity_points": [
+     "Row-level security gives no treating-relationship policy check",
+     "EMR container has no explicit link to audit sink",
+     "pgaudit logs do not reach the sink"
+    ],
+    "tradeoffs": [
+     "Auditing every read adds latency and storage volume"
+    ],
+    "justification": "WORM storage with 10-year retention and pgaudit exist, plus row-level security. But the EMR-to-audit-sink path is not modelled, and pgaudit is not connected to the sink. A treating-relationship policy check is not explicit, so 100% read audit is not assured."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "WAF Container",
+     "In-Memory Redaction Engine",
+     "Data Masking Engine",
+     "HashiCorp Vault",
+     "Immutable Audit Storage Sink",
+     "PostgreSQL Databases",
+     "pgaudit Module"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "PostgreSQL Databases",
+     "Patroni/etcd Clustering Engine",
+     "Event Broker"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Immutable Audit Storage Sink",
+     "WORM Storage Controller",
+     "Audit Logger"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Patient Portal Container",
+     "Web and Mobile Frontend",
+     "Receptionists"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Container",
+     "Reservation Service",
+     "Scheduling Controller"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Container",
+     "Clinical Data Manager",
+     "pgaudit Module",
+     "Immutable Audit Storage Sink"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Container",
+     "Insurance Clearinghouses"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Auth Validator",
+     "HashiCorp Vault",
+     "Transit Secrets Engine",
+     "PostgreSQL Databases"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Patroni/etcd Clustering Engine",
+     "PostgreSQL Databases",
+     "Reservation Service"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Gateway Cache Client",
+     "PgBouncer Connection Pooler"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Interoperability Adapter",
+     "EMR Container",
+     "External Labs/Imaging Vendors"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

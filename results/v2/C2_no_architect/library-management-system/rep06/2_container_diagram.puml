@@ -1,0 +1,38 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Library Management System
+
+Person(Patrons, "Library Patrons", "Library members who access self-service portals.")
+Person(Staff, "Librarians/Circulation Staff", "Staff members who manage circulation and library operations.")
+Person(Admins, "Library Administrators", "Administrators who configure and manage the library management system.")
+
+System_Ext(IdP, "EU-hosted Identity Provider (IdP)", "Authenticates users via OpenID Connect (OIDC) with multi-factor authentication (MFA).")
+System_Ext(CDN, "CDN/WAF Edge Services", "Provides edge services, TLS 1.3 termination, and perimeter defense.")
+System_Ext(Vendors, "Digital Content Vendors / Third-Party E-Resource Providers", "External providers of digital content integrated via OAuth2 and mTLS.")
+
+System_Boundary(LMS, "Library Management System") {
+    Container(ApiGateway, "API Gateway", "Istio Service Mesh / Kubernetes Gateway", "Routes incoming traffic to internal containers using mTLS.")
+    Container(PatronPortal, "Patron Portal", "Web Frontend / Backend Service", "Provides self-service portals for patrons, querying Elasticsearch via CQRS.")
+    Container(Circulation, "Circulation & Cataloguing Container", "Java / Microservice", "Manages cataloging and circulation transactional data.")
+    Container(Elasticsearch, "Elasticsearch Container", "Elasticsearch", "Provides sub-second search performance.")
+    Container(Kafka, "Kafka/Redpanda Event Streaming Container", "Apache Kafka / Redpanda", "Streams operational and transactional events.")
+    Container(Audit, "Audit & Event Tracking Container", "Microservice", "Consumes audit and event streams to track system activity.")
+    Container(Reporting, "Reporting/Analytics Container", "Analytics Service", "Provides reporting and analytics data populated from event streams.")
+    ContainerDb(Postgres, "PostgreSQL Database (Primary/Read Replica)", "PostgreSQL", "Stores relational transactional data with primary and read replica setup.")
+}
+
+Rel(Patrons, CDN, "Accesses portals", "HTTPS/TLS 1.3")
+Rel(Staff, CDN, "Accesses portals", "HTTPS/TLS 1.3")
+Rel(Admins, CDN, "Accesses portals", "HTTPS/TLS 1.3")
+Rel(CDN, ApiGateway, "Routes traffic", "HTTPS/TLS 1.3 and OAuth2/OIDC (JWT)")
+Rel(ApiGateway, PatronPortal, "Routes traffic", "mTLS")
+Rel(ApiGateway, Circulation, "Routes traffic", "mTLS")
+Rel(Circulation, Postgres, "Writes transactional data", "SQL")
+Rel(Circulation, Kafka, "Publishes events", "Kafka Protocol")
+Rel(PatronPortal, Elasticsearch, "Queries search data using CQRS", "REST/TCP")
+Rel(Kafka, Audit, "Consumes events", "Kafka Protocol")
+Rel(Audit, Reporting, "Populates analytics", "Internal API")
+
+@enduml

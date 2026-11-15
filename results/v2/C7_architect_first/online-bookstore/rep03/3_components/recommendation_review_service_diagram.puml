@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Recommendation & Review Service container
+
+System_Ext(Core_E_Commerce_API, "Core E-Commerce API", "Invokes endpoints on the API Controller using gRPC over mTLS.")
+System_Ext(Third_Party_Recommendation_Engine, "Third-Party Recommendation Engine", "Fetches product suggestions via HTTPS/REST with circuit breaker.")
+System_Ext(Amazon_Aurora_PostgreSQL_Global_Database, "Amazon Aurora (PostgreSQL) Global Database", "Distributed relational storage with multi-region replication.")
+
+Container_Boundary(Recommendation_Review_Service, "Recommendation & Review Service") {
+    Component(API_Controller_Component, "API Controller Component", "Python, FastAPI", "Handles incoming API requests and delegates operations.")
+    Component(Review_Management_Component, "Review Management Component", "Python", "Manages customer reviews and publishes review events.")
+    Component(Recommendation_Aggregator_Component, "Recommendation Aggregator Component", "Python", "Aggregates product recommendations and interacts with third-party engines and caches.")
+    Component(Data_Access_Repository_Component, "Data Access Repository Component", "Python, async SQLAlchemy", "Persists and queries data from the database securely via TLS 1.3.")
+    Component(Caching_Fallback_Store_Component, "Caching / Fallback Store Component", "Amazon ElastiCache Redis", "Reads and writes cached recommendations and heuristics fallback.")
+    Component(Review_Event_Consumer_Component, "Review Event Consumer Component", "Amazon SQS / SNS", "Publishes and processes review events asynchronously with Dead-Letter Queues.")
+}
+
+Rel(Core_E_Commerce_API, API_Controller_Component, "Invokes endpoints", "gRPC over mTLS")
+Rel(API_Controller_Component, Review_Management_Component, "Delegates operations", "In-process")
+Rel(API_Controller_Component, Recommendation_Aggregator_Component, "Delegates operations", "In-process")
+Rel(Recommendation_Aggregator_Component, Third_Party_Recommendation_Engine, "Fetches product suggestions", "HTTPS/REST with circuit breaker")
+Rel(Recommendation_Aggregator_Component, Caching_Fallback_Store_Component, "Reads/writes cached recommendations", "Redis TLS")
+Rel(Review_Management_Component, Data_Access_Repository_Component, "Persists and queries data", "Async SQLAlchemy via TLS 1.3")
+Rel(Recommendation_Aggregator_Component, Data_Access_Repository_Component, "Persists and queries data", "Async SQLAlchemy via TLS 1.3")
+Rel(Review_Management_Component, Review_Event_Consumer_Component, "Publishes review events", "Amazon SQS / SNS")
+Rel(Data_Access_Repository_Component, Amazon_Aurora_PostgreSQL_Global_Database, "Persists and queries relational data")
+
+@enduml

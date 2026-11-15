@@ -1,0 +1,345 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All functional requirements are mapped to components: Catalog & Search (R-01), Checkout & Order with Redis Cache (R-02), User & Reviews (R-03), and Recommendations (R-04). However, dedicated mechanisms for downloading or managing electronic book fulfillment are not explicitly detailed alongside physical shipping.",
+   "performance_efficiency": "Performance and 1M MAU scaling are thoroughly addressed using CloudFront edge caching, OpenSearch for search indexing, Redis Cache for carts and dynamic currency sessions, PgBouncer connection pooling, and PostgreSQL Regional Read-Replicas combined with an Async Event Bus.",
+   "compatibility": "Interoperability is well-architected with dedicated integration points: Shipping Integration Service connects to Third-Party Shipping APIs, Payment Integration Service links to Payment Gateway Provider, and explicit external interfaces handle Currency Exchange and Identity/Consent Management.",
+   "usability": "Both Customers and Administrators/Content Moderators are served via the Single Page Application / Server-Side Rendered Frontend container with UI View Components. However, administrative management interfaces and specific moderation tooling receive minimal architectural detailing.",
+   "reliability": "High availability (99.95%) is targeted via Redis automatic failover, Dead Letter Queue Handler on the Async Event Bus, and OpenSearch Backup and Snapshot Manager. Multi-region write failover and conflict resolution mechanisms for transactional checkout databases remain slightly underdeveloped.",
+   "security": "Security thoroughly addresses brief constraints via API Gateway Security and Rate Limiting (JWT validation), AWS Secrets Manager with Lambda rotation, AWS KMS encryption at rest, OpenTelemetry PII scrubbing, and integration with an Identity/Consent Management provider for GDPR and CCPA.",
+   "maintainability": "Modular microservices (Checkout & Order, Catalog & Search, Recommendations, User & Reviews) are cleanly isolated using Hexagonal Architecture, Repository Adapter patterns, asynchronous messaging via Kafka/EventBridge, and versioned database migrations using Flyway/Liquibase.",
+   "portability": "Target AWS multi-region deployment is well supported across ECS/EKS containers with Flyway multi-region migrations. However, deep coupling to proprietary services (AWS API Gateway, EventBridge, Secrets Manager, Parameter Store) moderately hinders portability to alternate cloud providers."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront CDN and OpenSearch offload catalog browsing and indexing. However, Redis caching is only connected to Checkout & Order rather than Catalog & Search, leaving high-throughput catalog reads dependent on OpenSearch cluster sizing.",
+    "elements": [
+     "Single Page Application / Server-Side Rendered Frontend",
+     "API Gateway",
+     "Catalog & Search",
+     "OpenSearch Database"
+    ],
+    "sensitivity_points": [
+     "OpenSearch cluster scaling during sudden read traffic spikes",
+     "Edge cache hit ratios at CloudFront"
+    ],
+    "tradeoffs": [
+     "Aggressive edge caching improves response times but risks stale catalog data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendations are fully isolated in a dedicated container. Pre-computed payloads are stored in Redis via Cache Manager and recomputation is decoupled through the Async Event Bus, keeping browsing traffic on Catalog & Search unaffected.",
+    "elements": [
+     "Recommendations",
+     "Async Event Bus",
+     "Redis Cache",
+     "Catalog & Search"
+    ],
+    "sensitivity_points": [
+     "Redis memory capacity for caching pre-computed recommendation lists",
+     "Asynchronous event queue latency during bulk updates"
+    ],
+    "tradeoffs": [
+     "Pre-computing recommendations trades storage and eventual consistency for minimal runtime compute overhead"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Order Processing Service incorporates transactional messaging and outbox patterns alongside the Async Event Bus and DLQ. However, the component diagram shows Order Processing invoking the Shipping Integration Service synchronously via HTTPS during checkout, requiring careful fallback handling.",
+    "elements": [
+     "Checkout & Order",
+     "Order Processing Service",
+     "Shipping Integration Service",
+     "Async Event Bus",
+     "Dead Letter Queue Handler"
+    ],
+    "sensitivity_points": [
+     "Resilience patterns such as timeouts and circuit breakers on shipping APIs",
+     "Reliable outbox event publishing to SQS DLQ"
+    ],
+    "tradeoffs": [
+     "Deferring shipping dispatch preserves checkout completion but requires asynchronous reconciliation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "While multi-region deployment is specified, PostgreSQL relies on asynchronous streaming replication to regional read-replicas. An abrupt failure in us-east-1 risks data loss (RPO > 0) or transaction inconsistency, failing the zero lost orders requirement without automated multi-region write failover.",
+    "elements": [
+     "PostgreSQL Database",
+     "Regional Read-Replicas",
+     "API Gateway",
+     "Checkout & Order"
+    ],
+    "sensitivity_points": [
+     "Cross-region replication lag during write failover",
+     "DNS and API Gateway multi-region routing failover latency"
+    ],
+    "tradeoffs": [
+     "Asynchronous cross-region replication avoids write latency penalties but risks lost committed transactions during regional outage"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Multi-currency support is handled through an external Currency Exchange Rate Provider and dynamic rate caching in Redis. Adding JPY requires updating exchange rate configuration and ingestion without changing core checkout workflows.",
+    "elements": [
+     "Currency Exchange",
+     "Checkout & Order",
+     "Redis Cache",
+     "Configuration & Secrets Management"
+    ],
+    "sensitivity_points": [
+     "Exchange rate cache expiration TTL in Redis",
+     "Currency format support in the payment gateway"
+    ],
+    "tradeoffs": [
+     "Dynamic exchange rate caching reduces external provider calls but risks intra-day rate discrepancies"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Recommendations is a standalone microservice container encapsulated behind API Gateway routes and event bus pub/sub subscriptions. Modifying or replacing the recommendation algorithm is entirely confined to the Recommendations container.",
+    "elements": [
+     "Recommendations",
+     "Recommendation Service",
+     "Cache Manager",
+     "Async Event Bus"
+    ],
+    "sensitivity_points": [
+     "Contract stability of recommendation domain events",
+     "Payload schema compatibility in Redis"
+    ],
+    "tradeoffs": [
+     "Encapsulating recommendation algorithms within a microservice adds network boundaries but maximizes modifiability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "PostgreSQL explicitly specifies parameterized queries with least privilege, mitigating SQL injection. API Gateway enforces JWT validation and rate limiting. However, explicit WAF rules and XSS sanitization filters for user reviews are not fully detailed.",
+    "elements": [
+     "API Gateway",
+     "Security and Rate Limiting",
+     "PostgreSQL Database",
+     "User & Reviews",
+     "Catalog & Search"
+    ],
+    "sensitivity_points": [
+     "Input sanitization coverage across review and search endpoints",
+     "WAF rule maintenance at API Gateway"
+    ],
+    "tradeoffs": [
+     "Strict input validation and inspection increase gateway processing latency slightly"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "An external Identity/Consent Management integration exists, and OpenTelemetry handles PII scrubbing. However, there is no explicit saga or deletion orchestration mechanism across distributed PostgreSQL databases, OpenSearch indexes, backups, and event streams to ensure verifiable CCPA/GDPR compliance.",
+    "elements": [
+     "Identity/Consent Management",
+     "User & Reviews",
+     "Checkout & Order",
+     "PostgreSQL Database",
+     "Async Event Bus"
+    ],
+    "sensitivity_points": [
+     "Propagation of personal data deletion events across distributed datastores",
+     "Handling immutable database backups containing personal data"
+    ],
+    "tradeoffs": [
+     "Hard data deletion ensures privacy compliance but complicates financial audit log retention"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Identity/Consent Management Provider",
+     "Identity/Consent Management",
+     "User & Reviews",
+     "OpenTelemetry Sidecars & Collectors"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Currency Exchange Rate Provider",
+     "Currency Exchange",
+     "Checkout & Order",
+     "Redis Cache",
+     "Session Management Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Third-Party Shipping APIs",
+     "Checkout & Order",
+     "Shipping Integration Service"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search",
+     "Catalog & Search Controller",
+     "Catalog & Search Service",
+     "OpenSearch Database",
+     "Search Indexing Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Checkout & Order",
+     "Checkout API Controller",
+     "Order Processing Service",
+     "Payment Integration Service",
+     "Payment Gateway Provider",
+     "Payment Gateway",
+     "PostgreSQL Database",
+     "Redis Cache",
+     "Session Management Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "User & Reviews",
+     "User & Reviews Controller",
+     "User & Reviews Service"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Recommendations",
+     "Recommendation Controller",
+     "Recommendation Service",
+     "Event Publisher/Consumer",
+     "Cache Manager"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "PgBouncer",
+     "Regional Read-Replicas",
+     "PostgreSQL Database",
+     "Redis Cache",
+     "API Gateway",
+     "Security and Rate Limiting",
+     "Async Event Bus"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Single Page Application / Server-Side Rendered Frontend",
+     "Redis Cache",
+     "OpenSearch Database",
+     "Search Indexing Engine"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Regional Read-Replicas",
+     "Caching Engine Component",
+     "Dead Letter Queue Handler",
+     "Security and Rate Limiting",
+     "Router and Proxy"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Security and Rate Limiting",
+     "API Gateway",
+     "Configuration & Secrets Management",
+     "Secrets Manager Integration",
+     "AWS KMS",
+     "OpenTelemetry Sidecars & Collectors"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

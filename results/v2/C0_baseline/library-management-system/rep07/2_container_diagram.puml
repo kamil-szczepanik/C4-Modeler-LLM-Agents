@@ -1,0 +1,38 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Library Management System
+
+Person(LibraryPatrons, "Library Patrons", "End users who use self-service portals to access and borrow physical and digital library items.")
+Person(LibrariansCirculationStaff, "Librarians/Circulation Staff", "Staff members responsible for managing item circulation and day-to-day library operations.")
+Person(LibraryAdministrators, "Library Administrators", "Administrators who configure and manage the Library Management System.")
+Person(ThirdPartyVendorsDigitalContentProviders, "Third-Party Vendors/Digital Content Providers", "External providers supplying digital content and items to the library system.")
+
+System_Ext(EUPaymentGateway, "EU Payment Gateway", "External EU-compliant payment processing system for financial transactions.")
+System_Ext(NotificationService, "Notification Service", "External service used for sending notifications to users.")
+
+System_Boundary(LibraryManagementSystem, "Library Management System") {
+    Container(SinglePageApplicationSPA, "Single Page Application (SPA)", "React/TypeScript, Nginx", "User interface providing an intuitive single-page application experience for patrons and staff.")
+    Container(APIGateway, "API Gateway", "Nginx or Spring Cloud Gateway", "Manages and routes incoming requests to the appropriate backend containers securely.")
+    Container(CoreDomainContainer, "Core Domain Container", "Java/Spring Boot, PostgreSQL (EU-hosted)", "Handles robust cataloguing, circulation logic, and transactional data storage.")
+    Container(SearchContainer, "Search Container", "Elasticsearch", "Dedicated search engine ensuring sub-800ms search performance for library items.")
+    Container(IntegrationContainer, "Integration Container", "Node.js/TypeScript", "Manages external APIs, third-party content, and payment handling.")
+    Container(AsyncEventBroker, "Async Event Broker", "Apache Kafka or RabbitMQ", "Decoupled event-driven messaging broker handling domain events and asynchronous notifications.")
+}
+
+Rel(LibraryPatrons, SinglePageApplicationSPA, "Interacts with the self-service portal", "HTTPS/REST")
+Rel(LibrariansCirculationStaff, SinglePageApplicationSPA, "Manages circulation and library items via UI", "HTTPS/REST")
+Rel(LibraryAdministrators, SinglePageApplicationSPA, "Configures and administers the system via UI", "HTTPS/REST")
+Rel(ThirdPartyVendorsDigitalContentProviders, IntegrationContainer, "Ingests digital content and external data", "HTTPS / SFTP")
+Rel(SinglePageApplicationSPA, APIGateway, "Sends user requests to backend services", "HTTPS/REST")
+Rel(APIGateway, CoreDomainContainer, "Routes domain and circulation requests", "gRPC or REST over TLS within EU-isolated VPC")
+Rel(APIGateway, SearchContainer, "Routes search queries", "gRPC or REST over TLS within EU-isolated VPC")
+Rel(APIGateway, IntegrationContainer, "Routes integration and external requests", "gRPC or REST over TLS within EU-isolated VPC")
+Rel(CoreDomainContainer, CoreDomainContainer, "Persists transactional data with encryption-at-rest", "Database protocol over TLS")
+Rel(CoreDomainContainer, AsyncEventBroker, "Publishes domain events", "SASL/SCRAM, mTLS")
+Rel(IntegrationContainer, AsyncEventBroker, "Asynchronously consumes events with DLQs", "SASL/SCRAM, mTLS")
+Rel(IntegrationContainer, EUPaymentGateway, "Processes secure financial transactions", "HTTPS")
+Rel(IntegrationContainer, NotificationService, "Triggers notifications", "HTTPS")
+
+@enduml

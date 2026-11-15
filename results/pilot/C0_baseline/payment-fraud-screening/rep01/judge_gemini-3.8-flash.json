@@ -1,0 +1,292 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "Scoring Engine and Model Evaluator Component satisfy R-01 and R-03, while Case Management Portal addresses R-02. However, there is no explicit mechanism or data flow connecting the Scoring Engine to the Case Management Portal to enqueue transactions flagged for review.",
+   "performance_efficiency": "Sub-50ms P99 at 3,000 TPS is well supported by Go microservices on ECS Fargate, gRPC over HTTP/2, ElastiCache Redis Cluster for sub-millisecond feature retrieval, and asynchronous decoupling via Amazon SQS and Kinesis Firehose.",
+   "compatibility": "The design facilitates clean interoperability using industry standards: gRPC and HTTPS/REST for Merchant Integration Systems, and OAuth2/OIDC protocols for the external Identity Provider.",
+   "usability": "Fraud Analysts are directly accommodated with a dedicated React Web UI in the Case Management Portal, backed by an OIDC Single Sign-On flow and access to historical decision explanations from Audit Storage.",
+   "reliability": "While SQS DLQ and RDS Multi-AZ provide baseline resilience, the architecture completely lacks a fail-open, bypass, or circuit-breaker mechanism at API Gateway / NLB to prevent blocking payments for more than 1 minute if the Scoring Engine fails (R-07).",
+   "security": "Audit Storage enforces 7-year WORM compliance via S3 Object Lock and KMS encryption. However, while a Tokenization Proxy relationship is noted for PAN masking (R-05), the proxy element itself is omitted from the container and component architectures.",
+   "maintainability": "Excellent modular decomposition across Scoring Engine, Case Management Portal, and audit components. Clear boundaries and the Model Evaluator Component's dual-buffer atomic swapping enable independent evolvability manageable by a small team of three engineers.",
+   "portability": "The solution perfectly targets AWS eu-west-1 using ECS Fargate and managed services. Strong lock-in to proprietary AWS primitives (Kinesis Firehose, S3 Object Lock, KMS) moderately restricts portability to alternative clouds."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 3,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 3.5,
+   "Modifiability": 4.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The Go scoring engine running on ECS Fargate leverages concurrent Redis pipelining, local in-memory ONNX inference, and asynchronous SQS audit publishing to easily sustain 3,000 TPS under 50 ms P99.",
+    "elements": [
+     "API Gateway / Network Load Balancer (NLB)",
+     "Scoring Engine",
+     "Request Handler Component",
+     "Model Evaluator Component",
+     "Feature Aggregator Component",
+     "Feature Store"
+    ],
+    "sensitivity_points": [
+     "Feature store Redis cluster latency directly dictates transaction evaluation latency."
+    ],
+    "tradeoffs": [
+     "In-memory local ONNX inference increases container memory requirements to minimize network hops."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Case Management Portal runs as a decoupled tier with dedicated PostgreSQL storage and direct S3 reads, completely isolated from the real-time scoring data path and Redis feature store.",
+    "elements": [
+     "Case Management Portal",
+     "Amazon RDS for PostgreSQL",
+     "Scoring Engine",
+     "Feature Store"
+    ],
+    "sensitivity_points": [
+     "Physical isolation of analyst operational database from the low-latency feature cache."
+    ],
+    "tradeoffs": [
+     "Data duplication between audit storage and case management database requires eventual synchronization."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture lacks an automated fallback path, stand-by rules engine, or circuit-breaker bypass at the ingress layer to decide and audit payments if the scoring engine crashes.",
+    "elements": [
+     "API Gateway / Network Load Balancer (NLB)",
+     "Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Absence of fallback edge decision logic creates a single point of operational failure."
+    ],
+    "tradeoffs": [
+     "Failing open or fallback scoring risks undetected fraud to satisfy availability mandates."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Audit events are dispatched asynchronously to Amazon SQS and buffered by Kinesis Firehose before S3 Object Lock, fully decoupling real-time scoring performance and availability from audit storage slowdowns.",
+    "elements": [
+     "Scoring Engine",
+     "Audit Dispatcher Component",
+     "Audit Queue",
+     "Audit Stream Processor",
+     "Audit Storage"
+    ],
+    "sensitivity_points": [
+     "SQS queue retention and Firehose buffer limits determine tolerance to extended storage outages."
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging sacrifices immediate read-after-write consistency for non-blocking scoring availability."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Model Evaluator uses a dual-buffer registry supporting atomic pointer swaps for zero-downtime model updates and instant rollbacks, and audit logs capture model version metadata.",
+    "elements": [
+     "Scoring Engine",
+     "Model Evaluator Component",
+     "Audit Dispatcher Component"
+    ],
+    "sensitivity_points": [
+     "Thread-safe atomic pointer swapping within the ONNX execution runtime."
+    ],
+    "tradeoffs": [
+     "Dual-buffer memory retention temporarily doubles model memory consumption during hot swaps."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "Although the API ingress and Go engine can accept new requests, internal feature pipelines, schemas, and models are tailored to card-not-present authorizations, requiring cross-component schema and feature modifications.",
+    "elements": [
+     "API Gateway / Network Load Balancer (NLB)",
+     "Request Handler Component",
+     "Feature Aggregator Component",
+     "Schema Registry Component"
+    ],
+    "sensitivity_points": [
+     "Flexibility of the ingestion schema to handle non-card payment primitives."
+    ],
+    "tradeoffs": [
+     "Generic payment abstraction layers increase payload size and deserialization overhead."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "A tokenization proxy prevents clear-text PAN exposure to analysts, but the architecture defines no SIEM, IDS, or behavioral access monitoring mechanisms to alert on compromised analyst accounts within 15 minutes.",
+    "elements": [
+     "Case Management Portal",
+     "External Identity Provider",
+     "Tokenization Proxy"
+    ],
+    "sensitivity_points": [
+     "Tokenization at boundary isolates cardholder data from presentation tiers."
+    ],
+    "tradeoffs": [
+     "Masking PAN limits analyst fraud triage context without de-tokenization workflows."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Audit records containing inputs, model versions, and explanations are stored in Amazon S3 with Object Lock in compliance mode, guaranteeing 7-year tamper-evident retention and easy retrieval via Case Management.",
+    "elements": [
+     "Audit Storage",
+     "Amazon S3",
+     "S3 Object Lock",
+     "AWS KMS",
+     "Case Management Portal"
+    ],
+    "sensitivity_points": [
+     "S3 Object Lock retention policy immutability over multi-year operational spans."
+    ],
+    "tradeoffs": [
+     "WORM compliance prevents log redaction even during regulatory data erasure requests."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "none"
+  },
+  "coverage": 0.6363636363636364,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "API Gateway / Network Load Balancer (NLB)",
+     "Scoring Engine",
+     "Audit Storage",
+     "AWS KMS"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Audit Storage",
+     "Amazon S3",
+     "S3 Object Lock",
+     "Audit Stream Processor",
+     "Audit Queue"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none"
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none"
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "Request Handler Component",
+     "Model Evaluator Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Portal",
+     "React Web UI",
+     "NestJS API Controller",
+     "Case Service",
+     "Amazon RDS for PostgreSQL"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model Evaluator Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "Request Handler Component",
+     "Feature Store",
+     "Feature Aggregator Component",
+     "Audit Queue"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Scoring Engine",
+     "Encryption Manager",
+     "AWS KMS"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Storage",
+     "S3 Object Lock",
+     "Audit Dispatcher Component",
+     "Audit Queue",
+     "Audit Stream Processor"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none"
+   }
+  }
+ }
+}

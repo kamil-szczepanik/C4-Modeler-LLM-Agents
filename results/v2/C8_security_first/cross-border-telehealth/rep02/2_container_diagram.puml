@@ -1,0 +1,34 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(Patients, "Patients", "EU and US mobile/web clients seeking video consultations and AI symptom checking.")
+Person(Licensed_Clinicians, "Licensed Clinicians", "Healthcare professionals conducting video consultations and issuing e-prescriptions.")
+
+System_Ext(Local_Pharmacies, "Local Pharmacies", "EU and US pharmacies receiving e-prescription orders.")
+System_Ext(External_Identity_Providers_IdP, "External Identity Providers (IdP)", "External identity providers handling user authentication.")
+
+System_Boundary(Cross_Border_Telehealth_Platform, "Cross-Border Telehealth Platform") {
+    Container(Istio_Service_Mesh_API_Gateway, "Istio Service Mesh & API Gateway", "Istio", "Manages mTLS, traffic splitting, VPC Service Controls, and routes incoming traffic.")
+    Container(Backend_for_Frontend_BFF, "Backend-for-Frontend (BFF)", "Node.js, GraphQL", "Powers the regional BFF to abstract regional data formats.")
+    Container(Mediasoup_SFU, "Mediasoup SFU", "Mediasoup WebRTC", "WebRTC SFU container for video/audio streaming with sub-300 kbit/s bandwidth degradation.")
+    Container(AI_Triage_Service, "AI Triage Service", "Containerized Service", "Performs AI symptom checking and triage.")
+    Container(Consent_Manager, "Consent Manager", "Containerized Service", "Manages regional data privacy, consent, and regulatory compliance (GDPR/HIPAA).")
+    Container(E_Prescription_Adapter, "E-Prescription Adapter", "Containerized Service", "Transmits e-prescriptions to US Pharmacies via HL7 FHIR and to EU Pharmacies via national standards (REST/SOAP).")
+    ContainerDb(Regional_WORM_Storage, "Regional WORM Storage", "GCP Storage", "Enforces strict regional data residency for secure data storage.")
+}
+
+Rel(Patients, Istio_Service_Mesh_API_Gateway, "Accesses video consultations, e-prescriptions, and AI symptom checker", "HTTPS (TLS 1.3)")
+Rel(Licensed_Clinicians, Istio_Service_Mesh_API_Gateway, "Conducts video consultations and manages prescriptions", "HTTPS (TLS 1.3)")
+Rel(Istio_Service_Mesh_API_Gateway, Backend_for_Frontend_BFF, "Routes client requests to regional BFF", "gRPC over mTLS")
+Rel(Istio_Service_Mesh_API_Gateway, Mediasoup_SFU, "Routes video and audio streams", "DTLS-SRTP")
+Rel(Backend_for_Frontend_BFF, AI_Triage_Service, "Sends triage and symptom check requests", "gRPC over mTLS (Istio)")
+Rel(Backend_for_Frontend_BFF, Consent_Manager, "Validates user consent and compliance policies", "gRPC over mTLS (Istio)")
+Rel(Backend_for_Frontend_BFF, E_Prescription_Adapter, "Sends e-prescription generation requests", "gRPC over mTLS (Istio)")
+Rel(E_Prescription_Adapter, Local_Pharmacies, "Transmits e-prescriptions to US and EU pharmacies", "HL7 FHIR, REST/SOAP")
+Rel(Backend_for_Frontend_BFF, Regional_WORM_Storage, "Persists patient data and records enforcing data residency", "HTTPS")
+Rel(AI_Triage_Service, Regional_WORM_Storage, "Logs immutable inference records", "HTTPS")
+Rel(Consent_Manager, Regional_WORM_Storage, "Persists consent records", "HTTPS")
+Rel(Istio_Service_Mesh_API_Gateway, External_Identity_Providers_IdP, "Authenticates users", "OAuth 2.0 / OIDC")
+
+@enduml

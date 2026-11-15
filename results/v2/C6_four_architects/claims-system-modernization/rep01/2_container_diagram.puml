@@ -1,0 +1,37 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(Customer_Broker, "Customer & Broker", "External users who submit and track claims online.")
+Person(Adjusters, "Adjusters", "Internal users who handle claim workflows.")
+
+System_Ext(Legacy_Mainframe, "Legacy Mainframe", "On-premises COBOL/DB2 system acting as the legacy system of record.")
+System_Ext(Azure_AD_Entra_ID, "Azure AD / Entra ID", "Provides identity management and authentication services.")
+
+System_Boundary(Modern_Claims_Platform, "Modern Claims Platform") {
+    Container(Customer_Portal, "Customer Portal", "React / TypeScript SPA", "Allows customers and brokers to submit and manage claims.")
+    Container(Web_Frontend, "Web Frontend", "React / TypeScript SPA", "Provides adjuster workflows and interface access.")
+    Container(API_Gateway_BFF, "API Gateway / BFF", "Node.js / Express", "Secures ingress, manages traffic, and handles client-facing routing.")
+    Container(Claims_Core_Service, "Claims Core Service", ".NET 8 / C#", "Processes online claims and core business logic.")
+    Container(Integration_Sync_Worker, "Integration & Sync Worker", "Python / C# Azure Function", "Bridges cloud messaging and the legacy mainframe.")
+    ContainerDb(Claims_Database, "Claims Database", "Azure SQL Database Managed Instance", "Provides relational persistence and ACID consistency for migrated claims.")
+    Container(Integration_Event_Broker, "Integration Event Broker", "Azure Service Bus", "Asynchronously decouples services to protect legacy batch limits.")
+    Container(Distributed_Cache_State_Store, "Distributed Cache / State Store", "Azure Cache for Redis", "Handles distributed session caching and idempotency keys.")
+    Container(Configuration_Feature_Store, "Configuration & Feature Store", "Azure App Configuration", "Enables dynamic feature flagging for rapid claim-type switch-backs.")
+}
+
+Rel(Customer_Broker, Customer_Portal, "Submits and tracks claims", "HTTPS")
+Rel(Adjusters, Web_Frontend, "Performs claim workflows", "HTTPS")
+Rel(Customer_Portal, API_Gateway_BFF, "Sends API requests and WebSocket messages", "HTTPS/REST, WSS (JSON)")
+Rel(Web_Frontend, API_Gateway_BFF, "Sends API requests and WebSocket messages", "HTTPS/REST, WSS (JSON)")
+Rel(API_Gateway_BFF, Claims_Core_Service, "Forwards backend API requests", "gRPC / HTTP/2")
+Rel(Claims_Core_Service, Claims_Database, "Reads and writes claim data", "TDS over TLS (TCP 1433)")
+Rel(Claims_Core_Service, Integration_Event_Broker, "Publishes asynchronous integration events", "AMQP over TLS (TCP 5671)")
+Rel(Integration_Sync_Worker, Legacy_Mainframe, "Syncs data and integrates across hybrid boundary", "Secure SFTP/MQ")
+Rel(Customer_Portal, Azure_AD_Entra_ID, "Authenticates users", "OpenID Connect (OIDC) over HTTPS")
+Rel(Web_Frontend, Azure_AD_Entra_ID, "Authenticates users", "OpenID Connect (OIDC) over HTTPS")
+Rel(API_Gateway_BFF, Azure_AD_Entra_ID, "Validates tokens", "OpenID Connect (OIDC) over HTTPS")
+Rel(Claims_Core_Service, Configuration_Feature_Store, "Retrieves dynamic feature flags and configuration", "HTTPS/REST")
+Rel(Claims_Core_Service, Distributed_Cache_State_Store, "Manages session cache and idempotency", "Redis Protocol over TLS")
+
+@enduml

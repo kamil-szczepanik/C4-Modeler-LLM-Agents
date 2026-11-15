@@ -1,0 +1,36 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Audit & Compliance Service container
+
+System_Ext(AmazonSQS, "Amazon SQS", "External messaging queue for audit events.", "AMQP/SQS")
+System_Ext(AmazonEventBridge, "Amazon EventBridge", "Event bus for GDPR cascades.", "Async Events / JSON over EventBridge")
+System_Ext(AmazonAuroraPostgreSQL, "Amazon Aurora PostgreSQL", "Secure WORM/RLS append-only data storage.", "TLS/TCP")
+System_Ext(AWSAPIGateway, "AWS API Gateway", "API Gateway routing incoming compliance requests.", "HTTPS/REST")
+System_Ext(AmazonS3, "Amazon S3", "Temporary storage for encrypted DSAR export bundles.", "HTTPS/S3 API")
+
+Container_Boundary(AuditComplianceService, "Audit & Compliance Service") {
+    Component(AuditEventConsumer, "Audit Event Consumer", "Node.js / TypeScript", "Consumes audit events from Amazon SQS.")
+    Component(CompliancePolicyEngine, "Compliance Policy Engine", "Node.js / TypeScript", "Enforces strict GDPR and CCPA regulations and triggers Amazon EventBridge for GDPR cascades.")
+    Component(AuditLogRepositoryInterface, "Audit Log Repository Interface", "Node.js / TypeScript", "Persists audit logs to Amazon Aurora PostgreSQL using WORM/RLS append-only data storage.")
+    Component(ComplianceAPIController, "Compliance API Controller", "Node.js / TypeScript", "Receives requests from AWS API Gateway for data subject access requests.")
+    Component(DataExportGenerator, "Data Export Generator", "Node.js / TypeScript", "Writes encrypted DSAR export bundles to Amazon S3.")
+    Component(RetentionPolicyScheduler, "Retention Policy Scheduler", "Node.js / TypeScript", "Manages data retention and triggers the Compliance Policy Engine.")
+    Component(ComplianceHealthMetricsMonitor, "Compliance Health & Metrics Monitor", "OpenTelemetry / Prometheus", "Collects metrics and observability instrumentation from system components.")
+}
+
+Rel(AuditEventConsumer, AmazonSQS, "Reads from", "AMQP/SQS")
+Rel(CompliancePolicyEngine, AmazonEventBridge, "Triggers Amazon EventBridge for GDPR cascades", "Async Events / JSON over EventBridge")
+Rel(AuditLogRepositoryInterface, AmazonAuroraPostgreSQL, "Persists to", "TLS/TCP")
+Rel(ComplianceAPIController, AWSAPIGateway, "Receives requests from", "HTTPS/REST")
+Rel(DataExportGenerator, AmazonS3, "Writes to", "HTTPS/S3 API")
+Rel(RetentionPolicyScheduler, CompliancePolicyEngine, "Triggers", "In-Process")
+Rel(AuditEventConsumer, ComplianceHealthMetricsMonitor, "Emits metrics to", "In-Process / OpenTelemetry")
+Rel(CompliancePolicyEngine, ComplianceHealthMetricsMonitor, "Emits metrics to", "In-Process / OpenTelemetry")
+Rel(AuditLogRepositoryInterface, ComplianceHealthMetricsMonitor, "Emits metrics to", "In-Process / OpenTelemetry")
+Rel(ComplianceAPIController, ComplianceHealthMetricsMonitor, "Emits metrics to", "In-Process / OpenTelemetry")
+Rel(DataExportGenerator, ComplianceHealthMetricsMonitor, "Emits metrics to", "In-Process / OpenTelemetry")
+Rel(RetentionPolicyScheduler, ComplianceHealthMetricsMonitor, "Emits metrics to", "In-Process / OpenTelemetry")
+
+@enduml

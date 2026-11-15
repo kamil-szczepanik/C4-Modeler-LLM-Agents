@@ -1,0 +1,335 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 2,
+   "security": 3,
+   "maintainability": 3,
+   "portability": 2
+  },
+  "mean": 2.875,
+  "justifications": {
+   "functional_suitability": "Real-Time Scoring Engine covers scoring (R-01) and Case Management Backend & UI covers review (R-02). Model & Rule Synchronizer's atomic swap supports no-downtime updates (R-03). Gaps: no routing of review cases into case management, no decision explanation or model version storage, no model deployment pipeline.",
+   "performance_efficiency": "Feature Store (ElastiCache Redis) gives sub-ms lookups, embedded ONNX in Inference & Rule Executor avoids network calls, and Audit Dispatcher with SQS Audit Buffer keeps logging off the hot path. Gaps: no autoscaling stated, extra API Gateway hop, and the Feature Retrieval API adds an unexplained layer.",
+   "compatibility": "Merchant / Payment Gateway integration via REST/HTTPS (gRPC at context level) and OAuth2/OIDC with the External IdP are named. Gaps: the IdP is absent from the container relationships, API contracts are undefined, and the REST vs gRPC inconsistency is unresolved.",
+   "usability": "Fraud Analyst, Risk Operations Manager and Compliance Auditor are served by the React Analyst Web App with WebSocket queue updates. Gaps: the auditor reaches audit data only through the case UI with no explicit Athena path, and no dashboards, explanation views or merchant developer interface are shown.",
+   "reliability": "SQS Audit Buffer decouples logging and managed Fargate/ElastiCache are used. But R-07 has no fail-open fallback, there is no multi-AZ, replication, circuit breaker or retry design, and Redis is a single point of failure for scoring. Nothing guarantees audit write durability before decisions.",
+   "security": "AWS WAF, TLS, IdP MFA, RBAC and data masking in FastAPI Case Management Backend, and S3 Object Lock WORM address integrity and audit. Gaps: no tokenization or encryption/KMS mechanism, no PCI network segmentation, no service-to-service authentication, and no storage of explanation or model version.",
+   "maintainability": "Decomposition is clear, with separate containers and components like Model & Rule Synchronizer, Audit Dispatcher and Feature Assembler. Gaps: inconsistent duplicate elements (Audit Log Storage repeated, API Gateway as a component of the engine), mixed Go/Python/Node stacks for a three-person team, and extra RDS.",
+   "portability": "The design is tightly bound to AWS services (Lambda, SQS, S3 Object Lock, Athena, ElastiCache, Fargate), with only eu-west-1 required. Containers (ECS Fargate, ONNX open model format) help somewhat, but there is no abstraction or IaC to replace infrastructure."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 1,
+   "AVAIL-02": 3,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 2,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.375,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 2.0,
+   "Modifiability": 2.5,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "API Gateway",
+     "Real-Time Scoring Engine",
+     "Feature Assembler",
+     "Inference & Rule Executor",
+     "Feature Store",
+     "Amazon ElastiCache Redis"
+    ],
+    "sensitivity_points": [
+     "API Gateway hop adds latency to the 50 ms budget",
+     "Redis lookup latency under load",
+     "Feature Retrieval API Go layer adds a hop"
+    ],
+    "tradeoffs": [
+     "Managed gateway convenience versus latency overhead",
+     "Embedded ONNX speed versus model flexibility"
+    ],
+    "justification": "In-process ONNX, Redis features and async audit suit the target. But no autoscaling or sizing, no capacity evidence, and API Gateway plus an extra Feature Retrieval API hop risk P99 under 50 ms."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Case Management Backend & UI",
+     "React Analyst Web App",
+     "FastAPI Case Management Backend",
+     "Real-Time Scoring Engine",
+     "Amazon CloudFront"
+    ],
+    "sensitivity_points": [
+     "Case data store is not defined",
+     "Shared Redis or S3 access could contend with scoring"
+    ],
+    "tradeoffs": [
+     "Separate containers isolate load versus higher cost",
+     "Static SPA via CloudFront speeds screens but adds complexity"
+    ],
+    "justification": "The case UI is a separate Fargate service with a CDN-hosted SPA, so it is isolated from scoring. But there is no case database, queue store or read model, and the case-to-scoring data path is unclear. Risks are unaddressed."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 1,
+    "elements": [
+     "Real-Time Scoring Engine",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "No fallback decision path defined",
+     "No redundancy or health checks specified"
+    ],
+    "tradeoffs": [
+     "Fallback approving risks fraud; fallback declining risks blocking payments"
+    ],
+    "justification": "No fallback path, circuit breaker, multi-AZ deployment or default-decision mechanism exists. Fallback decisions are not audited. A crash of scoring would block payments, so the requirement is not met."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Audit Dispatcher",
+     "Audit Buffer Component",
+     "Audit Ingestion Component",
+     "Tamper-Evident Vault Component",
+     "Amazon S3"
+    ],
+    "sensitivity_points": [
+     "Audit Dispatcher flush is async but has no local buffer",
+     "Container-level link writes to S3 directly, bypassing SQS",
+     "Dispatcher-to-SQS link is missing"
+    ],
+    "tradeoffs": [
+     "Async buffering protects latency but risks loss on a crash",
+     "Serverless ingestion saves cost but adds delay"
+    ],
+    "justification": "An SQS buffer and Lambda decouple audit writes from scoring. But the dispatcher's wiring is inconsistent: it writes straight to S3, no durable local buffering or DLQ is stated, and no-loss is not guaranteed."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Model & Rule Synchronizer",
+     "Inference & Rule Executor",
+     "Amazon S3",
+     "Real-Time Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Atomic swap is in-process per instance",
+     "No rollback or version registry",
+     "Model version not recorded in audit"
+    ],
+    "tradeoffs": [
+     "Hot swap avoids downtime but lacks staged rollout or canary"
+    ],
+    "justification": "The atomic.Value swap gives zero-downtime activation, and models are stored in S3. But there is no rollback procedure, no versioning or canary, no notification trigger, and no explicit recording of the model version in decisions."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "elements": [
+     "Model & Rule Synchronizer",
+     "Inference & Rule Executor",
+     "Case Management Backend & UI"
+    ],
+    "sensitivity_points": [
+     "No rule authoring or approval component",
+     "Rule explanation not captured",
+     "Rule-set versioning absent"
+    ],
+    "tradeoffs": [
+     "Embedded rules are fast but harder for analysts to edit"
+    ],
+    "justification": "Rules are embedded and can be hot-swapped, but no rule authoring interface, approval workflow, or rule distribution is modeled. Nothing records applied rules or an explanation per decision. Analyst-driven change within an hour is unsupported."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "elements": [
+     "FastAPI Case Management Backend",
+     "External Identity Provider (IdP)",
+     "Audit Event Emitter",
+     "Audit Log Storage"
+    ],
+    "sensitivity_points": [
+     "Data masking is only mentioned in a description",
+     "No anomaly detection or alerting component",
+     "No tokenization service shown"
+    ],
+    "tradeoffs": [
+     "Masking in the backend is simple but is a single point of failure"
+    ],
+    "justification": "RBAC, MFA via the IdP and masking exist in the backend, and access is audited. But no tokenization or vault, no anomaly detection or alerting within 15 minutes, and no guarantee that card data stays out of analyst-reachable stores."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Audit Log Storage",
+     "Tamper-Evident Vault Component",
+     "Query & Access Component",
+     "Feature Snapshotter",
+     "Audit Dispatcher"
+    ],
+    "sensitivity_points": [
+     "Audit payload content not specified to include explanation",
+     "Model artifacts retention for 7 years not specified",
+     "Object Lock compliance mode and Athena aid retrieval"
+    ],
+    "tradeoffs": [
+     "WORM storage ensures integrity but prevents correction and deletion"
+    ],
+    "justification": "S3 Object Lock in compliance mode, partitioned logs, Athena queries and feature snapshots support retrieval of tamper-evident records. But explanations, model version and rules aren't shown as stored, and there is no model artifact archive for reproduction."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "none"
+  },
+  "coverage": 0.5909090909090909,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "AWS WAF",
+     "API Gateway",
+     "External Identity Provider (IdP)",
+     "FastAPI Case Management Backend"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Audit Log Storage",
+     "Tamper-Evident Vault Component",
+     "Query & Access Component",
+     "Audit Dispatcher",
+     "Feature Snapshotter"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Audit Ingestion Component",
+     "Query & Access Component",
+     "Real-Time Scoring Engine"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Audit Ingestion Component",
+     "Query & Access Component",
+     "Case Management Backend & UI"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Inference & Rule Executor",
+     "Feature Assembler",
+     "Feature Store",
+     "HTTP/gRPC Ingress Router"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Backend & UI",
+     "React Analyst Web App",
+     "FastAPI Case Management Backend"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model & Rule Synchronizer",
+     "Inference & Rule Executor"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Feature Store",
+     "Amazon ElastiCache Redis",
+     "Audit Buffer Component",
+     "Audit Dispatcher",
+     "Inference & Rule Executor"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "FastAPI Case Management Backend",
+     "AWS WAF",
+     "Managed Edge Router"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit Dispatcher",
+     "Tamper-Evident Vault Component",
+     "Audit Log Storage",
+     "Feature Snapshotter"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

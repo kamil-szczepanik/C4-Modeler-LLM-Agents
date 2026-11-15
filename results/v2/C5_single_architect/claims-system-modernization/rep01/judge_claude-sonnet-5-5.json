@@ -1,0 +1,334 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 3,
+   "portability": 3
+  },
+  "mean": 3.125,
+  "justifications": {
+   "functional_suitability": "Customer Portal with Claim Submission Form covers R-01; Adjuster Workspace covers R-02. Adapter Router and Migration Sync Ledger hint at R-03, but no per-claim-type routing or migration toggle is defined. Brokers get no distinct features, and L1/L2 are inconsistent.",
+   "performance_efficiency": "Workflow Orchestrator claims local caching and async adapters for sub-2s loads, and Resilience4j in the ACL shields against mainframe latency. gRPC and Event Hubs help. However, no concrete cache store, read model or scaling mechanism is shown; the caching is only asserted.",
+   "compatibility": "Integration Layer (Camel, Protocol Translator, Mainframe ACL) and Event Hubs bridge the mainframe; OIDC covers AD. Gaps: no batch-window coordination, the L1 ACL differs from L2, and the mainframe interface is unclear given the one-change-per-quarter limit.",
+   "usability": "Customers and brokers use the React Customer Portal with Claim Status Tracker; adjusters use the Adjuster Workspace BFF. No distinct broker interface and no adjuster UI component are shown. Status polling is basic, though the channels are appropriate.",
+   "reliability": "Idempotency & Replay Manager, Outbox Event Publisher (Debezium), Migration Sync Ledger and Resilience4j address R-04 well. Gaps: no rollback switch mechanism for R-06 beyond the Audit & Fallback Log, and no HA, retry or DR details. The Redis-based idempotency store is not in the container view.",
+   "security": "API Gateway Authentication & Authorization Component, MSAL.js Authentication Module and OIDC with AD give SSO. TLS on gRPC, JDBC and AMQP, plus the append-only Audit & Fallback Log provide accountability. Gaps: no secrets management, network segmentation or authorization model detail.",
+   "maintainability": "Clear decomposition: BFF, Claim Domain Service (DDD), Adapter Router, ACL and Integration Layer. Rollback within a day is supported only vaguely. Weaknesses: the ACL is duplicated across containers, Event Publisher/Integration Adapter overlap, and Adjuster Workspace holds Camel.",
+   "portability": "Container Apps, PostgreSQL, Camel and Spring are fairly portable, and the hybrid on-prem/Azure split is addressed through the Integration Layer. But Azure-specific services dominate, there is no IaC or containerization detail, and the team's limited cloud experience is not addressed."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 3,
+   "MOD-01": 3,
+   "MOD-02": 3,
+   "PERF-01": 2,
+   "PERF-02": 2,
+   "SEC-01": 2,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.40625,
+  "by_quality_attribute": {
+   "Performance": 2.0,
+   "Availability": 3.0,
+   "Modifiability": 3.0,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "elements": [
+     "Adjuster Workspace",
+     "Workflow Orchestrator",
+     "Claims Core Engine",
+     "Adapter Router",
+     "Anti-Corruption Layer (ACL)",
+     "Migrated Claims Database"
+    ],
+    "sensitivity_points": [
+     "Cache is claimed but no cache store or invalidation is modeled",
+     "Legacy fallback calls appear synchronous"
+    ],
+    "tradeoffs": [
+     "Caching improves latency but risks stale claim data"
+    ],
+    "justification": "Resilience4j ACL and a 'local caching' claim are mentioned, but no cache container, timeout or async prefetch is modeled. Synchronous gRPC to the core engine and legacy fallback could still exceed 2 s with a 5 s mainframe."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "elements": [
+     "Customer Portal",
+     "API Gateway",
+     "Claims Core Engine",
+     "Integration Layer",
+     "Migrated Claims Database"
+    ],
+    "sensitivity_points": [
+     "Autoscaling is not specified",
+     "Event Hubs throttling toward the mainframe is not modeled"
+    ],
+    "tradeoffs": [
+     "Asynchronous decoupling gives eventual consistency of legacy state"
+    ],
+    "justification": "Submissions persist in PostgreSQL and propagate via Event Hubs, which decouples the mainframe. However, no scaling policy, rate control or batch-window-aware forwarding is shown, so protection of the batch window is not explicit."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "elements": [
+     "Integration Layer",
+     "Idempotency & Replay Manager",
+     "Event Hubs",
+     "Outbox Event Publisher",
+     "Migrated Claims Database"
+    ],
+    "sensitivity_points": [
+     "No explicit batch-window hold or scheduling of forwarding",
+     "Replay Manager is not wired into the flows"
+    ],
+    "tradeoffs": [
+     "Delayed forwarding means the mainframe is temporarily stale"
+    ],
+    "justification": "Submissions are stored locally, the outbox pattern and Event Hubs buffer events, and the replay manager is named. But the Replay Manager has no relationships in the model, and there is no mechanism that holds back forwarding during the window and releases it afterwards."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Outbox Event Publisher",
+     "Migration Sync Ledger",
+     "Idempotency & Replay Manager",
+     "Audit & Fallback Log",
+     "Integration Layer"
+    ],
+    "sensitivity_points": [
+     "Reconciliation process is not defined",
+     "Redis idempotency state durability is unspecified"
+    ],
+    "tradeoffs": [
+     "Idempotency adds state and latency to every message"
+    ],
+    "justification": "Outbox, sync ledger, idempotency store and audit log are the right building blocks for at-least-once delivery with deduplication. Reconciliation logic is not modeled, Redis is a weak store for idempotency, and the mainframe-side dedup is unclear."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Adapter Router",
+     "Anti-Corruption Layer (ACL)",
+     "Protocol Translator",
+     "Migration Sync Ledger",
+     "Audit & Fallback Log"
+    ],
+    "sensitivity_points": [
+     "Per-claim-type routing configuration is not explicit",
+     "Mainframe interface change count is not addressed"
+    ],
+    "tradeoffs": [
+     "Dual-run synchronization raises complexity for flexibility"
+    ],
+    "justification": "Adapter Router and ACL can route between the platforms, and the JSONB store suits new types. However, there is no explicit per-type feature flag or switch-back mechanism, and the one-change-per-quarter mainframe limit is not explicitly handled."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "elements": [
+     "Customer Portal",
+     "Adjuster Workspace",
+     "Claims Core Engine",
+     "Adapter Router",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Adapter Router must be removed cleanly",
+     "Data ownership cutover process is not defined"
+    ],
+    "tradeoffs": [
+     "Abstraction layers add indirection that must later be removed"
+    ],
+    "justification": "UIs talk only to the gateway and the core engine, and the mainframe sits behind the ACL, so the UIs need no rewrite. However, the cutover of system-of-record status and data migration are not modeled."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "elements": [
+     "API Gateway",
+     "Authentication & Authorization Component",
+     "Claims Core Engine",
+     "Customer Portal"
+    ],
+    "sensitivity_points": [
+     "No broker-to-customer ownership authorization model",
+     "No audit of denied access, and no mainframe-side enforcement"
+    ],
+    "tradeoffs": [
+     "Fine-grained authorization adds per-request overhead"
+    ],
+    "justification": "The gateway validates tokens, which gives authentication only. Row-level or ownership authorization in the core engine is absent, the Audit Log is not tied to denials, and enforcement in the mainframe is not addressed."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Authentication & Authorization Component",
+     "Active Directory",
+     "API Gateway",
+     "Integration Layer",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Token lifetime and revocation are not specified",
+     "Mainframe accounts are not linked to AD"
+    ],
+    "tradeoffs": [
+     "Short token lifetimes improve revocation but increase re-authentication"
+    ],
+    "justification": "SSO through AD/OIDC at the gateway means disabling the AD account blocks new tokens for the new platform. Token lifetime and session revocation within 15 minutes are unspecified, and mainframe access is not tied to AD."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "full"
+  },
+  "coverage": 0.6818181818181818,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Legacy Mainframe",
+     "Integration Layer",
+     "Mainframe ACL",
+     "Adapter Router"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Idempotency & Replay Manager",
+     "Integration Layer"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Anti-Corruption Layer (ACL)",
+     "Integration Layer",
+     "Protocol Translator",
+     "Mainframe ACL"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Azure App Service",
+     "Azure Container Apps",
+     "Azure Static Web Apps",
+     "Integration Layer"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer Portal",
+     "Claim Submission Form",
+     "API Gateway",
+     "Claims Core Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Workspace",
+     "Claims Core Engine",
+     "Workflow Orchestrator",
+     "Engine Client"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Adapter Router",
+     "Migration Sync Ledger",
+     "Claims Core Engine",
+     "Migrated Claims Database"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Idempotency & Replay Manager",
+     "Outbox Event Publisher",
+     "Migration Sync Ledger",
+     "Claim Aggregate Store"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Workflow Orchestrator",
+     "Anti-Corruption Layer (ACL)",
+     "Integration Adapter"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Adapter Router",
+     "Audit & Fallback Log",
+     "Migration Sync Ledger"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Authentication & Authorization Component",
+     "Authentication Module",
+     "API Gateway",
+     "Active Directory"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

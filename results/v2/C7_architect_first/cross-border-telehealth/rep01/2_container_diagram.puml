@@ -1,0 +1,34 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Cross-Border Telehealth Platform
+
+Person(Patients, "Patients", "Patients accessing video consultations, e-prescriptions, and the AI symptom checker.")
+Person(LicensedClinicians, "Licensed Clinicians", "Licensed clinicians accessing the platform to conduct video consultations and manage healthcare delivery.")
+
+System_Ext(EUNationaleprescriptionGateways, "EU National e-Prescription Gateways", "External national gateways for e-prescriptions within the EU.")
+System_Ext(USPharmacyNetworks, "US Pharmacy Networks", "External pharmacy networks within the US.")
+System_Ext(ThirdPartyAIModelProviders, "Third-Party AI Model Providers", "External AI providers powering the symptom checker.")
+System_Ext(IdentityProviders, "Identity Providers", "External OAuth2/OIDC, EU eIDAS, and US Login.gov authentication systems.")
+
+System_Boundary(CrossBorderTelehealthPlatform, "Cross-Border Telehealth Platform") {
+    Container(GCPApiGateway, "GCP API Gateway", "Google Cloud Endpoints / Cloud API Gateway", "Cloud Endpoints routing and securing incoming requests.")
+    Container(WebAppMobileAppContainers, "Web Application & Mobile App Containers", "React, React Native", "Client-facing frontend applications for patients and clinicians.")
+    Container(CoreServicesGKEClusters, "Core Services GKE Clusters", "Google Kubernetes Engine (GKE), Istio Service Mesh, gRPC", "Microservices for Consultation, Prescription, AI Symptom Checker, Consent & Policy, Notification, Localization, and BI Ingestion.")
+    ContainerDb(DataContainers, "Data Containers", "Cloud SQL PostgreSQL, Cloud Storage with WORM policies", "Region-isolated transactional data storage and encrypted medical artifacts.")
+    Container(MediaRelayContainers, "Media Relay Containers", "Coturn TURN/STUN, Mediasoup SFU", "Relays real-time video and audio data for consultations.")
+}
+
+Rel(Patients, WebAppMobileAppContainers, "Interacts with the platform via web or mobile apps", "HTTPS/WSS")
+Rel(LicensedClinicians, WebAppMobileAppContainers, "Interacts with the platform via web or mobile apps", "HTTPS/WSS")
+Rel(WebAppMobileAppContainers, GCPApiGateway, "Sends API requests to backend services", "HTTPS/WSS")
+Rel(GCPApiGateway, CoreServicesGKEClusters, "Routes requests to regional GKE services", "gRPC over mTLS")
+Rel(CoreServicesGKEClusters, MediaRelayContainers, "Connects consultation traffic to media relays", "WebRTC (DTLS-SRTP)")
+Rel(CoreServicesGKEClusters, DataContainers, "Reads and writes transactional data and medical artifacts", "PostgreSQL protocol, Cloud Storage APIs")
+Rel(CoreServicesGKEClusters, EUNationaleprescriptionGateways, "Integrates for EU e-prescriptions", "REST and HL7 FHIR over secure mTLS")
+Rel(CoreServicesGKEClusters, USPharmacyNetworks, "Integrates for US pharmacy and prescription data", "REST and HL7 FHIR over secure mTLS")
+Rel(CoreServicesGKEClusters, ThirdPartyAIModelProviders, "Invokes third-party AI models with anonymized payloads via Istio Egress Gateways", "HTTPS with Istio Egress Filtering")
+Rel(CoreServicesGKEClusters, IdentityProviders, "Authenticates users", "OAuth2/OIDC, mTLS")
+
+@enduml

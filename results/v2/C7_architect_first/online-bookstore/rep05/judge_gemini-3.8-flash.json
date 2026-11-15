@@ -1,0 +1,345 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "Catalog Service with Amazon OpenSearch handles search (R-01); Order & Checkout Service and Stripe/PayPal handle checkout (R-02); Review Service supports ratings (R-03); Recommendation Service provides co-purchase recommendations (R-04). However, dedicated mechanisms for electronic book fulfillment or digital delivery are omitted.",
+   "performance_efficiency": "Edge caching via Edge Content Delivery Network (CloudFront), code splitting in React Single Page Application, ElastiCache Redis caching, and DynamoDB Global Tables effectively guarantee 1 M MAU scalability and under 2-second page loads on 3G.",
+   "compatibility": "The architecture explicitly defines integration mechanisms with external systems: Fulfillment Integration connects to FedEx/UPS, Payment Orchestration integrates with Stripe/PayPal, Dispatch Adapter binds to SendGrid/SES, and Pricing & Localization Interceptor connects with Fixer exchange rate APIs.",
+   "usability": "React Single Page Application covers end-user shopping, search, and checkout flows well. However, dedicated interfaces, consoles, or operational workflows for internal Administrators identified in the brief are completely absent.",
+   "reliability": "High availability (99.95%) is addressed via DNS Router geo-failover, DynamoDB Global Table Replica Manager across all three AWS regions, Aurora multi-region storage, SQS Dead Letter Queues, and Fallback & Resiliency Manager in Recommendation Service.",
+   "security": "AWS WAF provides explicit OWASP Top-10 mitigations, Amazon API Gateway enforces JWT auth with AWS Cognito, mTLS is mandated via AWS App Mesh, and AWS KMS encrypts sensitive data across Aurora, DynamoDB, and Compliance Audit Logger.",
+   "maintainability": "System decomposition is cleanly partitioned into microservices (Catalog Service, Order & Checkout Service, Review Service) communicating via gRPC/App Mesh and asynchronous SQS events, with modular frontend components (Catalog & Search Module, Cart & Checkout Flow).",
+   "portability": "The design deploys cleanly across the required AWS regions (us-east-1, eu-west-1, ap-southeast-1). However, extensive coupling to proprietary AWS primitives (DynamoDB, App Mesh, Kinesis, CloudFront, Route 53) restricts replaceability and cloud portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.96875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "CloudFront edge caching, Redis catalog caching, and DynamoDB auto-scaling absorb traffic spikes, allowing catalog and product pages to be served quickly within the 2-second target.",
+    "elements": [
+     "Global Edge Layer",
+     "Edge Content Delivery Network",
+     "Catalog Service",
+     "Catalog Cache Layer",
+     "Amazon ElastiCache (Redis)",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio at CloudFront and ElastiCache Redis layers",
+     "Read throughput provisioning on DynamoDB Global Tables"
+    ],
+    "tradeoffs": [
+     "Aggressive edge caching increases risk of briefly stale catalog inventory data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Pre-computed recommendation vectors stored in Redis decouple asynchronous model recomputation from synchronous catalog browsing, preventing background ML loads from degrading user response times.",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Engine",
+     "Recommendation Cache Engine",
+     "Amazon ElastiCache Redis",
+     "Fallback & Resiliency Manager"
+    ],
+    "sensitivity_points": [
+     "Separation of compute-intensive ML training from Redis read replicas"
+    ],
+    "tradeoffs": [
+     "Precomputing recommendation vectors conserves real-time latency at the cost of eventual consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The transactional outbox pattern combined with Amazon SQS buffers shipping events asynchronously, ensuring checkout succeeds without synchronous dependency on external carrier availability.",
+    "elements": [
+     "Order & Checkout Service",
+     "Order Management",
+     "Outbox Event Publisher",
+     "Fulfillment Integration",
+     "Amazon SQS",
+     "FedEx/UPS"
+    ],
+    "sensitivity_points": [
+     "Reliability of Outbox polling and Amazon SQS message delivery"
+    ],
+    "tradeoffs": [
+     "Asynchronous fulfillment improves checkout availability but delays shipping label confirmation to customers"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Route 53 geo-DNS and DynamoDB Global Tables handle multi-region failover, but cross-region promotion of Aurora PostgreSQL writer replicas introduces slight failover latency and operational recovery overhead.",
+    "elements": [
+     "DNS Router",
+     "Amazon Route 53",
+     "Amazon Aurora PostgreSQL",
+     "Distributed Storage Volume",
+     "Global Table Replica Manager",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "Replication lag and promotion time of Aurora cross-region read replicas"
+    ],
+    "tradeoffs": [
+     "Active-passive database replication maintains strict ACID integrity but adds promotion RTO during regional outages"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Pricing & Localization Interceptor encapsulates currency conversions using external exchange rate feeds, while Stripe and PayPal natively support multi-currency checkout without widespread core architectural changes.",
+    "elements": [
+     "Catalog Service",
+     "Pricing & Localization Interceptor",
+     "Order & Checkout Service",
+     "Payment Orchestration",
+     "Fixer/Open Exchange Rates",
+     "Stripe/PayPal"
+    ],
+    "sensitivity_points": [
+     "Abstraction level of currency formatting and conversion interceptors"
+    ],
+    "tradeoffs": [
+     "Centralizing exchange rate fetching simplifies currency additions but requires reliable external provider connectivity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Recommendation Engine is encapsulated behind a gRPC API controller and an ElastiCache Redis cache layer, allowing algorithm updates without modifying external clients or services.",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Engine",
+     "Recommendation API Controller",
+     "Amazon ElastiCache Redis"
+    ],
+    "sensitivity_points": [
+     "Stability of internal gRPC contracts between API Controller and Engine"
+    ],
+    "tradeoffs": [
+     "Microservice decoupling isolates algorithmic iterations but requires maintaining internal gRPC interfaces"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "AWS WAF filters malicious payloads at the edge, while API Gateway validation and parameterized database persistence components block SQLi and XSS across catalogue and review paths.",
+    "elements": [
+     "Global Edge Layer",
+     "Web Application Firewall",
+     "Amazon API Gateway",
+     "Review Service",
+     "Review Moderation Engine",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Regular updating of AWS WAF managed rule sets against OWASP Top-10"
+    ],
+    "tradeoffs": [
+     "Deep payload inspection at edge WAF ensures security but introduces sub-millisecond edge latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The Customer Privacy/Compliance Service coordinates a distributed saga via Amazon SQS to erase personal records across databases and Redis caches, logging immutable compliance records in DynamoDB.",
+    "elements": [
+     "Customer Privacy/Compliance Service",
+     "Consent & Preference Controller",
+     "Data Erasure & Anonymization Engine",
+     "Compliance Audit Logger",
+     "Amazon SQS",
+     "Amazon ElastiCache Redis"
+    ],
+    "sensitivity_points": [
+     "Complete saga event consumption by all services containing personal user data"
+    ],
+    "tradeoffs": [
+     "Asynchronous deletion sagas ensure multi-service data consistency but require complex rollback error handling"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Customer Privacy/Compliance Service",
+     "Consent & Preference Controller",
+     "Data Erasure & Anonymization Engine",
+     "Data Export Handler",
+     "Compliance Audit Logger"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Fixer/Open Exchange Rates",
+     "Pricing & Localization Interceptor"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "FedEx/UPS",
+     "Order & Checkout Service",
+     "Fulfillment Integration"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog Service",
+     "Catalog & Search Module",
+     "Search Engine Adapter",
+     "Amazon OpenSearch",
+     "Catalog Table Store",
+     "Search Index Accelerator"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Order & Checkout Service",
+     "Stripe/PayPal",
+     "Cart & Checkout Flow",
+     "Order Management",
+     "Payment Orchestration",
+     "Session Store Engine",
+     "Amazon Aurora PostgreSQL"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Review Service",
+     "Recommendation & Review Widgets",
+     "Review API Controller",
+     "Rating Aggregator Component",
+     "Review Moderation Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Engine",
+     "Recommendation Cache Engine",
+     "Recommendation & Review Widgets"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Global Edge Layer",
+     "Amazon API Gateway",
+     "Amazon Aurora PostgreSQL",
+     "Amazon DynamoDB",
+     "Amazon ElastiCache Redis",
+     "Event Buffer",
+     "Connection Pooler"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Global Edge Layer",
+     "Edge Content Delivery Network",
+     "Edge Request Transformer",
+     "Routing & App Shell",
+     "Catalog Cache Layer",
+     "Amazon ElastiCache Redis"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "DNS Router",
+     "Global Table Replica Manager",
+     "Distributed Storage Volume",
+     "Fallback & Resiliency Manager"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Web Application Firewall",
+     "Edge Request Transformer",
+     "Auth & Authorization",
+     "Rate Limiting & Throttling"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

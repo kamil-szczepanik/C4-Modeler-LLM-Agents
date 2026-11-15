@@ -1,0 +1,319 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 3,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 2,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.5,
+  "justifications": {
+   "functional_suitability": "The Scoring Engine (Rule Engine and Model Runner) handles authorization scoring, while the Case Management API and Case Controller support analyst reviews. Dynamic model updates are supported via S3 synchronization, though explicit in-memory rule hot-reloading mechanics are left underspecified.",
+   "performance_efficiency": "In-memory evaluation using Go and Model Runner provides low latency. However, writing audit logs directly from Audit Logger to Aurora PostgreSQL under 3,000 TPS risks saturation, and there is an architectural mismatch between L2 Amazon SQS and L3 Amazon Kinesis Data Streams.",
+   "compatibility": "External interfaces support standard protocols including gRPC and REST over TLS for Payment Switch, Payment Gateway, and IdP integration via OAuth2/OIDC. S3 integration enables interoperability with the Model Training Environment.",
+   "usability": "Fraud Analysts are provided a dedicated Web UI integrated with Case Management API and Case Controller. Payment clients are well served with gRPC and REST APIs via the API Gateway.",
+   "reliability": "The architecture lacks mechanisms for R-07; neither API Gateway nor Scoring Engine incorporates circuit breakers, fallback bypasses, or fail-open routing to prevent blocking payments when scoring is down. Container and component views also contradict on SQS versus Kinesis.",
+   "security": "Token Sanitizer redacts PANs before scoring, and Masking & Tokenization Proxy shields raw data from analysts. Audit Ledger enforces hash-chaining for tamper-evidence alongside IdP authentication, adequately aligning with PCI-DSS requirements.",
+   "maintainability": "Clear modular separation between the Scoring Engine, Case Management API, and Edge routing. Components like Model Runner and Rule Engine have distinct responsibilities, facilitating maintainability for a small team of three engineers.",
+   "portability": "While targeted at AWS eu-west-1, the design is tightly coupled to AWS proprietary offerings (AWS API Gateway, Lambda Authorizer, Amazon Aurora PostgreSQL, and Kinesis), limiting execution in non-AWS environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.53125,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 2.5,
+   "Modifiability": 3.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "In-process execution of rules and ONNX ML models inside Go containers avoids network hops, keeping evaluation within latency budgets. However, API Gateway edge authorizer hops under 3,000 TPS introduce latency risks.",
+    "elements": [
+     "API Gateway",
+     "AWS API Gateway HTTP API",
+     "Lambda Authorizer",
+     "Scoring Engine",
+     "API Handler",
+     "Token Sanitizer",
+     "Rule Engine",
+     "Model Runner"
+    ],
+    "sensitivity_points": [
+     "In-process ONNX runtime execution latency",
+     "API Gateway HTTP API and Lambda authorizer cold starts and overhead"
+    ],
+    "tradeoffs": [
+     "Local embedded model inference reduces latency but increases container memory footprint"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "justification": "Case Management API and Scoring Engine share the same Aurora PostgreSQL database and PgBouncer pooler without dedicated read replicas, risking lock contention and connection pool starvation during peak analyst workloads.",
+    "elements": [
+     "Case Management API",
+     "Case Controller",
+     "Case Repository",
+     "Data Store",
+     "Connection Pooler",
+     "Transactional Database",
+     "Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Database connection pool allocation between analyst queries and scoring writes",
+     "Shared I/O capacity on Aurora PostgreSQL"
+    ],
+    "tradeoffs": [
+     "Shared database cluster reduces infrastructure cost but compromises performance isolation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture does not specify fallback routing, a dead-letter bypass, or circuit breaker mechanisms in API Gateway or Payment Switch if Scoring Engine instances fail completely.",
+    "elements": [
+     "API Gateway",
+     "Scoring Engine",
+     "Payment Switch / Core Processing"
+    ],
+    "sensitivity_points": [
+     "Absence of circuit breaker and static fallback policy in gateway",
+     "Fargate task restart time exceeding the 1-minute availability constraint"
+    ],
+    "tradeoffs": [
+     "Relying solely on ECS auto-healing reduces complexity but risks blocking payments during crashes"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Audit Logger uses Go channels and asynchronous streams, but Level 3 component diagrams also indicate direct synchronous writes to the Data Store, which would block scoring when the database slows down.",
+    "elements": [
+     "Scoring Engine",
+     "Audit Logger",
+     "Event Stream",
+     "Amazon Kinesis Data Streams",
+     "Data Store",
+     "Connection Pooler"
+    ],
+    "sensitivity_points": [
+     "In-memory Go channel buffer capacity under prolonged database outages",
+     "Consistency between Kinesis streaming and direct Aurora writes"
+    ],
+    "tradeoffs": [
+     "Asynchronous buffering protects latency but risks log loss during process crash under backlog"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Decoupled ML pipeline synchronizes models to S3 and local ONNX runtime handles runtime execution with model version logging. Explicit automated rollback triggers within 5 minutes are not detailed.",
+    "elements": [
+     "Model Training Environment (ML Pipeline)",
+     "Scoring Engine",
+     "Model Runner",
+     "Audit Logger"
+    ],
+    "sensitivity_points": [
+     "Frequency and mechanism of model file synchronization from S3 into containers",
+     "Memory overhead of loading multiple ONNX model versions concurrently"
+    ],
+    "tradeoffs": [
+     "Dynamic local model swapping eliminates downtime but requires extra container memory overhead"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "Rule Engine evaluates in-memory rules, but no distributed state store exists for cross-transaction velocity checks, and there is no mechanism defined for hot-reloading rules without container redeployment.",
+    "elements": [
+     "Scoring Engine",
+     "Rule Engine",
+     "Data Store"
+    ],
+    "sensitivity_points": [
+     "Lack of distributed cache for real-time velocity calculations across replicas",
+     "Rule propagation mechanism and deployment pipeline runtime"
+    ],
+    "tradeoffs": [
+     "In-memory rule evaluation achieves sub-millisecond latency but prevents stateful velocity tracking"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Token Sanitizer and Masking & Tokenization Proxy prevent clear-text PAN exposure to analysts and IdP secures access. However, no SIEM, behavioral auditing, or anomaly alerting mechanism is present to detect compromised accounts in 15 minutes.",
+    "elements": [
+     "Case Management API",
+     "Masking & Tokenization Proxy",
+     "Identity Provider (IdP)",
+     "Audit & Evidence Service"
+    ],
+    "sensitivity_points": [
+     "Absence of continuous anomaly detection and security monitoring integration",
+     "Strictness of field-level masking in Case Management API"
+    ],
+    "tradeoffs": [
+     "Rigid tokenization protects PAN data but requires additional mapping lookups"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "The design includes S3 with Object Lock for 7-year immutable retention, alongside cryptographic hash-chaining in the Aurora Audit Ledger and captured model versions, fulfilling multi-year audit retrieval.",
+    "elements": [
+     "Audit & Compliance Archive",
+     "Data Store",
+     "Audit Ledger",
+     "Audit Logger",
+     "Case Management API"
+    ],
+    "sensitivity_points": [
+     "Index efficiency for retrieving 6-year-old records within one working day",
+     "Retention policy enforcement using S3 Object Lock Compliance Mode"
+    ],
+    "tradeoffs": [
+     "Immutable write-once storage guarantees compliance but prevents data corrections and increases long-term storage costs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "none"
+  },
+  "coverage": 0.5454545454545454,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Token Sanitizer",
+     "Masking & Tokenization Proxy"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Audit & Compliance Archive",
+     "Audit Ledger",
+     "Audit Logger"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "API Handler",
+     "Rule Engine",
+     "Model Runner"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Service",
+     "Case Management API",
+     "Case Controller",
+     "Case Repository",
+     "Fraud Analysts"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Model Training Environment (ML Pipeline)",
+     "Model Runner",
+     "Rule Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "AWS API Gateway HTTP API",
+     "Model Runner",
+     "Connection Pooler",
+     "Event Stream"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Token Sanitizer",
+     "Masking & Tokenization Proxy"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit Logger",
+     "Audit Ledger",
+     "Audit & Evidence Service",
+     "Audit & Compliance Archive"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

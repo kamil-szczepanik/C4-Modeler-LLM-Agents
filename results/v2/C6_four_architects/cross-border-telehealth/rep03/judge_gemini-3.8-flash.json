@@ -1,0 +1,340 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All requirements (R-01 to R-04) are fully addressed by dedicated elements: Video Consultation Service for consultations, Clinical Core & E-Prescription Service for prescriptions, AI Symptom Checker Service for triage, and Consent & Identity Management Service for purpose-based consent.",
+   "performance_efficiency": "Performance is thoroughly supported by Mediasoup SFU Router, Adaptive Transcoder, Outbox Event Dispatcher with Cloud Pub/Sub, and caching via Local Credential Cache Component and Redis Room State Manager.",
+   "compatibility": "R-08 is satisfied via Interoperability Mapper Component and EU/US Pharmacy Adapter Components supporting HL7 FHIR, SOAP, and REST to connect to External Pharmacy Gateways, alongside OIDC/OAuth2 federation with Identity Providers.",
+   "usability": "Patients and Clinicians connect directly to API Gateway / BFF, but dedicated frontend interfaces or client applications (web/mobile portals) tailored to each distinct user group are omitted from the container model.",
+   "reliability": "R-06 degraded mode is directly addressed by Bandwidth Throttling & Adaptation Module and Adaptive Transcoder. Reliability is bolstered by Buffer & Resiliency Manager, Local Credential Cache Component, and transactional outbox messaging.",
+   "security": "Addresses GDPR/HIPAA with Consent Enforcement Validator, OPA Policy Sidecar, CMEK data encryption, Prescription Validation & Signer Component, Break-Glass logging, and Regional Model Gateway enforcing regional data residency.",
+   "maintainability": "High maintainability achieved via well-bounded microservices, decoupled asynchronous messaging via Cloud Pub/Sub and Outbox Event Dispatcher, and reusable sidecars like Audit & Compliance Logger Sidecar and OPA Policy Sidecar.",
+   "portability": "Services leverage containerized runtimes (Go, Node.js, Python, Java) across GCP regions (europe-west3, us-central1). However, tight dependencies on proprietary GCP services (Cloud SQL, Cloud Pub/Sub) without an abstraction layer slightly limit cross-cloud portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The SFU Router (Mediasoup) and TURN/STUN cluster provide dedicated real-time media routing and scaling. However, the model lacks explicit auto-scaling policies and distributed SFU clustering details to definitively ensure sub-10s join times under sudden 5,000 concurrent session bursts.",
+    "elements": [
+     "API Gateway / BFF",
+     "Video Consultation Service",
+     "SFU Router",
+     "TURN/STUN Relay Server",
+     "Signaling"
+    ],
+    "sensitivity_points": [
+     "SFU horizontal auto-scaling and signaling connection capacity under peak concurrency"
+    ],
+    "tradeoffs": [
+     "Lower signaling latency versus increased resource overhead of maintaining warm SFU nodes"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "FastAPI handles high async throughput (~14 RPS for 50,000/hr) and delegating to Regional Model Gateways offloads intensive compute. The 3s response measure depends directly on external regional LLM inference latency and throttling limits, which are external to platform control.",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Symptom Assessment API Handler",
+     "Inference Orchestrator",
+     "Regional Model Gateway"
+    ],
+    "sensitivity_points": [
+     "Latency and concurrency quotas of upstream regional LLM endpoints on GCP"
+    ],
+    "tradeoffs": [
+     "Model accuracy and complex prompt chains versus inference response time"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The architecture contains dedicated real-time adaptation components including the Media Quality Monitor, Adaptive Transcoder, and Bandwidth Throttling & Adaptation Module to downscale video/audio below 300 kbit/s. Clinical record operations remain decoupled via transactional outbox patterns, preventing data loss.",
+    "elements": [
+     "Video Consultation Service",
+     "Adaptive Transcoder",
+     "Media Quality Monitor",
+     "Bandwidth Throttling & Adaptation Module",
+     "Clinical Core & E-Prescription Service"
+    ],
+    "sensitivity_points": [
+     "Threshold tuning for dynamic WebRTC bitrate and resolution degradation"
+    ],
+    "tradeoffs": [
+     "Video fidelity degradation traded off for continuous consultation connectivity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The target cloud lists only a single US region (us-central1). The architecture provides no secondary US region or automated failover mechanisms for US compute and Cloud SQL storage, making recovery within 1 hour without cross-border data transfer improbable.",
+    "elements": [
+     "Data Storage",
+     "Relational Data Store",
+     "Regional Tenant Router Component"
+    ],
+    "sensitivity_points": [
+     "Absence of a secondary disaster recovery region within US jurisdiction"
+    ],
+    "tradeoffs": [
+     "Strict data residency enforcement versus cross-region disaster recovery availability"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The architecture cleanly isolates format conversions within the Interoperability Mapper Component and encapsulates destination-specific integrations inside the modular EU/US Pharmacy Adapter Components, ensuring additions are strictly confined to a single adapter without impacting core clinical logic.",
+    "elements": [
+     "Clinical Core & E-Prescription Service",
+     "Interoperability Mapper Component",
+     "Notification & Pharmacy Integration Service",
+     "EU/US Pharmacy Adapter Components"
+    ],
+    "sensitivity_points": [
+     "Decoupling of national prescription format mapping from core domain entities"
+    ],
+    "tradeoffs": [
+     "Adapter modularity overhead versus agility in supporting diverse country standards"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The AI Symptom Checker Service features an Inference Orchestrator and Regional Model Gateway supporting version updates, alongside a Traceability & Audit Emitter and Audit & Traceability Store that explicitly log inputs and model versions for full EU MDR traceability and rollback.",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Inference Orchestrator",
+     "Traceability & Audit Emitter",
+     "Audit & Traceability Store"
+    ],
+    "sensitivity_points": [
+     "Immutable tracking of model version identifiers alongside patient inference payloads"
+    ],
+    "tradeoffs": [
+     "Storage overhead of comprehensive audit logging versus regulatory auditability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Cross-region access is mediated by the Tenant & Region Context Resolver and Consent Enforcement Validator, which queries the Consent & Identity Management Service and evaluates policies via OPA Sidecars. Denials and accesses are logged via the Audit & Compliance Logger Sidecar.",
+    "elements": [
+     "Clinical Core & E-Prescription Service",
+     "Tenant & Region Context Resolver Component",
+     "Consent Enforcement Validator Component",
+     "Consent & Identity Management Service",
+     "OPA Policy Sidecar Component",
+     "Audit & Compliance Logger Sidecar"
+    ],
+    "sensitivity_points": [
+     "Low-latency OPA policy evaluation enforcing regional data boundaries and active consent"
+    ],
+    "tradeoffs": [
+     "Strict zero-trust cross-region validation latency versus clinical record access speed"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Consent withdrawal is recorded in the Consent Ledger Component, which emits domain events via the Consent Revocation Broadcaster through Cloud Pub/Sub. The Local Credential Cache and OPA Sidecar ensure policy invalidation propagates near real-time, well within the 24-hour window.",
+    "elements": [
+     "Consent & Identity Management Service",
+     "Consent Ledger Component",
+     "Consent Revocation Broadcaster Component",
+     "Local Credential Cache Component",
+     "OPA Policy Sidecar Component",
+     "Data Storage"
+    ],
+    "sensitivity_points": [
+     "Reliable broadcast and immediate eviction of cached consent permissions"
+    ],
+    "tradeoffs": [
+     "Asynchronous revocation eventual consistency versus immediate synchronous invalidation blocking"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9583333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent & Identity Management Service",
+     "Consent & Policy Enforcer",
+     "Compliance Sanitizer & Masker",
+     "Audit & Compliance Logger Sidecar"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Regional Tenant Router Component",
+     "Region-Bound Access Controller",
+     "Regional Model Gateway",
+     "Regional Dispatcher",
+     "Data Storage"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Traceability & Audit Emitter",
+     "Audit Persistence Hook",
+     "Traceability Indexer",
+     "Audit & Traceability Store"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Adaptive Transcoder",
+     "Bandwidth Throttling & Adaptation Module",
+     "Media Relay Engine",
+     "Local Credential Cache Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Video Consultation Service",
+     "Signaling",
+     "SFU Router",
+     "TURN/STUN Relay Server"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Clinical Core & E-Prescription Service",
+     "E-Prescription Engine Component",
+     "Prescription Validation & Signer Component",
+     "Notification & Pharmacy Integration Service",
+     "EU/US Pharmacy Adapter Components",
+     "External Pharmacy Gateways"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Symptom Assessment API Handler",
+     "Inference Orchestrator",
+     "Safety & Fallback Guardrail Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Consent & Identity Management Service",
+     "Consent Ledger Component",
+     "Consent Enforcement Validator Component",
+     "Consent Revocation Broadcaster Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Regional Tenant Router Component",
+     "Tenant & Region Context Resolver Component",
+     "Consent Enforcement Validator Component",
+     "OPA Policy Sidecar Component",
+     "Region-Bound Access Controller"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Adaptive Transcoder",
+     "Bandwidth Throttling & Adaptation Module",
+     "Media Quality Monitor"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Traceability & Audit Emitter",
+     "Audit Persistence Hook",
+     "Traceability Indexer",
+     "Audit & Traceability Store"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Interoperability Mapper Component",
+     "EU/US Pharmacy Adapter Components",
+     "External Pharmacy Gateways"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

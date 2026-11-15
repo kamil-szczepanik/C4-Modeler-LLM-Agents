@@ -1,0 +1,332 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are explicitly covered: patient admissions via Demographics & Profile Form, clash checking via Clash Detection Engine, EMR via Core Clinical & EMR Service, and billing/claims submission through Billing & Claims Service and Claim Management Component.",
+   "performance_efficiency": "The sub-second EMR target is addressed using PgBouncer Connection Pooler, a Read Replica Cluster, client-side caching, and high-performance UI grids. However, cross-region query latency between on-prem-k8s and eu-central-1 lacks explicit distributed caching or data locality mechanisms.",
+   "compatibility": "The FHIR Interoperability Adapter with HAPI FHIR REST Facade directly fulfills R-08 for external lab and imaging systems. Integration with Third-Party Payment & Insurance Gateway is explicitly handled with dedicated adapter components.",
+   "usability": "All defined roles are served through tailored interfaces: Patient Portal Frontend (including an Accessibility & Localization Module) and Staff Web Application with role-specific modules for Receptionists, Clinicians, Billing Specialists, and Compliance Officers.",
+   "reliability": "AWS S3 Object Lock satisfies the 10-year retention constraint. However, while hybrid clusters target 99.99% active-active uptime, the database architecture relies on an active-passive PostgreSQL Primary Instance with asynchronous streaming replication, conflicting with true multi-region active-active operation.",
+   "security": "Security is thoroughly implemented via OIDC MFA at the API Gateway, AES-256 at rest using HashiCorp Vault Transit Secrets Engine, internal mTLS, pgaudit, and tamper-proof logging sent to the Audit & Compliance Service.",
+   "maintainability": "The architecture exhibits high modularity with domain-bounded microservices (Clinical, Scheduling, Billing, Audit), dynamic service discovery, database migration engines (Flyway/Liquibase), and clear separation between presentation, orchestration, and persistence layers.",
+   "portability": "Containerized services deploy across hybrid Kubernetes clusters (on-prem-k8s and AWS). However, direct integration with proprietary AWS S3 Object Lock SDKs in the Billing and Audit services creates a tight cloud dependency for the on-premise environment."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "PgBouncer connection pooling and a dedicated PostgreSQL Read Replica Cluster offload high-volume read traffic from the primary instance, while the staff client utilizes an optimized clinical data grid to satisfy the sub-second P95 latency target.",
+    "elements": [
+     "Staff Web Application",
+     "API Gateway",
+     "Core Clinical & EMR Service",
+     "Connection Pooler",
+     "Read Replica Cluster"
+    ],
+    "sensitivity_points": [
+     "Read replica replication lag under heavy concurrent queries",
+     "Connection pool sizing in PgBouncer"
+    ],
+    "tradeoffs": [
+     "Read replicas improve throughput but may introduce slight eventual consistency lag"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The FHIR Interoperability Adapter decouples result ingestion from Core Clinical querying via an asynchronous Kafka message broker. Write traffic is buffered while EMR reads hit PostgreSQL read replicas, insulating interactive clinical users from P95 degradation.",
+    "elements": [
+     "FHIR Interoperability Adapter",
+     "Core Clinical & EMR Service",
+     "PostgreSQL databases"
+    ],
+    "sensitivity_points": [
+     "Kafka partition throughput and consumer processing rate",
+     "PostgreSQL write IOPS on primary during ingestion"
+    ],
+    "tradeoffs": [
+     "Asynchronous processing introduces brief ingestion latency in exchange for protected EMR read responsiveness"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "While hybrid Kubernetes enables workload execution across sites, PostgreSQL uses active-passive streaming replication. Achieving cross-site failover with zero data loss and recovery within 1 minute across hybrid WAN boundaries presents significant replication lag and failover coordination challenges.",
+    "elements": [
+     "Hybrid Kubernetes Clusters",
+     "PostgreSQL databases",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Hybrid WAN latency affecting synchronous database replication",
+     "Automated cross-region DNS failover speed"
+    ],
+    "tradeoffs": [
+     "Synchronous replication guarantees zero data loss but increases cross-region write latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "PgBouncer manages connection reconnection, while asynchronous messaging and payment gateways support decoupled claim submission. However, explicit distributed idempotency keys and automated transaction replay mechanisms to guarantee zero claim duplication are not fully specified.",
+    "elements": [
+     "Billing & Claims Service",
+     "PostgreSQL databases",
+     "Connection Pooler",
+     "Third-Party Payment & Insurance Gateway"
+    ],
+    "sensitivity_points": [
+     "PgBouncer failover detection timeout",
+     "Database write transaction rollback and claim idempotency handling"
+    ],
+    "tradeoffs": [
+     "Strict claim deduplication checks increase end-to-end processing latency during failover"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Billing and claims are isolated within a dedicated microservice. Changes to insurance clearinghouses are strictly encapsulated within the Claim Management Component and its external gateway adapter, leaving the Core Clinical & EMR Service completely untouched.",
+    "elements": [
+     "Billing & Claims Service",
+     "Third-Party Payment & Insurance Gateway"
+    ],
+    "sensitivity_points": [
+     "Coupling between Claim Management and external gateway protocols",
+     "Rules engine extensibility in Claim Scrubbing"
+    ],
+    "tradeoffs": [
+     "Encapsulating clearinghouse logic inside a dedicated service increases inter-service network hops"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Adding an audited demographic field is isolated to three components: Patient & Admissions UI, Core Clinical EMR Service with Flyway migrations, and the automated Spring AOP Audit Interceptor which captures schema changes without modifying the central audit service.",
+    "elements": [
+     "Staff Web Application",
+     "Core Clinical & EMR Service",
+     "PostgreSQL databases"
+    ],
+    "sensitivity_points": [
+     "Schema migration automation via Flyway",
+     "AOP audit interceptor field coverage"
+    ],
+    "tradeoffs": [
+     "Automated AOP auditing reduces boilerplate modifications but incurs runtime reflection overhead"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Mandatory MFA enforced via the external Identity Provider and API Gateway successfully stops password-only authentication attempts. However, generating an automated security alert within 1 minute requires dedicated SIEM or alerting capabilities not explicitly detailed in the architecture.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "API Gateway",
+     "Audit & Compliance Service"
+    ],
+    "sensitivity_points": [
+     "IdP MFA enforcement policies",
+     "Latency of audit ingestion and SIEM alert dispatching"
+    ],
+    "tradeoffs": [
+     "Strict edge token introspection increases initial authentication latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Spring Security enforces fine-grained ABAC policies to verify clinician-patient relationships. All reads trigger the Audit Interceptor, dispatching events to the Audit & Compliance Service, which commits records to AWS S3 Object Lock with immutable 10-year retention policies.",
+    "elements": [
+     "Core Clinical & EMR Service",
+     "Audit & Compliance Service",
+     "AWS S3 Object Lock"
+    ],
+    "sensitivity_points": [
+     "ABAC policy evaluation overhead on EMR reads",
+     "S3 Object Lock retention mode configuration"
+    ],
+    "tradeoffs": [
+     "Auditing 100% of read access increases storage volume and telemetry overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Service",
+     "HashiCorp Vault",
+     "AWS S3 Object Lock",
+     "Encryption and Backup Daemon",
+     "Session & Inactivity Guard",
+     "Edge TLS Termination & WAF Proxy",
+     "DSAR Query Processor"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Hybrid Kubernetes Clusters",
+     "PostgreSQL Primary Instance",
+     "Read Replica Cluster",
+     "Connection Pooler"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AWS S3 Object Lock",
+     "Retention Mode Engine",
+     "Lifecycle Transition Manager",
+     "Retention Policy Enforcer",
+     "Billing Archive Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient & Admissions Module",
+     "Demographics & Profile Form",
+     "Core Clinical & EMR Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Service",
+     "Clash Detection Engine",
+     "Appointment API Controller",
+     "Appointment & Scheduling Module",
+     "Scheduling Workspace"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Core Clinical & EMR Service",
+     "EMR Orchestrator Component",
+     "Audit Interceptor Component",
+     "Audit & Compliance Service",
+     "EMR Clinical Workspace"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Service",
+     "Claim Management Component",
+     "Claim Scrubbing Component",
+     "Payment Processing Component",
+     "Third-Party Payment & Insurance Gateway",
+     "Billing & Admin Dashboard"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Authentication & JWT Validation Filter",
+     "HashiCorp Vault",
+     "Transit Secrets Engine",
+     "PostgreSQL databases"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Hybrid Kubernetes Clusters",
+     "PostgreSQL Primary Instance",
+     "Read Replica Cluster",
+     "Connection Pooler"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "EMR Clinical Workspace",
+     "Read Replica Cluster",
+     "Connection Pooler",
+     "API Gateway / Edge Proxy"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Interoperability Adapter",
+     "FHIR REST Facade",
+     "Transformation Engine",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

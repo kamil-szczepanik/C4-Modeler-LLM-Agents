@@ -1,0 +1,314 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: Customer Portal provides broker and customer submission, Adjuster Workspace provides adjuster workflows, and the Claim Router Component in Claims Integration Service enables phased claim migration.",
+   "performance_efficiency": "Local Claim Cache and asynchronous processing via Azure Service Bus successfully shield adjusters from 5-second mainframe latency, though a persistent cloud read database for CQRS is not explicitly modeled as a container.",
+   "compatibility": "The on-premises Mainframe Adapter with Translation Service and Mainframe Connector directly bridges legacy DB2/CICS/MQ protocols, while Microsoft Entra ID interfaces smoothly with Corporate Active Directory for authentication.",
+   "usability": "Customer Portal provides dedicated Claim Submission Form and Broker Workspace views with offline draft support, while Adjuster Workspace offers a specialized UI Controller and Razor Pages interface for internal claims staff.",
+   "reliability": "Zero data loss and strict consistency (R-04) are achieved via the Outbox Processor Component, Azure Service Bus topics/queues, and the Idempotency Manager in the Mainframe Adapter.",
+   "security": "R-07 is met using Auth Handler and Microsoft Entra ID for SSO. The architecture enforces mTLS, Azure Key Vault with Managed Identities, and audit logging across the integration and adapter services.",
+   "maintainability": "R-06 is directly satisfied by Claim Router Component and Azure App Configuration feature flags allowing instant rollback. Clean separation between Mainframe Adapter and Claims Integration Service minimizes mainframe changes.",
+   "portability": "The hybrid topology accurately balances on-premises deployment for Mainframe Adapter with Azure West Europe containerized workloads, though cloud components rely heavily on proprietary Azure PaaS services."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "The Adjuster Workspace relies on an in-memory cache to mitigate latency, but cache misses still trigger synchronous calls through the integration layer to the 5-second mainframe. A dedicated CQRS read store is mentioned in Level 1 but omitted from Level 2 and Level 3 designs.",
+    "elements": [
+     "Adjuster Workspace",
+     "Local Claim Cache",
+     "Claims Integration Service",
+     "Mainframe Adapter",
+     "CQRS Read Model"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios directly determine whether adjuster screen load times stay under 2 seconds"
+    ],
+    "tradeoffs": [
+     "Using local in-memory caching improves read latency but risks serving stale claim data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Customer submissions are decoupled from the mainframe via Azure Service Bus queues and the Outbox Processor. Sudden five-fold submission spikes are safely buffered in cloud messaging, throttling outbound traffic to the mainframe to prevent interference with the nightly batch window.",
+    "elements": [
+     "Customer Portal",
+     "Claims Integration Service",
+     "Azure Service Bus",
+     "Outbox Processor Component",
+     "Mainframe Adapter"
+    ],
+    "sensitivity_points": [
+     "Queue capacity and dispatch rates determine isolation of the batch window during traffic spikes"
+    ],
+    "tradeoffs": [
+     "Buffering submissions protects batch processing but introduces eventual consistency delays for users"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Transactional Outbox pattern combined with Azure Service Bus decouples online submissions from mainframe uptime. During the 23:00-05:00 batch window, incoming claims queue reliably in the mainframe-sync-queue and are drained automatically once the Mainframe Adapter resumes forwarding.",
+    "elements": [
+     "Customer Portal",
+     "Claims Integration Service",
+     "Outbox Processor Component",
+     "Azure Service Bus",
+     "Mainframe Adapter"
+    ],
+    "sensitivity_points": [
+     "Message retention limits on Azure Service Bus must safely exceed batch window durations"
+    ],
+    "tradeoffs": [
+     "Asynchronous decoupling preserves online availability during batch windows at the cost of immediate confirmation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The architecture incorporates an Outbox Processor to guarantee at-least-once delivery alongside an Idempotency Manager with local persistent storage in the Mainframe Adapter. Incomplete sync attempts are reconciled via persistent logs without duplicating or dropping claims.",
+    "elements": [
+     "Outbox Processor Component",
+     "Azure Service Bus",
+     "Mainframe Adapter",
+     "Idempotency Manager",
+     "Audit & Reconciliation Logger"
+    ],
+    "sensitivity_points": [
+     "Reliable duplicate detection depends on the durability of the Idempotency Manager local store"
+    ],
+    "tradeoffs": [
+     "Enforcing idempotency via local database checks adds processing overhead to every synchronized claim"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Azure App Configuration provides centralized feature flagging paired with the Claim Router and Legacy Fallback components. Claim types like motor can be routed conditionally to new services and rolled back instantly to the mainframe within minutes without requiring redeployments or mainframe changes.",
+    "elements": [
+     "Claim Router Component",
+     "Legacy Fallback Component",
+     "Azure App Configuration",
+     "Mainframe Adapter"
+    ],
+    "sensitivity_points": [
+     "Granularity of routing rules in App Configuration determines the speed of claim-type rollbacks"
+    ],
+    "tradeoffs": [
+     "Dynamic routing branches introduce branching complexity in integration logic to enable fast rollback"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Customer Portal and Adjuster Workspace depend strictly on the Claims Integration Service and API Gateway. Neither UI directly couples to mainframe schemas or adapters. Decommissioning the mainframe simply involves updating Claim Router configurations without requiring frontend rewrites.",
+    "elements": [
+     "Customer Portal",
+     "Adjuster Workspace",
+     "Claims Integration Service",
+     "Claim Router Component",
+     "Mainframe Adapter"
+    ],
+    "sensitivity_points": [
+     "API boundary stability between UI clients and the Claims Integration Service prevents frontend rewrites"
+    ],
+    "tradeoffs": [
+     "Maintaining facade and integration layers adds architectural indirection but protects client applications"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Authentication via Microsoft Entra ID is present, and actions are logged via the Audit & Telemetry Logger. However, the model lacks explicit broker-tenant isolation mechanisms, authorization policy enforcement filters, or claims-based access rules to prevent cross-broker record access.",
+    "elements": [
+     "Customer Portal",
+     "Claim Status Viewer",
+     "Azure API Management",
+     "Microsoft Entra ID",
+     "Audit & Telemetry Logger Component"
+    ],
+    "sensitivity_points": [
+     "Fine-grained broker tenant authorization logic must be enforced at the API gateway or backend"
+    ],
+    "tradeoffs": [
+     "Strict fine-grained relationship authorization checks increase per-request validation latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Single sign-on via Active Directory and Microsoft Entra ID centralizes adjuster identity management across both modern and legacy adapters. Access revocation in AD disables authentication, though achieving the strict 15-minute SLA depends on short token lifespans or Continuous Access Evaluation, which are unstated.",
+    "elements": [
+     "Adjuster Workspace",
+     "Auth Handler",
+     "Corporate Active Directory / Microsoft Entra ID",
+     "Mainframe Adapter"
+    ],
+    "sensitivity_points": [
+     "Token expiration time and Continuous Access Evaluation support determine access revocation speed"
+    ],
+    "tradeoffs": [
+     "Enforcing short token lifetimes improves revocation responsiveness but increases token refresh traffic"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy COBOL/DB2 Mainframe",
+     "Mainframe Adapter"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Insurance Claims Platform",
+     "mainframe-sync-queue",
+     "Mainframe Adapter"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Anti-Corruption Layer (ACL)",
+     "Mainframe Adapter",
+     "Translation Service",
+     "Mainframe Connector"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer Portal",
+     "Claim Submission Form",
+     "Claim Status Viewer"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Workspace",
+     "UI Controller / Razor Pages",
+     "Claim Processing Facade"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Claim Router Component",
+     "Azure App Configuration",
+     "Claims Integration Service"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Outbox Processor Component",
+     "Azure Service Bus",
+     "Idempotency Manager",
+     "Audit & Reconciliation Logger"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "CQRS Read Model",
+     "Local Claim Cache",
+     "Claim Processing Facade"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Azure App Configuration",
+     "Legacy Fallback Component",
+     "Claim Router Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Corporate Active Directory / Microsoft Entra ID",
+     "Authentication Controller",
+     "Auth Handler"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

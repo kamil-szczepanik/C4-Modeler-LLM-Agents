@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Notification Engine container
+
+Container_Boundary(notification_engine, "Notification Engine") {
+    Component(event_consumer, "Event Consumer", "Go (Sarama or amqp091-go)", "Consumes asynchronous events from the message broker for message ingestion.")
+    Component(preference_router, "Preference Router", "Go Module", "Evaluates patron communication rules using a local cache.")
+    Component(preference_cache, "Preference Cache", "Go Ristretto", "In-memory store for patron preferences to prevent database bottlenecks.")
+    Component(template_engine, "Template Engine", "Go html/template", "Generates localized, PII-safe messaging.")
+    Component(dispatchers, "Dispatchers", "Go Modules (sony/gobreaker)", "Handles external channel delivery using circuit breakers.")
+    Component(audit_logger, "Audit & History Logger", "Asynchronous Writer (Go)", "Asynchronously logs delivery states.")
+}
+
+Component_Ext(message_broker, "Message Broker", "RabbitMQ / Kafka", "External message broker for decoupled event-driven architecture.")
+Component_Ext(external_gateways, "External Gateways", "SMTP, Twilio/SMPP, Firebase/APNs", "External gateways for Email, SMS, and Push notifications.")
+Component_Ext(primary_database, "Primary Database", "SQL / TCP", "Database for persisting delivery audit logs.")
+
+Rel(event_consumer, message_broker, "Consumes asynchronous events", "AMQP/Kafka")
+Rel(event_consumer, preference_router, "Forwards event payloads", "Go Channel")
+Rel(preference_router, preference_cache, "Queries cached patron preferences", "In-Memory")
+Rel(preference_router, template_engine, "Requests compiled, localized messages", "In-Memory")
+Rel(template_engine, dispatchers, "Passes rendered payloads", "Go Structs")
+Rel(dispatchers, external_gateways, "Delivers notifications", "TLS 1.3 / HTTPS / SMTP")
+Rel(dispatchers, audit_logger, "Reports delivery status", "Go Channel")
+Rel(audit_logger, primary_database, "Persists delivery audit logs", "SQL/TCP")
+
+@enduml

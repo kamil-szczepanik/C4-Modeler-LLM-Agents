@@ -32,6 +32,9 @@ diagrams, scores and the judge's justifications). Each release is archived on Ze
 | `configs/conditions_v2.yaml` | the eleven conditions and the generation settings |
 | `configs/scenarios/` | eight ATAM scenarios per brief |
 | `configs/analysis_plan.yaml` | analysis plan: outcomes, hypotheses, tests |
+| `docs/analysis_plan.md` | the analysis plan in prose, with its amendments made before data collection |
+| `results/v2/` | all 432 runs of the study, their evaluations, `runs.csv` and the analysis outputs (`analysis/`) |
+| `results/pilot/`, `results/pilot-31/` | pilot runs used to choose the generator model and the sample size |
 | `data/briefs/` | the six system briefs |
 | `scripts/` | command-line entry points (below) |
 | `tests/` | unit tests with a scripted fake model (no API key or network needed) |

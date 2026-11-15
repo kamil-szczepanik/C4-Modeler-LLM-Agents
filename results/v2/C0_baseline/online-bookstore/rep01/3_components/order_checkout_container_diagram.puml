@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(Book_Buyer, "Book Buyer", "Primary persona executing purchases, guest checkouts, and multi-currency transactions.")
+System_Ext(API_Gateway, "API Gateway", "Routes transactions via gRPC over mTLS using AWS App Mesh.")
+System_Ext(Payment_Gateway, "Payment Gateway", "External payment processing gateway.")
+System_Ext(Third_Party_Shipping_API, "Third-Party Shipping API", "External fulfillment and shipping API.")
+System_Ext(Tax_Calculation_Service, "Tax Calculation Service", "External tax calculation service.")
+
+Container_Boundary(Order_Checkout_Container, "Order & Checkout Container") {
+    Component(Cart_Checkout_Orchestrator, "Cart & Checkout Orchestrator", "Node.js / Express / TypeScript", "Component managing state transitions, BOLA authorization, and the Outbox Pattern.")
+    Component(Payment_Processor_Client, "Payment Processor Client", "Node.js / TypeScript", "Handles secure, PCI-DSS compliant ephemeral card tokenization and interacts with the Payment Gateway.")
+    Component(Fulfillment_Tax_Broker, "Fulfillment & Tax Broker", "Node.js / TypeScript / AWS SDK", "Handles asynchronous dispatch of shipping and tax events.")
+    Component(Guest_Session_Manager, "Guest Session Manager", "Node.js / TypeScript", "Manages transient guest tokens and ephemeral session state.")
+    Component(Payment_Error_Normalizer, "Payment Error Normalizer", "Node.js / TypeScript", "Maps raw gateway exceptions to localized error codes.")
+    ComponentDb(Order_Database, "Order Database", "PostgreSQL", "PostgreSQL instance storing orders and encrypted PII.")
+    ComponentDb(Session_Cache, "Session Cache", "Amazon ElastiCache (Redis)", "Amazon ElastiCache (Redis) managing high-availability guest sessions.")
+    Component(AWS_SQS, "AWS SQS", "Amazon SQS", "Enables asynchronous decoupling of shipping and tax calculations.")
+}
+
+Rel(Book_Buyer, API_Gateway, "Initiates purchase, guest checkout, and multi-currency transactions.", "HTTPS")
+Rel(API_Gateway, Cart_Checkout_Orchestrator, "Routes transactions via gRPC over mTLS using AWS App Mesh.", "gRPC / mTLS")
+Rel(Cart_Checkout_Orchestrator, Order_Database, "Persists relational data via TCP/SQL.", "TCP/SQL")
+Rel(Cart_Checkout_Orchestrator, AWS_SQS, "Dispatches asynchronous fulfillment events via AWS SDK / HTTPS.", "AWS SDK / HTTPS")
+Rel(Cart_Checkout_Orchestrator, Session_Cache, "Manages guest sessions via TCP/RESP.", "TCP/RESP")
+Rel(Payment_Processor_Client, Payment_Gateway, "Processes card data via HTTPS with TLS 1.3.", "HTTPS / TLS 1.3")
+Rel(Payment_Processor_Client, Payment_Error_Normalizer, "Sends raw gateway exceptions for error code mapping.", "In-memory")
+Rel(Fulfillment_Tax_Broker, Third_Party_Shipping_API, "Dispatches shipping events via HTTPS.", "HTTPS")
+Rel(Fulfillment_Tax_Broker, Tax_Calculation_Service, "Dispatches tax events via HTTPS.", "HTTPS")
+Rel(Guest_Session_Manager, Session_Cache, "Reads and writes transient guest session state.", "TCP/RESP")
+
+@enduml

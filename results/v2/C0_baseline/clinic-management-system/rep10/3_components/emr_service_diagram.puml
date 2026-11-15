@@ -1,0 +1,32 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the EMR Service container
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway routing incoming traffic.")
+System_Ext(pods, "Pods", "Kubernetes Pods running the service.")
+System_Ext(rabbitmq, "RabbitMQ Message Broker", "RabbitMQ")
+System_Ext(postgresql, "PostgreSQL", "PostgreSQL (Encrypted with AES-256)")
+System_Ext(vault, "HashiCorp Vault", "HashiCorp Vault")
+
+Container_Boundary(emr_service, "EMR Service") {
+    Component(emr_api_controller, "EMR API Controller", "Go / Fiber", "Routes EMR requests and coordinates validations.")
+    Component(clinical_workflow_engine, "Clinical Workflow Engine", "Go", "Handles validated clinical notes and orchestrates workflow processes.")
+    Component(audit_compliance_logger, "Audit & Compliance Logger", "Go", "Generates immutable audit trails for compliance.")
+    Component(data_access_repository, "Data Access Repository", "Go with pgx", "Interfaces with storage using the Transactional Outbox Pattern.")
+    Component(patient_consent_manager, "Patient Consent & Preference Manager", "Go", "Evaluates consent policies and patient preferences.")
+    Component(fhir_serialization_mapper, "FHIR Serialization Mapper", "Go", "Transforms clinical models into FHIR format.")
+}
+
+Rel(api_gateway, emr_api_controller, "Routes EMR requests", "mTLS / REST / JSON over HTTPS")
+Rel(emr_api_controller, patient_consent_manager, "Evaluates consent policies", "Go interface")
+Rel(emr_api_controller, clinical_workflow_engine, "Handles validated clinical notes", "In-process function calls")
+Rel(clinical_workflow_engine, audit_compliance_logger, "Generates immutable audit trails", "Asynchronous event emission / Go channels")
+Rel(clinical_workflow_engine, data_access_repository, "Interfaces with storage", "SQL over TLS 1.3")
+Rel(clinical_workflow_engine, fhir_serialization_mapper, "Transforms clinical models", "In-process transformation")
+Rel(fhir_serialization_mapper, rabbitmq, "Publishes FHIR clinical events", "AMQP over TLS 1.3")
+Rel(data_access_repository, postgresql, "Persists data via Transactional Outbox Pattern", "SQL / TLS 1.3")
+Rel(pods, vault, "Injects secrets via Kubernetes CSI Secrets Store Provider", "API / TLS")
+
+@enduml

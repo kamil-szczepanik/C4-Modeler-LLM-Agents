@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container(claims_web_app, "Claims Web Application", "React, Azure Static Web Apps", "Modern responsive frontend for customers, brokers, and claims adjusters")
+ContainerDb(azure_cache_for_redis, "Azure Cache for Redis", "Azure Cache for Redis", "Provides fast caching to meet the sub-2s performance requirement")
+Container(migration_router_acl, "Migration Router / Anti-Corruption Layer", "Azure Container Apps, .NET Core", "Routes requests between modern and legacy systems")
+System_Ext(active_directory, "Active Directory", "Directory Service", "Handles identity and access management")
+
+System_Boundary(api_gateway_bff, "API Gateway / BFF") {
+    Component(routing_aggregation_controller, "Routing & Aggregation Controller", ".NET Core / ASP.NET Web API", "Handles routing and aggregation of domain requests, forwarding to the migration router and interacting with Redis cache.")
+    Component(authentication_middleware, "Authentication Middleware", ".NET Core / Microsoft.Identity.Web", "Validates user sessions and authenticates against Active Directory using OIDC/OAuth2.")
+    Component(response_caching_transformation_service, "Response Caching & Transformation Service", ".NET Core", "Transforms responses and provides caching mechanisms to meet performance requirements.")
+    Component(async_polling_websocket_notifier, "Async Polling / WebSocket Notifier", ".NET Core / SignalR", "Dispatches async job statuses and sends background updates to clients via WebSockets.")
+}
+
+Rel(claims_web_app, authentication_middleware, "validates session", "HTTPS/OIDC")
+Rel(claims_web_app, async_polling_websocket_notifier, "receives background updates", "WebSockets/WSS")
+Rel(routing_aggregation_controller, azure_cache_for_redis, "reads/writes UI state", "RESP")
+Rel(routing_aggregation_controller, migration_router_acl, "forwards domain requests", "HTTPS/REST")
+Rel(routing_aggregation_controller, async_polling_websocket_notifier, "dispatches async job statuses", "Internal Channel")
+Rel(api_gateway_bff, active_directory, "authenticates against", "OIDC/OAuth2")
+
+@enduml

@@ -1,0 +1,343 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "All requirements are directly fulfilled: 'Patient Registry' captures demographics (R-01), 'Scheduling Engine' checks clashes (R-02), 'EMR Core' with 'Audit Interceptor' manages medical records (R-03), and 'Claim Submission Controller' handles billing and insurance submissions (R-04).",
+   "performance_efficiency": "The sub-1s load target and scalability are well supported via 'React Single-Page Application' on CDN, 'PgBouncer Connection Pooler', 'Redis Cache' for clash checks, and asynchronous messaging via 'Localized Apache Kafka/RabbitMQ message brokers'.",
+   "compatibility": "Interoperability is thoroughly supported by 'FHIR Interoperability Service' leveraging HAPI FHIR and Apache Camel to connect with 'External Lab & Imaging Systems', alongside 'Clearinghouse Adapter' integrating with 'Third-Party Payment Gateway & Insurance Clearinghouse'.",
+   "usability": "All specified personas (Front Desk Staff, Clinicians, Billing Officers, Patients, Auditors) access dedicated features through 'React Single-Page Application (SPA) / React Native Mobile Client', though specific UI adaptations for differing clinical versus patient user journeys are not deeply detailed.",
+   "reliability": "High availability (99.99%) is achieved using 'Global Traffic Manager / Anycast DNS', active-active hybrid routing, 'Primary Database Engine' with CNPG automated failover, and 'Local Edge Buffer Component' to avoid data loss during network partitions.",
+   "security": "Security requirements are met via MFA at 'Identity Provider', fine-grained authorization via 'Access Control & Policy Enforcer (OPA)', secret and encryption management with 'HashiCorp Vault', and immutable audit retention using 'AWS S3 / on-prem object storage (WORM)'.",
+   "maintainability": "Domain responsibilities are cleanly decoupled into distinct containers ('EMR & Scheduling Service', 'Billing & Claims Service', and 'FHIR Interoperability Service') interacting through event streams on 'Event Streaming Core' and well-defined internal mTLS APIs.",
+   "portability": "The hybrid requirement (on-prem-k8s and eu-central-1) is achieved using portable abstractions including CNPG/RDS for 'Region-local PostgreSQL', MinIO/S3 for WORM storage, and SPIFFE/SPIRE with 'Distributed Network Interconnect / SD-WAN'."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "PgBouncer and Envoy handle connection pooling and load balancing to PostgreSQL. However, caching is explicitly modeled only for scheduling clashes, leaving EMR reads reliant on direct database queries under concurrent morning load.",
+    "elements": [
+     "React Single-Page Application (SPA) / React Native Mobile Client",
+     "Envoy API Gateway / Edge Proxy",
+     "EMR Core",
+     "PgBouncer Connection Pooler",
+     "Primary Database Engine"
+    ],
+    "sensitivity_points": [
+     "Database connection pooling limits under burst traffic",
+     "PostgreSQL query optimization and row-level security indexing"
+    ],
+    "tradeoffs": [
+     "Direct database reads preserve strict consistency at the expense of query latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The FHIR service decouples high-volume ingestion via asynchronous event streaming through Kafka/RabbitMQ. EMR query paths remain isolated from lab write spikes, satisfying both the ingestion window and the 1-second read threshold.",
+    "elements": [
+     "FHIR Interoperability Service",
+     "FHIR API Controller",
+     "Transformation Engine",
+     "Async Event Dispatcher",
+     "Localized Apache Kafka/RabbitMQ message brokers"
+    ],
+    "sensitivity_points": [
+     "Message broker consumer throughput and batching parameters",
+     "Asynchronous buffer capacity during ingestion spikes"
+    ],
+    "tradeoffs": [
+     "Asynchronous ingestion trades instantaneous clinical record consistency for ingestion throughput"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Global Traffic Manager and SD-WAN redirect ingress traffic between cloud and on-premises sites. However, the architecture relies on region-local PostgreSQL databases without an explicit cross-region transactional replication strategy, endangering the zero-data-loss requirement.",
+    "elements": [
+     "Global Traffic Manager / Anycast DNS",
+     "Distributed Network Interconnect / SD-WAN",
+     "Envoy API Gateway / Edge Proxy",
+     "Region-local PostgreSQL databases",
+     "Localized Apache Kafka/RabbitMQ message brokers"
+    ],
+    "sensitivity_points": [
+     "Cross-region replication lag across hybrid SD-WAN links",
+     "DNS TTL convergence latency during failover"
+    ],
+    "tradeoffs": [
+     "Region-local storage ensures low latency locally but complicates cross-region zero-RPO failover"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Cloud-Native PostgreSQL (CNPG) and Amazon RDS automated failover restore database availability within 30 seconds. Idempotent ledger operations and transactional events via Axon and Kafka prevent lost or duplicate claims during failover.",
+    "elements": [
+     "Claim Submission Controller",
+     "Billing Audit & Ledger Component",
+     "PgBouncer Connection Pooler",
+     "Primary Database Engine",
+     "Task & Routing Broker"
+    ],
+    "sensitivity_points": [
+     "Database failover detection timeout and election duration",
+     "Idempotency token validation in the billing ledger"
+    ],
+    "tradeoffs": [
+     "Strict ledger idempotency adds write latency during transaction verification"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Clearinghouse Adapter isolates external clearinghouse protocols within the Billing & Claims Service. Dynamic credentials are independently handled by HashiCorp Vault, leaving the EMR service completely decoupled and unaffected.",
+    "elements": [
+     "Clearinghouse Adapter",
+     "Claim Submission Controller",
+     "HashiCorp Vault",
+     "Third-Party Payment Gateway & Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Loose coupling of the clearinghouse integration adapter interface",
+     "Configuration-driven secret injection from Vault"
+    ],
+    "tradeoffs": [
+     "Dedicated adapter layer adds minor architectural indirection to maximize service isolation"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Changes are confined to the Patient Registry, the React SPA UI component, and the database schema. Audit logging is automated through the Audit Interceptor and pgaudit, easily completing within a single sprint.",
+    "elements": [
+     "Web UI Router and State Manager",
+     "Patient Registry",
+     "Audit Interceptor",
+     "Audit Logging Engine",
+     "Primary Database Engine"
+    ],
+    "sensitivity_points": [
+     "Extensibility of demographic data models in PostgreSQL",
+     "Automated change tracking in the audit logging interceptor"
+    ],
+    "tradeoffs": [
+     "Automated auditing of new fields increases audit payload size and storage volume"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Authentication is delegated to an external IdP enforcing MFA via OIDC/SAML. The Envoy API Gateway validates tokens and streams failed attempt metrics via the Telemetry Emitter directly to the centralized SIEM for rapid alerting.",
+    "elements": [
+     "Identity Provider",
+     "Envoy API Gateway / Edge Proxy",
+     "Auth & Authorization Filter",
+     "Telemetry & Audit Emitter",
+     "Centralized SIEM & Observability Platform"
+    ],
+    "sensitivity_points": [
+     "Strict MFA enforcement rules at the Identity Provider",
+     "Low-latency SIEM telemetry ingestion and alerting pipeline"
+    ],
+    "tradeoffs": [
+     "Delegating MFA to an external IdP introduces an external availability dependency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "OPA enforces fine-grained ABAC policies and break-glass procedures before record access. Every read is captured by the Audit Interceptor and forwarded to WORM-compliant storage with a 10-year retention lock and SIEM streaming.",
+    "elements": [
+     "Access Control & Policy Enforcer (OPA)",
+     "EMR Core",
+     "Audit Interceptor",
+     "AWS S3 / on-prem object storage (WORM)",
+     "Centralized SIEM & Observability Platform"
+    ],
+    "sensitivity_points": [
+     "Policy evaluation latency in OPA on synchronous read paths",
+     "WORM retention compliance and immutability settings in object storage"
+    ],
+    "tradeoffs": [
+     "Synchronous policy enforcement and comprehensive audit logging add overhead to EMR reads"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Access Control & Policy Enforcer (OPA)",
+     "Audit Interceptor",
+     "Centralized SIEM & Observability Platform",
+     "AWS S3 / on-prem object storage (WORM)",
+     "Audit Logging Engine",
+     "Broker Encryption & Access Manager",
+     "Transit Secrets Engine"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Global Traffic Manager / Anycast DNS",
+     "Distributed Network Interconnect / SD-WAN",
+     "Primary Database Engine",
+     "Replication Manager",
+     "Local Edge Buffer Component",
+     "PgBouncer Connection Pooler"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AWS S3 / on-prem object storage (WORM)",
+     "Object Storage Engine",
+     "Storage Tiering Scheduler",
+     "WORM Archival Service"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Registry",
+     "EMR & Scheduling Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Engine",
+     "EMR & Scheduling Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Core",
+     "Audit Interceptor",
+     "Audit Logging Engine",
+     "AWS S3 / on-prem object storage (WORM)",
+     "EMR & Scheduling Service"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Service",
+     "Claim Submission Controller",
+     "Clearinghouse Adapter",
+     "Billing Audit & Ledger Component",
+     "Third-Party Payment Gateway & Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider",
+     "Auth & Authorization Filter",
+     "Transit Secrets Engine",
+     "Primary Database Engine",
+     "Object Storage Engine",
+     "HashiCorp Vault"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Global Traffic Manager / Anycast DNS",
+     "Distributed Network Interconnect / SD-WAN",
+     "Region-local PostgreSQL databases",
+     "Primary Database Engine",
+     "Replication Manager",
+     "Local Edge Buffer Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "React Single-Page Application (SPA) / React Native Mobile Client",
+     "PgBouncer Connection Pooler",
+     "EMR Core"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Interoperability Service",
+     "FHIR API Controller",
+     "Transformation Engine",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

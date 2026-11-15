@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Mainframe Integration Adapter container
+
+System_Ext(LegacyMainframe, "Legacy Mainframe", "COBOL/DB2 Mainframe", "Dumps batch extracts via IBM MQ binary.")
+System_Ext(DataSyncWorker, "Data Sync Worker", "Container", "Receives stream and sends processing ACKs.")
+
+Container_Boundary(MainframeIntegrationAdapter, "Mainframe Integration Adapter") {
+    Component(MQMessageListenerComponent, "MQ Message Listener Component", "Spring JMS", "Consumes and manages IBM MQ messages on-premises reliably.")
+    Component(DataTransformationComponent, "Data Transformation Component", "Apache Camel", "Translates legacy EBCDIC fixed-length records into JSON domain events.")
+    Component(SchemaValidationSubcomponent, "Schema Validation Sub-component", "JSON Schema Validator", "Intercepts malformed records before cloud transmission.")
+    Component(OutboundDispatcherComponent, "Outbound Dispatcher Component", "Azure Service Bus SDK", "Securely routes transformed events to the cloud via AMQP 1.0.")
+    Component(AdapterHealthAuditMonitorComponent, "Adapter Health & Audit Monitor Component", "Micrometer / OpenTelemetry", "Emits health telemetry and audit metrics locally.")
+    Component(RetryDeadLetterManagerComponent, "Retry & Dead-Letter Manager Component", "Spring Retry / IBM MQ DLQ handler", "Handles re-queue or poison-message routing.")
+}
+
+Rel(LegacyMainframe, MQMessageListenerComponent, "Dumps batch extracts", "IBM MQ binary")
+Rel(MQMessageListenerComponent, DataTransformationComponent, "Forwards raw records", "In-memory")
+Rel(DataTransformationComponent, SchemaValidationSubcomponent, "Validates JSON payload", "In-memory")
+Rel(SchemaValidationSubcomponent, OutboundDispatcherComponent, "Valid payload", "In-memory")
+Rel(OutboundDispatcherComponent, DataSyncWorker, "Sends stream", "AMQP 1.0 via Azure ExpressRoute")
+Rel(DataSyncWorker, OutboundDispatcherComponent, "Sends processing ACKs", "AMQP via Azure Service Bus")
+Rel(OutboundDispatcherComponent, MQMessageListenerComponent, "Confirms successful delivery", "JMS commit")
+Rel(RetryDeadLetterManagerComponent, MQMessageListenerComponent, "Re-queue or poison-message routing", "IBM MQ API")
+Rel(MQMessageListenerComponent, DataTransformationComponent, "Triggers transformation", "In-memory")
+
+@enduml

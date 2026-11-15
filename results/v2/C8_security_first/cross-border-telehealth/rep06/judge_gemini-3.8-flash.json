@@ -1,0 +1,335 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: Video Consultation Container handles R-01, E-Prescription Integration Container and National Gateway Adapter handle R-02, AI Symptom Checker Container addresses R-03, and Consent & Auth Middleware with User and Consent Management Engine satisfy R-04.",
+   "performance_efficiency": "Performance is well supported via the Adaptive Bitrate Controller scaling down to 150 kbit/s, ONNX Runtime in Inference Engine for low-latency inference, Telemetry & Resilience Interceptor for payload compression, and PgBouncer Connection Pooler for database query optimization.",
+   "compatibility": "The National Gateway Adapter explicitly handles HL7 FHIR and EU national standards (R-08). External Identity Providers connect via OAuth2/OIDC, and external media systems integrate via WebSockets and DTLS-SRTP within the WebRTC SFU.",
+   "usability": "Patients, Licensed Clinicians, and Auditors are served through designated endpoints via API Gateway & BFF, WebRTC SFU, and IAM-restricted Read-Only APIs. However, specific client applications (web/mobile frontend containers) are omitted from the container architecture.",
+   "reliability": "Reliability is addressed for rural connectivity and distributed workflows: Adaptive Bitrate Controller maintains streaming below 300 kbit/s, Telemetry & Resilience Interceptor provides circuit breaking, and Prescription Outbox & Retry Processor guarantees reliable messaging.",
+   "security": "Security is thoroughly addressed via Geo-Enforcement & Routing Proxy for data residency, Consent & Auth Middleware, CMEK Key Management Module, Row-Level Security in PostgreSQL, and Traceability & Audit Interceptor with HSM-backed keys for immutable WORM compliance.",
+   "maintainability": "The architecture exhibits high modularity with clear separation of concerns across specialized containers (E-Prescription Integration Container, AI Symptom Checker Container, Video Consultation Container) and distinct, decoupled internal components such as Prescription Router and National Gateway Adapter.",
+   "portability": "The architecture aligns with target GCP regions (europe-west3, us-central1) using containerized microservices. However, dependencies on proprietary services like Google Cloud Storage Object Retention Lock and Cloud KMS slightly limit out-of-the-box portability to other cloud providers."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "MediaSoup and signaling handle WebRTC streams, but scaling 5,000 concurrent video sessions requires horizontal SFU orchestration and cluster load distribution, which are not detailed in the container or component definitions.",
+    "elements": [
+     "Video Consultation Container",
+     "WebRTC SFU",
+     "Signaling Server",
+     "Third-Party Video Relay / TURN Network"
+    ],
+    "sensitivity_points": [
+     "SFU CPU saturation during high concurrent video stream transcoding and routing."
+    ],
+    "tradeoffs": [
+     "Client-side adaptive bitrate reduces server bandwidth at the cost of perceived video resolution."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "A rate of 50,000 requests/hour (~14 req/s) is easily handled by FastAPI and ONNX Runtime. The deterministic validation layer and asynchronous audit logging ensure latency stays well under 3 seconds.",
+    "elements": [
+     "API Gateway & BFF",
+     "API Router / Triage Controller",
+     "Deterministic Validation Layer",
+     "Inference Engine",
+     "Traceability & Audit Interceptor"
+    ],
+    "sensitivity_points": [
+     "ONNX runtime model execution latency and thread allocation."
+    ],
+    "tradeoffs": [
+     "Lightweight ONNX models improve inference latency but may limit predictive complexity."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The architecture explicitly includes an Adaptive Bitrate Controller designed to adapt down to 150 kbit/s, satisfying the 200 kbit/s threshold and preventing consultation drops.",
+    "elements": [
+     "Video Consultation Container",
+     "WebRTC SFU",
+     "Adaptive Bitrate Controller",
+     "Telemetry & Resilience Interceptor"
+    ],
+    "sensitivity_points": [
+     "Bitrate probe frequency and sensitivity to sudden packet loss."
+    ],
+    "tradeoffs": [
+     "Sacrificing video track to preserve audio-only mode maintains call continuity."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Target cloud configuration defines only a single US region (us-central1). Because health data residency prevents migrating US data to europe-west3, a full US regional failure cannot be recovered within 1 hour without a secondary US disaster-recovery region.",
+    "elements": [
+     "Geo-Enforcement & Routing Proxy",
+     "Cloud SQL (PostgreSQL)",
+     "Cloud Storage (WORM enabled)"
+    ],
+    "sensitivity_points": [
+     "Single regional point of failure in us-central1 for US patient data."
+    ],
+    "tradeoffs": [
+     "Strict regional data residency prevents cross-region disaster failover to the operational EU region."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The E-Prescription Integration Container isolates external integration logic within the National Gateway Adapter and Prescription Router, allowing new country formats and gateways to be added with localized changes.",
+    "elements": [
+     "E-Prescription Integration Container",
+     "Prescription Router",
+     "National Gateway Adapter"
+    ],
+    "sensitivity_points": [
+     "Degree of coupling between country-specific schema transformations in the adapter."
+    ],
+    "tradeoffs": [
+     "Adapter encapsulation simplifies extensibility but introduces a translation abstraction overhead."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Localized AI Model Registries, versioned inference metadata, and immutable WORM audit logs enable model rollback while maintaining complete traceability between recommendations and model versions.",
+    "elements": [
+     "Localized AI Model Registries",
+     "Inference Engine",
+     "Traceability & Audit Interceptor",
+     "Cloud Storage (WORM enabled)",
+     "AI Symptom Logs Store"
+    ],
+    "sensitivity_points": [
+     "Registry version tagging consistency and cryptographic model signing."
+    ],
+    "tradeoffs": [
+     "Immutable WORM logging of all inputs and model versions increases long-term storage consumption."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The Geo-Enforcement & Routing Proxy, Consent & Auth Middleware, and PostgreSQL Row-Level Security explicitly enforce purpose-based consent and residency boundaries, denying unauthorized cross-region access while logging attempts.",
+    "elements": [
+     "Geo-Enforcement & Routing Proxy",
+     "Consent & Auth Middleware",
+     "User and Consent Management Engine",
+     "Cloud Storage (WORM enabled)"
+    ],
+    "sensitivity_points": [
+     "Correct propagation and validation of regional consent scopes in JWTs."
+    ],
+    "tradeoffs": [
+     "Strict per-request consent checks and RLS evaluation introduce marginal request authorization latency."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "The Consent & Auth Middleware and User and Consent Management Engine update consent state immediately, but the architecture does not specify downstream batch research pipelines, de-identification systems, or verification mechanisms for research data revocation.",
+    "elements": [
+     "Consent & Auth Middleware",
+     "User and Consent Management Engine",
+     "Prescription State & Event Manager"
+    ],
+    "sensitivity_points": [
+     "Propagation delay of consent revocation across asynchronous and external pipelines."
+    ],
+    "tradeoffs": [
+     "Instant consent revocation checking at query time avoids complex cache invalidation."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Geo-Enforcement & Routing Proxy",
+     "Consent & Auth Middleware",
+     "User and Consent Management Engine",
+     "Object Retention Lock Engine",
+     "CMEK Key Management Module",
+     "Traceability & Audit Interceptor"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Geo-Enforcement & Routing Proxy",
+     "Cloud SQL (PostgreSQL)",
+     "Cloud Storage (WORM enabled)",
+     "E-Prescription Data Store",
+     "Localized AI Model Registries"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Traceability & Audit Interceptor",
+     "Cloud Storage (WORM enabled)",
+     "Object Retention Lock Engine",
+     "AI Symptom Logs Store"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Video Consultation Container",
+     "Adaptive Bitrate Controller",
+     "Telemetry & Resilience Interceptor",
+     "Geo-Enforcement & Routing Proxy"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Video Consultation Container",
+     "WebRTC SFU",
+     "Signaling Server",
+     "Third-Party Video Relay / TURN Network"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "E-Prescription Integration Container",
+     "Prescription Router",
+     "National Gateway Adapter",
+     "National e-Prescription Gateways (EU) & US Pharmacy Networks (HL7 FHIR)"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Container",
+     "API Router / Triage Controller",
+     "Deterministic Validation Layer",
+     "Inference Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Consent & Auth Middleware",
+     "API Gateway & BFF",
+     "User and Consent Management Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Geo-Enforcement & Routing Proxy",
+     "Consent & Auth Middleware",
+     "User and Consent Management Engine",
+     "Cloud SQL (PostgreSQL)",
+     "Cloud Storage (WORM enabled)"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Video Consultation Container",
+     "Adaptive Bitrate Controller",
+     "WebRTC SFU"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Traceability & Audit Interceptor",
+     "AI Symptom Logs Store",
+     "Cloud Storage (WORM enabled)",
+     "Object Retention Lock Engine"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "National Gateway Adapter",
+     "E-Prescription Integration Container",
+     "National e-Prescription Gateways (EU) & US Pharmacy Networks (HL7 FHIR)"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

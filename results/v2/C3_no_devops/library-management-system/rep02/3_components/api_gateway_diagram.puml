@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the API Gateway container
+
+Container_Boundary(api_gateway, "API Gateway") {
+    Component(Routing___Load_Balancer, "Routing & Load Balancer", "NGINX / Spring Cloud Gateway", "Routes incoming requests and balances load across backend services.")
+    Component(Authentication___Authorization_Filter, "Authentication & Authorization Filter", "OAuth 2.0 / OpenID Connect with JWT", "Validates and enforces security tokens for incoming requests.")
+    Component(Rate_Limiting___Throttling_Component, "Rate Limiting & Throttling Component", "Redis-backed token bucket", "Enforces user-persona quotas and limits request rates.")
+    Component(WAF___Payload_Inspection_Filter, "WAF / Payload Inspection Filter", "ModSecurity WAF", "Performs perimeter defense and payload inspection.")
+    Component(API_Analytics_Emitter, "API Analytics Emitter", "Messaging / Event Emitter", "Streams usage metrics to the analytics worker.")
+}
+
+System_Ext(Analytics_Worker, "Analytics Worker", "Python/Spring worker for processing analytics.")
+System_Ext(Core_Business_Services, "Core Business Services", "Spring Boot backend services.")
+System_Ext(Search_Engine, "Search Engine", "Elasticsearch / OpenSearch.")
+System_Ext(Web_Application, "Web Application", "React/TypeScript single-page app.")
+
+Rel(Web_Application, Routing___Load_Balancer, "Sends user requests", "HTTPS / REST and WebSockets")
+Rel(Routing___Load_Balancer, WAF___Payload_Inspection_Filter, "Inspects traffic", "Internal")
+Rel(WAF___Payload_Inspection_Filter, Authentication___Authorization_Filter, "Authenticates request", "Internal")
+Rel(Authentication___Authorization_Filter, Rate_Limiting___Throttling_Component, "Checks rate limits", "Internal")
+Rel(Rate_Limiting___Throttling_Component, Core_Business_Services, "Forwards core API requests retaining signed JWT", "gRPC / internal REST with mTLS")
+Rel(Rate_Limiting___Throttling_Component, Search_Engine, "Queries search index", "gRPC / internal REST with mTLS")
+Rel(API_Analytics_Emitter, Analytics_Worker, "Streams usage metrics", "Apache Kafka / RabbitMQ")
+@enduml

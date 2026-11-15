@@ -1,0 +1,319 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "While 'Catalog & Search', 'Checkout/Payment', and 'Personalization Engine' satisfy R-01, R-02, and R-04, the architecture completely omits components or services for customer reviews and 5-star ratings (R-03). Electronic book delivery/fulfillment is also not represented.",
+   "performance_efficiency": "'AWS CloudFront & WAF', 'Lambda@Edge', and 'Amazon ElastiCache / Redis' provide caching and edge execution to optimize 3G load times. Asynchronous offloading via 'Amazon Kinesis / SQS' supports the 1M MAU scalability requirement, though backend database persistence layers are omitted.",
+   "compatibility": "The architecture explicitly integrates with 'Third-Party Payment Gateways', 'Third-Party Shipping APIs', and 'External Exchange Rate APIs' using HTTPS, REST, and SQS/SNS, addressing multi-currency and fulfillment constraints effectively.",
+   "usability": "'Book Buyer' and 'Store Administrator' are defined as actors, but the architecture lacks a frontend/presentation container (e.g., Single-Page Application or Mobile App). CloudFront routes edge traffic directly to backend API services.",
+   "reliability": "High availability (99.95%) is supported by 'CDN Edge Caching' failover, 'Message Consumer & Dispatcher' with Dead Letter Queues (DLQ), and Redis replication. However, explicit multi-region database failover mechanisms across the required AWS regions are missing.",
+   "security": "'AWS WAF & AWS Shield' mitigates OWASP Top-10 and DDoS risks. 'AWS App Mesh' enforces zero-trust mTLS, payment tokenization is specified, and 'Consent & Preference Validator' explicitly enforces GDPR and CCPA compliance.",
+   "maintainability": "The system is decomposed into focused microservice containers with clear responsibilities and observability via 'Amazon CloudWatch & AWS X-Ray'. However, some Level 3 component diagrams incorrectly nest external AWS infrastructure inside individual microservice containers.",
+   "portability": "Workloads are containerized using 'Amazon ECS/EKS', fitting the target AWS multi-region cloud. However, tight coupling to proprietary AWS primitives ('Lambda@Edge', 'AWS App Mesh', 'Kinesis') limits portability to alternative deployment environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront edge caching offloads catalog browsing while containerized Search services and OpenSearch scale under load. However, underlying product database persistence scaling is omitted.",
+    "elements": [
+     "AWS CloudFront & WAF",
+     "CDN Edge Caching",
+     "Catalog & Search",
+     "Search Controller",
+     "Search Engine Connector"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios on CloudFront and OpenSearch cluster scaling thresholds."
+    ],
+    "tradeoffs": [
+     "Aggressive edge caching increases performance but risks serving stale catalog data."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Background recommendation recomputation is decoupled via asynchronous Kinesis and SQS queues and cached in ElastiCache Redis, isolating heavy inference workloads from real-time browsing.",
+    "elements": [
+     "Personalization Engine",
+     "Lambda@Edge",
+     "Amazon ElastiCache / Redis",
+     "Amazon Kinesis / SQS",
+     "ECS/EKS Services"
+    ],
+    "sensitivity_points": [
+     "Redis cache read latencies and asynchronous queue ingestion throughput."
+    ],
+    "tradeoffs": [
+     "Serving precomputed recommendations from Redis sacrifices real-time session responsiveness for browsing latency."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Asynchronous queueing via SQS with dead-letter queues decouples shipping dispatch from checkout, though direct synchronous links in the fulfillment component introduce minor coupling risks.",
+    "elements": [
+     "Checkout/Payment",
+     "Payment Orchestrator",
+     "Fulfillment Integration Service",
+     "Notification Container",
+     "Message Consumer & Dispatcher"
+    ],
+    "sensitivity_points": [
+     "Dead-letter queue retention periods and retry backoff policies."
+    ],
+    "tradeoffs": [
+     "Asynchronous order fulfillment ensures checkout availability but delays shipping confirmation."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "CloudFront provides edge failover and Redis supports global datastores, but primary order and transaction databases are completely omitted, leaving transactional cross-region replication unaddressed.",
+    "elements": [
+     "AWS CloudFront & WAF",
+     "CDN Edge Caching",
+     "Localization/Currency Container",
+     "Checkout/Payment"
+    ],
+    "sensitivity_points": [
+     "DNS failover latency and cross-region state replication guarantees."
+    ],
+    "tradeoffs": [
+     "Multi-region active failover prevents downtime but increases cross-region data synchronization costs."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "A dedicated Localization/Currency container backed by EventBridge workers and dynamic exchange rate caching cleanly isolates currency modifications, requiring minimal configuration updates in Checkout.",
+    "elements": [
+     "Localization/Currency",
+     "Localization/Currency Container",
+     "AWS ElastiCache (Redis)",
+     "AWS EventBridge & Lambda",
+     "Checkout/Payment"
+    ],
+    "sensitivity_points": [
+     "Third-party exchange rate API schema compatibility and cache update intervals."
+    ],
+    "tradeoffs": [
+     "Decoupled currency service simplifies additions but introduces network hops during checkout."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Personalization Engine is fully encapsulated within its own container and exposes standardized interfaces via App Mesh, allowing recommendation algorithms to change without external side effects.",
+    "elements": [
+     "Personalization Engine",
+     "ECS/EKS Services",
+     "Lambda@Edge",
+     "AWS App Mesh"
+    ],
+    "sensitivity_points": [
+     "Stability of recommendation API contracts and data models in Redis."
+    ],
+    "tradeoffs": [
+     "Encapsulating recommendation models limits custom catalog-level query optimizations."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "AWS WAF and Shield at the edge effectively block SQLi and XSS before requests reach backend services, although review-specific storage and input sanitization components are missing.",
+    "elements": [
+     "AWS CloudFront & WAF",
+     "Edge Security & DDoS Mitigation",
+     "Catalog & Search",
+     "Search Controller"
+    ],
+    "sensitivity_points": [
+     "WAF rule coverage, inspection depth, and false-positive rates."
+    ],
+    "tradeoffs": [
+     "Strict edge WAF inspection improves security but adds small request latency."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "The architecture lacks a centralized customer database and deletion orchestrator to propagate hard-deletes across containers, caches, OpenSearch, and streaming telemetry pipelines.",
+    "elements": [
+     "Notification Container",
+     "Consent & Preference Validator",
+     "Telemetry Emitter",
+     "Personalization Engine"
+    ],
+    "sensitivity_points": [
+     "Absence of global user data management and distributed purge mechanisms."
+    ],
+    "tradeoffs": [
+     "Decentralized service data storage improves container autonomy but complicates global privacy deletions."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "none",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent & Preference Validator",
+     "Telemetry Emitter",
+     "Security & Secrets Manager"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Localization/Currency",
+     "AWS ElastiCache (Redis)",
+     "AWS EventBridge & Lambda",
+     "External Exchange Rate APIs"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping APIs",
+     "Third-Party Shipping APIs",
+     "Fulfillment Integration Service",
+     "Third-Party Shipping & Notification APIs"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search",
+     "Search Controller",
+     "Search Engine Connector"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Checkout/Payment",
+     "Cart Session Manager",
+     "Payment Orchestrator",
+     "Third-Party Payment Gateways"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "none",
+    "elements": []
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Personalization Engine",
+     "Lambda@Edge",
+     "ECS/EKS Services",
+     "Amazon ElastiCache / Redis",
+     "Amazon Kinesis / SQS"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "AWS CloudFront & WAF",
+     "Notification Workers",
+     "Amazon ElastiCache / Redis",
+     "Amazon Kinesis / SQS"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "AWS CloudFront & WAF",
+     "CDN Edge Caching",
+     "Lambda@Edge",
+     "Amazon ElastiCache / Redis"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "CDN Edge Caching",
+     "Message Consumer & Dispatcher",
+     "AWS ElastiCache (Redis)"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "AWS CloudFront & WAF",
+     "Edge Security & DDoS Mitigation",
+     "Request Routing & mTLS Termination",
+     "AWS App Mesh"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

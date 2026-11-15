@@ -1,0 +1,249 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "The 'Search & Catalog Service' and 'Core Circulation Service' fulfill cataloguing and circulation requirements. However, specific architectural mechanisms or data models differentiating digital item delivery from physical item cataloguing (R-01) are not distinctly detailed.",
+   "performance_efficiency": "Search latency (< 800 ms SLA) is directly addressed via 'Search & Catalog Service' utilizing 'Spring WebFlux' and 'Elasticsearch', decoupled asynchronous indexing through 'IndexSyncWorker' and 'Message Broker', and autoscaling managed by 'KEDA' and 'OpenTelemetry Collector'.",
+   "compatibility": "The architecture integrates cleanly with external entities via standard interfaces: 'Payment Gateway' uses REST with circuit breakers, 'Notification Provider' connects via SMTP/webhooks, and 'Message Broker' enforces Avro contracts through the 'Schema Registry'.",
+   "usability": "While 'Library Patron' and 'Library Staff / Librarian' are defined as actors accessing the 'API Gateway', the architecture omits dedicated front-end presentation containers or self-service web/mobile portal components required by the brief.",
+   "reliability": "Reliability is well supported using circuit breakers for 'Payment Gateway', read-replicas for 'PostgreSQL', KRaft consensus in 'Message Broker', and a dedicated 'DLQ & Audit Forwarder Component', though cross-zone failover mechanisms are not fully elaborated.",
+   "security": "EU data residency and security are rigorously enforced through 'Edge Router' geo-blocking, 'Istio Service Mesh' zero-trust mTLS, SPIFFE/SPIRE workload identities, Cloud 'HSM' key management, and PII masking inside the 'Audit Logging Sidecar'.",
+   "maintainability": "Services are modularly segregated ('Core Circulation Service', 'Search & Catalog Service', 'Analytics Service') with low coupling. Contracts are strictly enforced via 'Schema Registry', and components isolate concerns like indexing, policy evaluation, and event dispatching.",
+   "portability": "The system runs on 'EU Kubernetes Cluster and EU Cloud Provider's HSM' using standardized container runtimes, Istio, and agnostic technologies like PostgreSQL, Kafka, and OpenTelemetry, ensuring smooth deployment across any compliant EU cloud environment."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 5,
+   "MOD-01": 3,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.90625,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 4.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Dedicated Elasticsearch with non-blocking Spring WebFlux execution in Search & Catalog Service, combined with KEDA autoscaling and API Gateway rate-limiting, directly addresses sub-800ms latency under peak load.",
+    "elements": [
+     "API Gateway",
+     "SearchController",
+     "CatalogQueryService",
+     "Elasticsearch",
+     "KEDA",
+     "OpenTelemetry Collector"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster sizing and indexing overhead during high query concurrency",
+     "Non-blocking reactive query pipeline in SearchController"
+    ],
+    "tradeoffs": [
+     "Elasticsearch resource consumption versus query latency under high load"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Search and updates are decoupled via Kafka and asynchronous IndexSyncWorker, ensuring search read performance is isolated from indexing workloads, easily propagating updates well within 5 minutes.",
+    "elements": [
+     "IndexSyncWorker",
+     "CatalogQueryService",
+     "Elasticsearch",
+     "Message Broker",
+     "Core Circulation Service"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer lag in IndexSyncWorker during bulk catalogue ingestion",
+     "Elasticsearch refresh interval affecting near real-time visibility"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of catalog updates traded against read latency stability"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Circulation transactions are strictly isolated within Core Circulation Service and PostgreSQL, preventing any loan loss. Redundant container orchestration via Kubernetes and distributed Elasticsearch ensure search recovery within one minute.",
+    "elements": [
+     "Search & Catalog Service",
+     "Elasticsearch",
+     "Core Circulation Service",
+     "PostgreSQL",
+     "Kubernetes Control Plane and Worker Nodes"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch shard replica count and master election speed on node failure",
+     "Separation of circulation persistence from search index data store"
+    ],
+    "tradeoffs": [
+     "Storage overhead for Elasticsearch replica shards versus high-availability failover time"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Stateless service instances orchestrated by Kubernetes ensure rapid failover across remaining replicas without service interruption. The Transaction Manager with transactional PostgreSQL prevents data loss for in-flight loan operations.",
+    "elements": [
+     "API Gateway",
+     "Kubernetes Control Plane and Worker Nodes",
+     "Circulation API Controller",
+     "Transaction Manager",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Kubernetes pod readiness probes and upstream failure detection in Edge Router",
+     "Transactional state boundaries in Core Circulation Service"
+    ],
+    "tradeoffs": [
+     "Readiness probe check frequency versus network overhead and pod restart churn"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Ingesting external e-book providers can leverage Kafka and IndexSyncWorker, but no dedicated external provider integration adapter exists in the architecture, requiring modifications to existing indexing components or adding a custom ingestion service.",
+    "elements": [
+     "Search & Catalog Service",
+     "IndexSyncWorker",
+     "Message Broker",
+     "Schema Registry"
+    ],
+    "sensitivity_points": [
+     "Absence of a dedicated integration adapter component for external e-book providers",
+     "Schema extensibility in Schema Registry for third-party catalog payloads"
+    ],
+    "tradeoffs": [
+     "Generic event ingestion versus provider-specific integration components"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The architecture explicitly models a Loan & Policy Engine that queries dynamically stored loan rules directly from PostgreSQL at runtime, enabling library-specific rule changes via database configuration without requiring code redeployment.",
+    "elements": [
+     "Loan & Policy Engine",
+     "PostgreSQL",
+     "Circulation API Controller"
+    ],
+    "sensitivity_points": [
+     "Rule externalization into database tables versus hardcoding in Go policy engine",
+     "Caching and cache invalidation of loan rules within Loan & Policy Engine"
+    ],
+    "tradeoffs": [
+     "Runtime database rule evaluation overhead versus deployment decoupling"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Strict EU data residency is enforced by design through Edge Router geo-blocking, hosting entirely within an EU-region Kubernetes cluster, egress lockdown via Istio/Cilium, and cryptographic operations anchored to an EU Cloud HSM.",
+    "elements": [
+     "Edge Router",
+     "EU Kubernetes Cluster and EU Cloud Provider's HSM",
+     "Istio Service Mesh",
+     "EU Cloud Infrastructure Provider",
+     "Audit Logging Sidecar"
+    ],
+    "sensitivity_points": [
+     "Egress firewall rules and network policies blocking non-EU data transfers",
+     "Key storage exclusively within EU Cloud Hardware Security Module"
+    ],
+    "tradeoffs": [
+     "Restricting external cloud regions versus disaster recovery options outside the EU"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Edge authentication via OAuth 2.0/OIDC coupled with object-level authorization in the Circulation API Controller prevents cross-patron record access. All access attempts are captured, pseudonymized, and securely streamed by the Audit Logging Sidecar.",
+    "elements": [
+     "API Gateway",
+     "Auth Filter",
+     "Circulation API Controller",
+     "Audit Logging Sidecar",
+     "Audit Log Stream"
+    ],
+    "sensitivity_points": [
+     "Fine-grained object-level authorization checks in Circulation API Controller",
+     "Tamper-proof audit logging of authorization failures via Audit Logging Sidecar"
+    ],
+    "tradeoffs": [
+     "Detailed audit event logging overhead versus patron data confidentiality and forensic accountability"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "EU Cloud Infrastructure Provider",
+     "EU Kubernetes Cluster and EU Cloud Provider's HSM",
+     "Edge Router",
+     "Kubernetes Control Plane and Worker Nodes",
+     "EU Cloud Provider's Hardware Security Module (HSM)"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Search & Catalog Service",
+     "CatalogQueryService",
+     "IndexSyncWorker"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search & Catalog Service",
+     "SearchController",
+     "CatalogQueryService",
+     "KEDA",
+     "OpenTelemetry Collector"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

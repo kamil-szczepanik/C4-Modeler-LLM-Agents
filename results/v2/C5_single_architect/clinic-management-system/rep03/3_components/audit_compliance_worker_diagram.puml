@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Audit & Compliance Worker container
+
+System_Ext(message_broker, "Message Broker", "External Kafka message broker.")
+System_Ext(audit_storage, "Regulatory Archiving / Audit Storage", "Long-term regulatory archiving and audit storage.")
+
+Container_Boundary(audit_compliance_worker, "Audit & Compliance Worker") {
+    Component(event_consumer_component, "Event Consumer Component", "Go, segmentio/kafka-go", "Consumes raw security and access events.")
+    Component(compliance_normalizer_component, "Compliance Normalizer Component", "Go", "Validates, sanitizes, and structures event payloads against HIPAA/GDPR schemas.")
+    Component(retention_policy_enforcer_component, "Retention Policy Enforcer Component", "Go", "Applies data immutability flags and tagging.")
+    Component(archival_exporter_component, "Archival Exporter Component", "Go, AWS SDK", "Batches and streams processed audit packages to long-term storage.")
+    Component(dlq_handler_component, "DLQ Handler Component", "Go", "Catches malformed or failed events to prevent audit data loss.")
+}
+
+Rel(event_consumer_component, message_broker, "reads", "Kafka Protocol")
+Rel(compliance_normalizer_component, retention_policy_enforcer_component, "passes data", "In-memory Go channels")
+Rel(compliance_normalizer_component, dlq_handler_component, "routes failures", "In-memory Go channels")
+Rel(archival_exporter_component, audit_storage, "writes", "HTTPS / S3 API")
+Rel(dlq_handler_component, message_broker, "publishes retry/alert", "Kafka Protocol")
+@enduml

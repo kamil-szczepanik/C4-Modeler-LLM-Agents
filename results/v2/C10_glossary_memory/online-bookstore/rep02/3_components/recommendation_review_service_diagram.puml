@@ -1,0 +1,39 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Recommendation & Review Service container
+
+System_Ext(Recommendation_Engine, "Recommendation Engine", "AWS Personalize", "Provides machine learning-driven book recommendations via REST over HTTPS.")
+System_Ext(Redis_on_Amazon_ElastiCache, "Redis on Amazon ElastiCache", "Redis", "Serves high-frequency read requests with cache-aside pattern via RESP with TLS.")
+System_Ext(Amazon_RDS, "Amazon RDS", "Relational Database", "Persistent storage of review and recommendation data.")
+System_Ext(Amazon_SQS, "Amazon SQS", "Queue Service", "Decouples asynchronous telemetry and analytics event processing.")
+System_Ext(AWS_Secrets_Manager, "AWS Secrets Manager", "Secrets Manager", "Stores and provides secure configuration data and secrets.")
+System_Ext(Centralized_Logging_SIEM, "Centralized Logging & SIEM", "Logging & SIEM System", "Receives centralized logs and telemetry data.")
+
+Container_Boundary(Recommendation_Review_Service, "Recommendation & Review Service") {
+    Component(Recommendation_Review_API_Handler, "Recommendation & Review API Handler", "Python / FastAPI", "Handles incoming gRPC requests via AWS App Mesh for recommendations and customer reviews.")
+    Component(Recommendation_Logic_Controller, "Recommendation Logic Controller", "Python / FastAPI", "Manages recommendation processing, communicating with the external Recommendation Engine via REST over HTTPS with circuit breakers.")
+    Component(Review_Moderation_Handler, "Review Moderation Handler", "Python / FastAPI", "Processes and validates customer review submissions.")
+    Component(Cache_Manager, "Cache Manager", "Python / FastAPI & Redis on Amazon ElastiCache", "Handles high-frequency read requests using a cache-aside pattern with Redis via RESP with TLS.")
+    Component(Data_Access_Layer, "Data Access Layer", "Python / FastAPI & AWS SDK", "Interacts with Amazon RDS for persistent storage of review and recommendation data.")
+    Component(Messaging_Publisher, "Messaging Publisher", "Python / FastAPI & AWS SDK", "Publishes asynchronous telemetry and analytics events to Amazon SQS.")
+    Component(Security_Secrets_Handler, "Security & Secrets Handler", "Python / FastAPI & AWS SDK", "Retrieves secure configuration data and secrets from AWS Secrets Manager.")
+    Component(Telemetry_Logging_Client, "Telemetry & Logging Client", "Python / FastAPI", "Sends centralized logs and telemetry data to the Centralized Logging & SIEM system.")
+}
+
+Rel(Recommendation_Review_API_Handler, Recommendation_Logic_Controller, "Delegates recommendation requests")
+Rel(Recommendation_Review_API_Handler, Review_Moderation_Handler, "Delegates review processing requests")
+Rel(Recommendation_Logic_Controller, Cache_Manager, "Checks and updates cache")
+Rel(Recommendation_Logic_Controller, Recommendation_Engine, "Fetches machine learning-driven recommendations via REST over HTTPS with circuit breakers", "REST over HTTPS")
+Rel(Cache_Manager, Redis_on_Amazon_ElastiCache, "Serves read requests via RESP with TLS", "RESP with TLS")
+Rel(Review_Moderation_Handler, Data_Access_Layer, "Saves and retrieves review data")
+Rel(Data_Access_Layer, Amazon_RDS, "Executes database queries via AWS SDK", "AWS SDK")
+Rel(Recommendation_Logic_Controller, Messaging_Publisher, "Dispatches asynchronous events")
+Rel(Messaging_Publisher, Amazon_SQS, "Sends messages via AWS SDK", "AWS SDK")
+Rel(Recommendation_Review_API_Handler, Security_Secrets_Handler, "Fetches runtime secrets")
+Rel(Security_Secrets_Handler, AWS_Secrets_Manager, "Retrieves secrets via AWS SDK", "AWS SDK")
+Rel(Recommendation_Review_API_Handler, Telemetry_Logging_Client, "Emits audit logs and metrics")
+Rel(Telemetry_Logging_Client, Centralized_Logging_SIEM, "Forwards logs via HTTPS / AWS Infrastructure", "HTTPS")
+
+@enduml

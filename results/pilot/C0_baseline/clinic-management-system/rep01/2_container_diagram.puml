@@ -1,0 +1,47 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patients, "Patients", "Individuals receiving care who access the system.")
+Person(Receptionists, "Receptionists", "Clinic staff managing patient admissions and front-desk operations.")
+Person(Attending Physicians, "Attending Physicians", "Medical professionals managing electronic medical records and treatments.")
+Person(Billing Specialists, "Billing Specialists", "Financial staff handling patient billing, payments, and claims.")
+Person(Clinic Administrators, "Clinic Administrators", "Management staff overseeing system configuration and compliance.")
+
+System_Ext(Identity Provider, "Identity Provider", "External system handling authentication and access control.")
+System_Ext(Third-Party Payment Gateways/Clearinghouses, "Third-Party Payment Gateways/Clearinghouses", "External financial systems for processing insurance claims and payments.")
+System_Ext(External Laboratory & Imaging Systems, "External Laboratory & Imaging Systems", "External systems providing medical lab results and diagnostic images.")
+
+System_Boundary(Clinic Management System, "Clinic Management System") {
+    Container(Web Application Gateway, "Web Application Gateway", "NGINX", "Entry point managing incoming traffic via HTTPS/TLS.")
+    Container(Core API Service, "Core API Service", "Node.js / NestJS", "Handles core business logic and API requests.")
+    Container(EMR Engine, "EMR Engine", "Java / Spring Boot", "Engine responsible for electronic medical records management.")
+    Container(Billing Worker, "Billing Worker", "Python / Celery", "Processes billing and financial asynchronous tasks.")
+    Container(Audit Logging Sidecar, "Audit Logging Sidecar", "Sidecar Proxy", "Handles WORM audit logging for compliance.")
+    ContainerDb(PostgreSQL Cluster, "PostgreSQL Cluster", "PostgreSQL with AES-256 and LUKS", "Transactional data store with read-replicas.")
+    ContainerDb(Redis, "Redis", "Redis", "Used for caching and distributed locking.")
+    Container(Kafka, "Kafka", "Apache Kafka", "Message broker for asynchronous processing.")
+}
+
+Rel(Patients, Web Application Gateway, "Accesses system services", "HTTPS/TLS")
+Rel(Receptionists, Web Application Gateway, "Manages patient admissions", "HTTPS/TLS")
+Rel(Attending Physicians, Web Application Gateway, "Views and updates EMRs", "HTTPS/TLS")
+Rel(Billing Specialists, Web Application Gateway, "Processes billing", "HTTPS/TLS")
+Rel(Clinic Administrators, Web Application Gateway, "Administers system", "HTTPS/TLS")
+
+Rel(Web Application Gateway, Core API Service, "Routes API requests", "gRPC over TLS")
+Rel(Core API Service, EMR Engine, "Communicates with EMR service", "gRPC over TLS")
+Rel(Core API Service, PostgreSQL Cluster, "Persists transactional data", "TCP")
+Rel(Core API Service, Redis, "Caches data and acquires locks", "TCP")
+Rel(Core API Service, Kafka, "Publishes billing messages", "TCP")
+Rel(EMR Engine, PostgreSQL Cluster, "Persists patient records", "TCP")
+Rel(EMR Engine, Redis, "Caches EMR data", "TCP")
+Rel(Billing Worker, Kafka, "Processes billing messages", "TCP")
+
+Rel(Core API Service, Identity Provider, "Authenticates users", "OAuth2/JWT")
+Rel(Core API Service, Third-Party Payment Gateways/Clearinghouses, "Processes payments and claims", "REST/HTTPS")
+Rel(Core API Service, External Laboratory & Imaging Systems, "Integrates lab and imaging data", "HL7 FHIR REST APIs")
+
+@enduml

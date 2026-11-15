@@ -1,0 +1,266 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.5,
+  "justifications": {
+   "functional_suitability": "Core Domain Services with Cataloguing Controller and Circulation Controller cover cataloguing and circulation, and the Self-Service Portals and Kiosks serve patrons. Digital items are not explicitly handled (no storage or lending of digital content), and the Core Domain Services and Search Tier components lack detail.",
+   "performance_efficiency": "Dedicated Search Tier with Search Index Service targets p99 <800 ms. Caching Layer (Redis), the Event Bus feeding Idempotent Event Consumer, BFF non-blocking I/O, and Resilience Handler bulkheads support it. Gaps: no scaling or autoscaling, and no load-test evidence.",
+   "compatibility": "OpenAPI/REST contracts, Schema Validation and Contract Enforcer, Schema Registry and standard protocols (AMQP/Kafka, gRPC) aid interoperability. The brief names no external systems, but there are no library standards (MARC, Z39.50, SIP2) or integrations for catalogue and kiosk hardware.",
+   "usability": "Web and Mobile UI Frontend serves patrons and staff through Self-Service Portals and Kiosks, with kiosk-aware storage handling. Staff and patron roles are not distinguished, and accessibility, multilingual support and UX mechanisms are absent.",
+   "reliability": "Resilience Handler (retry, circuit breaker), Fault Tolerance Manager, Search Tier bulkheads, Transactional Outbox Processor, Idempotent Event Consumer, DLQ, Data Migration and Backup Container and snapshot manager are present. Gaps: no replication, failover or HA, and no RTO/RPO.",
+   "security": "Routing and Security Router (OAuth2/JWT, TLS), Security and Storage Manager (CSP, encrypted IndexedDB), mTLS in Security and Traceability Manager, EU-certified Secrets Management Vault, PII masking and audit event emitter. Gaps: no explicit RBAC, and the datastore lacks encryption-at-rest detail.",
+   "maintainability": "Modular containers with clear responsibilities: Hexagonal/DDD Domain Service Logic, BFF, Schema Registry, Configuration & Feature Management Container, Observability and contract enforcement. Weaknesses: some inconsistent or odd component definitions (Core Domain Services listed as a component in Observability, a Redis relationship wrongly typed) and coarse monolithic Core Domain Services.",
+   "portability": "Kubernetes CronJobs, containers, S3 API client, and standard protocols (SQL, Kafka, Redis) enable infrastructure replacement. EU-only residency is addressed via EU-certified vault and storage. There are no explicit deployment/IaC definitions or multi-environment strategy."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 3,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.53125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.0,
+   "Modifiability": 2.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "elements": [
+     "Dedicated Search Tier",
+     "Search Index Service",
+     "Caching Layer (Redis)",
+     "API Gateway",
+     "Resilience Handler"
+    ],
+    "sensitivity_points": [
+     "Search path from BFF to search tier is not explicit",
+     "Index sizing under 2,000 concurrent queries"
+    ],
+    "tradeoffs": [
+     "Caching speeds reads but risks stale results",
+     "Bulkheads and load shedding protect latency but may reject requests"
+    ],
+    "justification": "A dedicated search tier states a p99 under 800 ms, with bulkheads, caching, a gateway and a non-blocking BFF. However, the search query path is only shown via Core Domain Services, and no capacity or scaling mechanism is given."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "elements": [
+     "Asynchronous Event Bus (Message Broker)",
+     "Transactional Outbox Processor",
+     "Idempotent Event Consumer",
+     "Search Index Service",
+     "Core Domain Services"
+    ],
+    "sensitivity_points": [
+     "Event consumer lag determines the 5-minute searchability",
+     "Indexing load competes with query load"
+    ],
+    "tradeoffs": [
+     "Eventual consistency enables decoupling but delays visibility",
+     "Outbox adds reliability but extra latency"
+    ],
+    "justification": "Updates reach the search index asynchronously through the outbox, broker and idempotent consumer, isolating writes from searches. The 5-minute freshness is plausible, but no lag monitoring or SLA is defined, and indexing and query load are not explicitly separated."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "elements": [
+     "Dedicated Search Tier",
+     "Resilience Handler",
+     "Backup and Snapshot Manager",
+     "Primary Transactional Datastore",
+     "Transactional Outbox Processor"
+    ],
+    "sensitivity_points": [
+     "No replication or failover for search nodes is stated",
+     "Failover time vs the 1-minute limit"
+    ],
+    "tradeoffs": [
+     "Graceful degradation keeps service but reduces search quality",
+     "Snapshots aid recovery but are slower than replicas"
+    ],
+    "justification": "Circuit breakers, graceful degradation, the outbox and ACID storage keep circulation running and protect loan transactions. But search node replication and failover are not specified, only snapshots, so a 1-minute recovery is unproven."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Self-Service Portals and Kiosks",
+     "Resilience Handler",
+     "API Gateway",
+     "Security and Storage Manager"
+    ],
+    "sensitivity_points": [
+     "Multiple portal instances and load balancing are not shown",
+     "Client retry may duplicate loan requests"
+    ],
+    "tradeoffs": [
+     "Retries improve resilience but risk duplicates",
+     "Local encrypted storage helps offline but adds complexity"
+    ],
+    "justification": "Client retry with backoff, circuit breakers and gateway idempotency help avoid lost loans. However, redundant portal instances, load balancing and failover are never modelled, so continued service on remaining instances is only implied."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "elements": [
+     "Core Domain Services",
+     "Domain Service Logic",
+     "Cataloguing Controller",
+     "Schema Registry"
+    ],
+    "sensitivity_points": [
+     "No integration or provider adapter component exists",
+     "Catalogue logic is within Core Domain Services"
+    ],
+    "tradeoffs": [
+     "Hexagonal design aids isolation but without a dedicated adapter",
+     "Monolithic core services increase change coupling"
+    ],
+    "justification": "Hexagonal architecture could host provider adapters in principle, but no e-book provider integration component or anti-corruption layer is modelled. The change would touch Core Domain Services, so confinement to one component is not demonstrated."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "elements": [
+     "Configuration & Feature Management Container",
+     "Configuration Management Service",
+     "Feature Flag Engine",
+     "Domain Service Logic"
+    ],
+    "sensitivity_points": [
+     "No rules engine or per-library tenant configuration",
+     "Config applies by GitOps pull request, not runtime UI"
+    ],
+    "tradeoffs": [
+     "Config-as-code is auditable but slower than runtime editing",
+     "Feature flags give flexibility but do not express loan rules"
+    ],
+    "justification": "A configuration and feature flag service exists, but no relationship connects it to Core Domain Services, and there is no loan rules or per-library policy model. Runtime rule changes without redeploy are only loosely supported."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "elements": [
+     "API Gateway",
+     "Primary Transactional Datastore",
+     "Compliance and Archival Manager",
+     "Integrity and Compliance Validator",
+     "Backup and Snapshot Manager",
+     "EU-certified Secrets Management Vault"
+    ],
+    "sensitivity_points": [
+     "Residency enforcement relies on deployment region configuration",
+     "Third-party and observability exports may leak data"
+    ],
+    "tradeoffs": [
+     "Strict geo-routing limits resilience options across regions",
+     "PII masking reduces diagnostic detail"
+    ],
+    "justification": "Residency is addressed consistently: geo-routing, EU datastore, EU backups and object storage, EU vault, PII redaction, and a compliance validator. However, 'prevention by design' is mostly declarative, with no explicit policy-as-code or deployment guardrails."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Routing and Security Router",
+     "Security and Storage Manager",
+     "Observability & Logging Container",
+     "Circulation Controller",
+     "Compliance and Archival Manager"
+    ],
+    "sensitivity_points": [
+     "No object-level authorization in Circulation Controller",
+     "Audit of denied access is not explicit"
+    ],
+    "tradeoffs": [
+     "PII masking in logs may hamper audit investigation",
+     "Gateway-level token checks are coarse"
+    ],
+    "justification": "OAuth2/JWT introspection at the gateway and short-lived tokens authenticate patrons, and logging exists. But there is no per-patron authorization on loan history and no explicit audit of denied attempts, leaving an unaddressed risk."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Primary Transactional Datastore",
+     "API Gateway",
+     "Data Migration and Backup Container",
+     "Integrity and Compliance Validator",
+     "Backup and Snapshot Manager",
+     "EU-certified Secrets Management Vault",
+     "Compliance and Archival Manager",
+     "Job Scheduler",
+     "Asynchronous Event Bus (Message Broker)"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Core Domain Services",
+     "Cataloguing Controller",
+     "Domain Service Logic",
+     "Primary Transactional Datastore",
+     "Dedicated Search Tier",
+     "Self-Service Portals and Kiosks"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Dedicated Search Tier",
+     "Search Index Service",
+     "Idempotent Event Consumer",
+     "Resilience Handler",
+     "Caching Layer (Redis)",
+     "Asynchronous Event Bus (Message Broker)",
+     "Resource Throttling and Rate-Limiter"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Data Layer container
+
+System_Ext(CoreServices, "Core Services & EMR Service", "External services accessing the data layer.")
+System_Ext(EMRService, "EMR Service", "Handles Electronic Medical Records and binary data transfers.")
+System_Ext(ReplicationSyncManager, "Replication & Sync Manager", "Debezium and Kafka Connect for hybrid cross-site synchronization.")
+
+Container_Boundary(DataLayer, "Data Layer") {
+    Component(PrimaryRelationalStore, "Primary Relational Store", "PostgreSQL (Multi-Master / Citus or Cloud Managed RDS)", "Stores structured EMR, billing, and scheduling data with ACID compliance.")
+    Component(AuditLoggingStore, "Audit Logging Store", "Append-only PostgreSQL schema", "Provides tamper-proof audit trails with row-level security.")
+    Component(BlobObjectStore, "Blob Object Store", "MinIO / AWS S3", "Stores large medical imaging and lab binary files.")
+    Component(DataAccessProxy, "Data Access Proxy", "PgBouncer", "Handles connection pooling and load distribution to prevent database exhaustion.")
+    Component(EncryptionKeyManagementModule, "Encryption & Key Management Module", "HashiCorp Vault or AWS KMS", "Provides FIPS 140-2 Level 3 HSM encryption and AES-256 encryption at rest.")
+    Component(DatabaseMigrationSchemaManager, "Database Migration & Schema Manager", "Flyway or Liquibase", "Executes atomic, zero-downtime version-controlled schema upgrades.")
+}
+
+Rel(CoreServices, DataAccessProxy, "TLS (TCP/JDBC)", "Connection pooling")
+Rel(DataAccessProxy, PrimaryRelationalStore, "TCP/JDBC", "Database queries")
+Rel(EMRService, BlobObjectStore, "HTTPS (S3 API)", "Pre-signed URLs for binary transfers")
+Rel(PrimaryRelationalStore, AuditLoggingStore, "Internal synchronous logical replication", "Audit trail sync")
+Rel(PrimaryRelationalStore, EncryptionKeyManagementModule, "gRPC/HTTPS", "Envelope encryption and key rotation")
+Rel(BlobObjectStore, EncryptionKeyManagementModule, "gRPC/HTTPS", "Envelope encryption and key rotation")
+Rel(ReplicationSyncManager, PrimaryRelationalStore, "TLS (Logical Replication Stream)", "Between on-prem-k8s and eu-central-1")
+
+@enduml

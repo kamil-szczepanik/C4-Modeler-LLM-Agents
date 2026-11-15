@@ -1,0 +1,20 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container(api_gateway, "API Gateway", "API Gateway", "External API Gateway routing requests.")
+System_Ext(rabbitmq, "RabbitMQ", "Message Broker", "Handles asynchronous tasks and audit events.")
+
+Container_Boundary(core_domain_service, "Core Domain Service") {
+    Component(circulation_controller, "Circulation Controller", "NestJS Controller (Node.js, REST/gRPC)", "Handling REST/gRPC endpoints, JWT validation, and RBAC.")
+    Component(catalog_management_module, "Catalog Management Module", "NestJS Module (Node.js)", "Managing item metadata, availability rules, and R-01 cataloguing.")
+    Component(domain_event_publisher, "Domain Event Publisher", "NestJS Service (Node.js)", "Emitting encrypted AMQP events with W3C Trace Context.")
+    Component(repository_adapters, "Repository Adapters", "TypeORM / Prisma (TypeScript)", "TypeORM/Prisma components with circuit breakers and RLS.")
+}
+
+Rel(api_gateway, circulation_controller, "Routes requests", "gRPC over mTLS")
+Rel(circulation_controller, catalog_management_module, "Coordinates item availability", "TypeScript Method Calls")
+Rel(circulation_controller, repository_adapters, "Executes persistence operations", "TLS-encrypted TCP with fail-closed circuit breakers")
+Rel(catalog_management_module, repository_adapters, "Executes persistence operations", "TLS-encrypted TCP with fail-closed circuit breakers")
+Rel(domain_event_publisher, rabbitmq, "Dispatches audit and domain events", "AMQP over TLS with AES-GCM encryption and W3C headers")
+@enduml

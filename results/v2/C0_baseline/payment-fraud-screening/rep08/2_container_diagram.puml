@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening
+
+Person(FraudAnalysts_RiskManagers, "Fraud Analysts & Risk Managers", "Internal users reviewing suspicious payments and updating models.")
+
+System_Ext(PaymentGateway_Merchants, "Payment Gateway / Merchants", "External API clients submitting authorization requests.")
+System_Ext(IdentityProvider, "Identity Provider", "AWS Cognito / Okta providing OIDC/OAuth2 authentication.")
+System_Ext(BI_AnalyticsTool, "BI / Analytics Tool", "Amazon QuickSight for aggregated metric reporting via isolated data pipelines.")
+
+System_Boundary(RealTimePaymentFraudScreening, "Real-Time Payment Fraud Screening") {
+    Container(APIGatewayRoutingLayer, "API Gateway & Routing Layer", "AWS API Gateway / ALB", "Ingress & Routing layer handling incoming API requests with built-in circuit breaker.")
+    Container(ScoringEngineContainer, "Scoring Engine Container", "Go or Rust on AWS Fargate Spot", "Evaluates card-not-present payment authorizations with sub-50 ms P99 latencies.")
+    Container(CaseManagementContainer, "Case Management Container", "Node.js / React SPA backend with Amazon RDS (PostgreSQL)", "Provides case management for fraud analysts with relational state and row-level encryption.")
+    Container(AuditEventStoreContainer, "Audit & Event Store Container", "Amazon DynamoDB & S3", "Stores tamper-evident logs secured with AWS KMS Customer Managed Keys and S3 Object Lock.")
+    Container(MessagingBackbone, "Messaging Backbone", "Amazon SQS / SNS", "Serverless, low-maintenance event publishing backbone.")
+    Container(ModelStorageManagement, "Model Storage & Management", "Amazon S3 & AWS Secrets Manager", "Stores dynamic model weights and secrets for the system.")
+}
+
+Rel(PaymentGateway_Merchants, APIGatewayRoutingLayer, "Submits payment authorizations", "HTTPS (REST/JSON)")
+Rel(APIGatewayRoutingLayer, ScoringEngineContainer, "Routes scoring requests", "gRPC with mTLS")
+Rel(ScoringEngineContainer, ModelStorageManagement, "Retrieves dynamic model weights", "HTTPS (S3 API)")
+Rel(ScoringEngineContainer, MessagingBackbone, "Publishes scoring events", "HTTPS (SQS/SNS)")
+Rel(CaseManagementContainer, MessagingBackbone, "Publishes case events", "HTTPS (SQS/SNS)")
+Rel(FraudAnalysts_RiskManagers, CaseManagementContainer, "Reviews cases and manages fraud workflow", "HTTPS (OAuth2/OIDC)")
+Rel(CaseManagementContainer, AuditEventStoreContainer, "Writes audit logs and events", "AWS SDK (DynamoDB API)")
+
+@enduml

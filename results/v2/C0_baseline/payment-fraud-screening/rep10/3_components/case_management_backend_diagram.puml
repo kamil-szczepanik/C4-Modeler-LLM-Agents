@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Case Management Backend container
+
+Person(Analyst_Rules_Portal, "Analyst & Rules Portal", "External portal used by payment analysts.")
+System_Ext(Audit_Event_Stream, "Audit & Event Stream", "External audit and event streaming service.")
+
+Container_Boundary(Case_Management_Backend, "Case Management Backend") {
+    Component(Case_API_Controller, "Case API Controller", "AWS ECS Fargate, Node.js/Express/Fastify", "Provides high-performance REST/GraphQL APIs for processing fraud review workflows.")
+    Component(Workflow_Engine_Component, "Workflow Engine Component", "Node.js/TypeScript", "Executes state transitions and manages the core fraud review workflow logic.")
+    Component(Batch_Processing_Worker_Component, "Batch Processing Worker Component", "AWS ECS Fargate", "Handles asynchronous bulk processing and decisioning without causing gateway timeouts.")
+    Component(Notification_Telemetry_Component, "Notification & Telemetry Component", "Node.js/TypeScript", "Pushes job status updates via WebSockets and handles system telemetry.")
+    Component(Audit_Dispatcher_Component, "Audit Dispatcher Component", "Node.js/TypeScript", "Streams immutable audit events to maintain strict PCI-DSS compliance and auditability.")
+    Component(PostgreSQL_Database, "PostgreSQL Database", "AWS RDS with AWS KMS encryption", "Relational storage for transactional case states, protected via AWS KMS and AWS Secrets Manager.")
+    Component(Asynchronous_Job_Queue, "Asynchronous Job Queue", "Amazon SQS / Redis on Amazon ElastiCache with DLQ", "Enqueues bulk requests and manages asynchronous job queuing.")
+}
+
+Rel(Analyst_Rules_Portal, Case_API_Controller, "Submits REST/GraphQL requests", "HTTPS/REST/GraphQL")
+Rel(Case_API_Controller, Asynchronous_Job_Queue, "Enqueues bulk requests", "AWS SQS / Redis protocol")
+Rel(Batch_Processing_Worker_Component, Workflow_Engine_Component, "Executes state transitions", "In-process function calls")
+Rel(Workflow_Engine_Component, PostgreSQL_Database, "Persists case state", "PostgreSQL wire protocol over TLS 1.3")
+Rel(Audit_Dispatcher_Component, Audit_Event_Stream, "Streams immutable audit events", "Amazon EventBridge")
+Rel(Notification_Telemetry_Component, Analyst_Rules_Portal, "Pushes job status updates", "WebSockets")
+
+@enduml

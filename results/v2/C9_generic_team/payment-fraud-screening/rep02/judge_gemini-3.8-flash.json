@@ -1,0 +1,307 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 3,
+   "portability": 3
+  },
+  "mean": 3.875,
+  "justifications": {
+   "functional_suitability": "High-Performance Scoring Engine handles scoring decisions (R-01), Case Management Web Application addresses analyst reviews (R-02), and Model & Rule Registry enables zero-downtime updates (R-03). However, explicit mechanisms for generating decision explanations required by R-06 are only superficially detailed.",
+   "performance_efficiency": "The 50 ms P99 target at 3,000 req/s is well supported by Envoy connection pooling, Protobuf serialization, local LRU caching, Redis ElastiCache with a 15 ms timeout budget, and offloading audit/case workloads via Async Event Bus.",
+   "compatibility": "Standard HTTPS/JSON interfaces cleanly integrate with external Payment Gateway/Acquirer systems. Internal systems interoperate effectively using gRPC, Redis protocol, standard AWS SDKs, and Parquet formats for analytics compatibility via Athena.",
+   "usability": "The Fraud Analyst user group is directly supported by the Case Management Web Application and Backend-for-Frontend API, which features strict data masking to streamline review workflows without exposing sensitive cardholder data.",
+   "reliability": "Circuit breaking is present in Envoy proxy and queues decouple downstream failures. However, the critical requirement (R-07) to prevent blocking payments for over 1 minute lacks an explicit fail-open or fallback decision execution path.",
+   "security": "PCI-DSS compliance and R-05/R-06 are rigorously met through tokenization stripping, data masking in the BFF API, AWS Secrets Manager credential rotation, and tamper-evident 7-year retention via AWS S3 Object Lock in Compliance Mode.",
+   "maintainability": "The system decomposes well into managed AWS services suitable for three engineers. However, the Scoring Engine's Level 3 diagram incorrectly defines external containers as internal components, reflecting poor internal modular design and encapsulation.",
+   "portability": "While containers run on AWS ECS Fargate, the architecture is tightly coupled to proprietary AWS services (EventBridge, SQS, SSM Parameter Store, Athena, S3 Object Lock), limiting portability outside AWS eu-west-1 without substantial rework."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.0,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Envoy gRPC connection pooling, Protocol Buffers, in-memory Redis feature lookups with a strict 15ms timeout budget, and asynchronous event decoupling directly ensure sub-50ms P99 latency at 3,000 TPS.",
+    "elements": [
+     "API Gateway / Ingestion Container",
+     "High-Performance Scoring Engine",
+     "Feature Store",
+     "Protocol Buffers Serializer"
+    ],
+    "sensitivity_points": [
+     "Feature store Redis query latency under peak concurrency",
+     "Connection pooling and serialization overhead between gateway and scoring engine"
+    ],
+    "tradeoffs": [
+     "Strict feature retrieval timeout bounds latency at the cost of potential feature omission"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management workloads are isolated from synchronous scoring. Review cases are transferred asynchronously over SQS/EventBridge, and analyst traffic hits a dedicated BFF without contending for scoring engine compute or storage.",
+    "elements": [
+     "Case Management Web Application",
+     "Async Event Bus",
+     "High-Performance Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Isolation of compute and data stores between case management and the scoring engine"
+    ],
+    "tradeoffs": [
+     "Asynchronous case dispatch introduces slight propagation delay to the analyst queue"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Envoy provides circuit breaking and fallback activation telemetry, but the architecture lacks an explicit fallback decision engine (e.g., static stand-in rules or acquirer failover logic) to safely approve/decline payments when scoring crashes.",
+    "elements": [
+     "API Gateway / Ingestion Container",
+     "AWS API Gateway & Envoy proxy",
+     "High-Performance Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker trip thresholds and fallback decision path routing logic"
+    ],
+    "tradeoffs": [
+     "Default approval on fallback minimizes blocked transactions but increases fraud risk"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Audit persistence is decoupled from real-time scoring via durable SQS queues and EventBridge. Slowdown or failure of S3 ingestion buffers messages without impacting synchronous scoring latency or dropping audit records.",
+    "elements": [
+     "Async Event Bus",
+     "High-Performance Scoring Engine",
+     "Audit & Compliance Storage"
+    ],
+    "sensitivity_points": [
+     "SQS queue retention period and consumer backpressure handling"
+    ],
+    "tradeoffs": [
+     "Durable asynchronous queuing trades immediate audit consistency for low decision latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Model & Rule Registry publishes versioned artifacts to S3 and updates Parameter Store pointers. The scoring engine hot-reloads models and records versions, though automated validation and fast rollback mechanics remain partially implicit.",
+    "elements": [
+     "Model & Rule Registry Container",
+     "High-Performance Scoring Engine",
+     "Configuration & Secrets Management"
+    ],
+    "sensitivity_points": [
+     "Hot-reload synchronization across distributed scoring engine instances"
+    ],
+    "tradeoffs": [
+     "Dynamic hot-reloading increases memory footprint and engine complexity compared to container recycling"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "New rules are published via the registry and GitOps pipeline into Parameter Store, which the engine hot-reloads without downtime. Decisions capture input snapshots and rule execution metadata, enabling full explainability.",
+    "elements": [
+     "Model & Rule Registry Container",
+     "Configuration & Secrets Management",
+     "High-Performance Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Propagation time of rule configurations from Parameter Store to scoring memory"
+    ],
+    "tradeoffs": [
+     "In-memory rule evaluation avoids DB roundtrips but requires strict rule schema validation"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Tokenization stripping at the ingress proxy and strict masking at the BFF API prevent clear-text card exposure. However, the model lacks dedicated user behavior analytics or an automated alerting mechanism for detecting compromised accounts within 15 minutes.",
+    "elements": [
+     "API Gateway / Ingestion Container",
+     "Case Management Web Application",
+     "Backend-for-Frontend API"
+    ],
+    "sensitivity_points": [
+     "Enforcement of field-level tokenization masking in the analyst interface"
+    ],
+    "tradeoffs": [
+     "Masking card numbers prevents data leakage but may complicate fraud pattern validation"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Audit events containing input snapshots, model versions, and explanations are stored in Parquet format in S3 with Object Lock Compliance Mode (7-year retention) and queried quickly using serverless Athena.",
+    "elements": [
+     "Audit & Compliance Storage",
+     "Object Lock Enforcement Manager",
+     "Query & Analytics Interface"
+    ],
+    "sensitivity_points": [
+     "S3 Object Lock retention policy configuration and Parquet partition indexing"
+    ],
+    "tradeoffs": [
+     "Immutable S3 Object Lock prevents any compliance data modification, requiring archival cleanup lifecycle rules"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "API Gateway / Ingestion Container",
+     "Backend-for-Frontend API",
+     "Configuration & Secrets Management"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Storage",
+     "Object Lock Enforcement Manager",
+     "High-Performance Scoring Engine"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Audit & Compliance Storage",
+     "Query & Analytics Interface",
+     "Async Event Bus"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Git-Ops / Infrastructure-as-Code Pipeline",
+     "Configuration & Secrets Management",
+     "High-Performance Scoring Engine"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "API Gateway / Ingestion Container",
+     "High-Performance Scoring Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Web Application",
+     "Backend-for-Frontend API",
+     "Fraud Analyst",
+     "Event Queue"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model & Rule Registry Container",
+     "Model & Rule Registry API",
+     "Artifact Publisher",
+     "High-Performance Scoring Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "API Gateway / Ingestion Container",
+     "Protocol Buffers Serializer",
+     "High-Performance Scoring Engine",
+     "Feature Store",
+     "In-Memory Feature Cache"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "API Gateway / Ingestion Container",
+     "Backend-for-Frontend API"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Storage",
+     "Object Lock Enforcement Manager",
+     "High-Performance Scoring Engine",
+     "Async Event Bus"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "AWS API Gateway & Envoy proxy",
+     "Amazon CloudWatch"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

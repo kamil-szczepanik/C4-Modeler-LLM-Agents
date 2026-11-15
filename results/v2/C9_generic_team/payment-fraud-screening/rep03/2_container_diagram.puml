@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalysts, "Fraud Analysts", "Internal users performing case reviews and managing fraud cases.")
+
+System_Ext(PaymentGateway, "Payment Gateway", "External source of authorization requests.")
+System_Ext(MonitoringBackend, "Monitoring Backend", "External monitoring backend for telemetry collection.")
+
+System_Boundary(FraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(AWSApiGateway, "AWS API Gateway", "AWS API Gateway with Circuit Breaker", "Receives payment authorizations and routes incoming traffic.")
+    Container(TokenizationProxyContainer, "Tokenization Proxy Container", "Container", "Handles tokenization securely for incoming payment requests via gRPC/Protobuf.")
+    Container(ModularMonolithCoreScoringEngine, "Modular Monolith Core Scoring Engine", "AWS ECS Fargate", "Processes and evaluates card-not-present payment authorizations for fraud in real-time.")
+    Container(CaseManagementService, "Case Management Service", "AWS ECS Fargate", "Provides case management tools for fraud analysts.")
+    Container(AmazonSQSMessageBus, "Amazon SQS Message Bus", "Amazon SQS", "Decouples real-time scoring from asynchronous analyst case management.")
+    Container(AWSS3ObjectLock, "AWS S3 Object Lock", "AWS S3 Object Lock", "Immutable audit storage for tamper-evident logging.")
+    Container(AWSS3Glacier, "AWS S3 Glacier", "AWS S3 Glacier", "Archival storage for long-term data retention.")
+    Container(OpenTelemetrySidecarContainer, "OpenTelemetry Sidecar Container", "AWS Distro for OpenTelemetry", "Sidecar telemetry collection for monitoring P99 latency.")
+    Container(ConfigurationValidationInitContainer, "Configuration Validation Init Container", "Container", "Validates configuration on startup.")
+}
+
+Rel(PaymentGateway, AWSApiGateway, "Sends payment authorization requests", "HTTPS/TLS 1.3")
+Rel(AWSApiGateway, TokenizationProxyContainer, "Forwards payment data", "gRPC/Protobuf")
+Rel(TokenizationProxyContainer, ModularMonolithCoreScoringEngine, "Sends tokenized payment data for scoring", "Internal VPC Network")
+Rel(ModularMonolithCoreScoringEngine, AmazonSQSMessageBus, "Asynchronously routes cases", "Amazon SQS API")
+Rel(AmazonSQSMessageBus, CaseManagementService, "Triggers case processing via polling", "Polling")
+Rel(FraudAnalysts, CaseManagementService, "Performs case reviews and manages fraud cases", "HTTPS/TLS 1.3")
+Rel(ModularMonolithCoreScoringEngine, AWSS3ObjectLock, "Writes tamper-evident audit logs", "AWS SDK / S3 API")
+Rel(OpenTelemetrySidecarContainer, MonitoringBackend, "Exports telemetry and metrics", "OTLP")
+
+@enduml

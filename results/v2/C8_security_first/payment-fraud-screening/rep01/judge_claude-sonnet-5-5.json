@@ -1,0 +1,331 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 2
+  },
+  "mean": 3.125,
+  "justifications": {
+   "functional_suitability": "Scoring Engine Container and Case Management Container cover R-01 and R-02, and double-buffered models in Model Execution Engine support R-03. Gaps: no rule management component, no approve/decline/review response shown, and no case creation flow from scoring to Case Management beyond the SQS Case Queue.",
+   "performance_efficiency": "Feature Enrichment Component uses ElastiCache Redis, Model Execution Engine uses in-process ONNX with double-buffering, and audit is flushed asynchronously. Gaps: cache.t4g.micro is undersized for 3,000 TPS, there is no autoscaling, API Gateway adds latency, and the RDS/Fargate sizing is not shown.",
+   "compatibility": "Uses mTLS and gRPC for the Payment Gateway / Acquirer, OIDC/SAML for the Corporate Identity Provider, and ONNX models. Gaps: the Card Tokenization Provider has no relationship, and the API Gateway HTTP APIs are inconsistent with PrivateLink/NLB and gRPC.",
+   "usability": "Case Management Frontend (SPA on CloudFront) serves analysts, with IdP login and Notification Gateway alerts. Gaps: the acquirer interface is only a technical API, there is no explanation view for analysts, and no dashboards or risk-manager metrics UI are shown.",
+   "reliability": "Fallback & Circuit Breaker Component targets R-07, and SQS has Dead Letter Queues, with RDS Proxy for connection pooling. Gaps: there are no multi-AZ/replication/backup details, no fallback policy specifics, and API Gateway and Redis are single points of failure with no failover.",
+   "security": "mTLS, signed model loading, S3 WORM Object Lock, Lake Formation column masking, IdP authentication, and pgaudit are present. Gaps: the Card Tokenization Provider is not wired into the flow, there is no KMS/encryption at rest, and no WAF or analyst RBAC is shown. Tamper evidence relies on Object Lock without hashing.",
+   "maintainability": "Clear container decomposition (Scoring Engine Container, Case Management Container, SQS / EventBridge, Athena & S3 Data Lake) and components with defined responsibilities, with asynchronous decoupling. Gaps: the Data Lake component diagram mixes in external callers, audit storage is duplicated across RDS, S3 and EventBridge, and there is no rule management or observability.",
+   "portability": "Fargate containers and Go/ONNX are fairly portable, and a single region is acceptable. But the design is heavily tied to AWS-native services (API Gateway, EventBridge, Athena, Lake Formation, Object Lock), and there is no IaC or abstraction layer for replacing infrastructure."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 3,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 2,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.4375,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 3.0,
+   "Modifiability": 2.5,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "API Gateway",
+     "Scoring Engine Container",
+     "Feature Enrichment Component",
+     "Model Execution Engine"
+    ],
+    "sensitivity_points": [
+     "Redis cache.t4g.micro under 3,000 TPS",
+     "API Gateway hop adds latency",
+     "Fargate scaling not specified"
+    ],
+    "tradeoffs": [
+     "Managed gateway convenience vs latency budget",
+     "Cheap cache vs throughput headroom"
+    ],
+    "justification": "In-process ONNX scoring and Redis features are plausible for 50 ms. But API Gateway HTTP API plus a t4g.micro cache, with no autoscaling or latency evidence, leaves P99 risk. Redis is also missing from the container view."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Case Management Container",
+     "Amazon RDS PostgreSQL",
+     "Scoring Engine Container",
+     "Amazon SQS / EventBridge"
+    ],
+    "sensitivity_points": [
+     "Shared API Gateway for both paths",
+     "RDS Proxy pooling during peaks"
+    ],
+    "tradeoffs": [
+     "Shared ingress cost vs workload isolation"
+    ],
+    "justification": "Case management runs in separate containers with its own database, so scoring is mostly isolated. The shared API Gateway and no explicit throttling or caching leave 2 s screens and scoring P99 unproven."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "elements": [
+     "Fallback & Circuit Breaker Component",
+     "Scoring Engine Container",
+     "API Gateway",
+     "Audit & Telemetry Dispatcher"
+    ],
+    "sensitivity_points": [
+     "Fallback decision rules undefined",
+     "Crash of whole service bypasses in-process breaker",
+     "Fallback audit path unspecified"
+    ],
+    "tradeoffs": [
+     "Approve-on-failure risks fraud vs decline blocks payments"
+    ],
+    "justification": "A circuit breaker is named, but it lives inside the scoring container, so a crash of the container is not covered. No multi-AZ replicas, health checks, or external fallback path are described, and fallback auditing is unspecified."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Audit & Telemetry Dispatcher",
+     "EventBridge Audit Bus",
+     "Amazon S3 WORM Bucket & Model Bucket",
+     "Amazon Kinesis Data Firehose"
+    ],
+    "sensitivity_points": [
+     "Asynchronous flush with in-memory buffer loss",
+     "Dispatcher failure handling undefined"
+    ],
+    "tradeoffs": [
+     "Async decoupling protects latency vs risk of losing records"
+    ],
+    "justification": "Async dispatch keeps decisions fast, and EventBridge archive and Firehose are durable. But there is no local durable buffer or retry or DLQ for audit events, so a crash or outage could lose records."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Model Execution Engine",
+     "Amazon S3 WORM Bucket & Model Bucket",
+     "Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Model version recorded in audit event",
+     "Rollback procedure not defined",
+     "Model reload trigger not specified"
+    ],
+    "tradeoffs": [
+     "Signed models add safety vs slower deployment"
+    ],
+    "justification": "Double-buffered models and signed S3 model loading support zero-downtime swaps. But there is no model registry, deployment pipeline, rollback mechanism, or explicit version stamping in decisions, and the reload trigger is unclear."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "elements": [
+     "Scoring Engine Container",
+     "Model Execution Engine",
+     "Case Management Container"
+    ],
+    "sensitivity_points": [
+     "No rules engine component",
+     "Rule names in decision explanation absent"
+    ],
+    "tradeoffs": [
+     "Models-only logic is simpler vs rules need runtime agility"
+    ],
+    "justification": "No rules engine, rule store, or rule-authoring and distribution mechanism exists, even though R-03 requires rule updates. Context mentions tuning rules, but nothing implements it or records rules applied per decision."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "elements": [
+     "Corporate Identity Provider (IdP)",
+     "Card Tokenization Provider",
+     "Amazon Athena & S3 Data Lake",
+     "AWS Lake Formation",
+     "Case Management Container"
+    ],
+    "sensitivity_points": [
+     "Tokenization flow missing from relationships",
+     "No anomaly detection or alerting on analyst access",
+     "Alerts within 15 minutes unaddressed"
+    ],
+    "tradeoffs": [
+     "External vault reduces PCI scope vs added dependency"
+    ],
+    "justification": "External tokenization provider and Lake Formation masking help hide card data. But the provider has no relationships, there is no analyst access monitoring or alerting, and no MFA or RBAC details, so detection within 15 minutes is unaddressed."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Amazon S3 Data Lake Storage",
+     "Amazon Athena Query Engine",
+     "Amazon S3 WORM Bucket & Model Bucket",
+     "EventBridge Audit Bus"
+    ],
+    "sensitivity_points": [
+     "Explanation content not captured",
+     "Inputs and model version in records unspecified",
+     "Parquet queries over 7 years"
+    ],
+    "tradeoffs": [
+     "Object Lock immutability vs storage cost and cost of query"
+    ],
+    "justification": "WORM Object Lock, 7-year retention and Athena queries make tamper-evident retrieval feasible. But no component explicitly stores decision inputs, model version, or explanation, and there is no integrity verification such as hashing chains."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "partial"
+  },
+  "coverage": 0.5454545454545454,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Card Tokenization Provider",
+     "Amazon S3 WORM Bucket & Model Bucket",
+     "AWS Lake Formation",
+     "Ingress and TLS Termination Controller"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Amazon S3 WORM Bucket & Model Bucket",
+     "WORM Object Storage",
+     "EventBridge Audit Bus",
+     "Amazon S3 Data Lake Storage",
+     "Audit & Telemetry Dispatcher"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Amazon Athena Query Engine",
+     "Feature Enrichment Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Scoring Engine Container",
+     "Case Management Container",
+     "Amazon SQS / EventBridge"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Scoring Engine Container",
+     "Model Execution Engine",
+     "API Router Component",
+     "Feature Enrichment Component",
+     "API Gateway"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Container",
+     "Case Management Frontend",
+     "Case Management Backend",
+     "Amazon RDS PostgreSQL",
+     "Amazon SQS Case Queue"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Model Execution Engine",
+     "Model Bucket Storage",
+     "Scoring Engine Container"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Scoring Engine Container",
+     "Feature Enrichment Component",
+     "Model Execution Engine",
+     "API Router Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Card Tokenization Provider",
+     "AWS Lake Formation",
+     "Ingress and TLS Termination Controller"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit & Telemetry Dispatcher",
+     "WORM Object Storage",
+     "EventBridge Audit Bus",
+     "Amazon S3 Data Lake Storage",
+     "Audit Log Schema"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Fallback & Circuit Breaker Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

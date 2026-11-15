@@ -1,0 +1,334 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 5,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "Elements like Search Service, Checkout Orchestrator, and Recommendations Container satisfy R-01 through R-04. Shipping integration is addressed via Async Event Bus. However, explicit mechanisms for GDPR/CCPA data rights (erasure, consent) and currency conversion execution are missing in backend components.",
+   "performance_efficiency": "Meets 1M MAU and low latency via CloudFront, API Gateway caching, OpenSearch indexing, Redis In-Memory Cache, and DynamoDB. However, explicit client-side bundling or asset optimization mechanisms to ensure < 2s load on 3G are not specified.",
+   "compatibility": "Integrates with Third-Party Payment Gateway, Third-Party Shipping Provider, and external Identity Provider using standard HTTPS/REST and OIDC. Although Currency Exchange Rate Service is defined at context/container levels, no backend component explicitly consumes it.",
+   "usability": "Customer needs are met through the Single Page Application (SPA), providing dedicated views including Catalog & Search View, Cart & Checkout View, and Reviews & Ratings Widget. Feedback and alerts are supported via Notification Service.",
+   "reliability": "High availability (99.95%) is ensured via Amazon Aurora PostgreSQL Multi-Region, DynamoDB Global Tables, Payment Client Component circuit breakers, and Dead Letter Queue (DLQ) Handler in the Async Event Bus.",
+   "security": "Strong transport security with TLS across all internal/external links, Auth Filter at API Gateway validating OIDC tokens, and Rate Limiter for abuse mitigation. Specific GDPR/CCPA data protection or PII encryption mechanisms are not elaborated.",
+   "maintainability": "Clear microservice modularity across business domains with explicit schema governance via AWS Glue Schema Registry. Minor overlap exists between ML responsibilities in the Catalog & Search Container and the Recommendations Container.",
+   "portability": "Multi-region AWS targets (us-east-1, eu-west-1, ap-southeast-1) are well supported using DynamoDB Global Tables and Aurora Multi-Region. However, components are tightly coupled to AWS proprietary services (Glue, EventBridge, SageMaker)."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 4.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront CDN caching, API Gateway caching, and OpenSearch full-text retrieval offload database load effectively. However, 3G delivery heavily relies on aggressive asset optimization and edge caching not fully elaborated at the client tier.",
+    "elements": [
+     "Single Page Application (SPA)",
+     "API Gateway",
+     "Catalog & Search Container",
+     "Search Service",
+     "Request Transformation/Caching"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios at CloudFront and API Gateway",
+     "OpenSearch query latency under concurrency spikes"
+    ],
+    "tradeoffs": [
+     "Aggressive response caching reduces latency but risks serving stale catalog prices"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The asynchronous decoupling of recommendation processing via SageMaker, Spring Batch, and an isolated Recommendations Container with ElastiCache ensures intensive recomputations do not consume catalog browsing compute or storage bandwidth.",
+    "elements": [
+     "Catalog & Search Container",
+     "Recommendations Container",
+     "Collaborative Filtering Engine",
+     "In-Memory Cache",
+     "Amazon SageMaker"
+    ],
+    "sensitivity_points": [
+     "Resource isolation between inference engines and primary transactional databases",
+     "Cache freshness in ElastiCache"
+    ],
+    "tradeoffs": [
+     "Background batch inference avoids compute contention but delays real-time recommendation updates"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Checkout orchestration immediately publishes an OrderPlaced event to the Async Event Bus. Outbound shipping dispatches are decoupled asynchronously with DLQ support, guaranteeing checkout success independent of third-party shipping API availability.",
+    "elements": [
+     "Order & Checkout Container",
+     "Checkout Orchestrator Component",
+     "Async Event Bus",
+     "Dead Letter Queue (DLQ) Handler",
+     "Third-Party Shipping Provider"
+    ],
+    "sensitivity_points": [
+     "Dead-letter queue monitoring and retry exhaustion policies",
+     "Event delivery guarantees on the broker"
+    ],
+    "tradeoffs": [
+     "Asynchronous fulfillment improves availability but delays immediate shipping confirmation to buyers"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "While storage tiers explicitly use Aurora Multi-Region and DynamoDB Global Tables, multi-region failover routing (such as Route 53 or Global Accelerator) and cross-region application deployment topologies are omitted from the design.",
+    "elements": [
+     "Amazon Aurora PostgreSQL & Amazon DynamoDB",
+     "Catalog & User Relational DB",
+     "Cart & Session NoSQL Store",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Replication lag across AWS regions during failover",
+     "DNS failover latency and health-checking mechanisms"
+    ],
+    "tradeoffs": [
+     "Multi-region replication increases uptime but introduces write-latency overhead and consistency tradeoffs"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "External exchange rate integration and stateless pricing workflows minimize core changes. Adding JPY requires minor configuration changes in the exchange client and UI rendering, though multi-currency display logic spans both SPA and backend containers.",
+    "elements": [
+     "Currency Exchange Rate Service",
+     "Order & Checkout Container",
+     "Cart Management Component",
+     "Single Page Application (SPA)"
+    ],
+    "sensitivity_points": [
+     "Exchange rate caching intervals and precision rounding rules",
+     "Gateway multi-currency transaction handling"
+    ],
+    "tradeoffs": [
+     "Dynamic multi-currency conversion simplifies expansion but introduces dependency on external rate feeds"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Recommendations are fully isolated in a dedicated Recommendations Container and ML Inference Bridge via gRPC contracts. Swapping algorithms inside the Collaborative Filtering Engine or SageMaker requires zero code modifications to upstream consumers.",
+    "elements": [
+     "Recommendations Container",
+     "Collaborative Filtering Engine",
+     "ML Inference Bridge",
+     "Catalog & Search Container"
+    ],
+    "sensitivity_points": [
+     "Stability of the gRPC interface contract",
+     "Algorithm feature vector compatibility"
+    ],
+    "tradeoffs": [
+     "Strict container modularity simplifies algorithm swapping but adds inter-service network hops"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Parameterized queries via Prisma ORM and Spring Data JPA prevent SQL injection, and React escapes XSS. However, a dedicated Web Application Firewall (AWS WAF) is missing at the API edge to block malicious payloads early.",
+    "elements": [
+     "API Gateway",
+     "Order Persistence Component",
+     "Inventory Manager",
+     "Single Page Application (SPA)"
+    ],
+    "sensitivity_points": [
+     "Strict sanitization of search queries entering OpenSearch",
+     "Validation layers prior to persistence execution"
+    ],
+    "tradeoffs": [
+     "Deep payload inspection increases ingress latency but prevents malicious injections"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "Customer data is distributed across Aurora, DynamoDB, OpenSearch, and notification audit logs. The architecture lacks a dedicated privacy orchestration mechanism, deletion event contracts, or automated cascading deletion across disparate data stores.",
+    "elements": [
+     "Amazon Aurora PostgreSQL & Amazon DynamoDB",
+     "Catalog & Search Container",
+     "Notification Service",
+     "Async Event Bus"
+    ],
+    "sensitivity_points": [
+     "Traceability of personal data across polyglot datastores",
+     "Auditability of immutable logs versus right-to-be-forgotten mandates"
+    ],
+    "tradeoffs": [
+     "Polyglot persistence optimizes workload performance but greatly complicates coordinated data deletion"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "none",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "partial"
+  },
+  "coverage": 0.7272727272727273,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "none",
+    "elements": []
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Currency Exchange Rate Service"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Third-Party Shipping Provider",
+     "Async Event Bus",
+     "Outbound Dispatcher"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Container",
+     "Catalog Controller",
+     "Search Service",
+     "Catalog & Search View",
+     "Inventory Manager",
+     "Catalog & User Relational DB"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Order & Checkout Container",
+     "Cart & Checkout View",
+     "Checkout Orchestrator Component",
+     "Cart Management Component",
+     "Payment Client Component",
+     "Third-Party Payment Gateway",
+     "Cart & Session NoSQL Store"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Reviews & Ratings Widget",
+     "Catalog & User Relational DB"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendations Container",
+     "Recommendation API Router",
+     "Recommendation Service",
+     "Collaborative Filtering Engine",
+     "Recommendation Ingestion Component",
+     "ML Inference Bridge",
+     "Amazon SageMaker"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "Async Event Bus",
+     "Event Topic / Stream Partition Manager",
+     "Amazon Aurora PostgreSQL & Amazon DynamoDB",
+     "Catalog & User Relational DB",
+     "Cart & Session NoSQL Store",
+     "In-Memory Cache"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Single Page Application (SPA)",
+     "Request Transformation/Caching",
+     "State Hydration / Caching Manager",
+     "In-Memory Cache"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Catalog & User Relational DB",
+     "Cart & Session NoSQL Store",
+     "Dead Letter Queue (DLQ) Handler",
+     "Payment Client Component",
+     "Rate Limiter"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "partial",
+    "elements": [
+     "Auth Filter",
+     "Rate Limiter",
+     "Schema Registry",
+     "Identity Provider / Auth Service"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

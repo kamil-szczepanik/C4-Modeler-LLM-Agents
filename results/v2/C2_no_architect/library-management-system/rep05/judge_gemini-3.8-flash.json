@@ -1,0 +1,235 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 3,
+   "portability": 4
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "While circulation, self-service portals, and search are covered by the Circulation Logic Engine and Discovery Controller, dedicated mechanisms or workflows for cataloguing physical and digital items (R-01) by librarians are not explicitly defined beyond generic database updates.",
+   "performance_efficiency": "Search response targets (< 800 ms) are explicitly addressed via Discovery Controller querying a Distributed Cache (Redis) and Read-Replica Data Store. Heavy analytics workloads are offloaded via the Message Broker and Aggregation and Reporting Service to prevent search degradation.",
+   "compatibility": "Interoperability with external systems like Catalogue Database and External Institutional BI Tools / Municipal Dashboards is well-supported through standard protocols including mTLS API push, Kafka protocols, and TLS 1.3.",
+   "usability": "All target personas (Library Patrons, Librarians, and Library Administrators) are addressed with dedicated access paths via the Self-Service Portal Container, Circulation Management Container, and Dashboard and Export Controller, complemented by localized static asset delivery via CDN.",
+   "reliability": "Reliability is well-supported using multi-zone read-replicas with circuit breaking, connection pooling in the Catalogue Database, and a 3-broker Message Broker cluster with replication factor 2 and a Dead Letter Queue (DLQ) Handler.",
+   "security": "Security thoroughly addresses the EU-only data residency constraint and data protection via WAF, OAuth2/OIDC JWT validation, Istio mTLS, AES-256 at-rest encryption via Cloud KMS / Vault, and pseudonymized analytics export over mTLS.",
+   "maintainability": "Services are modularly separated by concern. However, C4 containment boundaries are violated inside the Circulation Management Container diagram, which erroneously includes container-level elements like API Gateway, Message Broker, and Catalogue Database as internal components.",
+   "portability": "Containers are orchestrated with Kubernetes and Istio, using cloud-agnostic components (Kafka/Strimzi, Redis, PostgreSQL/ClickHouse), which allows flexible deployment into any compliant EU-based cloud or on-premises infrastructure."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.53125,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 4.0,
+   "Modifiability": 2.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "Catalogue queries utilize Redis caching and database read replicas via the Discovery Controller. However, lacking a dedicated full-text search engine (e.g., Elasticsearch) makes sustaining P99 < 800 ms under 2,000 concurrent complex searches risky.",
+    "elements": [
+     "API Gateway",
+     "Self-Service Portal Container",
+     "Discovery Controller",
+     "Redis Cache",
+     "Catalogue Database and Read-Replica Data Store"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in the Redis distributed cache",
+     "Read-replica replication lag and query throughput"
+    ],
+    "tradeoffs": [
+     "Database read-replica scaling versus deploying a dedicated search engine"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "justification": "Writes are isolated from reads via primary-replica separation and asynchronous messaging. However, the model lacks explicit cache invalidation mechanisms between circulation updates and patron search caches, jeopardizing the 5-minute freshness target.",
+    "elements": [
+     "Circulation Logic Engine",
+     "Discovery Controller",
+     "Catalogue Database and Read-Replica Data Store",
+     "Message Broker"
+    ],
+    "sensitivity_points": [
+     "Replication latency between primary database and read-replicas",
+     "Cache invalidation latency upon item updates"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of search results versus immediate cache invalidation overhead"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The multi-zone replicated database with connection pooling and circuit-breaking isolates failures. Searching falls back to healthy replicas, while circulation transactions route to the primary database, avoiding data loss.",
+    "elements": [
+     "Catalogue Database & Read-Replica",
+     "Circulation Logic Engine",
+     "Discovery Controller"
+    ],
+    "sensitivity_points": [
+     "Read-replica failover and circuit breaker detection thresholds",
+     "Database connection pool recovery times"
+    ],
+    "tradeoffs": [
+     "Automated failover speed versus risk of split-brain state during transient partitions"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The portal runs on Kubernetes with Istio service mesh, providing automated health checks, container restarts, and load balancing across surviving instances within one minute without losing stateless patron sessions.",
+    "elements": [
+     "API Gateway",
+     "Self-Service Portal Container",
+     "Account Workflow Manager"
+    ],
+    "sensitivity_points": [
+     "Kubernetes liveness and readiness probe timings",
+     "Istio traffic re-routing and connection draining"
+    ],
+    "tradeoffs": [
+     "Fast pod eviction timeouts versus avoiding false-positive node failovers"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "The architecture lacks dedicated integration adapters or connectors for third-party digital catalogue ingestion. Ingesting a new e-book provider requires modifying core circulation logic and catalogue data access layers directly.",
+    "elements": [
+     "Circulation Logic Engine",
+     "Catalogue Database and Read-Replica Data Store"
+    ],
+    "sensitivity_points": [
+     "Coupling between third-party metadata schemas and core catalogue models"
+    ],
+    "tradeoffs": [
+     "Generic ingestion abstraction complexity versus point-to-point provider integration"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "Circulation Logic Engine embeds loan policy enforcement directly within the microservice. There is no externalized rule engine, policy-as-code agent, or runtime configuration store specified to modify rules without rebuilding or redeploying code.",
+    "elements": [
+     "Circulation Logic Engine",
+     "Circulation Management Container"
+    ],
+    "sensitivity_points": [
+     "Coupling between loan policy definitions and application business logic"
+    ],
+    "tradeoffs": [
+     "External rules engine operational overhead versus deployment-bound loan policy changes"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "EU data residency is noted across component descriptions and Cloud KMS is incorporated. However, structural enforcement mechanisms—such as strict Istio egress lockdown policies or geofenced infrastructure controls—are not explicitly detailed.",
+    "elements": [
+     "API Gateway",
+     "Cloud KMS / Vault",
+     "Analytics/Reporting Container",
+     "Message Broker"
+    ],
+    "sensitivity_points": [
+     "Configuration of network egress controls and cloud region boundaries"
+    ],
+    "tradeoffs": [
+     "Strict outbound egress filtering versus integration with external municipal dashboards"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Incoming requests pass through OAuth2/OIDC validation with short-lived JWTs and WAF. Account Workflow Manager provides identity contextualization. Attempts are denied and OpenTelemetry captures audit logs.",
+    "elements": [
+     "API Gateway",
+     "OAuth2/OIDC Validator",
+     "WAF",
+     "Account Workflow Manager"
+    ],
+    "sensitivity_points": [
+     "Fine-grained RBAC and patron ownership verification logic in services",
+     "Audit log immutability and ingestion latency"
+    ],
+    "tradeoffs": [
+     "Granular per-request token validation versus latency at API Gateway"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.6666666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Library Management System",
+     "Event Ingestion Engine",
+     "Circulation Logic Engine"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Catalogue Database",
+     "Catalogue Database and Read-Replica Data Store",
+     "Circulation Management Container",
+     "Circulation Logic Engine",
+     "Discovery Controller"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Discovery Controller",
+     "Distributed Cache (Redis)",
+     "Read-Replica Data Store",
+     "Aggregation and Reporting Service",
+     "Redis Cache"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

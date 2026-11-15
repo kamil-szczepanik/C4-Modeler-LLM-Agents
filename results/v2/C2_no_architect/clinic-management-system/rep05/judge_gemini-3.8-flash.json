@@ -1,0 +1,312 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 3,
+   "portability": 5
+  },
+  "mean": 3.875,
+  "justifications": {
+   "functional_suitability": "While EMR, admissions, and notifications are covered, R-02 lacks explicit resource clash checking mechanisms, and R-04 lacks insurance claim submission integrations or gateways within EMR & Billing Containers.",
+   "performance_efficiency": "Offloading reporting to Celery workers dynamically scaled by KEDA and using PgBouncer pooling supports performance, though explicit caching mechanisms for achieving sub-second P95 EMR screen loads are not fully detailed.",
+   "compatibility": "Addressed thoroughly via the dedicated HL7 FHIR Integration Service connecting to external Lab and Imaging Systems over secure mTLS as required by R-08.",
+   "usability": "Patient Portal UI incorporates WCAG 2.1 AA standards for patients, but Clinical Staff and Administrative Staff lack dedicated frontend application containers or client interfaces to access EMR and billing features.",
+   "reliability": "Istio Service Mesh enables multi-cluster routing and circuit breaking, but concrete active-active hybrid data synchronization across on-prem-k8s and eu-central-1 is missing for PostgreSQL to guarantee 99.99% uptime.",
+   "security": "Comprehensive security mechanisms include FIDO2/WebAuthn MFA, OAuth2/OIDC tokens, Envoy mTLS, column-level encryption and Row-Level Security in Data Access Layer, PII scrubbing, and tamper-proof WORM storage for audit trails.",
+   "maintainability": "Good modularity in Analytics & Audit Reporting Container, but EMR, admissions, scheduling, and billing domains are tightly coupled inside a single EMR & Billing Containers service and database layer.",
+   "portability": "The entire stack uses portable, cloud-agnostic containerized technologies including Kubernetes, Istio, Spring Boot, Celery with KEDA, and S3/MinIO compatible storage, facilitating seamless hybrid operation between on-prem-k8s and eu-central-1."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 3,
+   "MOD-01": 2,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 2,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.53125,
+  "by_quality_attribute": {
+   "Performance": 2.5,
+   "Availability": 3.0,
+   "Modifiability": 3.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "PgBouncer and connection pooling manage concurrency, but the absence of a distributed read-cache layer (such as Redis) forces all concurrent reads onto PostgreSQL, risking P95 latency degradation under peak concurrent load.",
+    "elements": [
+     "API Gateway",
+     "EMR & Billing Controller",
+     "Clinical Transaction Service",
+     "Data Access Layer"
+    ],
+    "sensitivity_points": [
+     "Database connection pool sizing under high concurrent morning query spikes",
+     "Absence of distributed caching for frequently accessed patient charts"
+    ],
+    "tradeoffs": [
+     "Strict transactional reads directly against the database trade off query latency for data freshness"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "justification": "The HL7 FHIR service processes incoming lab payloads synchronously within the core EMR container without an ingestion queue or message broker, directly competing for database connections and degrading concurrent EMR read latency.",
+    "elements": [
+     "HL7 FHIR Integration Service",
+     "Clinical Transaction Service",
+     "Data Access Layer",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Lack of asynchronous message buffering for high-throughput FHIR payload ingestion",
+     "Database write saturation during batch ingestion impacting concurrent read performance"
+    ],
+    "tradeoffs": [
+     "Synchronous end-to-end ingestion simplifies transaction verification but risks backpressure and thread pool starvation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Istio provides multi-cluster routing across hybrid regions, but the architecture does not specify active-active cross-site database replication or automated failover mechanisms for PostgreSQL between on-prem-k8s and eu-central-1.",
+    "elements": [
+     "Istio Service Mesh",
+     "Envoy Proxy",
+     "Data Access Layer"
+    ],
+    "sensitivity_points": [
+     "Cross-region hybrid replication latency and consistency model for PostgreSQL",
+     "Automated DNS and ingress traffic shifting time during regional cloud outages"
+    ],
+    "tradeoffs": [
+     "Multi-cluster active-active mesh increases operational complexity to achieve zero-downtime regional failover"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "ACID compliance and connection pooling through PgBouncer provide basic resiliency, but explicit database high availability clustering (e.g., Patroni) and application-level idempotency mechanisms for insurance claim retries are not defined.",
+    "elements": [
+     "Clinical Transaction Service",
+     "Data Access Layer"
+    ],
+    "sensitivity_points": [
+     "PostgreSQL failover election and split-brain resolution time under crash conditions",
+     "Idempotency token handling across billing transaction retries"
+    ],
+    "tradeoffs": [
+     "Strict database transaction rollbacks protect data integrity but require client-side retry coordination"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "Billing and claim submission logic is bundled inside the monolith 'EMR & Billing Containers' without a dedicated claim integration adapter, making it impossible to add a clearinghouse without modifying core EMR services.",
+    "elements": [
+     "EMR & Billing Containers",
+     "Clinical Transaction Service",
+     "EMR & Billing Controller"
+    ],
+    "sensitivity_points": [
+     "Coupling of billing domain logic and EMR within the same container",
+     "Absence of dedicated clearinghouse integration gateway or adapter component"
+    ],
+    "tradeoffs": [
+     "Collocating EMR and billing simplifies data access but directly couples domain release lifecycles"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are cleanly scoped across the UI, backend API/data layer, and audit logger, easily fitting within the three-component limit and deliverable within a single sprint.",
+    "elements": [
+     "Patient Portal UI",
+     "Data Access Layer",
+     "Compliance Audit Logger"
+    ],
+    "sensitivity_points": [
+     "Data schema migration velocity across hybrid database deployments",
+     "Audit schema extensibility for newly introduced demographic fields"
+    ],
+    "tradeoffs": [
+     "Adding audited fields across multiple layers requires synchronized schema and UI deployment"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "FIDO2/WebAuthn multi-factor authentication is enforced at the perimeter via API Gateway and Envoy, blocking stolen password attempts. Centralized telemetry supports alerting, though a dedicated SIEM/SOC response integration is not detailed.",
+    "elements": [
+     "API Gateway",
+     "Envoy Proxy",
+     "Analytics & Audit Reporting Container"
+    ],
+    "sensitivity_points": [
+     "Perimeter enforcement of WebAuthn credentials prior to token issuance",
+     "Latency of real-time security event telemetry and alerting pipelines"
+    ],
+    "tradeoffs": [
+     "Strict MFA enforcement increases initial login friction for clinical staff during emergencies"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Row-Level Security controls unauthorized record access, and the Compliance Audit Logger persists events directly to tamper-proof WORM storage to meet the 10-year retention mandate, though an asynchronous event-driven audit pipeline is omitted.",
+    "elements": [
+     "Data Access Layer",
+     "Compliance Audit Logger",
+     "Analytics & Audit Reporting Container"
+    ],
+    "sensitivity_points": [
+     "Row-level security policy evaluation overhead on high-frequency read queries",
+     "WORM storage retention policy enforcement and immutability guarantees"
+    ],
+    "tradeoffs": [
+     "Comprehensive read auditing against WORM storage increases storage overhead and I/O latency"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "partial",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.7272727272727273,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Analytics & Audit Reporting Container",
+     "Data Aggregator & Scrubber",
+     "Compliance Audit Logger",
+     "Data Access Layer"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "API Gateway",
+     "Istio Service Mesh"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Compliance Audit Logger"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Portal",
+     "Patient Portal UI",
+     "Patient Portal BFF",
+     "EMR & Billing Containers",
+     "EMR & Billing Controller"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Patient Portal",
+     "Patient Portal UI",
+     "Clinical Transaction Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR & Billing Containers",
+     "EMR & Billing Controller",
+     "Clinical Transaction Service",
+     "Analytics & Audit Reporting Container",
+     "Compliance Audit Logger"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "EMR & Billing Containers",
+     "EMR & Billing Controller",
+     "Data Access Layer"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "EMR & Billing Containers",
+     "Data Access Layer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "API Gateway",
+     "Istio Service Mesh"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "EMR & Billing Containers",
+     "Analytics & Audit Reporting Container",
+     "Data Access Layer"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "HL7 FHIR Integration Service",
+     "Lab and Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

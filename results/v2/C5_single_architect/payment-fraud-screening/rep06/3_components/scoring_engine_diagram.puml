@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Scoring Engine container
+
+Container_Boundary(scoring_engine, "Scoring Engine") {
+    Component(HTTPHandlerRouterComponent, "HTTP Handler / Router Component", "Go (net/http)", "Receives inbound routing requests from the AWS API Gateway.")
+    Component(RuleEvaluatorComponent, "Rule Evaluator Component", "In-memory AST", "Evaluates rules using an in-memory abstract syntax tree for rapid transaction assessment.")
+    Component(ModelScoringComponent, "Model Scoring Component", "Embedded ONNX Runtime / compiled decision trees", "Executes embedded model scoring to meet sub-50ms P99 latency requirements.")
+    Component(AuditDispatcherComponent, "Audit Dispatcher Component", "Worker pools", "Asynchronously dispatches audit logs without impacting real-time performance.")
+}
+
+System_Ext(AmazonKinesisDataFirehose, "Amazon Kinesis Data Firehose", "External system")
+System_Ext(AmazonS3ObjectLock, "Amazon S3 Object Lock", "External system")
+System_Ext(AmazonAuroraPostgreSQLAmazonDynamoDB, "Amazon Aurora PostgreSQL / Amazon DynamoDB", "External system")
+
+Rel(HTTPHandlerRouterComponent, RuleEvaluatorComponent, "Invokes rule evaluation for inbound transactions", "")
+Rel(HTTPHandlerRouterComponent, ModelScoringComponent, "Invokes model scoring for transaction evaluation", "")
+Rel(HTTPHandlerRouterComponent, AuditDispatcherComponent, "Dispatches asynchronous audit logs", "")
+Rel(AuditDispatcherComponent, AmazonKinesisDataFirehose, "Sends asynchronous audit logs", "HTTPS")
+Rel(AuditDispatcherComponent, AmazonS3ObjectLock, "Stores tamper-evident immutable audit trails", "AWS SDK over HTTPS")
+Rel(RuleEvaluatorComponent, AmazonAuroraPostgreSQLAmazonDynamoDB, "Reads compiled rule definitions and model state", "AWS SDK / pgx pool over TLS")
+Rel(ModelScoringComponent, AmazonAuroraPostgreSQLAmazonDynamoDB, "Reads model state and configuration", "AWS SDK / pgx pool over TLS")
+
+@enduml

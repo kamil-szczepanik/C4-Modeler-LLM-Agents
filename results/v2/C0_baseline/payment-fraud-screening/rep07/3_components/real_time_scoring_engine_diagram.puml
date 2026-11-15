@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Real-Time Scoring Engine container
+
+Container_Boundary("Real-Time Scoring Engine", "Real-Time Scoring Engine") {
+    Component(API_Handler_Component, "API Handler Component", "Go net/http", "Handles incoming authorization requests and coordinates the scoring workflow.")
+    Component(Feature_Aggregator_Component, "Feature Aggregator Component", "Go", "Fetches and aggregates user behavioral features for scoring.")
+    Component(In_Memory_Scoring_Engine_Component, "In-Memory Scoring Engine Component", "WASM models", "Executes fraud scoring using WebAssembly models and includes an Explainability Formatter.")
+    Component(Audit_Publisher_Component, "Audit Publisher Component", "Go", "Publishes tamper-evident logs and telemetry.")
+    Component(Circuit_Breaker_Fallback_Controller, "Circuit Breaker Fallback Controller", "Go", "Provides fallback mechanisms and local circuit breaking for resilience.")
+}
+
+System_Ext(Redis_Cache, "Redis Cache", "Amazon ElastiCache (Redis) with TLS 1.3")
+System_Ext(Messaging_Bus, "Messaging Bus", "Amazon SQS / EventBridge")
+System_Ext(Audit_Storage, "Audit Storage", "Amazon S3 with KMS envelope encryption and Object Lock")
+
+Rel(API_Handler_Component, Feature_Aggregator_Component, "Requests behavioral features for incoming payloads")
+Rel(Feature_Aggregator_Component, Redis_Cache, "Performs sub-millisecond feature lookups", "Redis Protocol over TLS 1.3")
+Rel(API_Handler_Component, In_Memory_Scoring_Engine_Component, "Passes aggregated features to evaluate fraud risk")
+Rel(In_Memory_Scoring_Engine_Component, Audit_Publisher_Component, "Sends scoring decisions and logs for publishing")
+Rel(Audit_Publisher_Component, Messaging_Bus, "Streams tamper-evident logs and telemetry", "Amazon SQS / AMQP")
+Rel(Audit_Publisher_Component, Audit_Storage, "Writes cryptographically signed, encrypted decision logs", "AWS SDK / HTTPS")
+Rel(API_Handler_Component, Circuit_Breaker_Fallback_Controller, "Monitors availability and triggers fallbacks when needed")
+
+@enduml

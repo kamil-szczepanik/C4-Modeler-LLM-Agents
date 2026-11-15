@@ -1,0 +1,330 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are explicitly covered: Video Session Manager for consultations (R-01), E-Prescription Integrator for pharmacy dispatch (R-02), AI Symptom Checker Service for triage (R-03), and Consent & Policy Engine with WASM / Lua Consent Filter for granular data sharing consent (R-04).",
+   "performance_efficiency": "Media Gateway Controller implements adaptive bitrate control for degraded modes. gRPC-Web and API Client & Sync Engine minimize payload overhead, while Session State Coordinator (Redis) and Offline Local Store provide multi-tiered caching for rapid state access.",
+   "compatibility": "Interoperability targets (R-08) are directly met by Enterprise Message Router supporting HL7 FHIR and national EU formats when interfacing with Regional Pharmacy Networks. Identity federation integrates smoothly with Regional Identity Providers via OAuth 2.0 / OIDC.",
+   "usability": "Web & Mobile Client Apps provide UI Layer & State Manager for patients and clinicians, backed by Offline Local Store for intermittent connections. Compliance Officers have a dedicated Data Access Layer. However, specialized clinician workflows are minimally differentiated in client apps.",
+   "reliability": "Fault tolerance is robustly addressed by Pharmacy Circuit Breaker Service and DLQ Error Buffer. Low-bandwidth stability is handled by Offline Local Store, Media Gateway Controller adaptive bitrate, and Session State Coordinator's 60-second reconnection grace period.",
+   "security": "Residency and privacy constraints (R-05, GDPR, HIPAA) are strictly enforced by Data Sync & Residency Enforcer, Consent & Policy Engine, and VPC Service Controls. mTLS, OAuth2/PKCE, SQLCipher, and BigQuery Audit & Traceability Engine ensure end-to-end security and traceability.",
+   "maintainability": "The architecture exhibits high cohesion and loose coupling across modular services (Core Telehealth Service, AI Symptom Checker Service, Video Session Manager). Responsibilities are isolated with clean internal gRPC and SPIFFE/SPIRE interfaces, facilitating independent updates and testability.",
+   "portability": "The design aligns cleanly with target GCP regions (Cloud Run, BigQuery, Vertex AI, Cloud SQL). However, tight coupling to proprietary GCP managed services reduces easy replaceability or migration across non-GCP cloud providers if required."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The WebRTC SFU Media Gateway Controller and Redis-backed session coordinator support low-latency setup, though managing 5,000 concurrent media streams on custom SFU infrastructure introduces operational scaling sensitivity.",
+    "elements": [
+     "API Gateway",
+     "Video Session Manager",
+     "Signaling Server Component",
+     "Media Gateway Controller",
+     "Session State Coordinator"
+    ],
+    "sensitivity_points": [
+     "SFU auto-scaling responsiveness under sudden peak European traffic surges"
+    ],
+    "tradeoffs": [
+     "Self-hosting Mediasoup SFUs gives traffic control but increases cluster orchestration complexity"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Serverless Cloud Run auto-scaling combined with Vertex AI inference and asynchronous BigQuery Storage Write API logging comfortably handles 14-50 QPS while maintaining sub-3s latencies.",
+    "elements": [
+     "API Gateway",
+     "AI Symptom Checker Service",
+     "Intake & Normalization Component",
+     "Inference & Explainability Engine",
+     "Audit & Traceability Engine"
+    ],
+    "sensitivity_points": [
+     "Vertex AI inference latency and Cloud Run container cold start times"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging guarantees low latency at the risk of slight buffering lag"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The SFU Media Gateway Controller implements adaptive bitrate streaming, Redis coordinates a 60-second reconnection window, and the client Offline Local Store prevents any loss of clinical notes.",
+    "elements": [
+     "Web & Mobile Client Apps",
+     "Offline Local Store",
+     "Media Gateway Controller",
+     "Session State Coordinator"
+    ],
+    "sensitivity_points": [
+     "Threshold sensitivity when downscaling video to audio-only at sub-300 kbit/s"
+    ],
+    "tradeoffs": [
+     "Dropping video quality preserves audio continuity and consultation integrity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The deployment target specifies only us-central1 and europe-west3. Since data residency strictly forbids failing over US data to the EU, an outage in us-central1 lacks a secondary US region to recover within 1 hour.",
+    "elements": [
+     "API Gateway",
+     "Regional Data Storage & Audit Layer",
+     "Transactional Database",
+     "Data Sync & Residency Enforcer"
+    ],
+    "sensitivity_points": [
+     "Absence of a defined secondary US failover region in GCP target configuration"
+    ],
+    "tradeoffs": [
+     "Strict regional residency prevents cross-region disaster failover to the operational EU region"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Enterprise Message Router within E-Prescription Integrator uses Spring Integration to decouple integration logic, isolating new national EU formats and adapters from core telehealth services.",
+    "elements": [
+     "E-Prescription Integrator",
+     "Enterprise Message Router",
+     "Prescription Dispatcher Controller",
+     "Pharmacy Circuit Breaker Service"
+    ],
+    "sensitivity_points": [
+     "Extensibility of payload transformation interfaces for varying EU prescription schemas"
+    ],
+    "tradeoffs": [
+     "Centralizing integration adapters adds routing complexity inside the integrator service"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Inference outputs are tied directly to model versions via the Audit & Traceability Component and logged into BigQuery, while Cloud Run and Vertex AI enable immediate version rollbacks.",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Inference & Explainability Engine",
+     "Audit & Traceability Component",
+     "Audit & Traceability Engine"
+    ],
+    "sensitivity_points": [
+     "Consistent propagation of model version metadata from Vertex AI to BigQuery audit logs"
+    ],
+    "tradeoffs": [
+     "Detailed per-inference lineage logging increases storage volume for explainability and compliance"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The Consent & Policy Engine (OPA) coupled with WASM filters and VPC Service Controls verifies patient consent tokens before routing queries across regional databases, logging all access in BigQuery.",
+    "elements": [
+     "API Gateway",
+     "WASM / Lua Consent Filter",
+     "Core Telehealth Service",
+     "Consent & Policy Engine",
+     "Regional Data Storage & Audit Layer"
+    ],
+    "sensitivity_points": [
+     "Strict evaluation of regional cross-border consent policies before database querying"
+    ],
+    "tradeoffs": [
+     "Policy evaluation on every data fetch introduces slight processing latency for security"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Withdrawal updates the Consent & Policy Engine dynamically, immediately cutting off access. However, specific mechanisms for purging previously synchronized research datasets within BigQuery are not fully articulated.",
+    "elements": [
+     "Local Consent & Session Manager",
+     "Core Telehealth Service",
+     "Consent & Policy Engine",
+     "Data Sync & Residency Enforcer",
+     "Audit & Traceability Engine"
+    ],
+    "sensitivity_points": [
+     "Propagation delay of consent revocation events across asynchronous data pipelines"
+    ],
+    "tradeoffs": [
+     "Immediate policy enforcement stops queries instantly without waiting for batched downstream pipeline purges"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.875,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent & Policy Engine",
+     "Regional Data Storage & Audit Layer",
+     "Transactional Database",
+     "Audit & Traceability Engine"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Regional Data Storage & Audit Layer",
+     "Data Sync & Residency Enforcer",
+     "Envoy Proxy Router",
+     "Transactional Database"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Audit & Traceability Component",
+     "Audit & Traceability Engine"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Offline Local Store",
+     "API Client & Sync Engine",
+     "Media Gateway Controller",
+     "Session State Coordinator"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Video Session Manager",
+     "Signaling Server Component",
+     "Media Gateway Controller",
+     "Third-Party Video Infrastructure"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "E-Prescription Integrator",
+     "Prescription Dispatcher Controller",
+     "Enterprise Message Router",
+     "Regional Pharmacy Networks"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Intake & Normalization Component",
+     "Inference & Explainability Engine",
+     "Handoff Formatter Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Local Consent & Session Manager",
+     "WASM / Lua Consent Filter",
+     "Consent & Policy Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Consent & Policy Engine",
+     "Data Sync & Residency Enforcer",
+     "WASM / Lua Consent Filter",
+     "Regional Data Storage & Audit Layer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Media Gateway Controller",
+     "Session State Coordinator"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Audit & Traceability Component",
+     "Audit & Traceability Engine"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Enterprise Message Router",
+     "E-Prescription Integrator",
+     "Transactional Database"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

@@ -1,0 +1,32 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for New Claims Platform
+
+Person(EndCustomersBrokers, "End Customers & Brokers", "External users submitting claims online")
+Person(ClaimsAdjusters, "Claims Adjusters", "Internal users managing claims via a new web application")
+Person(MigrationOperationsTeam, "Migration Operations Team", "Users monitoring data reconciliation and rollbacks")
+
+System_Ext(LegacyMainframe, "Legacy Mainframe", "COBOL/DB2 on-premise system of record")
+
+System_Boundary(NewClaimsPlatform, "New Claims Platform") {
+    Container(AzureAPIManagement, "Azure API Management", "Azure API Management / OIDC / OAuth2", "Single entry point handling OIDC/OAuth2 Active Directory SSO and request routing")
+    Container(CustomerPortalAdjusterWorkspace, "Customer Portal & Adjuster Workspace", "React SPA & Node.js BFF", "Frontend user interfaces and Backend-for-Frontend for performance and decoupled loading")
+    Container(ClaimsCoreEngine, "Claims Core Engine", "Java Spring Boot", "Application handling domain logic and claim-type feature flagging")
+    Container(IntegrationMediator, "Integration Mediator", "Azure Logic Apps / Function App", "Translates events and maps JSON to COBOL copybooks for the legacy mainframe")
+    Container(AzureServiceBus, "Azure Service Bus", "Azure Service Bus", "Enterprise Messaging Queue with Dead-Letter Queues (DLQs)")
+    Container(PolyglotPersistenceLayer, "Polyglot Persistence Layer", "Azure Cosmos DB / PostgreSQL", "Data storage with Change Data Capture (CDC)")
+    Container(MigrationOperationsDashboard, "Migration Operations Dashboard", "Web UI", "Dedicated monitoring and reconciliation UI driven by CDC")
+}
+
+Rel(EndCustomersBrokers, AzureAPIManagement, "Submit claims and interact with Customer Portal", "HTTPS (REST/JSON)")
+Rel(ClaimsAdjusters, AzureAPIManagement, "Manage claims via Adjuster Workspace", "HTTPS (REST/JSON)")
+Rel(AzureAPIManagement, CustomerPortalAdjusterWorkspace, "Routes requests to BFF and frontend", "HTTPS")
+Rel(AzureAPIManagement, ClaimsCoreEngine, "Routes API requests", "HTTPS (gRPC)")
+Rel(ClaimsCoreEngine, AzureServiceBus, "Sends and receives asynchronous messages", "AMQP")
+Rel(ClaimsCoreEngine, IntegrationMediator, "Communicates domain events", "TCP/MQ")
+Rel(IntegrationMediator, LegacyMainframe, "Relays transactions and maps data", "TCP/MQ via JSON-to-COBOL copybook mapping")
+Rel(PolyglotPersistenceLayer, MigrationOperationsDashboard, "Streams data updates for reconciliation", "Change Data Capture (CDC)")
+
+@enduml

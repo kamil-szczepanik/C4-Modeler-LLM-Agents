@@ -1,0 +1,320 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "The design satisfies R-01, R-02, and R-03 through the Scoring Engine Container for decisions, Case Management Backend Container for analyst reviews, and Model Loader Component enabling zero-downtime hot-swapping of models.",
+   "performance_efficiency": "In-memory execution via Inference Engine Component (ONNX Runtime) and asynchronous event logging in Audit & Persistence Component support low latencies, though synchronous external calls by Feature Fetcher Component could risk P99 targets under 3,000 TPS.",
+   "compatibility": "The architecture integrates cleanly with external systems using defined standards, including gRPC/mTLS with Payment Gateway / Core Ledger, HTTPS to Card Schemes / Issuer 3DS Directory Servers, and standard protocols for external ML Feature Stores.",
+   "usability": "Fraud Analysts are well supported by the Case Management Backend Container and Case Controller for review workflows, although a specific web frontend container interface is omitted from the container model.",
+   "reliability": "Circuit Breaker & Fallback Component and ALB Health Check & Circuit Breaker Component provide fail-open execution within the 1-minute requirement. DynamoDB Global Table Replication Module and Point-in-Time Recovery ensure resilience and data availability.",
+   "security": "PCI-DSS requirements are met through the Tokenization Proxy Container running in AWS Nitro Enclaves, envelope encryption via AWS KMS, and tamper-evident 7-year storage via Amazon S3 Object Lock in compliance mode.",
+   "maintainability": "Clear modular separation between Scoring Engine Container, Case Management Backend Container, and Tokenization Proxy Container simplifies maintenance. Serverless AWS Fargate and managed DynamoDB keep operational complexity manageable for a three-engineer team.",
+   "portability": "While containers (Go, Rust, Node.js) provide runtime portability, components are tightly coupled to proprietary AWS services, including AWS Nitro Enclaves, Amazon DynamoDB, and Amazon S3 Object Lock."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 3,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "In-memory C++ ONNX inference and asynchronous audit logging via Go channels satisfy sub-50 ms latency. However, synchronous tokenization and external feature store calls over the network present minor latency jitter risks at 3,000 rps.",
+    "elements": [
+     "AWS Application Load Balancer (ALB)",
+     "Scoring Engine Container",
+     "Inference Engine Component",
+     "Sanitization & Tokenization Guard Component",
+     "Feature Fetcher Component"
+    ],
+    "sensitivity_points": [
+     "Network latency of external feature store calls",
+     "Vsock inter-process communication overhead with Nitro Enclave"
+    ],
+    "tradeoffs": [
+     "In-process CGO ONNX runtime trades memory footprint for microsecond-level scoring latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management runs in an isolated ECS Fargate container and targets a dedicated DynamoDB table module, preventing analyst queries from contending with the hot transaction path or scoring engine memory.",
+    "elements": [
+     "Case Management Backend Container",
+     "Scoring Engine Container",
+     "Amazon DynamoDB",
+     "Hot State Table Module",
+     "Case Management Table Module"
+    ],
+    "sensitivity_points": [
+     "Physical isolation between hot scoring tables and case management queries"
+    ],
+    "tradeoffs": [
+     "Dual table provisioning adds operational overhead to maintain latency isolation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "ALB circuit breaker and container-level fallback components provide quick fail-open paths. However, ALB-level fallback decision auditing is less detailed than container-level fallback logging if ECS tasks become completely unreachable.",
+    "elements": [
+     "AWS Application Load Balancer (ALB)",
+     "Health Check & Circuit Breaker Component",
+     "Scoring Engine Container",
+     "Circuit Breaker & Fallback Component"
+    ],
+    "sensitivity_points": [
+     "ALB health check probe intervals and timeout settings"
+    ],
+    "tradeoffs": [
+     "Fail-open authorization trades increased fraud risk for meeting availability constraints"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Audit logging is decoupled from the main thread via in-memory Go channels. However, there is no persistent durable buffer (like SQS or Kafka); prolonged audit store downtime risks buffer exhaustion and data loss.",
+    "elements": [
+     "Scoring Engine Container",
+     "Audit & Persistence Component",
+     "Amazon S3 Object Lock",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "In-memory Go channel buffer capacity under backpressure"
+    ],
+    "tradeoffs": [
+     "In-memory asynchronous logging maintains low latency but risks record loss under store outages"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Model Loader implements atomic in-memory pointer swaps for zero-downtime model updates, SageMaker artifacts are securely imported, and Decision Explainer binds the specific model version directly to each decision record.",
+    "elements": [
+     "Model Loader Component",
+     "Inference Engine Component",
+     "Decision Explainer Component",
+     "Model Training & Experimentation Environment"
+    ],
+    "sensitivity_points": [
+     "Atomic memory pointer swap mechanism during active concurrent execution"
+    ],
+    "tradeoffs": [
+     "Pointer swap minimizes deployment downtime but temporarily doubles model memory consumption"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "While velocity tables and hot state exist in DynamoDB, the architecture lacks an explicit business rules engine or rule authoring/publishing workflow for analysts, making sub-one-hour analyst rule deployment ambiguous.",
+    "elements": [
+     "Scoring Engine Container",
+     "Inference Engine Component",
+     "Hot State Table Module",
+     "Decision Explainer Component"
+    ],
+    "sensitivity_points": [
+     "Coupling between compiled inference pipeline and fraud rule updates"
+    ],
+    "tradeoffs": [
+     "Hardcoding rules into inference models speeds up execution but slows independent analyst rule deployments"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Nitro Enclaves and tokenization proxies guarantee analysts only see tokens. However, the architecture lacks automated behavioral anomaly detection and alerting pipelines to detect compromised analyst sessions within 15 minutes.",
+    "elements": [
+     "Tokenization Proxy Container",
+     "Tokenization Core",
+     "Case Management Backend Container",
+     "WAF & Security Filter Component"
+    ],
+    "sensitivity_points": [
+     "Strict isolation of PAN detokenization capabilities within Nitro Enclave"
+    ],
+    "tradeoffs": [
+     "Strict tokenization prevents data exfiltration but complicates analyst investigation workflows"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Tamper-evident 7-year storage is enforced via S3 Object Lock in Compliance Mode. The Metadata Indexer links decision payloads to DynamoDB, and Glacier Deep Archive lifecycle policies ensure fast, reproducible lookups.",
+    "elements": [
+     "Amazon S3 Object Lock",
+     "Object Writer",
+     "Metadata Indexer",
+     "Audit Verification",
+     "Lifecycle Management"
+    ],
+    "sensitivity_points": [
+     "Immutability enforcement through S3 Object Lock compliance retention modes"
+    ],
+    "tradeoffs": [
+     "Tiering to Glacier Deep Archive minimizes storage costs while requiring hours for batch retrieval"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Tokenization Proxy Container",
+     "Sanitization & Tokenization Guard Component",
+     "Tokenization Core",
+     "Health & Attestation Monitor",
+     "WAF & Security Filter Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Decision Explainer Component",
+     "Audit & Persistence Component",
+     "Amazon S3 Object Lock",
+     "Audit Ledger Archive Module",
+     "Lifecycle Management",
+     "Audit Verification"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Scoring Engine Container",
+     "API Handler Component",
+     "Inference Engine Component",
+     "Decision Explainer Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Fraud Analysts",
+     "Case Management Backend Container",
+     "Case Controller",
+     "Case Service",
+     "Case Management Table Module",
+     "Data Access Layer"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model Training & Experimentation Environment",
+     "Model Loader Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Inference Engine Component",
+     "Feature Fetcher Component",
+     "Hot State Table Module",
+     "Scoring Engine Container"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Tokenization Proxy Container",
+     "Sanitization & Tokenization Guard Component",
+     "Tokenization Core",
+     "Tokenization Client",
+     "Case Service"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Decision Explainer Component",
+     "Audit & Persistence Component",
+     "Audit Logger",
+     "Amazon S3 Object Lock",
+     "Object Writer"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "AWS Application Load Balancer (ALB)",
+     "Health Check & Circuit Breaker Component",
+     "Circuit Breaker & Fallback Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

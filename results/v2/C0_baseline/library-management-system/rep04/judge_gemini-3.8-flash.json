@@ -1,0 +1,246 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "The Catalog & Circulation Module, Catalog Discovery Component, and Self-Service Circulation Component satisfy cataloguing and circulation requirements. However, distinct mechanisms for managing digital items (such as digital lending or media streaming) versus physical items are not explicitly detailed.",
+   "performance_efficiency": "A dedicated Search Container powered by an Elasticsearch Cluster, paired with TanStack Query caching in the Web App and asynchronous indexing via Kafka, directly ensures the 99th-percentile search response stays under 800 ms.",
+   "compatibility": "Integration with external services is well-defined via standard protocols: OIDC/OAuth2 for the External IdP, HTTPS/REST for Payment Gateway, and SMTP/HTTPS for Notification Service. However, standard library-specific interoperability protocols (e.g., SIP2, NCIP, Z39.50) are omitted.",
+   "usability": "The Web App / SPA addresses required personas through specialized components: the Catalog Discovery Component and Self-Service Circulation Component serve patrons, while the Librarian Management Dashboard provides staff operational workflows.",
+   "reliability": "Resilience is thoroughly addressed through Patroni replication across EU availability zones, PgBouncer pooling, Envoy upstream circuit breakers, and Kafka Retry Topics with Dead Letter Queues (DLQ) for guaranteed message processing.",
+   "security": "Strict EU data residency is honored with EU-only hosting. Security is reinforced via end-to-end mTLS, column-level PII encryption in PostgreSQL, OAuth2/OIDC validation at the API Gateway, and tamper-resistant tracking in the WORM Storage Manager.",
+   "maintainability": "Containers and internal modules exhibit high cohesion and clear separation of concerns (e.g., isolating search, core domain, and audit logging). Decoupling through the Message Broker allows independent evolution and service maintainability.",
+   "portability": "The architecture uses standard portable container runtimes and open-source infrastructure (PostgreSQL, Kafka, Elasticsearch, Envoy). EU data residency constraints are adhered to across availability zones, though target cloud or container orchestrators are not explicitly modeled."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 5.0,
+   "Modifiability": 2.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture decouples search from the primary transactional database using a dedicated Elasticsearch Cluster fronted by an optimized Search API Handler, TanStack Query caching, and Envoy API Gateway, comfortably maintaining sub-800ms latencies under 2,000 concurrent requests.",
+    "elements": [
+     "Search Container",
+     "Elasticsearch Cluster",
+     "Search API Handler",
+     "API Gateway",
+     "State & Caching Layer"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster sizing and index replica configuration under peak query load",
+     "Query caching efficiency at the client and API Gateway layers"
+    ],
+    "tradeoffs": [
+     "Maintaining a dedicated Elasticsearch cluster increases operational overhead and infrastructure cost"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalogue modifications write to PostgreSQL and emit asynchronous events via Kafka to an Indexing Service updating Elasticsearch. This CQRS pattern completely isolates transactional catalogue writes from peak search queries, ensuring sub-800ms searches and sub-minute indexing synchronization.",
+    "elements": [
+     "Catalog & Circulation Module",
+     "Message Broker",
+     "Kafka Broker (KRaft Mode)",
+     "Indexing Service",
+     "Elasticsearch Cluster"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer lag on the Indexing Service during heavy catalogue updates",
+     "Elasticsearch indexing refresh intervals vs. search read performance"
+    ],
+    "tradeoffs": [
+     "Eventual consistency between relational transactional records and searchable Elasticsearch documents"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Elasticsearch inherently uses distributed clustering with shard replication to handle single-node failures seamlessly without downtime. Furthermore, circulation operations are fully decoupled in PostgreSQL with Patroni HA, ensuring zero lost loan transactions even if search nodes fail.",
+    "elements": [
+     "Search Container",
+     "Elasticsearch Cluster",
+     "Core Services Container",
+     "Catalog & Circulation Module",
+     "Database",
+     "Replication Manager"
+    ],
+    "sensitivity_points": [
+     "Shard replication count and automated primary shard failover time in Elasticsearch",
+     "Decoupling circulation workflows from search dependencies"
+    ],
+    "tradeoffs": [
+     "Cluster shard replication requires extra storage capacity and cross-node network bandwidth"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The SPA portal runs client-side backed by CDN caching, while Envoy API Gateway implements health checks, circuit breakers, and upstream load balancing. Transactional state is preserved in high-availability PostgreSQL with PgBouncer connection pooling and Patroni failover.",
+    "elements": [
+     "Web App / SPA",
+     "API Gateway",
+     "Routing & Upstream Cluster Manager",
+     "Connection Pooler",
+     "Database"
+    ],
+    "sensitivity_points": [
+     "Envoy health check intervals and circuit breaking thresholds",
+     "PgBouncer pool exhaustion limits during failover redistribution"
+    ],
+    "tradeoffs": [
+     "Aggressive circuit breaker limits may cause false-positive evictions under transient latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "The Core Services Container is implemented as a modular monolith where the Catalog & Circulation Module manages all items. It lacks an explicit plugin or adapter abstraction for external digital e-book providers, requiring modifications directly within the existing core module.",
+    "elements": [
+     "Core Services Container",
+     "Catalog & Circulation Module"
+    ],
+    "sensitivity_points": [
+     "Coupling between external provider ingestion protocols and internal catalogue data entities",
+     "Absence of a dedicated integration adapter layer"
+    ],
+    "tradeoffs": [
+     "Monolithic module cohesion simplifies deployment but increases change blast radius for integrations"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The architecture does not define or model a business rules engine or dynamic configuration management component. Distinct loan rules between academic and public libraries would currently require modifying Spring Boot application code or redeploying the Core Services Container.",
+    "elements": [
+     "Core Services Container",
+     "Catalog & Circulation Module"
+    ],
+    "sensitivity_points": [
+     "Hardcoded circulation business logic within monolithic application services",
+     "Absence of externalized dynamic rule configuration mechanisms"
+    ],
+    "tradeoffs": [
+     "Hardcoded domain logic simplifies initial implementation but prevents zero-downtime policy modification"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The architecture mandates strict EU data residency by deploying all persistent transactional data, Kafka brokers, and database replicas across EU availability zones. Column-level PII encryption and mTLS communication ensure end-to-end data residency boundary enforcement.",
+    "elements": [
+     "Database",
+     "Relational Engine - Primary",
+     "Message Broker",
+     "Kafka Broker (KRaft Mode)",
+     "Audit Container"
+    ],
+    "sensitivity_points": [
+     "Cloud regional deployment boundary controls and availability zone configurations",
+     "Data leakage prevention when communicating with external notification and payment systems"
+    ],
+    "tradeoffs": [
+     "Restricting compute and storage strictly to EU regions limits geo-redundancy options"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The API Gateway validates tokens via an Authentication Filter and injects trusted identity headers. Core Services enforces fine-grained authorization via its Security & RBAC Module. Unauthorized access triggers security events dispatched through Kafka to the Audit Container and WORM storage.",
+    "elements": [
+     "API Gateway",
+     "Authentication Filter",
+     "Security & RBAC Module",
+     "Audit & Event Dispatcher",
+     "Audit Container",
+     "WORM Storage Manager"
+    ],
+    "sensitivity_points": [
+     "Granular resource-level authorization checks inside the Security & RBAC Module",
+     "Reliability of audit event dispatching over Kafka without data drop"
+    ],
+    "tradeoffs": [
+     "Double-layer token inspection and synchronous RBAC validation add minor processing latency"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Library Management System",
+     "Database",
+     "Kafka Broker (KRaft Mode)",
+     "Replication Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Catalog & Circulation Module",
+     "Catalog Discovery Component",
+     "Indexing Service",
+     "Database"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Container",
+     "Elasticsearch Cluster",
+     "Search API Handler",
+     "Catalog Discovery Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

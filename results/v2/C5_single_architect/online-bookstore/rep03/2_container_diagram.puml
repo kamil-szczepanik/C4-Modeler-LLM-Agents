@@ -1,0 +1,49 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(Customer, "Customer", "External actor interacting via web browsers to browse, purchase physical and electronic books, view ratings, and receive recommendations.")
+Person(Administrator, "Administrator", "External actor interacting via web browsers to manage inventory, pricing, and system administration.")
+
+System_Ext(PaymentGateway, "Payment Gateway", "External payment processing service for secure checkout.")
+System_Ext(ShippingProvider, "Shipping Provider", "External shipping provider API for fulfillment tracking.")
+System_Ext(TaxAPI, "Tax API", "External tax calculation API for regional tax computations.")
+
+System_Boundary(OnlineBookstore, "Online Bookstore") {
+    Container(SPA, "Single-Page App (SPA)", "React, AWS S3, CloudFront", "Frontend application hosted globally for fast page loads and user interaction.")
+    Container(APIGateway, "API Gateway", "AWS API Gateway", "Manages entry points, routing, and rate-limiting for backend communication.")
+    Container(CatalogService, "Catalog Service", "Node.js, NestJS, Amazon ECS/Fargate", "Microservice managing book catalog data and keyword search.")
+    Container(OrderService, "Order & Checkout Service", "Node.js, NestJS, Amazon ECS/Fargate", "Microservice handling purchases, orders, and publishing events.")
+    Container(RecommendationService, "Recommendation Service", "Node.js, NestJS, Amazon ECS/Fargate", "Microservice generating personalized book recommendations.")
+    Container(EmailService, "Email Service", "Node.js, NestJS, Amazon ECS/Fargate", "Microservice handling transactional and notification emails.")
+    
+    ContainerDb(RDS, "Amazon RDS (PostgreSQL)", "Amazon RDS, PostgreSQL", "ACID-compliant relational storage for orders and user data.")
+    ContainerDb(OpenSearch, "Amazon OpenSearch", "Amazon OpenSearch", "Dedicated search engine for catalog keyword search.")
+    ContainerDb(DynamoDB, "Amazon DynamoDB", "Amazon DynamoDB", "NoSQL storage for high-throughput customer reviews and ratings.")
+    ContainerDb(Redis, "Amazon ElastiCache (Redis)", "Amazon ElastiCache, Redis", "In-memory caching for sessions and recommendations.")
+    
+    Container(EventBridge, "AWS EventBridge & SQS", "AWS EventBridge, Amazon SNS/SQS", "Event-driven decoupling layer for asynchronous microservice communication.")
+}
+
+Rel(Customer, SPA, "Browses books, manages cart, and performs checkout", "HTTPS / TLS 1.3")
+Rel(Administrator, SPA, "Manages store administration", "HTTPS / TLS 1.3")
+Rel(SPA, APIGateway, "Sends frontend-to-backend requests", "HTTPS / JSON")
+Rel(APIGateway, CatalogService, "Routes catalog requests", "HTTP / gRPC")
+Rel(APIGateway, OrderService, "Routes order and checkout requests", "HTTP / gRPC")
+Rel(APIGateway, RecommendationService, "Routes recommendation requests", "HTTP / gRPC")
+Rel(APIGateway, EmailService, "Routes email notification triggers", "HTTP / gRPC")
+
+Rel(OrderService, EventBridge, "Publishes OrderPlaced events", "AMQP / JSON over HTTPS")
+Rel(EventBridge, RecommendationService, "Delivers asynchronous events via SQS queues", "SQS")
+Rel(EventBridge, EmailService, "Delivers asynchronous events via SQS queues", "SQS")
+
+Rel(OrderService, RDS, "Reads and writes order and user data", "PostgreSQL Protocol")
+Rel(CatalogService, OpenSearch, "Performs catalog keyword search", "REST/HTTP")
+Rel(CatalogService, DynamoDB, "Reads and writes customer reviews and ratings", "DynamoDB API")
+Rel(RecommendationService, Redis, "Caches and retrieves recommendation data", "Redis Protocol")
+
+Rel(OrderService, PaymentGateway, "Processes payments", "HTTPS / REST")
+Rel(OrderService, ShippingProvider, "Coordinates fulfillment tracking", "HTTPS / REST")
+Rel(OrderService, TaxAPI, "Calculates regional taxes", "HTTPS / REST")
+
+@enduml

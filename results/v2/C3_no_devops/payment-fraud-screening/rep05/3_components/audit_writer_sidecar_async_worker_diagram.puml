@@ -1,0 +1,20 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Audit Writer Sidecar / Async Worker container
+
+Container_Boundary(audit_writer_sidecar, "Audit Writer Sidecar / Async Worker") {
+    Component(AuditEventConsumer, "Audit Event Consumer", "Go", "Consumes high-throughput, low-latency audit events via local IPC / UNIX Domain Socket from the Scoring Engine.")
+    Component(TamperEvidentFormatterAndSigner, "Tamper-Evident Formatter & Signer", "Go, Ed25519, AWS KMS", "Formats audit events and performs cryptographic signing using envelope encryption via AWS KMS.")
+    Component(ImmutableStorageClient, "Immutable Storage Client", "HTTPS / TLS 1.3, AWS SDK", "Sends signed, tamper-evident audit logs to write-once, append-only immutable storage.")
+    Component(DlqAndMetricForwarder, "DLQ & Metric Forwarder", "AWS SDK", "Forwards failed messages to Dead Letter Queues and pushes operational metrics to CloudWatch.")
+    Component(LocalRingBufferAndPersistenceManager, "Local Ring Buffer & Persistence Manager", "Go, mmap", "Provides local persistence and buffering using memory-mapped files to guarantee durability during outages.")
+}
+
+Rel(AuditEventConsumer, TamperEvidentFormatterAndSigner, "Passes raw consumed audit events for formatting and cryptographic signing")
+Rel(TamperEvidentFormatterAndSigner, ImmutableStorageClient, "Sends signed tamper-evident records for persistence")
+Rel(TamperEvidentFormatterAndSigner, LocalRingBufferAndPersistenceManager, "Backs up uncommitted events locally using mmap")
+Rel(ImmutableStorageClient, DlqAndMetricForwarder, "Forwards failed write requests to DLQ on transmission errors")
+
+@enduml

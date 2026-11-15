@@ -1,0 +1,256 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.75,
+  "justifications": {
+   "functional_suitability": "Catalog Module handles physical and digital items; Digital Content Delivery Network / S3-compatible EU Object Storage holds digital assets; Circulation Module, Fines & Fees Module and Search Orchestrator Module add support. Gaps: no explicit physical/digital type model, and Catalog-to-Search indexing flow is vague.",
+   "performance_efficiency": "Dedicated Search Engine (OpenSearch) with Index & Ranking Component and Search Orchestrator Module targets the 800 ms p99. PgBouncer, Redis Rate Limiter Filter, and Async Message Broker help. Gaps: no search result caching, no explicit scaling or latency budget, no load-test mechanism.",
+   "compatibility": "Standard protocols are used: OpenID Connect via EU Identity Provider, REST/HTTPS to SEPA / Stripe EU API Payment Gateway, ISO ILL or mTLS REST for ILL partners, S3-compatible storage. API Gateway Versioning & Transformation Filter helps. Gaps: no catalogue standards such as MARC, Z39.50 or SRU.",
+   "usability": "Web Application (SPA) serves patrons, staff and admins via Catalog Discovery Component, Circulation Desk Component and Admin Dashboard Component; Suggest & Spellcheck Component aids search. Gaps: no accessibility, localization or mobile channels, and no distinct patron self-service component.",
+   "reliability": "Kafka multi-AZ replication, Local Persistence Layer offline circulation resilience, PgBouncer and rate limiting help. Gaps: no database replication or failover, single Core Services API monolith with no redundancy, no backup or DR, no circuit breakers.",
+   "security": "Strong, explicit mechanisms: TLS 1.3, EU Identity Provider with Authentication/OAuth2 Proxy JWT validation, WAF, rate limiting, secure_pii Schema, pgaudit, Data Governance Interceptor, client-side encryption in Local Persistence Layer, SIEM audit streaming, and EU-only residency.",
+   "maintainability": "Modular monolith with separate Catalog, Circulation, Fines & Fees and Search Orchestrator Modules, API Gateway filters, and separated containers. Observability via Prometheus exporters and W3C Trace Context. Gaps: Catalog-Circulation coupling, shared database, and Data Governance Interceptor covers only some modules.",
+   "portability": "Kubernetes/Strimzi, Nginx/Envoy, PostgreSQL, OpenSearch and S3-compatible storage are open and replaceable. Gaps: no deployment diagram, no containerization or IaC for most containers, and vendor options left as either/or choices."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 2,
+   "MOD-02": 1,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.34375,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 2.0,
+   "Modifiability": 1.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Search Engine",
+     "Search Orchestrator Module",
+     "API Gateway",
+     "Rate Limiter Filter",
+     "Core Services API"
+    ],
+    "sensitivity_points": [
+     "No search cache or replica/shard sizing specified",
+     "Search path passes through gateway and monolith"
+    ],
+    "tradeoffs": [
+     "Dedicated search index boosts latency but adds sync complexity"
+    ],
+    "justification": "Dedicated Elasticsearch and an orchestrator suit low-latency search, but there is no caching, scaling, replica or load-test mechanism. 2,000 concurrent users at P99 under 800 ms is plausible yet unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Catalog Module",
+     "Search Orchestrator Module",
+     "Async Message Broker",
+     "Ingestion & Synchronization Component",
+     "Search Engine"
+    ],
+    "sensitivity_points": [
+     "Indexing load competes with queries on same cluster",
+     "Index lag bound of 5 minutes not monitored"
+    ],
+    "tradeoffs": [
+     "Async indexing protects search latency but gives eventual consistency"
+    ],
+    "justification": "Async ingestion into a separate index supports the 5-minute searchability goal. However, the Core-to-broker-to-index flow is not explicit (the Orchestrator reads Catalog directly), with no lag monitoring or isolation of indexing from queries."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "Search Engine",
+     "Database",
+     "Circulation Module",
+     "Core Services API",
+     "Async Message Broker"
+    ],
+    "sensitivity_points": [
+     "Search cluster replication and failover not defined",
+     "Core Services' behaviour on search failure undefined"
+    ],
+    "tradeoffs": [
+     "Monolith simplicity vs lack of graceful degradation isolation"
+    ],
+    "justification": "Circulation uses PostgreSQL, so loans are independent of search, but no search replicas, failover, circuit breaker or fallback are specified. Kafka multi-AZ is mentioned, yet the Search Engine has no HA mechanism and the database has no stated HA."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Web Application (SPA)",
+     "API Gateway",
+     "Local Persistence Layer",
+     "Core Services API"
+    ],
+    "sensitivity_points": [
+     "No stated multiple instances or load balancing",
+     "Offline queue sync and conflict handling unspecified"
+    ],
+    "tradeoffs": [
+     "Offline persistence aids resilience but risks sync conflicts"
+    ],
+    "justification": "The SPA is client-side, so a portal instance failure mainly concerns static hosting and the gateway; no redundancy, load balancer or deployment is described. The offline queue protects staff circulation transactions, not patron loans, and there is no replica or HA design."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "elements": [
+     "Catalog Module",
+     "Core Services API",
+     "Digital Content Delivery Network / S3-compatible EU Object Storage"
+    ],
+    "sensitivity_points": [
+     "No provider adapter or integration component exists",
+     "Catalog Module couples physical and digital cataloguing"
+    ],
+    "tradeoffs": [
+     "Modular monolith eases deployment but weakens integration isolation"
+    ],
+    "justification": "No dedicated e-book provider integration or anti-corruption adapter exists. A new provider would likely modify Catalog Module and perhaps search ingestion, so changes are not confined to one component, though the modular monolith limits the blast radius."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 1,
+    "elements": [
+     "Circulation Module",
+     "Admin Dashboard Component",
+     "Core Services API"
+    ],
+    "sensitivity_points": [
+     "Loan rules appear embedded in code",
+     "No rules engine or configuration store exists"
+    ],
+    "tradeoffs": [
+     "Hardcoded rules are simple but force redeployment for each policy change"
+    ],
+    "justification": "There is no rules engine, policy configuration store or tenant-specific rule mechanism. The Admin Dashboard is generic and Circulation Module has no configurable policy. Different loan rules would need code changes and redeployment."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "Data Governance Interceptor",
+     "Database",
+     "secure_pii Schema",
+     "API Gateway",
+     "External Notification Service",
+     "Centralized SIEM / Monitoring Platform",
+     "EU Identity Provider"
+    ],
+    "sensitivity_points": [
+     "Third-party EU vendors can still process data outside the EU",
+     "Interceptor covers only Catalog and Circulation modules"
+    ],
+    "tradeoffs": [
+     "External SaaS convenience vs strict control over residency"
+    ],
+    "justification": "EU-region services, a PII schema and a governance interceptor are good mechanisms. But Stripe, Twilio and Datadog are not guaranteed EU-only, the interceptor does not cover Fines or Search, and there are no infrastructure-level region controls, so enforcement is not by design."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Authentication/OAuth2 Proxy",
+     "Data Governance Interceptor",
+     "Circulation Module",
+     "secure_pii Schema",
+     "Centralized SIEM / Monitoring Platform",
+     "Database"
+    ],
+    "sensitivity_points": [
+     "No explicit object-level authorization on loan history",
+     "Denied-attempt logging not explicitly defined"
+    ],
+    "tradeoffs": [
+     "Central gateway authentication vs per-resource authorization in modules"
+    ],
+    "justification": "Authentication, JWT validation, audit logging via the interceptor and pgaudit, and SIEM forwarding exist. However, no ownership or authorization check for patron-level loan access is defined, nor explicit logging of denied attempts."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "partial"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "EU Identity Provider",
+     "Digital Content Delivery Network / S3-compatible EU Object Storage",
+     "Centralized SIEM / Monitoring Platform",
+     "Database",
+     "Routing & Tenant Resolver",
+     "Data Governance Interceptor",
+     "secure_pii Schema"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog Module",
+     "Digital Content Delivery Network / S3-compatible EU Object Storage",
+     "Core Services API",
+     "Database",
+     "Search Engine",
+     "Catalog Discovery Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Search Engine",
+     "Search Orchestrator Module",
+     "Index & Ranking Component",
+     "Query Parser & Router Component",
+     "Ingestion & Synchronization Component",
+     "postgres_exporter",
+     "Rate Limiter Filter"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

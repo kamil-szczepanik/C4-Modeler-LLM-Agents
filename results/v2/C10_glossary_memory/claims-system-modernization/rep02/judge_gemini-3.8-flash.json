@@ -1,0 +1,314 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Customer Portal UI supports online submissions (R-01), Adjuster Workspace UI enables claim handling (R-02), and Migration Feature Flag Adapter with Mainframe Anti-Corruption Layer (ACL) allows gradual, incremental migration of claim types (R-03).",
+   "performance_efficiency": "The Response Cache in the API Gateway / BFF decouples adjuster screens from slow 5-second mainframe responses to achieve sub-2 s load times (R-05). Outbox Event Publisher and Data Sync Engine enable efficient asynchronous data propagation.",
+   "compatibility": "Mainframe Adapter Component and Mainframe Anti-Corruption Layer (ACL) interface seamlessly with the Legacy Mainframe System over encrypted TCP/MQ via ESB. The Auth Component integrates directly with the Enterprise Identity Provider via OpenID Connect (R-07).",
+   "usability": "Both major user roles are accommodated via dedicated frontend components: Customer Portal UI for Customers and Brokers, and Adjuster Workspace UI for Claims Adjusters. Specialized views or tooling for Operations or Finance are less detailed.",
+   "reliability": "The Transactional Outbox pattern via Outbox Event Publisher, combined with the Data Sync Engine's Idempotency Store and Dead-Letter & Reconciliation Handler, ensures exactly-once semantics without lost or duplicate claims during migration (R-04).",
+   "security": "Authentication & Token Translation validates SSO tokens via Enterprise Identity Provider (R-07). Mainframe communication uses mTLS with certificates secured in Azure Key Vault, and Azure SQL Ledger Tables provide tamper-evident auditing.",
+   "maintainability": "Decoupled architecture with clear boundaries (BFF, Core Claims Service, Data Sync Engine). Migration Feature Flag Adapter and Mainframe Anti-Corruption Layer specifically ensure migrated claim types can be rolled back to the mainframe within one day (R-06).",
+   "portability": "Effectively targets the hybrid environment (Azure West Europe and on-premise mainframe). However, heavy reliance on proprietary services (Azure Functions, Azure SQL Ledger, Azure Service Bus) introduces vendor lock-in to Azure."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 5.0,
+   "Modifiability": 4.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The BFF Response Cache and local Azure SQL Database decouple adjuster read operations from slow mainframe calls. However, if un-synchronized mainframe data must be fetched on-demand through the Mainframe ACL, latency could exceed the 2-second SLA.",
+    "elements": [
+     "API Gateway / Backend-for-Frontend (BFF)",
+     "Response Cache",
+     "Core Claims Service",
+     "Azure SQL Database",
+     "Mainframe Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios and pre-synchronization of mainframe claim records",
+     "Synchronous fallback latency via Mainframe Anti-Corruption Layer"
+    ],
+    "tradeoffs": [
+     "Serving cached or asynchronous data risks displaying slightly stale information to adjusters"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Incoming claims are written locally to Azure SQL Database and buffered via the Transactional Outbox and Azure Service Bus in the Data Sync Engine, completely decoupling submission ingest throughput from the mainframe batch window.",
+    "elements": [
+     "Core Claims Service",
+     "Outbox Event Publisher",
+     "Azure SQL Database",
+     "Data Sync Engine"
+    ],
+    "sensitivity_points": [
+     "Azure Service Bus queue depth and throttling policies into the mainframe"
+    ],
+    "tradeoffs": [
+     "Buffering peak submissions increases latency before records are reflected on the mainframe"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Online claims are captured independently in the cloud data store and reliably held in Azure Service Bus via the Outbox pattern. Data Sync Engine pauses forwarding until the mainframe batch window completes without dropping requests.",
+    "elements": [
+     "Core Claims Service",
+     "Outbox Event Publisher",
+     "Data Sync Engine",
+     "Sync Ingestion Function"
+    ],
+    "sensitivity_points": [
+     "Message retention duration and queue limits in Azure Service Bus"
+    ],
+    "tradeoffs": [
+     "Eventual consistency between cloud and mainframe during extended batch outages"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The architecture incorporates an Outbox Event Publisher, an Idempotency Store in the Data Sync Engine to prevent double processing, and a dedicated Dead-Letter & Reconciliation Handler to detect and resolve incomplete synchronization.",
+    "elements": [
+     "Outbox Event Publisher",
+     "Data Sync Engine",
+     "Idempotency Store",
+     "Dead-Letter & Reconciliation Handler",
+     "Azure SQL Ledger Tables"
+    ],
+    "sensitivity_points": [
+     "Consistent idempotency key generation across heterogeneous environments",
+     "Dead-letter processing automation"
+    ],
+    "tradeoffs": [
+     "Maintaining idempotency stores and ledger tables adds storage and write overhead"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Migration Feature Flag Adapter and Mainframe ACL enable selective routing and fast rollbacks without mainframe rework. However, operational rollback procedures for data entered on the new platform during active cutover are not fully detailed.",
+    "elements": [
+     "Migration Feature Flag Adapter",
+     "Web Frontend",
+     "Mainframe Anti-Corruption Layer (ACL)",
+     "Data Sync Engine"
+    ],
+    "sensitivity_points": [
+     "Granularity and synchronization capabilities of the Mainframe Anti-Corruption Layer"
+    ],
+    "tradeoffs": [
+     "Maintaining dual routing logic and feature flags increases system complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The user interfaces interface solely with the modern API Gateway and Core Claims Service. Azure SQL Database serves as the modern system of record, allowing legacy decommission by simply disabling the Mainframe ACL and Data Sync Engine.",
+    "elements": [
+     "Web Frontend",
+     "API Gateway / Backend-for-Frontend (BFF)",
+     "Core Claims Service",
+     "Azure SQL Database",
+     "Mainframe Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Complete isolation of UI layers from legacy mainframe schema dependencies"
+    ],
+    "tradeoffs": [
+     "Carrying anti-corruption abstraction layers until final legacy system decommissioning"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Authentication and token translation exist at the API Gateway, and ledger tables audit updates. However, explicit domain-level multitenant or broker-level authorization and record-level entitlement rules are not articulated in the Core Claims Service components.",
+    "elements": [
+     "Authentication & Token Translation",
+     "API Router and Gateway",
+     "Claim Domain Controller",
+     "Azure SQL Ledger Tables"
+    ],
+    "sensitivity_points": [
+     "Enforcement of fine-grained relationship-based authorization checks in the domain layer"
+    ],
+    "tradeoffs": [
+     "Complex fine-grained authorization checks can increase claim retrieval latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "SSO revocation is supported via Entra ID / Active Directory and MSAL.js for the cloud platform. However, the model does not define token revocation mechanisms (e.g., continuous access evaluation) or how revocation propagates to legacy mainframe user sessions within 15 minutes.",
+    "elements": [
+     "Enterprise Identity Provider",
+     "Auth Component",
+     "Authentication & Token Translation",
+     "Legacy Mainframe System"
+    ],
+    "sensitivity_points": [
+     "Token lifetime configuration and propagation of revocation events to legacy systems"
+    ],
+    "tradeoffs": [
+     "Short-lived tokens and frequent re-validation increase load on identity providers"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe System",
+     "Data Sync Engine",
+     "Mainframe Adapter Component",
+     "Mainframe Anti-Corruption Layer (ACL)"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Mainframe Anti-Corruption Layer (ACL)",
+     "Mainframe Adapter Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers and Brokers",
+     "Web Frontend",
+     "Customer Portal UI",
+     "API Router and Gateway",
+     "Core Claims Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Web Frontend",
+     "Adjuster Workspace UI",
+     "API Router and Gateway",
+     "Core Claims Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Migration Feature Flag Adapter",
+     "Claim Processing Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Outbox Event Publisher",
+     "Data Sync Engine",
+     "Idempotency Store",
+     "Dead-Letter & Reconciliation Handler",
+     "Azure SQL Ledger Tables"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Response Cache",
+     "Azure SQL Database",
+     "Data Sync Engine",
+     "Outbox Event Publisher"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Migration Feature Flag Adapter",
+     "Data Sync Engine",
+     "Mainframe Adapter Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Enterprise Identity Provider",
+     "Auth Component",
+     "Authentication & Token Translation"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

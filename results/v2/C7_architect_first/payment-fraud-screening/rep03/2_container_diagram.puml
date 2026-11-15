@@ -1,0 +1,38 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening Platform
+
+Person(FraudAnalyst, "Fraud Analyst", "Internal user reviewing suspicious cases and monitoring metrics.")
+Person(FraudOperationsManager, "Fraud Operations Manager", "Internal user reviewing suspicious cases and monitoring metrics.")
+Person(RiskRuleAuthor, "Risk Rule Author", "Internal user managing fraud models.")
+Person(DataScientist, "Data Scientist", "Internal user managing fraud models.")
+Person(RegulatoryComplianceAuditor, "Regulatory / Compliance Auditor", "External actor reviewing audit logs.")
+
+System_Ext(PaymentGatewayAcquirer, "Payment Gateway / Awquirer", "External actor sending authorization requests.")
+System_Ext(AWSS3ObjectLock, "AWS S3 Object Lock", "Cloud storage providing tamper-evident audit logging with 7-year retention.")
+
+System_Boundary(RealTimePaymentFraudScreeningPlatform, "Real-Time Payment Fraud Screening Platform") {
+    Container(AWSALB, "AWS ALB", "AWS ALB", "Provides TLS termination, request routing, tokenizes PANs, and fail-safe circuit breaker health checks.")
+    Container(FraudScoringEngine, "Fraud Scoring Engine", "Java/Spring Boot container on AWS ECS Fargate with embedded ONNX Runtime", "Evaluates real-time payment authorizations and manages suspicious transactions with sub-50ms latency.")
+    Container(CaseManagementAPIUI, "Case Management API & UI", "Go/Node.js backend container and React SPA frontend", "Handles analyst reviews, case management, and reporting.")
+    Container(RuleModelAuthoringService, "Rule/Model Authoring Service", "Container Service", "Manages and publishes updates to fraud rules and models.")
+    Container(AmazonSQS, "Amazon SQS", "Amazon SQS", "Asynchronous message bus for case routing and publishing model/rule updates.")
+    ContainerDb(AmazonDynamoDB, "Amazon DynamoDB", "Amazon DynamoDB", "Hot data store for low-latency state and rule lookups.")
+}
+
+Rel(PaymentGatewayAcquirer, AWSALB, "Calls via gRPC/HTTPS over TLS", "gRPC/HTTPS over TLS")
+Rel(AWSALB, FraudScoringEngine, "Routes traffic and tokenizes PANs", "HTTPS")
+Rel(FraudScoringEngine, AmazonDynamoDB, "Persists decisions and retrieves state/rules", "AWS SDK")
+Rel(FraudScoringEngine, AmazonSQS, "Sends asynchronous messages for cases", "AWS SDK")
+Rel(AmazonSQS, CaseManagementAPIUI, "Routes async cases", "SQS Message Polling")
+Rel(RuleModelAuthoringService, AmazonSQS, "Publishes updates", "AWS SDK")
+Rel(FraudScoringEngine, AWSS3ObjectLock, "Archives data and audit logs using AWS KMS CMKs", "AWS SDK with AWS KMS")
+Rel(FraudAnalyst, CaseManagementAPIUI, "Reviews suspicious cases and monitors metrics", "HTTPS")
+Rel(FraudOperationsManager, CaseManagementAPIUI, "Reviews suspicious cases and monitors metrics", "HTTPS")
+Rel(RiskRuleAuthor, CaseManagementAPIUI, "Manages fraud models and rules", "HTTPS")
+Rel(DataScientist, CaseManagementAPIUI, "Manages fraud models", "HTTPS")
+Rel(RegulatoryComplianceAuditor, AWSS3ObjectLock, "Reviews audit logs", "HTTPS")
+
+@enduml

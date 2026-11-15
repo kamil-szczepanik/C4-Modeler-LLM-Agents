@@ -1,0 +1,320 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "Scoring Engine satisfies R-01 via Rule Evaluator and Model Scoring components. Case Management Backend addresses R-02, and dynamic rule loading addresses R-03. However, the direct asynchronous ingestion path routing payments marked for 'review' from Scoring Engine to Case Management Backend is omitted.",
+   "performance_efficiency": "Sub-50ms latency at 3,000 RPS is enabled by compiled in-memory ASTs, embedded ONNX Runtime, and asynchronous logging via Audit Dispatcher Component and Amazon Kinesis Data Firehose. However, potential synchronous database access to Amazon DynamoDB or Amazon Aurora on the scoring path could risk P99 latency.",
+   "compatibility": "Interoperability is thoroughly addressed with external Payment Gateway systems via AWS API Gateway using mTLS, external Identity Provider via OAuth2/OIDC, and External Tokenization/Vault Service via gRPC/mTLS.",
+   "usability": "Fraud Analysts are effectively supported via Case API Handler and Case Workflow Engine. However, Regulatory / Compliance Auditors lack a concrete interface container, relying only on abstract portal access noted at the Context level.",
+   "reliability": "The design lacks a fallback, circuit breaker, or fail-open mechanism in AWS API Gateway or Scoring Engine to fulfill R-07 (ensuring payments are not blocked for more than 1 minute if scoring is unavailable).",
+   "security": "PCI-DSS compliance is strictly enforced through Authorizer mTLS, External Tokenization/Vault Service, Data Access Repository data masking, and 7-year immutable audit trails stored via S3 Bucket with Object Lock and AWS KMS Encryption Key.",
+   "maintainability": "Modular microservices on AWS ECS Fargate cleanly decouple scoring from case management. However, operating both Amazon DynamoDB and Amazon Aurora PostgreSQL simultaneously creates high operational overhead for a three-engineer team.",
+   "portability": "Well-suited for the AWS eu-west-1 target using containerized Go and Node.js components on AWS ECS Fargate. Heavy coupling to AWS-native services (Firehose, DynamoDB, S3 Object Lock) limits multi-cloud portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 2,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.65625,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.0,
+   "Modifiability": 4.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "In-memory AST rules and embedded ONNX keep runtime scoring fast, but routing 3,000 RPS through AWS API Gateway introduces HTTP proxy overhead and significant per-request latency variance that jeopardizes sub-50ms P99.",
+    "elements": [
+     "AWS API Gateway",
+     "Scoring Engine",
+     "Rule Evaluator Component",
+     "Model Scoring Component",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "API Gateway proxy latency under 3,000 RPS concurrent load",
+     "In-memory evaluation vs network round trips to DynamoDB"
+    ],
+    "tradeoffs": [
+     "Using API Gateway simplifies routing and auth but increases per-request latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Scoring and case review workflows are completely decoupled across separate ECS services and datastores (DynamoDB for scoring, Aurora for case management), preventing analyst query contention from impacting real-time scoring.",
+    "elements": [
+     "Case Management Backend",
+     "Scoring Engine",
+     "Amazon Aurora PostgreSQL",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "Workload isolation across independent database engines",
+     "Read replication on Aurora for heavy case review queries"
+    ],
+    "tradeoffs": [
+     "Dual-datastore architecture increases operational complexity for the small team"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture lacks a defined fail-open or fallback scoring path in API Gateway or Scoring Engine. If the Scoring Engine container crashes, requests fail immediately at the gateway without an automated fallback decision mechanism.",
+    "elements": [
+     "AWS API Gateway",
+     "Scoring Engine",
+     "HTTP Proxy Integration"
+    ],
+    "sensitivity_points": [
+     "API Gateway error handling and failover routing capabilities",
+     "Absence of a standalone lightweight fallback engine"
+    ],
+    "tradeoffs": [
+     "Omitting a dedicated fallback mechanism simplifies design but risks blocking payments during outages"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Audit Dispatcher decouples logging via asynchronous worker pools to Kinesis Firehose, shielding scoring latency from downstream backpressure. However, local memory-backed worker queues could drop records if Firehose experiences sustained failures.",
+    "elements": [
+     "Scoring Engine",
+     "Audit Dispatcher Component",
+     "Amazon Kinesis Data Firehose",
+     "Amazon S3 Object Lock"
+    ],
+    "sensitivity_points": [
+     "Memory buffer capacity in Audit Dispatcher during downstream delays",
+     "Firehose buffering and backpressure handling"
+    ],
+    "tradeoffs": [
+     "Asynchronous in-memory dispatch protects decision latency but risks audit loss under process termination"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Model metadata and configurations reside in DynamoDB/Aurora and are scored via embedded ONNX runtime. Rolling container deployments or dynamic config polling enable zero downtime and fast rollbacks, with decisions tagging active model versions.",
+    "elements": [
+     "Scoring Engine",
+     "Model Scoring Component",
+     "Model Registry Schema",
+     "FraudRulesTable"
+    ],
+    "sensitivity_points": [
+     "Dynamic hot-reloading vs ECS container replacement rollout time",
+     "Consistency between running engine versions and persisted model tags"
+    ],
+    "tradeoffs": [
+     "Embedded ONNX runtime ensures ultra-fast scoring but requires container restarts or memory reloading"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The in-memory AST compiles rules fetched from DynamoDB FraudRulesTable or Aurora Model Registry, allowing rule changes within minutes without downtime. Evaluation outputs can easily append applied rule IDs to the audit trail.",
+    "elements": [
+     "Scoring Engine",
+     "Rule Evaluator Component",
+     "FraudRulesTable",
+     "Model Registry Schema"
+    ],
+    "sensitivity_points": [
+     "Frequency of rule cache invalidation or polling from DynamoDB",
+     "AST evaluation overhead for complex velocity aggregations"
+    ],
+    "tradeoffs": [
+     "Polling DynamoDB enables fast updates without redeployment but slightly delays propagation"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "justification": "Data Access Repository enforces masking and external tokenization isolates primary PAN data. However, the architecture specifies no SIEM, IDS, or automated anomaly detection mechanism to detect and alert on compromised analyst accounts within 15 minutes.",
+    "elements": [
+     "Case Management Backend",
+     "Data Access Repository",
+     "External Tokenization/Vault Service",
+     "Identity Provider (IdP)"
+    ],
+    "sensitivity_points": [
+     "Absence of real-time security analytics and behavioral monitoring",
+     "Field-level masking implementation in Data Access Repository"
+    ],
+    "tradeoffs": [
+     "Relying solely on application-level masking prevents data exposure but leaves intrusion detection unaddressed"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Amazon S3 Object Lock in Compliance Mode strictly enforces 7-year tamper-evident retention with KMS encryption. Persisted decision payloads containing model metadata, inputs, and explanations can be queried directly via Athena within one day.",
+    "elements": [
+     "Amazon S3 Object Lock",
+     "S3 Bucket with Object Lock",
+     "AWS KMS Encryption Key",
+     "Bucket Lifecycle Policy Manager",
+     "Amazon Kinesis Data Firehose"
+    ],
+    "sensitivity_points": [
+     "S3 Compliance Mode retention policy configuration",
+     "Completeness of decision attributes dispatched to Firehose"
+    ],
+    "tradeoffs": [
+     "Compliance mode locks data against premature deletion even by administrators, increasing storage retention rigidity"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "none"
+  },
+  "coverage": 0.5909090909090909,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "External Tokenization/Vault Service",
+     "Authorizer",
+     "Data Access Repository",
+     "AWS KMS Encryption Key"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "S3 Bucket with Object Lock",
+     "Bucket Lifecycle Policy Manager",
+     "Regulatory / Compliance Auditors",
+     "Audit Dispatcher Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "HTTP Handler / Router Component",
+     "Rule Evaluator Component",
+     "Model Scoring Component",
+     "AWS API Gateway"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Backend",
+     "Case API Handler",
+     "Case Workflow Engine",
+     "Data Access Repository",
+     "Case Management Schema",
+     "CaseManagementTable"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model Registry Schema",
+     "FraudRulesTable",
+     "Rule Evaluator Component",
+     "Model Scoring Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "Rule Evaluator Component",
+     "Model Scoring Component",
+     "Audit Dispatcher Component",
+     "FraudRulesTable"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "External Tokenization/Vault Service",
+     "Data Access Repository",
+     "AWS KMS Encryption Key"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit Dispatcher Component",
+     "Amazon Kinesis Data Firehose",
+     "Firehose Data Transformer",
+     "S3 Bucket with Object Lock",
+     "Amazon S3 Object Lock"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

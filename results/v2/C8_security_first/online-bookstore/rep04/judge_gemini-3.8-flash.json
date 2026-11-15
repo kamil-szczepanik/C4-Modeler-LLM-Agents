@@ -1,0 +1,319 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "Catalog Service, OpenSearch, and Order & Checkout Service address search and purchasing. However, customer reviews and 5-star ratings (R-03) lack explicit service or component implementations, electronic book delivery is unaddressed, and GDPR/CCPA compliance mechanisms are absent.",
+   "performance_efficiency": "CloudFront, Catalog Cache Manager (ElastiCache), OpenSearch, and Aurora Read Replicas effectively target 1M MAU and fast load times. However, delivering a large React SPA over 3G without server-side rendering or code-splitting specifications may challenge the sub-2s threshold.",
+   "compatibility": "Interoperability is thoroughly handled via REST and webhooks with Third-Party Shipping Provider, Payment Gateway, Currency Exchange Service, and external Recommendation Engine, supported by well-defined integration components like Payment & Currency Gateway Client.",
+   "usability": "Both Shopper and Administrator personas interact via Frontend App, supported by Localization Module for multi-currency display and React Router. However, administrative moderation workflows are not distinctly separated from consumer interfaces.",
+   "reliability": "Multi-region Aurora PostgreSQL, App Mesh mTLS, Envoy circuit breakers on External Engine Client, and Transactional Outbox Processor with EventBridge support high availability and fault tolerance, though cross-region failover automation is not fully specified.",
+   "security": "Strong transport security (TLS 1.3, mTLS), AWS IAM authentication, API Gateway rate limiting, and JWT Authorizer effectively mitigate OWASP risks. However, specific compliance controls for CCPA and GDPR (e.g., right-to-be-forgotten processing) are omitted.",
+   "maintainability": "Microservices are clearly decoupled by domain (Catalog, Order & Checkout, Recommendation) communicating via gRPC/App Mesh and event outbox patterns. Internal layering within ECS containers promotes testability and modularity.",
+   "portability": "The architecture directly targets the requested AWS multi-region infrastructure using ECS Fargate, Aurora Global Database, and CloudFront. Tight coupling to proprietary AWS services (App Mesh, EventBridge, SigV4) reduces cross-cloud adaptability, though compliant with the brief."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 3,
+   "MOD-01": 3,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.65625,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.0,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront CDN, ElastiCache Redis, OpenSearch, and Aurora read replicas distribute read traffic effectively. However, rendering a React SPA over a 3G network without server-side rendering introduces bundle load latency that risks exceeding the strict 2-second threshold.",
+    "elements": [
+     "Frontend App",
+     "Catalog Cache Manager",
+     "Amazon OpenSearch",
+     "Amazon Aurora PostgreSQL",
+     "Amazon API Gateway"
+    ],
+    "sensitivity_points": [
+     "Client-side bundle size impacting initial 3G page load latency",
+     "ElastiCache hit ratios under Black Friday query spikes"
+    ],
+    "tradeoffs": [
+     "In-memory caching improves throughput but risks serving stale catalog pricing"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Recommendation Service runs in a separate ECS Fargate container and delegates heavy compute to an external engine. Analytics events are asynchronously offloaded via SQS and EventBridge, completely isolating browsing workloads and database instances from recommendation processing.",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Analytics & Feedback Component",
+     "External Engine Client Component",
+     "Catalog Service"
+    ],
+    "sensitivity_points": [
+     "Asynchronous event offloading capacity during peak browsing"
+    ],
+    "tradeoffs": [
+     "Asynchronous telemetry emission trades real-time recommendation freshness for backend catalog stability"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The Transactional Outbox Processor and AWS EventBridge allow orders to be committed locally while fulfillment requests are queued asynchronously. However, the direct synchronous connection between Fulfillment Coordinator and Third-Party Shipping Provider requires robust internal retry and dead-letter queueing to prevent thread exhaustion.",
+    "elements": [
+     "Order & Checkout Service",
+     "Fulfillment Coordinator",
+     "Transactional Outbox Processor",
+     "Third-Party Shipping Provider",
+     "Amazon Aurora PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Reliability of Transactional Outbox processing during prolonged third-party outages"
+    ],
+    "tradeoffs": [
+     "Asynchronous fulfillment allows uninterrupted checkout but delays customer shipment confirmation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Aurora multi-region deployment provides cross-region replication, but PostgreSQL uses a single primary writer. Regional failover of write operations involves promotion overhead and potential replication lag, risking order loss unless synchronized replication or manual failover protocols are strictly orchestrated.",
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Primary Writer Database Instance",
+     "Read Replica Database Instances",
+     "Amazon API Gateway"
+    ],
+    "sensitivity_points": [
+     "Aurora cross-region replication lag during an abrupt us-east-1 primary outage",
+     "Global DNS routing failover convergence time"
+    ],
+    "tradeoffs": [
+     "Single-writer database preserves transactional consistency but increases cross-region failover recovery time"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Adding JPY requires changes across multiple disconnected tiers. The frontend Localization Module, Order Service Payment Client, and unexpectedly the Recommendation Service (which connects directly to the FX exchange) are involved, rather than encapsulating FX logic in a centralized pricing service.",
+    "elements": [
+     "Localization Module",
+     "Payment & Currency Gateway Client",
+     "Recommendation Service",
+     "Pricing & Inventory Adapter",
+     "Third-Party Currency Exchange Service"
+    ],
+    "sensitivity_points": [
+     "Duplicated currency exchange coupling across checkout and recommendation services"
+    ],
+    "tradeoffs": [
+     "Decentralized currency handling avoids a shared service bottleneck but increases modification surface"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Recommendation logic is completely encapsulated within the Recommendation Service and its External Engine Client Component. Substituting the external recommendation engine or altering algorithms requires changes only to that specific adapter component without affecting Catalog, Checkout, or Frontend services.",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Orchestrator Component",
+     "External Engine Client Component",
+     "Third-Party Recommendation Engine"
+    ],
+    "sensitivity_points": [
+     "Interface contract stability between Recommendation Orchestrator and External Engine Client"
+    ],
+    "tradeoffs": [
+     "Abstracting the external engine behind an adapter introduces minor gRPC/HTTP translation overhead"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Spring Data JDBC and TypeScript ORM provide parameterized queries protecting against SQLi, and React helps mitigate reflected XSS. However, the architecture omits AWS WAF at CloudFront and API Gateway, lacking centralized inspection and filtering for malicious payloads.",
+    "elements": [
+     "Amazon API Gateway",
+     "Edge Router",
+     "Order Repository",
+     "Amazon OpenSearch",
+     "UI Components"
+    ],
+    "sensitivity_points": [
+     "Absence of an edge Web Application Firewall (WAF) for deep payload inspection",
+     "OpenSearch query string sanitization for unparameterized searches"
+    ],
+    "tradeoffs": [
+     "Relying on application-level sanitization avoids WAF operational costs but increases per-component vulnerability"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "The architecture does not model a Customer/Identity Service or a centralized privacy orchestration pipeline. Personal data resides across Aurora tables, OpenSearch indices, and analytics queues, with no explicit mechanism to orchestrate or audit right-to-be-forgotten deletion across microservices and external gateways.",
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Amazon OpenSearch",
+     "Order & Checkout Service",
+     "Recommendation Analytics & Feedback Component"
+    ],
+    "sensitivity_points": [
+     "Data sprawl across transactional databases, search indices, and event streams without unified ownership"
+    ],
+    "tradeoffs": [
+     "Retaining order records for regulatory accounting conflicts with hard deletion requirements"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "none",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "none",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "partial"
+  },
+  "coverage": 0.7272727272727273,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "none",
+    "elements": []
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Third-Party Currency Exchange Service",
+     "Localization Module",
+     "Payment & Currency Gateway Client",
+     "Frontend App"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Third-Party Shipping Provider",
+     "Order & Checkout Service",
+     "Fulfillment Coordinator"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog Service",
+     "Catalog API Controller",
+     "Search & Query Engine",
+     "Amazon OpenSearch",
+     "Search Engine Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Order & Checkout Service",
+     "Checkout Controller / Facade",
+     "Order Management Engine",
+     "Payment & Currency Gateway Client",
+     "Third-Party Payment Gateway"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "none",
+    "elements": []
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Third-Party Recommendation Engine",
+     "Recommendation Service",
+     "API Router Component",
+     "Recommendation Orchestrator Component",
+     "External Engine Client Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Read Replica Database Instances",
+     "Catalog Cache Manager",
+     "Amazon OpenSearch",
+     "Edge Router",
+     "Frontend App"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Frontend App",
+     "Catalog Cache Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Amazon Aurora PostgreSQL",
+     "Read Replica Database Instances",
+     "External Engine Client Component"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "partial",
+    "elements": [
+     "Amazon API Gateway",
+     "Edge Router",
+     "JWT Authorizer"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

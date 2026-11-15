@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Sync Orchestrator container
+
+Person(EdgeNodes, "Edge Nodes", "Edge clinic nodes transmitting data.")
+System_Ext(SIEM, "SIEM / Immutable Cold Storage", "Receives cryptographically signed audit logs for compliance.")
+
+Container_Boundary(SyncOrchestrator, "Sync Orchestrator") {
+    Component(SyncStateEngine, "Sync State Engine", "Go, RocksDB, SQLite, Raft", "Manages local queues, delta tracking, active-active reconciliation, and embedded Raft storage.")
+    Component(ConflictResolver, "Conflict Resolver", "Go", "Executes deterministic merge strategies using Last-Write-Wins with vector clocks and routes exceptions.")
+    Component(SyncAPIController, "Sync API Controller", "Go, REST, gRPC", "Exposes REST/gRPC endpoints with mTLS, adaptive backpressure, and payload cryptographic verification.")
+    Component(DashboardBackend, "Dashboard Backend", "Go, REST", "Serves the Administrative Staff Conflict Resolution Dashboard with RBAC, secure REST endpoints, and automated notification triggers.")
+}
+
+Rel(EdgeNodes, SyncAPIController, "Transmits encrypted payloads via mTLS with short-lived OAuth2/JWT tokens.", "mTLS / HTTPS")
+Rel(SyncAPIController, SyncStateEngine, "Internal communication using gRPC.", "gRPC")
+Rel(SyncStateEngine, ConflictResolver, "Processes state and queue data using internal function calls.", "Function calls")
+Rel(ConflictResolver, DashboardBackend, "Routes exceptions and publishes events via Kafka/NATS.", "Kafka/NATS")
+Rel(DashboardBackend, SIEM, "Streams cryptographically signed audit logs for compliance.", "TLS")
+
+@enduml

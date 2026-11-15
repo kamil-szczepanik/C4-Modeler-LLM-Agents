@@ -1,0 +1,315 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: Real-Time Scoring Engine evaluates payments (R-01), Case Management Container manages suspicious transactions for Fraud Analysts (R-02), and Model & Rule Registry Service enables zero-downtime rule and model rollouts via asynchronous publishing (R-03).",
+   "performance_efficiency": "The 50 ms P99 SLA at 3,000 req/s is achieved using a compiled Rust/Go Transaction Evaluation Engine, low-latency Amazon ElastiCache (Redis) for feature caching, and asynchronous decoupling via Amazon SQS / SNS to offload audit and case workloads.",
+   "compatibility": "The API Gateway integration container adheres to standard OpenAPI and TLS 1.3 specifications to interoperate smoothly with external Payment Gateways. Internal interfaces use gRPC, Redis Protocol, and AWS SDKs, though gateway response mapping for third-party protocols lacks detailed definition.",
+   "usability": "Fraud Analysts are served directly by the Case Review Controller with RFC 7807 error handling and RESTful endpoints, although the architecture specifies APIs rather than an explicit web UI frontend container for analysts.",
+   "reliability": "Level 1 specifies an API Gateway with Fail-Open Circuit Breaker to prevent blocking payments (R-07). High availability is reinforced by SQS FIFO Queues, DLQs, ElastiCache Multi-AZ, and Aurora Serverless, though circuit-breaker fallback behavior is omitted in Level 3.",
+   "security": "Strict PCI-DSS compliance is enforced by isolating PAN handling within the Tokenization/Masking Proxy Container before downstream evaluation. S3 Object Lock (Compliance Mode) guarantees 7-year tamper-evident auditability (R-06), complemented by AWS KMS envelope encryption and TLS 1.3 throughout.",
+   "maintainability": "Responsibilities are modularized across distinct containers like Case Management and Model Registry. Managed services (ECS Fargate, Aurora Serverless) match the small three-engineer operational team, while Hexagonal Architecture in Case Domain Service facilitates component maintainability and testability.",
+   "portability": "While perfectly aligned with the target AWS eu-west-1 environment, the architecture is tightly coupled to proprietary AWS services (S3 Object Lock, Aurora Serverless, KMS, SQS FIFO), making migration or multi-cloud deployment require substantial re-engineering."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 4.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Stateless Rust/Go scoring engine, ElastiCache Redis, and asynchronous logging via SQS ensure low latency, though chaining API Gateway, Tokenization Proxy, and Scoring Engine introduces serialization and network overhead under 3,000 rps.",
+    "elements": [
+     "API Gateway / Payment Gateway Integration Container",
+     "Tokenization/Masking Proxy Container",
+     "Real-Time Scoring Engine Container",
+     "Amazon ElastiCache (Redis)",
+     "Amazon SQS / SNS"
+    ],
+    "sensitivity_points": [
+     "Network latency across container hops",
+     "In-memory Redis cache hit ratios"
+    ],
+    "tradeoffs": [
+     "In-line tokenization enhances security at the expense of network hop overhead"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management is completely decoupled from the synchronous scoring path, running on dedicated ECS containers backed by Amazon Aurora Serverless with read replicas.",
+    "elements": [
+     "Case Management Container",
+     "Amazon Aurora",
+     "Real-Time Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Isolation between synchronous scoring and asynchronous back-office workloads"
+    ],
+    "tradeoffs": [
+     "Separate datastores for transactional state and case management increase infrastructure operational complexity"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "The API gateway mentions a fail-open circuit breaker, but the fallback decision logic, default action generation, and fallback audit trail publishing without the scoring engine are not detailed in Level 2 or 3.",
+    "elements": [
+     "API Gateway with Fail-Open Circuit Breaker",
+     "Real-Time Scoring Engine Container",
+     "Dead-Letter Queues (DLQs)"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker trip thresholds and fail-open default policy configuration"
+    ],
+    "tradeoffs": [
+     "Failing open preserves payment processing availability at the expense of fraud exposure"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Decoupling synchronous scoring from audit persistence through Amazon SQS FIFO buffers events when downstream S3 WORM storage or compliance ingestion slows or fails, protecting P99 latency and preventing record loss.",
+    "elements": [
+     "Real-Time Scoring Engine Container",
+     "Amazon SQS / SNS",
+     "Audit & Compliance Container",
+     "Amazon S3 Object Lock"
+    ],
+    "sensitivity_points": [
+     "SQS queue retention period and dead-letter queue capacities"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit durability trades real-time audit query consistency for uninterrupted scoring latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Model & Rule Registry publishes immutable versions asynchronously to scoring engines. Scoring engines reference versions in decisions. However, automated blue/green traffic shifting and fast automated rollback mechanisms are only partially specified.",
+    "elements": [
+     "Model & Rule Registry Service Container",
+     "Real-Time Scoring Engine Container",
+     "Publisher Service"
+    ],
+    "sensitivity_points": [
+     "In-memory hot-reloading latency of ONNX model binaries"
+    ],
+    "tradeoffs": [
+     "Stateless runtime model updates trade deployment simplicity for transient memory consumption"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The Model & Rule Registry broadcasts updates to scoring engines and case management via SNS/SQS. Velocity state is supported by ElastiCache. Decisions capture rule tags, meeting the one-hour target easily without downtime.",
+    "elements": [
+     "Model & Rule Registry Service Container",
+     "Real-Time Scoring Engine Container",
+     "Amazon ElastiCache (Redis)"
+    ],
+    "sensitivity_points": [
+     "Propagation delay of SNS/SQS rule broadcast events"
+    ],
+    "tradeoffs": [
+     "Eventual consistency in distributed rule propagation across scoring instances"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The Tokenization/Masking Proxy strips PAN before data enters the scoring and case management layers, securing clear-text numbers. However, automated detection and 15-minute alerting for anomalous analyst access are entirely absent.",
+    "elements": [
+     "Tokenization/Masking Proxy Container",
+     "Case Management Container",
+     "PAN Scrubber and Tokenizer"
+    ],
+    "sensitivity_points": [
+     "Completeness of PAN redaction at ingress proxies"
+    ],
+    "tradeoffs": [
+     "Irreversible tokenization protects PANs but limits analyst ad-hoc investigations"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Audit & Compliance writes SHA-256 hashed records with inputs, model versions, and explanations to Amazon S3 Object Lock in Compliance Mode. S3 Glacier Flexible Archive retrieval satisfies the 1-day turnaround for 6-year-old records.",
+    "elements": [
+     "Audit & Compliance Container",
+     "Amazon S3 Object Lock",
+     "Lifecycle and Archival Manager"
+    ],
+    "sensitivity_points": [
+     "S3 Glacier archive retrieval time and index availability"
+    ],
+    "tradeoffs": [
+     "Archiving audit logs to Glacier reduces monthly storage cost while increasing retrieval latency"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Tokenization/Masking Proxy Container",
+     "PAN Scrubber and Tokenizer",
+     "Encryption & Security Manager"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Audit & Compliance Container",
+     "Amazon S3 Object Lock",
+     "WORM Storage Engine",
+     "Lifecycle and Archival Manager"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Lifecycle and Archival Manager",
+     "Case Management Data Store"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Telemetry & Monitoring Agent",
+     "Amazon Aurora",
+     "Amazon ElastiCache (Redis)"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "API Gateway / Payment Gateway Integration Container",
+     "Scoring Invoker",
+     "Real-Time Scoring Engine Container",
+     "Transaction Evaluation Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Container",
+     "Case Review Controller",
+     "Case Ingestion Service",
+     "Case Domain Service",
+     "Persistence Adapter",
+     "Amazon Aurora"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model & Rule Registry Service Container",
+     "Model and Rule API Controller",
+     "Registry Orchestrator Service",
+     "Publisher Service"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine Container",
+     "Transaction Evaluation Engine",
+     "Amazon ElastiCache (Redis)",
+     "Redis In-Memory Data Store"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Tokenization/Masking Proxy Container",
+     "PAN Scrubber and Tokenizer",
+     "Token Cache Client",
+     "Case Review Controller"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit & Compliance Container",
+     "Compliance Logger Component",
+     "Amazon S3 Object Lock",
+     "WORM Storage Engine"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "API Gateway with Fail-Open Circuit Breaker",
+     "API Gateway / Payment Gateway Integration Container",
+     "Request Router"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

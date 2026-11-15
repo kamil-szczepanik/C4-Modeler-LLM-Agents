@@ -1,0 +1,256 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.75,
+  "justifications": {
+   "functional_suitability": "R-01 is covered by Catalog Management Module, Catalog Schema, and Search Service, with Circulation Controller and Sync Orchestrator for circulation and bibliographic import. Minor gaps: no explicit digital-item storage or lending component, and the payment flow lacks a container-level relationship.",
+   "performance_efficiency": "A dedicated Search Service on Elasticsearch with Faceting & Suggestion Engine, asynchronous Index Synchronization Consumer, CDN edge caching, PgBouncer, Read Replica, Async Worker and TanStack Query caching target the 800 ms p99. Gaps: no search cache or scaling and latency measurement details.",
+   "compatibility": "OIDC Identity Provider, REST payment gateway, National Library Database import via Sync Orchestrator, and OTLP are standards-based. Gaps: no library standards such as MARC or Z39.50, the Payment Gateway lacks container-level links, and the Kafka vs RabbitMQ/Debezium messaging is inconsistent.",
+   "usability": "UI Component Library targets WCAG 2.1 AA, with a responsive SPA, Offline Persistence & Queue Component, and multilingual Notification Processor. Gaps: patrons and staff share one SPA with no distinct staff or kiosk interfaces, and the UI RBAC adapter is only partly specified.",
+   "reliability": "Multi-AZ Database Primary with Read Replica, fail-closed circuit breakers in Repository Adapters, DLQ Handler, Persistent Queueing Extension, HA Redis, and offline mutation queue. Gaps: no explicit backup/recovery, RabbitMQ or Elasticsearch redundancy, or RTO/RPO.",
+   "security": "Security & Auth Plugin (JWT/OIDC, WAF, mTLS), MFA via Identity Provider, RBAC, RLS in Repository Adapters, TLS 1.3 everywhere, encrypted AMQP events, Audit & Logging Schema, and PII scrubbing in Processors Component. Thorough, with only minor gaps.",
+   "maintainability": "Clear decomposition into API Gateway, Core Domain Service, Search Service, Async Worker, and Database with single-purpose components and observability via OTEL Collector. Gaps: Core Domain Service combines circulation and catalog, and some inconsistencies appear (Kafka vs RabbitMQ, Bolt, Async Worker listing external elements as components).",
+   "portability": "Kubernetes, OTEL, Kong, PostgreSQL, and Elasticsearch are portable open technologies, with swappable CDN and Identity Provider options. Gaps: no explicit containerization, IaC, or deployment view, and EU-only residency is asserted but no cloud-agnostic deployment mechanism is shown."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 2,
+   "MOD-02": 1,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.34375,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 2.0,
+   "Modifiability": 1.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Search Service",
+     "Search Engine Cluster",
+     "API Gateway",
+     "Query Builder Component",
+     "Elasticsearch Client Adapter"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster sizing and shard count under 2,000 concurrent queries",
+     "Gateway rate limiting and WAF add latency"
+    ],
+    "tradeoffs": [
+     "Dedicated search gives speed but adds index synchronization complexity"
+    ],
+    "justification": "Dedicated Elasticsearch search service isolated from the transactional DB fits the P99 goal. But no caching, replica or scaling mechanism, nor any load-test evidence, is described. Risks stay unaddressed."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Index Synchronization Consumer",
+     "Search Service",
+     "Domain Event Publisher",
+     "Database Primary",
+     "Search Engine Cluster"
+    ],
+    "sensitivity_points": [
+     "Index sync path is inconsistent: Debezium CDC versus Kafka consumer",
+     "Indexing load competes with query load"
+    ],
+    "tradeoffs": [
+     "Asynchronous indexing protects search latency but gives eventual consistency"
+    ],
+    "justification": "Asynchronous indexing likely meets the 5-minute freshness target, and search is separate from writes. But the sync path is ambiguous: Kafka is not in the container view, CDC and publisher events conflict. Reindex lag isn't bounded."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "Search Engine Cluster",
+     "Search Service",
+     "Database",
+     "Core Domain Service",
+     "Repository Adapters"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch replica and shard configuration is not specified",
+     "Failover time of the search cluster is unspecified"
+    ],
+    "tradeoffs": [
+     "Separating search from circulation isolates failures but duplicates data"
+    ],
+    "justification": "Circulation uses PostgreSQL multi-AZ, so loan transactions are durable and independent of search. But there is no stated Elasticsearch replication or failover, and no search degradation fallback. The 1-minute search continuity is unsupported."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Web Application (SPA)",
+     "CDN / Edge Layer",
+     "API Gateway",
+     "Offline Persistence & Queue Component"
+    ],
+    "sensitivity_points": [
+     "No stated multiple instances or load balancing for the SPA or gateway",
+     "Offline queue replay semantics need idempotency"
+    ],
+    "tradeoffs": [
+     "Offline queuing improves resilience but risks conflicting updates on replay"
+    ],
+    "justification": "The SPA is static and served via CDN, and the offline mutation queue helps avoid lost actions. But redundancy, health checks and failover are not shown. Gateway and service replication are implicit only."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "elements": [
+     "Async Worker",
+     "Sync Orchestrator Component",
+     "Catalog Management Module",
+     "Catalog Schema"
+    ],
+    "sensitivity_points": [
+     "Only a National Library sync exists, with no provider abstraction",
+     "Catalog Management Module may couple to provider formats"
+    ],
+    "tradeoffs": [
+     "A central sync orchestrator is simple but concentrates integrations"
+    ],
+    "justification": "The Async Worker has a sync orchestrator for the national database, so a new provider could be added there. But there is no provider adapter or plugin interface, and digital item ingestion isn't modeled. Changes may spread to the catalog and search."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 1,
+    "elements": [
+     "Catalog Management Module",
+     "Circulation Controller",
+     "Circulation Schema"
+    ],
+    "sensitivity_points": [
+     "Loan rules are embedded in NestJS code",
+     "No rules engine or configuration store exists"
+    ],
+    "tradeoffs": [
+     "Hardcoded rules are simple but force redeploys for each library type"
+    ],
+    "justification": "Nothing in the model provides configurable loan rules, tenant policies or a rules engine. Availability rules live in the Catalog Management Module code. A runtime change without redeployment is not supported."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "Database",
+     "Search Engine Cluster",
+     "Centralized Observability Platform",
+     "Identity Provider",
+     "Payment Gateway",
+     "CDN / Edge Layer"
+    ],
+    "sensitivity_points": [
+     "Identity Provider option Auth0 and observability platform have unspecified EU location",
+     "Cloudflare or CloudFront EU-only POPs are assumed"
+    ],
+    "tradeoffs": [
+     "Managed external services speed delivery but weaken residency control"
+    ],
+    "justification": "The database and Elasticsearch are EU-hosted, with EU endpoints and DPAs for external systems, and PII is scrubbed from telemetry. But enforcement is by policy, not by design: no technical guardrails exist, and the observability platform and IdP regions are unspecified."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Circulation Controller",
+     "Repository Adapters",
+     "Security & Auth Plugin",
+     "UI RBAC & Claims Adapter",
+     "Audit & Logging Schema"
+    ],
+    "sensitivity_points": [
+     "Object-level ownership check is not explicit beyond RBAC and RLS",
+     "Denied-attempt logging is not explicitly specified"
+    ],
+    "tradeoffs": [
+     "Row-level security is strong but complicates query and connection pooling"
+    ],
+    "justification": "JWT validation, RBAC and RLS in Repository Adapters can block cross-patron reads, and audit events and an Audit schema exist. But denial recording is not explicit, and ownership checks are unspecified. PgBouncer pooling could weaken RLS context."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "R-01": "full",
+   "R-05": "partial"
+  },
+  "coverage": 0.6666666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "CDN / Edge Layer",
+     "Identity Provider",
+     "External Payment Gateway",
+     "National Library Database",
+     "Database",
+     "Database Primary",
+     "Search Engine Cluster",
+     "Library Management System"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Core Domain Service",
+     "Catalog Management Module",
+     "Catalog Schema",
+     "Database",
+     "Search Service",
+     "Sync Orchestrator Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Search Service",
+     "Query Builder Component",
+     "Elasticsearch Client Adapter",
+     "Search Engine Cluster",
+     "Index Synchronization Consumer",
+     "API Gateway",
+     "Memory Limiter & Sampler Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

@@ -1,0 +1,52 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(FrontDeskReceptionists, "Front-Desk Receptionists", "Manages patient check-ins, admissions, and basic front-desk operations.")
+Person(Clinicians, "Clinicians", "Accesses and updates electronic medical records (EMRs) and manages patient care.")
+Person(BillingSpecialists, "Billing Specialists", "Manages invoices, payments, and financial transactions with insurance providers.")
+Person(ITComplianceAdministrators, "IT/Compliance Administrators", "Manages system security, compliance, infrastructure, and access controls.")
+Person(Patients, "Patients", "Interacts with the system via portal to view appointments, records, and billing.")
+
+System_Ext(LabImagingSystems, "Lab & Imaging Systems", "External systems providing laboratory results and medical imaging data.")
+System_Ext(InsuranceClearinghouses, "Insurance Clearinghouses", "External systems for processing medical claims and insurance verifications.")
+System_Ext(IdentityPoviderIdP, "Identity Provider (IdP)", "Handles multi-factor authentication (MFA), OIDC, and SAML 2.0 identity services.")
+System_Ext(PatientPortalMobileApp, "Patient Portal / Mobile App", "External client application used by patients to access healthcare services.")
+
+System_Boundary(ClinicManagementSystem, "Clinic Management System") {
+    Container(UnifiedAPIGateway, "Unified API Gateway", "API Gateway, TLS 1.3", "Handles rate-limiting, JWT validation, and routes traffic for the system.")
+    Container(PatientRegistrationMicroservice, "Patient Registration Microservice", "Spring Boot", "Manages patient registration, admissions, and onboarding data.")
+    Container(EMRMicroservice, "EMR Microservice", "Go / gRPC", "Manages electronic medical records and patient health information.")
+    Container(SchedulingMicroservice, "Scheduling Microservice", "Spring Boot", "Manages appointments, scheduling, and calendar resources.")
+    Container(BillingMicroservice, "Billing Microservice", "Node.js / Express", "Processes billing, invoices, and clearinghouse integrations.")
+    Container(AsyncClaimsProcessingWorker, "Async Claims Processing Worker", "Background Worker", "Processes asynchronous insurance claims via message broker.")
+    Container(MessageBroker, "Message Broker", "Apache Kafka", "Implements asynchronous messaging for claims processing to prevent blocking HTTP threads.")
+    Container(DistributedCacheRedisEnterprise, "Distributed Cache (Redis Enterprise)", "Redis Enterprise", "Provides distributed session state and WebSocket message broker capabilities.")
+    ContainerDb(CloudNativeDistributedSQLDatabase, "Cloud-Native Distributed SQL Database", "CockroachDB", "Distributed SQL storage with Raft consensus to guarantee zero-downtime availability and 10-year data retention.")
+}
+
+Rel(PatientPortalMobileApp, UnifiedAPIGateway, "Requests API data and manages sessions", "HTTPS / REST and WebSocket via OIDC/OAuth 2.0")
+Rel(FrontDeskReceptionists, UnifiedAPIGateway, "Manages patient admissions and check-ins", "HTTPS / REST")
+Rel(Clinicians, UnifiedAPIGateway, "Accesses and updates patient records", "HTTPS / REST")
+Rel(BillingSpecialists, UnifiedAPIGateway, "Manages invoices and financial transactions", "HTTPS / REST")
+Rel(ITComplianceAdministrators, UnifiedAPIGateway, "Manages system security, compliance, and infrastructure", "HTTPS / REST")
+
+Rel(UnifiedAPIGateway, PatientRegistrationMicroservice, "Routes registration requests", "HTTP / REST")
+Rel(UnifiedAPIGateway, EMRMicroservice, "Routes EMR requests", "gRPC")
+Rel(UnifiedAPIGateway, SchedulingMicroservice, "Routes scheduling requests", "HTTP / REST")
+Rel(UnifiedAPIGateway, BillingMicroservice, "Routes billing requests", "HTTP / REST")
+
+Rel(EMRMicroservice, CloudNativeDistributedSQLDatabase, "Reads and writes EMR data", "SQL / TLS")
+Rel(PatientRegistrationMicroservice, CloudNativeDistributedSQLDatabase, "Reads and writes patient data", "SQL / TLS")
+Rel(SchedulingMicroservice, CloudNativeDistributedSQLDatabase, "Reads and writes scheduling data", "SQL / TLS")
+Rel(BillingMicroservice, CloudNativeDistributedSQLDatabase, "Reads and writes billing data", "SQL / TLS")
+
+Rel(BillingMicroservice, MessageBroker, "Publishes claims processing events", "Apache Kafka Protocol")
+Rel(AsyncClaimsProcessingWorker, MessageBroker, "Consumes claims events", "Apache Kafka Protocol")
+
+Rel(ClinicManagementSystem, LabImagingSystems, "Exchanges lab orders and imaging results", "HL7 FHIR over HTTPS (REST/JSON) with W3C trace contexts")
+Rel(ClinicManagementSystem, InsuranceClearinghouses, "Submits claims and verifies insurance", "Secure EDI / HTTPS APIs with circuit breakers")
+Rel(ClinicManagementSystem, IdentityPoviderIdP, "Authenticates users and performs multi-factor authentication", "OIDC/SAML 2.0 over HTTPS")
+@enduml

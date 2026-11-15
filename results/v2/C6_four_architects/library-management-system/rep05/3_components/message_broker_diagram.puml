@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Component(Core Services Container, "Core Services Container", "Microservice Container", "Publishes events to the Exchange Router.")
+Component(Integration Service, "Integration Service", "Integration Service Container", "Publishes incoming third-party webhook events and system events.")
+Component(Async Worker Container, "Async Worker Container", "Worker Container", "Receives dispatched background jobs and re-dispatches retried tasks.")
+Component(SIEM / Central Log Collector, "SIEM / Central Log Collector", "Syslog / TLS", "Receives forwarded security logs from the broker metrics and audit component.")
+Component(CI/CD Deployment Pipeline, "CI/CD Deployment Pipeline", "Pipeline / HTTPS", "Applies schema definitions to the topology management component.")
+
+Container_Boundary(Message Broker, "Message Broker") {
+    Component(Exchange Router Component, "Exchange Router Component", "Managed RabbitMQ / AMQP 0-9-1", "Handles asynchronous event processing and webhook ingestion.")
+    Component(Queue Manager Component, "Queue Manager Component", "Managed RabbitMQ / AMQP 0-9-1", "Manages queues, dispatches background jobs, and forwards failed messages.")
+    Component(Connection & Security Manager Component, "Connection & Security Manager Component", "TLS / HTTPS", "Secures internal messaging and communication protocols under EU data residency constraints.")
+    Component(Dead Letter & Retry Component, "Dead Letter & Retry Component", "Managed RabbitMQ / Internal AMQP", "Forwards failed messages and re-dispatches retried tasks.")
+    Component(Broker Metrics & Audit Component, "Broker Metrics & Audit Component", "Prometheus / RabbitMQ Prometheus Plugin", "Emits telemetry and forwards security logs.")
+    Component(Topology Management Component, "Topology Management Component", "Terraform / RabbitMQ definitions JSON / AMQP Management API", "Applies schema definitions, bindings, and TTL policies.")
+}
+
+Rel(Core Services Container, Exchange Router Component, "Publishes events", "AMQP/TLS")
+Rel(Integration Service, Exchange Router Component, "Publishes incoming third-party webhook events", "AMQP/TLS")
+Rel(Queue Manager Component, Async Worker Container, "Dispatches background jobs", "AMQP/TLS")
+Rel(Queue Manager Component, Dead Letter & Retry Component, "Forwards failed messages", "Internal AMQP")
+Rel(Dead Letter & Retry Component, Async Worker Container, "Re-dispatches retried tasks", "AMQP/TLS")
+Rel(Exchange Router Component, Broker Metrics & Audit Component, "Emits telemetry", "Prometheus/TLS")
+Rel(Queue Manager Component, Broker Metrics & Audit Component, "Emits telemetry", "Prometheus/TLS")
+Rel(Broker Metrics & Audit Component, SIEM / Central Log Collector, "Forwards security logs", "Syslog/TLS")
+Rel(CI/CD Deployment Pipeline, Topology Management Component, "Applies schema definitions", "HTTPS")
+Rel(Topology Management Component, Exchange Router Component, "Applies bindings and TTL policies", "AMQP Management API / HTTPS")
+Rel(Topology Management Component, Queue Manager Component, "Applies bindings and TTL policies", "AMQP Management API / HTTPS")
+@enduml

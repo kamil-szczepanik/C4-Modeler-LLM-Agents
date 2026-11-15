@@ -1,0 +1,315 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "Requirements R-01 and R-02 are satisfied by Customer Portal & Adjuster Web App and API Gateway. Incremental claim migration (R-03) is directly enabled by Claim Orchestrator, Claim Domain Model, and Dynamic Form Engine.",
+   "performance_efficiency": "The sub-2s requirement (R-05) is met despite 5s mainframe latency using Optimistic UI & Local State Cache (TanStack Query), asynchronous queuing via Integration & Anti-Corruption Layer, and caching in Mainframe Adapter.",
+   "compatibility": "Mainframe Adapter and LU6.2 Protocol Bridge Component provide concrete coexistence mechanisms with legacy COBOL/DB2. However, explicit mechanisms to safeguard or pause sync during the strict 23:00-05:00 nightly batch window are omitted.",
+   "usability": "All distinct personas (Customer, Broker, Claims Adjuster) are served via Customer Portal & Adjuster Web App. Dynamic Form Engine dynamically adapts UIs to specific claim flows without requiring client redeployments.",
+   "reliability": "Data consistency (R-04) is addressed using transactional outbox in Claim Audit & Event Publisher, Azure Service Bus, and Replay & Reconciliation Component. However, explicit deduplication and idempotency keys across mainframe boundaries are not fully detailed.",
+   "security": "R-07 is fulfilled via Azure Active Directory integration and API Gateway token validation. Confidentiality and accountability are reinforced through Crypto-Proxy Middleware, Claims Audit Database, and Azure Key Vault encryption.",
+   "maintainability": "R-06 is solved by the Rollback Switch feature-flag component allowing rapid traffic redirection to the Mainframe Adapter within one day. Decoupling is maintained through the Integration & Anti-Corruption Layer.",
+   "portability": "While satisfying the hybrid topology constraint, the architecture is deeply coupled to proprietary Azure PaaS elements (Cosmos DB, Azure Service Bus, Azure Container Apps), presenting significant cloud vendor lock-in."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "While Redis state caching in Mainframe Adapter and TanStack Query in the SPA help, there is no proactive read-model synchronization for mainframe data. Uncached claim reads will incur the legacy 5-second round-trip latency.",
+    "elements": [
+     "Customer Portal & Adjuster Web App",
+     "Optimistic UI & Local State Cache",
+     "API Gateway",
+     "Mainframe Adapter",
+     "Outbox & State Cache Component"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio determines whether adjuster screens meet the sub-2s threshold."
+    ],
+    "tradeoffs": [
+     "Local caching improves UI latency but risks displaying stale claim data."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Online submissions are ingested asynchronously through API Management and Claims Domain Services into Azure Service Bus queues. Decoupling decouples ingestion spikes from the mainframe batch window.",
+    "elements": [
+     "API Gateway",
+     "Claims Domain Services",
+     "Claim Audit & Event Publisher",
+     "Integration & Anti-Corruption Layer",
+     "Azure Service Bus"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue capacity and consumer throughput throttle rate to mainframe."
+    ],
+    "tradeoffs": [
+     "Asynchronous submission ingestion increases eventual consistency lag for newly submitted claims."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The architecture isolates the mainframe behind Azure Service Bus and an outbox pattern. During the 23:00-05:00 batch window, incoming submissions accumulate safely in persistent message queues and dispatch when connectivity resumes.",
+    "elements": [
+     "Integration & Anti-Corruption Layer",
+     "Message Router Component",
+     "Claims Domain Services",
+     "Claim Audit & Event Publisher",
+     "Mainframe Adapter"
+    ],
+    "sensitivity_points": [
+     "Message retention duration and queue quotas during extended mainframe maintenance."
+    ],
+    "tradeoffs": [
+     "Continuous queue buffering during batch windows delays confirmation from mainframe system of record."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Robust reliability mechanisms are explicitly provided: transactional outbox publisher, Dead Letter & Audit Store Component, and an automated Replay & Reconciliation Component handle partial sync failures and prevent duplicate processing.",
+    "elements": [
+     "Integration & Anti-Corruption Layer",
+     "Dead Letter & Audit Store Component",
+     "Replay & Reconciliation Component",
+     "Claims Domain Services",
+     "Claim Audit & Event Publisher"
+    ],
+    "sensitivity_points": [
+     "Idempotency key enforcement on mainframe adapter to prevent duplicate processing."
+    ],
+    "tradeoffs": [
+     "Reconciliation logic adds operational complexity to handle dead-letter reprocessing."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The design includes an explicit Rollback Switch feature flag component to redirect unmigrated or reverted claim types back to the mainframe. Dynamic Form Engine accommodates UI schema changes without code redeployments.",
+    "elements": [
+     "Claims Domain Services",
+     "Rollback Switch",
+     "Customer Portal & Adjuster Web App",
+     "Dynamic Form Engine",
+     "Integration & Anti-Corruption Layer"
+    ],
+    "sensitivity_points": [
+     "Dynamic form schemas and feature flag propagation delay across distributed instances."
+    ],
+    "tradeoffs": [
+     "Feature toggle complexity in domain logic enables zero-downtime rollback capabilities."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "UI components communicate exclusively with Azure API Management and domain microservices. The legacy mainframe is completely isolated behind the anti-corruption layer and adapter, allowing final switch-off without modifying customer or adjuster frontends.",
+    "elements": [
+     "Customer Portal & Adjuster Web App",
+     "API Gateway",
+     "Claims Domain Services",
+     "Claim Domain Model",
+     "Integration & Anti-Corruption Layer"
+    ],
+    "sensitivity_points": [
+     "Domain models fully encapsulating legacy data rules before mainframe decommissioning."
+    ],
+    "tradeoffs": [
+     "Maintaining Anti-Corruption Layer during migration increases upfront development overhead."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Azure API Management and Azure AD enforce OIDC JWT authentication, while the Claims Audit Store provides immutable, append-only security logs. However, fine-grained multi-tenant record ownership authorization logic is not explicitly detailed.",
+    "elements": [
+     "API Gateway",
+     "Azure Active Directory",
+     "Claims Domain Services",
+     "Claims Audit Store",
+     "Audit Event Writer"
+    ],
+    "sensitivity_points": [
+     "Enforcement of object-level authorization checks inside Claims Domain Services."
+    ],
+    "tradeoffs": [
+     "Fine-grained claim ownership checks at service boundaries introduce slight latency overhead."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Revoking adjuster credentials in Azure AD instantly blocks access to the API Gateway and modern web app. However, synchronization of revocation to on-premise mainframe security mechanisms (e.g., RACF) is not modeled.",
+    "elements": [
+     "Azure Active Directory",
+     "API Gateway",
+     "Legacy Mainframe Claims System",
+     "Customer Portal & Adjuster Web App"
+    ],
+    "sensitivity_points": [
+     "Token lifetime and revocation sync between Azure AD and on-premise security."
+    ],
+    "tradeoffs": [
+     "Short token lifetimes improve revocation speed but increase token refresh frequency."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe Claims System",
+     "Mainframe Adapter",
+     "Integration & Anti-Corruption Layer"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Mainframe Adapter",
+     "Translation & Mapping Component",
+     "LU6.2 Protocol Bridge Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer",
+     "Broker",
+     "API Gateway",
+     "Customer Portal & Adjuster Web App",
+     "Dynamic Form Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjuster",
+     "Customer Portal & Adjuster Web App",
+     "SPA Shell & Routing Engine"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Claims Domain Services",
+     "Dynamic Form Engine",
+     "Rollback Switch",
+     "Claim Orchestrator"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Integration & Anti-Corruption Layer",
+     "Claim Audit & Event Publisher",
+     "Dead Letter & Audit Store Component",
+     "Replay & Reconciliation Component",
+     "Outbox & State Cache Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Optimistic UI & Local State Cache",
+     "Customer Portal & Adjuster Web App",
+     "Outbox & State Cache Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Rollback Switch",
+     "Mainframe Adapter"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Identity Provider",
+     "Azure Active Directory",
+     "API Gateway",
+     "SPA Shell & Routing Engine"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

@@ -1,0 +1,39 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Cross-Border Telehealth Platform
+
+Person(Patients_and_Clinicians, "Patients and Clinicians", "Client applications users who participate in video consultations, use the AI symptom checker, and manage e-prescriptions.")
+
+System_Ext(Global_Traffic_Director___API_Gateway, "Global Traffic Director / API Gateway", "Routes global client traffic to the appropriate regional stack.")
+System_Ext(AI_Symptom_Checker_Service, "AI Symptom Checker Service", "Provides automated symptom checking capabilities for patients.")
+System_Ext(Regional_Audit_and_Compliance_Logging_Subsystem, "Regional Audit and Compliance Logging Subsystem", "Handles regional audit and compliance logging to meet GDPR and HIPAA requirements.")
+System_Ext(External_Identity_and_Consent_Provider, "External Identity and Consent Provider", "Manages user identity and consent verification.")
+System_Ext(National_E_Prescription_Gateways_and_Pharmacy_Networks, "National E-Prescription Gateways and Pharmacy Networks", "External networks for processing e-prescriptions via national and HL7 FHIR standards.")
+System_Ext(External_Notification_and_Messaging_Service, "External Notification and Messaging Service", "Sends external notifications and messages to users.")
+System_Ext(External_Payment_Gateways_and_Billing_Systems, "External Payment Gateways and Billing Systems", "Processes financial transactions and billing.")
+
+System_Boundary(Cross_Border_Telehealth_Platform, "Cross-Border Telehealth Platform") {
+    Container(API_Gateway___Ingress_Controller_Containers, "API Gateway / Ingress Controller Containers", "Google Cloud Platform Ingress / Envoy", "Manages inbound traffic for regional deployments.")
+    Container(Consent_Enforcement_Middleware_Proxy_Containers, "Consent Enforcement Middleware/Proxy Containers", "Custom Middleware / Envoy Proxy", "Enforces explicit consent for data processing and routing.")
+    Container(Stateless_Core_Application_Containers, "Stateless Core Application Containers", "Containerized Microservices (GCP)", "Handles core business logic, routing traffic through consent middleware.")
+    Container(Video_Streaming_Gateway_Containers_with_Local_Storage_Caching_Agents, "Video Streaming Gateway Containers with Local Storage/Caching Agents", "WebRTC, TURN/STUN, Local Storage Agents", "Manages WebRTC video consultations with adaptive bitrate streaming and local caching for unstable rural connections.")
+    Container(AI_Inference___Audit_Proxy_Containers, "AI Inference & Audit Proxy Containers", "Python / gRPC", "Synchronously logs inputs, model versions, and outputs before returning urgency recommendations.")
+    Container(FHIR_Translation_Adapter_Container__US__and_National_E_Prescription_Adapter_Container__EU_, "FHIR Translation Adapter Container (US) and National E-Prescription Adapter Container (EU)", "REST / HL7 FHIR / National APIs", "Translates and adapts prescriptions for US (HL7 FHIR) and EU (national standards) external systems.")
+    Container(Local_Async_Event_Bus___Queue_Containers, "Local Async Event Bus / Queue Containers", "MQTT / Local Message Broker", "Buffers telemetry and events locally during network drops and syncs upon reconnection.")
+    Container(Configuration_and_Secrets_Management_Sidecars, "Configuration and Secrets Management Sidecars", "GCP Secret Manager Sidecar", "Manages configuration and secrets for regional containers.")
+    Container(Observability___Telemetry_Exporter_Sidecars_with_PII_PHI_Stripping, "Observability & Telemetry Exporter Sidecars with PII/PHI Stripping", "OpenTelemetry / Custom Exporter", "Collects telemetry and strips PII/PHI before exporting.")
+}
+
+Rel(Patients_and_Clinicians, API_Gateway___Ingress_Controller_Containers, "Connect to Regional API Gateways via HTTPS and WebRTC", "HTTPS and WebRTC (TURN/STUN)")
+Rel(Global_Traffic_Director___API_Gateway, API_Gateway___Ingress_Controller_Containers, "Routes regional traffic to regional stacks", "mTLS")
+Rel(Stateless_Core_Application_Containers, Consent_Enforcement_Middleware_Proxy_Containers, "Route traffic through consent enforcement", "gRPC/REST")
+Rel(Video_Streaming_Gateway_Containers_with_Local_Storage_Caching_Agents, Patients_and_Clinicians, "Utilizes adaptive bitrate streaming for unstable connections", "WebRTC")
+Rel(FHIR_Translation_Adapter_Container__US__and_National_E_Prescription_Adapter_Container__EU_, National_E_Prescription_Gateways_and_Pharmacy_Networks, "Connects US Core to external pharmacies via HL7 FHIR and EU Core via national standards", "HL7 FHIR (US) and national standards (EU)")
+Rel(AI_Inference___Audit_Proxy_Containers, AI_Symptom_Checker_Service, "Sends requests for AI inference and urgency recommendations", "gRPC/REST")
+Rel(Local_Async_Event_Bus___Queue_Containers, Regional_Audit_and_Compliance_Logging_Subsystem, "Syncs buffered telemetry to Regional Audit Subsystems upon reconnection", "MQTT / HTTPS")
+Rel(Stateless_Core_Application_Containers, External_Identity_and_Consent_Provider, "Integrate for identity and consent", "OpenID Connect (OIDC)")
+Rel(Stateless_Core_Application_Containers, External_Payment_Gateways_and_Billing_Systems, "Process payments and billing", "REST APIs over HTTPS")
+
+@enduml

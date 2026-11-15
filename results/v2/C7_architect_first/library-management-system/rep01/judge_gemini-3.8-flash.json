@@ -1,0 +1,240 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "R-01 is completely fulfilled via the Catalog Management Module in Core Domain Service, Catalog Schema in Database, and Search Service. Circulation workflows, fine processing, and patron self-service are explicitly implemented across Web Application (SPA), Core Domain Service, and External Payment Gateway.",
+   "performance_efficiency": "Target R-05 (<800ms search) is addressed via a dedicated Search Service using Elasticsearch, Async Worker for offloading background tasks, PgBouncer for connection pooling, and CDN / Edge Layer caching. Read replicas isolate heavy query loads from transactional operations.",
+   "compatibility": "Interoperability is supported through integration with Identity Provider (OIDC/MFA), External Payment Gateway, and National Library Database via Async Worker Sync Orchestrator Component. External standards like AMQP, OTLP, and gRPC over mTLS are consistently used.",
+   "usability": "Library Patrons & Staff access a tailored Web Application (SPA) featuring UI Component Library meeting WCAG 2.1 AA, responsive views via Router Component, and Offline Persistence & Queue Component for smooth client-side operation.",
+   "reliability": "High availability and recoverability are ensured by Database multi-AZ replication, circuit breakers on Repository Adapters, DLQ Handler Component in Async Worker, and Persistent Queueing Extension in Telemetry Sidecar to manage backpressure.",
+   "security": "EU data residency constraints are enforced across Cloudflare/CloudFront EU POPs, EU-hosted Elasticsearch, and multi-AZ Postgres. Includes TLS 1.3, mTLS internal routing, Coraza WAF, OIDC/MFA via Identity Provider, client encryption, and OTEL PII scrubbing.",
+   "maintainability": "Decomposition follows clear domain separation (Search Service, Core Domain Service, Async Worker). Internal components exhibit high cohesion and loose coupling through event-driven messaging (RabbitMQ), clean repository patterns, and standardized telemetry via Telemetry Sidecar.",
+   "portability": "Containers are well-isolated using standard runtimes (Node.js, React, Java, Python) and open protocols (gRPC, OTLP). Cloud-agnostic designs support portability within EU regions, though minor infrastructure bindings (Kong, Celery, specific DB technologies) exist."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 5.0,
+   "Modifiability": 2.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Search queries bypass the transactional database and route through Kong to a dedicated Java Search Service backed by an EU-hosted Elasticsearch cluster, natively supporting high-concurrency sub-800ms reads.",
+    "elements": [
+     "CDN / Edge Layer",
+     "API Gateway",
+     "Search Service",
+     "Search Engine Cluster",
+     "Elasticsearch Client Adapter"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster sizing and indexing strategy under peak query loads"
+    ],
+    "tradeoffs": [
+     "Maintaining a dedicated search cluster adds infrastructure cost and data duplication"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Writes are processed in PostgreSQL while Elasticsearch index updates occur asynchronously via Debezium CDC and Kafka event streaming, keeping search latency low and propagating changes well within 5 minutes.",
+    "elements": [
+     "Core Domain Service",
+     "Database Primary",
+     "Index Synchronization Consumer",
+     "Search Engine Cluster"
+    ],
+    "sensitivity_points": [
+     "Change data capture lag between PostgreSQL and Elasticsearch during heavy writes"
+    ],
+    "tradeoffs": [
+     "Eventual consistency between primary transactional database and search engine indices"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The search engine operates as a cluster resilient to single-node failures. Loan transactions are isolated in the Core Domain Service and PostgreSQL, remaining entirely unaffected by search cluster disruptions.",
+    "elements": [
+     "Search Service",
+     "Search Engine Cluster",
+     "Core Domain Service",
+     "Database Primary"
+    ],
+    "sensitivity_points": [
+     "Cluster shard replica count to sustain node dropouts without downtime"
+    ],
+    "tradeoffs": [
+     "Higher storage overhead for redundant Elasticsearch shard replicas"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The frontend SPA is statically distributed across CDN edge nodes, while the Kong API Gateway balances backend requests across service instances. Transactions are safely committed to PostgreSQL.",
+    "elements": [
+     "CDN / Edge Layer",
+     "Web Application (SPA)",
+     "API Gateway",
+     "Core Domain Service",
+     "Database Primary"
+    ],
+    "sensitivity_points": [
+     "Gateway health-check intervals for rapid upstream instance failover"
+    ],
+    "tradeoffs": [
+     "Stateless client architecture requires frequent token validation on backends"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Background synchronization currently couples specifically to the National Library Database inside the Async Worker. Integrating a new e-book provider lacks an explicit provider abstraction layer, requiring code modifications.",
+    "elements": [
+     "Async Worker",
+     "Sync Orchestrator Component",
+     "Catalog Management Module"
+    ],
+    "sensitivity_points": [
+     "Coupling between external provider schemas and the internal catalog module"
+    ],
+    "tradeoffs": [
+     "Creating generic integration abstractions increases initial development complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The Catalog Management and Circulation modules implement availability and business rules in application code. There is no externalized configuration service or dynamic rules engine to modify loan policies at runtime.",
+    "elements": [
+     "Core Domain Service",
+     "Circulation Controller",
+     "Catalog Management Module"
+    ],
+    "sensitivity_points": [
+     "Hardcoded circulation and loan policy logic in NestJS application services"
+    ],
+    "tradeoffs": [
+     "Embedding business logic in code simplifies development but limits runtime reconfiguration"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Strict EU data residency is enforced by design across all components: EU-only CDN POPs, EU Identity Provider and Payment Gateways, EU-hosted PostgreSQL multi-AZ, and OTEL PII sanitization pipelines.",
+    "elements": [
+     "CDN / Edge Layer",
+     "Identity Provider",
+     "Database Primary",
+     "Search Engine Cluster",
+     "Telemetry Sidecar / OTEL Collector"
+    ],
+    "sensitivity_points": [
+     "Enforcing strict regional configuration constraints across third-party SaaS dependencies"
+    ],
+    "tradeoffs": [
+     "Restricting cloud deployment locations limits vendor choice and disaster recovery regions"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Unauthorized patron loan access is prevented by API Gateway JWT validation, controller RBAC, and repository Row-Level Security (RLS). Access attempts and security anomalies are captured in audit schemas and telemetry.",
+    "elements": [
+     "API Gateway",
+     "Circulation Controller",
+     "Repository Adapters",
+     "Audit & Logging Schema",
+     "Telemetry Sidecar / OTEL Collector"
+    ],
+    "sensitivity_points": [
+     "Correct implementation of PostgreSQL Row-Level Security policies"
+    ],
+    "tradeoffs": [
+     "Multi-layered authorization checks introduce minor latency overhead per request"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "CDN / Edge Layer",
+     "Identity Provider",
+     "External Payment Gateway",
+     "National Library Database",
+     "Database",
+     "Database Primary",
+     "Search Engine Cluster"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Core Domain Service",
+     "Catalog Management Module",
+     "Database",
+     "Catalog Schema"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Service",
+     "Search REST/gRPC Controller",
+     "Query Builder Component",
+     "Elasticsearch Client Adapter",
+     "Search Engine Cluster"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

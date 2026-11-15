@@ -1,0 +1,41 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patients, "Patients", "End-users accessing the Web/Mobile Portal for registration and appointments.")
+Person(Medical Staff, "Medical Staff", "Doctors, nurses, and receptionists managing EMRs, scheduling, and billing.")
+
+System_Ext(External IdP, "External IdP", "Azure AD / Okta handling Multi-Factor Authentication.")
+System_Ext(Payment Gateway, "Payment Gateway", "External service processing patient billing and credit cards.")
+System_Ext(Lab & Imaging Systems, "Lab & Imaging Systems", "Third-party medical systems communicating via HL7 FHIR APIs.")
+System_Ext(Notification Service, "Notification Service", "Twilio/SendGrid gateway for SMS/Email reminders.")
+
+System_Boundary(clinic_management_system, "Clinic Management System") {
+    Container(API Gateway / BFF, "API Gateway / BFF", "Kong / Node.js", "API Gateway for ingress, rate limiting, and routing.")
+    Container(Patient & Scheduling Service, "Patient & Scheduling Service", "Spring Boot / Java", "Core backend service for patient scheduling and business logic.")
+    Container(EMR Service, "EMR Service", "Spring Boot / Java", "Electronic Medical Records service ensuring robust clinical data management.")
+    Container(Billing & Claims Service, "Billing & Claims Service", ".NET Core", "Handles billing, claims, and payment processing integrations.")
+    Container(Interoperability Service, "Interoperability Service", "Apache Camel / Python", "Interoperability service for data translation and pushing HL7 FHIR payloads.")
+    Container(Apache Kafka, "Apache Kafka", "Apache Kafka", "Event bus for asynchronous, decoupled inter-service communication.")
+    ContainerDb(PostgreSQL, "PostgreSQL", "PostgreSQL", "Primary data store with AES-256 encryption at rest for PHI.")
+    ContainerDb(Redis, "Redis", "Redis", "Caching layer for scheduling and session management.")
+}
+
+Rel(Patients, API Gateway / BFF, "Accesses portal and scheduling features", "HTTPS/JSON with MFA")
+Rel(Medical Staff, API Gateway / BFF, "Accesses EMR, scheduling, and billing workflows", "HTTPS/JSON with MFA")
+Rel(API Gateway / BFF, Patient & Scheduling Service, "Routes requests internally", "gRPC")
+Rel(API Gateway / BFF, EMR Service, "Routes requests internally", "gRPC")
+Rel(API Gateway / BFF, Billing & Claims Service, "Routes requests internally", "gRPC")
+Rel(EMR Service, Apache Kafka, "Publishes domain events", "TLS")
+Rel(Billing & Claims Service, Apache Kafka, "Publishes domain events", "TLS")
+Rel(Interoperability Service, Apache Kafka, "Consumes Kafka events", "Kafka Consumer")
+Rel(Interoperability Service, Lab & Imaging Systems, "Pushes HL7 FHIR payloads", "HTTPS/REST")
+Rel(Billing & Claims Service, Payment Gateway, "Communicates for payment processing", "HTTPS")
+Rel(Patient & Scheduling Service, PostgreSQL, "Reads and writes patient data", "JDBC/SQL")
+Rel(EMR Service, PostgreSQL, "Reads and writes EMR data", "JDBC/SQL")
+Rel(Billing & Claims Service, PostgreSQL, "Reads and writes billing data", "JDBC/SQL")
+Rel(Patient & Scheduling Service, Redis, "Caches scheduling and session data", "Redis Protocol")
+
+@enduml

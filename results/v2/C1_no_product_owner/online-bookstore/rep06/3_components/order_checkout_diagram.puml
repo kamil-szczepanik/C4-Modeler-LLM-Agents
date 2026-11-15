@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Order & Checkout container
+
+Container_Boundary(order_checkout, "Order & Checkout") {
+    Component(Cart_Manager, "Cart Manager", "Spring Boot", "Manages ephemeral shopping cart and session state.")
+    Component(Checkout_Orchestrator, "Checkout Orchestrator", "Spring Boot", "Coordinates payment and fulfillment workflows.")
+    Component(Order_Processor, "Order Processor", "Spring Boot", "Handles persistent order state and domain events.")
+    ComponentDb(Amazon_DynamoDB, "Amazon DynamoDB", "AWS DynamoDB", "Stores cart and session data.")
+    ComponentDb(Amazon_Aurora_PostgreSQL, "Amazon Aurora PostgreSQL", "Amazon Aurora PostgreSQL / AWS RDS Proxy", "Stores transactional order data via AWS RDS Proxy.")
+}
+
+Component_Ext(Payment_Gateway_Shipping_Provider_APIs, "Payment Gateway & Shipping Provider APIs", "HTTPS/REST", "External financial and logistics systems.")
+Component(API_Gateway_ALB, "API Gateway / ALB", "AWS Cloud Map", "Handles ingress requests via HTTPS.")
+Component(Message_Bus, "Message Bus", "AWS SQS/SNS", "Publishes asynchronous events.")
+
+Rel(API_Gateway_ALB, Checkout_Orchestrator, "Ingress requests via HTTPS / AWS Cloud Map", "HTTPS")
+Rel(API_Gateway_ALB, Cart_Manager, "Ingress requests via HTTPS / AWS Cloud Map", "HTTPS")
+Rel(Checkout_Orchestrator, Cart_Manager, "Cart item retrieval", "gRPC (Protobuf over HTTP/2) with mTLS")
+Rel(Checkout_Orchestrator, Payment_Gateway_Shipping_Provider_APIs, "Processes payments and fulfillment", "HTTPS/REST")
+Rel(Order_Processor, Amazon_Aurora_PostgreSQL, "Persists order data", "TLS-encrypted JDBC / AWS RDS Proxy")
+Rel(Cart_Manager, Amazon_DynamoDB, "Reads/writes cart state", "AWS SDK (TLS)")
+Rel(Order_Processor, Message_Bus, "Publishes asynchronous events", "AWS SQS/SNS")
+
+@enduml

@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalysts, "Fraud Analysts", "Users reviewing suspicious transactions and updating rules.")
+
+System_Ext(PaymentGateway, "Payment Gateway / Acquirer Systems", "External system initiating payment authorization requests.")
+System_Ext(CardNetworks, "Card Networks / Tokenization Vaults", "External system providing token resolution and cardholder data.")
+System_Ext(AuditArchive, "Audit / Compliance Archive", "External WORM storage retaining immutable decision logs for 7 years.")
+System_Ext(IdP, "Identity Provider (IdP)", "External system managing analyst credentials and multi-factor authentication.")
+
+System_Boundary(FraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(ALB, "Amazon API / Application Load Balancer (ALB)", "AWS API Gateway / ALB", "Entry point for incoming traffic, routing requests to internal microservices.")
+    Container(FraudScoringEngine, "Fraud Scoring Engine", "Go or Rust, ECS Fargate", "Evaluates card-not-present payment authorizations in real-time.")
+    Container(CaseManagementService, "Case Management Service", "Node.js/Python, ECS Fargate", "Manages fraud cases and analyst reviews.")
+    Container(ElastiCache, "Amazon ElastiCache Serverless", "Redis", "In-memory model and rule caching sidecar.")
+    ContainerDb(Databases, "Amazon DynamoDB and Amazon Aurora Serverless v2", "DynamoDB, Aurora Serverless v2", "Managed data stores for operational persistence.")
+    ContainerDb(AuditStorage, "Amazon QLDB / S3 Object Lock buckets", "Amazon QLDB, S3", "Immutable, tamper-evident audit storage.")
+    Container(KMS, "AWS KMS (Key Management Service)", "AWS KMS", "Provides customer-managed encryption keys for data security.")
+}
+
+Rel(PaymentGateway, ALB, "Submits payment authorization requests", "HTTPS (REST/JSON)")
+Rel(ALB, FraudScoringEngine, "Routes scoring requests", "gRPC over mTLS")
+Rel(ALB, CaseManagementService, "Routes case management requests", "gRPC over mTLS")
+Rel(FraudScoringEngine, ElastiCache, "Retrieves models and rules from cache", "Redis protocol over mTLS")
+Rel(CaseManagementService, Databases, "Persists case data", "TLS")
+Rel(FraudScoringEngine, Databases, "Accesses operational data", "AWS SDK over TLS")
+Rel(FraudScoringEngine, AuditStorage, "Writes audit logs", "AWS SDK over TLS")
+Rel(CaseManagementService, AuditStorage, "Writes audit logs", "AWS SDK over TLS")
+Rel(FraudAnalysts, ALB, "Reviews cases and updates rules", "HTTPS")
+Rel(FraudAnalysts, IdP, "Authenticates using OIDC/SAML", "HTTPS using AWS IAM Identity Center")
+
+@enduml

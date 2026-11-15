@@ -1,0 +1,301 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 3.75,
+  "justifications": {
+   "functional_suitability": "Core elements like Real-Time Scoring Engine and Case Management Service are present, but vital interactions are missing: no relationship connects the Scoring Engine to Case Management for review cases, nor connects Model Management Service to the Scoring Engine for zero-downtime updates.",
+   "performance_efficiency": "Local IPC and Redis queues support low latency, but synchronously invoking Tokenization Proxy (backed by AWS KMS/CloudHSM) on the critical authorization path creates significant latency and throughput bottlenecks under 3,000 req/s with a sub-50ms P99 target.",
+   "compatibility": "The Scoring Gateway Controller natively supports standard REST API over TLS 1.3 for Payment Gateways, and the Authentication & RBAC Manager integrates standard OIDC/OAuth2 protocols for analyst identity.",
+   "usability": "The Case Management Service provides a dedicated Web Interface with Cognito RBAC for Fraud Analysts and Risk Managers, alongside explainability views in Model Management Service, satisfying primary user interaction needs.",
+   "reliability": "Although the Audit Sidecar includes a local buffer, there is no explicit fail-open or bypass mechanism specified in the Scoring Gateway Controller to guarantee payments are unblocked within 1 minute if scoring components fail.",
+   "security": "Security is addressed thoroughly: Tokenization Proxy with CloudHSM/KMS isolates PANs, gRPC uses mTLS, Cognito manages RBAC, and Audit & Cryptographic Signer Sidecar writes signed logs to Amazon S3 WORM buckets for 7-year tamper resistance.",
+   "maintainability": "Responsibilities are modularly divided into dedicated containers (Scoring, Tokenization, Case Management, Auditing). However, missing integration channels between Model Promotion Controller and the Scoring Engine leave runtime update maintenance underspecified.",
+   "portability": "The design matches the specified AWS target environment using ECS Fargate containers, although heavy reliance on proprietary AWS services (Cognito, CloudHSM, KMS, X-Ray) limits portability across alternative cloud providers."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 3.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "While local IPC to the sidecar avoids network hops, synchronous tokenization via Tokenization Proxy calling CloudHSM and KMS per authorization risks exceeding the 50 ms P99 threshold at 3,000 RPS.",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Scoring Gateway Controller",
+     "Fraud Evaluation Processor",
+     "Tokenization Client",
+     "Tokenization Proxy",
+     "Cryptographic Manager"
+    ],
+    "sensitivity_points": [
+     "Synchronous cryptographic calls to CloudHSM and KMS on the critical path."
+    ],
+    "tradeoffs": [
+     "Strong format-preserving tokenization security traded against transaction scoring latency."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management runs as a distinct ECS service using Amazon Redis for queue state and S3 for storage, completely isolated from real-time scoring runtime resources.",
+    "elements": [
+     "Case Management Service",
+     "Web Interface",
+     "Queue Manager",
+     "Real-Time Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Strict process and network separation between scoring workload and case management queries."
+    ],
+    "tradeoffs": [
+     "Deploying independent services increases operational complexity for a small three-engineer team."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture lacks an explicit gateway fallback or circuit-breaking mechanism to automatically bypass or default-decision payments and record audits when the Real-Time Scoring Engine container crashes.",
+    "elements": [
+     "Payment Gateway / Shoppers",
+     "Real-Time Scoring Engine",
+     "Scoring Gateway Controller"
+    ],
+    "sensitivity_points": [
+     "Absence of edge-level circuit breaker or standalone fail-open fallback path."
+    ],
+    "tradeoffs": [
+     "Centralizing scoring logic in one engine avoids dual maintenance but creates single-point-of-failure risks."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Audit Sidecar buffers log batches to local encrypted tmpfs and EBS storage via asynchronous IPC, shielding scoring latency from downstream S3 or KMS delays.",
+    "elements": [
+     "Audit Dispatcher",
+     "Audit & Cryptographic Signer Sidecar",
+     "Audit Sidecar",
+     "Amazon S3 WORM Bucket"
+    ],
+    "sensitivity_points": [
+     "Local buffer capacity during prolonged S3 WORM or KMS outages."
+    ],
+    "tradeoffs": [
+     "Local asynchronous buffering ensures sub-50ms latency but introduces transient durability exposure before flush."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Model Promotion Controller supports promotion and rollback via version manifests in S3, and memory-cached models enable zero downtime, though hot-reloading mechanism details are implicit.",
+    "elements": [
+     "Model Management Service",
+     "Model Promotion Controller",
+     "Real-Time Scoring Engine",
+     "AWS S3"
+    ],
+    "sensitivity_points": [
+     "Synchronization latency when propagating updated model manifests to active scoring instances."
+    ],
+    "tradeoffs": [
+     "In-memory model caching maximizes evaluation throughput at the expense of runtime cache invalidation."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "The model service supports versioning, but the architecture omits a distributed state store for real-time velocity calculations across distributed scoring instances.",
+    "elements": [
+     "Model Management Service",
+     "Fraud Evaluation Processor",
+     "Real-Time Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Lack of shared low-latency state store for multi-instance velocity counter tracking."
+    ],
+    "tradeoffs": [
+     "Stateless scoring nodes maximize raw compute speed but constrain complex velocity rule evaluation."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Card numbers are tokenized and analysts access cases via Cognito RBAC, preventing PAN visibility, but anomalous analyst access detection and 15-minute alerting mechanisms are missing.",
+    "elements": [
+     "Tokenization Proxy",
+     "Case Management Service",
+     "Authentication & RBAC Manager",
+     "Observability Agent"
+    ],
+    "sensitivity_points": [
+     "Absence of dedicated user behavior analytics or automated security alerting pipelines."
+    ],
+    "tradeoffs": [
+     "Relying on standard IAM and Cognito simplifies maintenance but limits automated intrusion response."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Audit logs and model manifests are stored in S3 WORM with Glacier Instant Retrieval for 7 years, while Explainability Previewer can reproduce historic decisions.",
+    "elements": [
+     "Audit Trail Storage Manager",
+     "Audit & Cryptographic Signer Sidecar",
+     "Amazon S3 WORM Bucket",
+     "Explainability Previewer"
+    ],
+    "sensitivity_points": [
+     "Long-term immutability and retrievability of S3 Object Lock storage."
+    ],
+    "tradeoffs": [
+     "Glacier Instant Retrieval maintains fast query response times under tight long-term storage budgets."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "none"
+  },
+  "coverage": 0.5909090909090909,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Tokenization Proxy",
+     "Cryptographic Manager",
+     "Authentication & RBAC Manager"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Audit & Cryptographic Signer Sidecar",
+     "Audit Sidecar",
+     "Audit Trail Storage Manager",
+     "Explainability Previewer"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Scoring Gateway Controller",
+     "Fraud Evaluation Processor"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Service",
+     "Web Interface",
+     "Queue Manager",
+     "Authentication & RBAC Manager"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Model Management Service",
+     "Model Promotion Controller",
+     "Real-Time Scoring Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Fraud Evaluation Processor",
+     "Tokenization Service"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Tokenization Proxy",
+     "Tokenization Client",
+     "Cryptographic Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Dispatcher",
+     "Audit & Cryptographic Signer Sidecar",
+     "Audit Sidecar"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

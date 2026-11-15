@@ -1,0 +1,310 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 5,
+   "security": 4,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "Web Application (SPA) serves online claim submission (R-01) and adjusters (R-02). Incremental claim type migration (R-03) is explicitly supported via the Feature Flag / Routing Service, Claim Management Core bounded contexts, and the Anti-Corruption Layer.",
+   "performance_efficiency": "Target R-05 (<2 s screens vs. 5 s mainframe latency) is directly solved using Cache / Read Model Store, In-Memory Cache Layer, Data Synchronization / ETL Service, and asynchronous Azure Service Bus decoupled messaging.",
+   "compatibility": "Coexists effectively with On-Premise COBOL/DB2 Mainframe via Anti-Corruption Layer, Mainframe Adapter, and On-Premise Active Directory. However, explicit mechanisms to guarantee respecting the tight 23:00-05:00 nightly batch window constraints are lightly specified.",
+   "usability": "UI Presentation Layer provides responsive web interfaces for both Customers/Brokers and Claims Adjusters with optimistic UI updates. However, distinct user journeys or specialized operational tools for adjusters versus external brokers are not distinctly separated.",
+   "reliability": "Consistency (R-04) and fault tolerance are robustly handled via Outbox Table & Dispatcher, Azure Service Bus DLQs, Polly Circuit Breakers, and deterministic fallback-to-safe-default routing to the legacy mainframe.",
+   "security": "Addresses R-07 via Authentication Client connecting to On-Premise Active Directory for SSO, with Security & Middleware Handler enforcing PII masking and audit correlation. External customer/broker authentication mechanics against AD remain slightly ambiguous.",
+   "maintainability": "R-06 (switching back within one day) is thoroughly addressed by the Feature Flag / Routing Service, Circuit Breaker Manager, and Cache Invalidation Publisher. Clean architecture, ACL, and Modular Domain Packages keep coupling low.",
+   "portability": "Appropriately targets Azure and on-premise hybrid environments using containerized Azure App Services, standard REST, AMQP, and Azure Service Bus. Azure managed-service dependencies create mild cloud vendor lock-in."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The Read Model Database Engine and In-Memory Cache Store decouple screen reads from mainframe latency. Adjuster screens query pre-synchronized read models directly, satisfying the sub-2-second target regardless of mainframe delays.",
+    "elements": [
+     "Cache / Read Model Store",
+     "Backend-for-Frontend (BFF)",
+     "Data Synchronization / ETL Service",
+     "Web Application (SPA)"
+    ],
+    "sensitivity_points": [
+     "Data synchronization replication lag directly impacts read model freshness"
+    ],
+    "tradeoffs": [
+     "Fast read responses traded against eventual consistency of mainframe state"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Submissions are buffered asynchronously using Azure Service Bus and the Outbox pattern. While peak load is isolated from the mainframe, explicit rate-limiting or batch-window scheduling controls are not fully detailed.",
+    "elements": [
+     "Claim Management Core",
+     "Message Broker (Azure Service Bus)",
+     "Anti-Corruption Layer (ACL)",
+     "Outbox Table & Dispatcher"
+    ],
+    "sensitivity_points": [
+     "Message queue buffering capacity during peak submission volumes"
+    ],
+    "tradeoffs": [
+     "Decoupled submission ingestion traded against delayed propagation to legacy core"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Outbox Table & Dispatcher and Azure Service Bus buffer incoming submissions while the mainframe is offline. Circuit breakers prevent cascading timeouts, ensuring submissions are preserved and dispatched when the window closes.",
+    "elements": [
+     "Claim Management Core",
+     "Message Broker (Azure Service Bus)",
+     "Outbox Table & Dispatcher",
+     "Circuit Breaker Manager"
+    ],
+    "sensitivity_points": [
+     "Outbox table storage capacity and queue durability during extended offline windows"
+    ],
+    "tradeoffs": [
+     "Continuous online availability traded against deferred legacy backend processing"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Outbox Pattern Handler, Resilient Message Handler, and Dead-Letter Queue Manager prevent message loss during transient network failures. However, automated dual-system reconciliation and deduplication logic for half-processed transactions are insufficiently specified.",
+    "elements": [
+     "Message Broker (Azure Service Bus)",
+     "Data Synchronization / ETL Service",
+     "Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Idempotency handling across legacy DB2 and modern cloud databases"
+    ],
+    "tradeoffs": [
+     "Reliable message delivery with DLQs traded against manual intervention for complex reconcile failures"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Feature Flag / Routing Service with Consistent Hashing and Cache Invalidation allows rapid rollouts and sub-day switchbacks. Modular Domain Packages isolate new claim logic, while the ACL minimizes mainframe interface changes.",
+    "elements": [
+     "Feature Flag / Routing Service",
+     "Anti-Corruption Layer (ACL)",
+     "Claim Management Core"
+    ],
+    "sensitivity_points": [
+     "Centralized feature flag rule propagation across hybrid routing components"
+    ],
+    "tradeoffs": [
+     "Dynamic routing flexibility traded against increased routing evaluation overhead"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The UI and BFF depend strictly on modern domain APIs rather than legacy contracts. When the mainframe is retired, only the ACL and synchronization layers are decommissioned, leaving the frontend and core intact.",
+    "elements": [
+     "Web Application (SPA)",
+     "Backend-for-Frontend (BFF)",
+     "Claim Management Core",
+     "Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Strict adherence to domain encapsulation behind the BFF boundary"
+    ],
+    "tradeoffs": [
+     "Higher initial architectural indirection traded against zero frontend rewrite on retirement"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The architecture includes Active Directory SSO and Security Middleware Handler, but resource-level multi-tenant authorization rules (isolating broker portfolios) are not explicitly detailed, relying mostly on generic middleware.",
+    "elements": [
+     "Web Application (SPA)",
+     "Backend-for-Frontend (BFF)",
+     "On-Premise Active Directory",
+     "Security & Middleware Handler"
+    ],
+    "sensitivity_points": [
+     "Granular broker claim tenancy enforcement in BFF middleware"
+    ],
+    "tradeoffs": [
+     "Centralized middleware security checks traded against custom domain authorization logic"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Active Directory SSO centralization ensures revoked credentials immediately block new logins. However, token lifetime enforcement and distributed session invalidation across active SPA sessions within 15 minutes are not detailed.",
+    "elements": [
+     "On-Premise Active Directory",
+     "Web Application (SPA)",
+     "Authentication Client",
+     "Backend-for-Frontend (BFF)"
+    ],
+    "sensitivity_points": [
+     "JWT and SSO token expiration limits across hybrid boundaries"
+    ],
+    "tradeoffs": [
+     "Stateless token performance traded against delay in propagating immediate session revocations"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "On-Premise COBOL/DB2 Mainframe (System of Record)",
+     "Anti-Corruption Layer (ACL)",
+     "Data Synchronization / ETL Service"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Data Synchronization / ETL Service",
+     "Mainframe Extraction Adapter",
+     "Configuration Manager"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Anti-Corruption Layer (ACL)",
+     "Domain Translator",
+     "Mainframe Adapter"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers and Brokers",
+     "Web Application (SPA)",
+     "UI Presentation Layer",
+     "Backend-for-Frontend (BFF)"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Web Application (SPA)",
+     "UI Presentation Layer",
+     "Backend-for-Frontend (BFF)"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Feature Flag / Routing Service",
+     "Routing Controller",
+     "Modular Domain Packages"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Outbox Table & Dispatcher",
+     "Outbox Pattern Handler",
+     "Message Broker (Azure Service Bus)",
+     "Dead-Letter Queue Manager"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Cache / Read Model Store",
+     "Read Model Database Engine",
+     "In-Memory Cache Layer",
+     "Resilience & Caching Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Feature Flag / Routing Service",
+     "Routing Controller",
+     "Circuit Breaker Manager",
+     "Cache Invalidation Publisher"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "On-Premise Active Directory",
+     "Authentication Client",
+     "Web Application (SPA)"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Integration & Anti-Corruption Layer container
+
+System_Ext(api_gateway_bff, "API Gateway & BFF", "API Gateway / BFF", "Entry point for client requests interacting with the migration platform.")
+System_Ext(legacy_mainframe, "Legacy Mainframe", "On-premise COBOL/DB2 system of record", "The underlying legacy system of record for claims.")
+
+Container_Boundary(integration_anti_corruption_layer, "Integration & Anti-Corruption Layer") {
+    Component(claim_translation_component, "Claim Translation Component", ".NET 8 Azure Function", "Translates modern claim payloads and coordinates routing via the routing registry.")
+    Component(mainframe_adapter, "Mainframe Adapter", ".NET 8 Azure Function with Polly", "Adapts messages for the legacy mainframe, handling latency and faults using Polly retry policies and circuit-breakers.")
+    Component(sync_reconciliation_router, "Sync & Reconciliation Router", "Azure Service Bus & Event Grid", "Manages asynchronous messaging, event routing, and dead-letter queues to guarantee consistency.")
+    Component(routing_registry_component, "Routing Registry Component", "Azure App Configuration", "Provides dynamic feature flags for one-day claim-type rollbacks.")
+}
+
+Rel(api_gateway_bff, claim_translation_component, "mTLS and HTTPS/JSON")
+Rel(claim_translation_component, sync_reconciliation_router, "AMQP")
+Rel(sync_reconciliation_router, mainframe_adapter, "AMQP")
+Rel(mainframe_adapter, legacy_mainframe, "HTTPS over Secure VPN/ExpressRoute")
+Rel(claim_translation_component, routing_registry_component, "REST/HTTPS")
+
+@enduml

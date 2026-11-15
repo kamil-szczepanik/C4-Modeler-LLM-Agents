@@ -1,0 +1,327 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 2
+  },
+  "mean": 3.125,
+  "justifications": {
+   "functional_suitability": "Real-Time Scoring Service and Scoring Engine Component cover R-01; Case Management Backend with Workflow Engine covers R-02; Model Event Bus hot-reload plus signed artifacts partially covers R-03. Gaps: no rules engine or rule-update component, and the decline/approve/review decision path is not explicit.",
+   "performance_efficiency": "Feature Store Cache Component, in-memory ONNX Scoring Engine, DynamoDB Feature Store and asynchronous Audit Event Publisher/SQS support 50 ms. Gaps: synchronous DynamoDB audit write and vault token resolution in the hot path, API Gateway plus ALB plus proxy hops, and no autoscaling or capacity plan for 3,000 TPS.",
+   "compatibility": "Defined protocols per integration: gRPC from Payment Gateway / Acquirer, mTLS to Card Networks & Tokenization Vault, REST to Core-Banking / Ledger System, signed artifacts from Model Training Environment. Gaps: inconsistent HTTPS vs gRPC ingress, no ISO 8583/acquirer standard adapters, and unclear disposition flow.",
+   "usability": "Fraud Analyst is served by Analyst Portal API Controller over HTTPS with MFA/RBAC and masked data via Tokenization & Masking Service Client. Gaps: no analyst UI container or explanation display, and the Payment Gateway integration is machine-only with no operator tooling.",
+   "reliability": "Circuit Breaker / Fallback Component, SQS FIFO with DLQ, SNS decoupling, managed DynamoDB/RDS and Resilience4j address R-07. Gaps: fallback policy is unspecified, there is no multi-AZ or recovery design, a single region, and synchronous audit writes can fail the scoring path.",
+   "security": "AWS WAF, mTLS, Go Routing & Tokenization Proxy scrubbing PANs, KMS CMK encryption, TLS 1.3, MFA/RBAC, masked analyst views, S3 Object Lock archive and signed model artifacts address R-05/R-06. Gaps: no explicit PCI segmentation, hash-chain detail, or IAM/secrets design.",
+   "maintainability": "Clear container and component decomposition: Scoring Service split into handler, token client, cache, engine, dispatcher and circuit breaker; messaging decoupling; managed AWS services suit three engineers. Gaps: mixed Go and Java stacks, multiple data technologies, and ambiguous Redis versus embedded cache.",
+   "portability": "Containerized Go and Java services on ECS and standard PostgreSQL help somewhat, but the design is deeply tied to AWS-specific services such as DynamoDB, SQS, EventBridge, Lambda, Signer and Glacier, with no abstraction layers. Single-region eu-west-1 matches the brief, but replaceability is limited."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 3,
+   "MOD-02": 1,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.4375,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 2.5,
+   "Modifiability": 2.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Real-Time Scoring Service",
+     "Scoring Engine Component",
+     "Feature Store Cache Component",
+     "API Gateway & Routing Layer",
+     "Token Resolution Client Component"
+    ],
+    "sensitivity_points": [
+     "Synchronous token resolution to external vault in the hot path",
+     "Two hops (gateway, Go proxy) before scoring",
+     "Audit write to DynamoDB, if synchronous"
+    ],
+    "tradeoffs": [
+     "In-memory ONNX scoring is fast but limits model complexity",
+     "API Gateway plus proxy adds latency versus security filtering"
+    ],
+    "justification": "In-memory scoring and feature cache suit 50 ms. But the external vault call, API Gateway+ALB+proxy hops and the synchronous audit write are unquantified latency risks; no capacity sizing for 3,000 TPS is shown."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "elements": [
+     "Case Management Backend",
+     "Case Management Database",
+     "Real-Time Scoring Service",
+     "Messaging & Eventing"
+    ],
+    "sensitivity_points": [
+     "Shared RDS load only from case workflow",
+     "Masked-data fetch from external vault per case screen"
+    ],
+    "tradeoffs": [
+     "Separate Fargate backend and RDS isolate analysts from scoring but add cost"
+    ],
+    "justification": "Case management runs in separate containers with its own PostgreSQL, decoupled via SQS, so analyst load barely touches scoring. Case screen 2 s depends on vault calls, with no caching shown."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "elements": [
+     "Circuit Breaker / Fallback Component",
+     "Real-Time Scoring Service",
+     "API Gateway & Routing Layer",
+     "Audit & Event Dispatcher Component"
+    ],
+    "sensitivity_points": [
+     "Fallback component is inside the crashing service",
+     "No defined fallback decision logic or rules",
+     "No multi-AZ or autoscaling stated"
+    ],
+    "tradeoffs": [
+     "Fail-open keeps payments flowing but raises fraud risk"
+    ],
+    "justification": "The fallback sits inside the scoring service, so a crash takes it down too. There is no external fail-open path at the gateway, no health-check failover, and no audited fallback decision mechanism. Significant changes needed."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Audit & Decision Log Store",
+     "Audit Event Publisher",
+     "Audit SNS Topic",
+     "Audit & Event Dispatcher Component",
+     "Circuit Breaker / Fallback Component"
+    ],
+    "sensitivity_points": [
+     "Direct synchronous DynamoDB write in decision path",
+     "No local buffer or durable spill when store is down"
+    ],
+    "tradeoffs": [
+     "Synchronous audit gives durability but couples latency to the store"
+    ],
+    "justification": "An SNS async publisher exists, and DynamoDB is highly available, but the scoring service writes directly to DynamoDB. No buffering or retry guarantees no loss, and decoupling of latency from the store is not explicit."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Model Event Bus",
+     "Scoring Engine Component",
+     "Model Training Environment",
+     "Real-Time Scoring Service"
+    ],
+    "sensitivity_points": [
+     "Hot-reload signal via EventBridge",
+     "No model registry or version store",
+     "No explicit model version in decision record"
+    ],
+    "tradeoffs": [
+     "In-process hot reload avoids downtime but lacks canary isolation"
+    ],
+    "justification": "EventBridge hot-reload and signed artifacts enable zero-downtime swap. But there is no model registry, rollback mechanism, canary, or stated recording of model version in decisions, leaving rollback within 5 minutes and referencing unaddressed."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 1,
+    "elements": [
+     "Scoring Engine Component",
+     "Real-Time Scoring Service",
+     "Case Management Backend"
+    ],
+    "sensitivity_points": [
+     "No rules engine or rule store exists",
+     "Analysts have no rule authoring interface"
+    ],
+    "tradeoffs": [
+     "Rules embedded in model code would require redeployment"
+    ],
+    "justification": "The architecture has no rule engine, rule repository, analyst rule-authoring UI, or recording of applied rules and explanations. Only ML model artifacts are handled. Meeting this needs a new component."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "Go Routing & Tokenization Proxy",
+     "Tokenization & Masking Service Client",
+     "Case Management Backend",
+     "Fraud Analyst",
+     "Card Networks & Tokenization Vault"
+    ],
+    "sensitivity_points": [
+     "Tokenized data only reaches the backend",
+     "MFA/RBAC present but no anomaly detection",
+     "Masking client talks to the vault"
+    ],
+    "tradeoffs": [
+     "Tokenization protects PANs but adds vault dependency and latency"
+    ],
+    "justification": "Tokenization at the edge and masking mean analysts see no PANs, and MFA/RBAC exist. However, no monitoring, such as CloudTrail/GuardDuty, or alerting within 15 minutes is defined. The masking client talking to the vault is ambiguous."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Audit & Decision Log Store",
+     "Long-Term Audit Archive",
+     "Audit Archival Worker",
+     "Scoring Engine Component"
+    ],
+    "sensitivity_points": [
+     "Explanation content not explicitly stored",
+     "Glacier retrieval time and no query index",
+     "DynamoDB tamper-evidence is not hash chained"
+    ],
+    "tradeoffs": [
+     "Glacier is cheap for 7 years but slows retrieval"
+    ],
+    "justification": "S3 Object Lock and Glacier archive give 7-year tamper-resistant retention, and retrieval fits one working day. But the explanation, inputs and model version are not explicitly in the record, no explainability component exists, and there is no lookup index."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial"
+  },
+  "coverage": 0.5909090909090909,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "AWS ALB & AWS WAF",
+     "Go Routing & Tokenization Proxy",
+     "Card Networks & Tokenization Vault",
+     "Data & Audit Stores"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Audit & Decision Log Store",
+     "Long-Term Audit Archive",
+     "Audit Archival Worker"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Audit Archival Worker",
+     "Case Management Backend"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Service",
+     "Scoring Engine Component",
+     "API Handler Component",
+     "Feature Store"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Backend",
+     "Workflow Engine Component",
+     "Analyst Portal API Controller",
+     "Case Management Database",
+     "Case Queue"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Model Event Bus",
+     "Scoring Engine Component",
+     "Model Training Environment"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Feature Store Cache Component",
+     "Scoring Engine Component",
+     "Real-Time Scoring Service",
+     "Feature Store"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Go Routing & Tokenization Proxy",
+     "Card Networks & Tokenization Vault",
+     "Tokenization & Masking Service Client",
+     "AWS ALB & AWS WAF"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit & Decision Log Store",
+     "Audit & Event Dispatcher Component",
+     "Long-Term Audit Archive"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Circuit Breaker / Fallback Component",
+     "Messaging & Eventing"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

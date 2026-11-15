@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the API Gateway container
+
+System_Ext(External_Identity_Provider, "External Identity Provider", "Validates token signatures")
+System_Ext(Redis_Cluster, "Redis Cluster", "Tracks distributed rate-limit counters")
+System_Ext(Catalog_Search_Service, "Catalog & Search Service", "Handles search queries")
+System_Ext(Circulation_Core_Service, "Circulation & Core Service", "Handles core transactions")
+System_Ext(Observability_Platform, "Observability Platform", "Receives logs and traces")
+
+Container_Boundary(api_gateway, "API Gateway") {
+    Component(WAF_Threat_Protection, "WAF & Threat Protection", "Coraza / ModSecurity plugin with OWASP Core Rule Set", "Enforces injection defense and sanitizes incoming payloads.")
+    Component(JWT_Validator, "JWT Validator", "Kong / Nginx Lua plugin", "Validates token signatures against the External Identity Provider via OIDC.")
+    Component(Access_Control_ACL, "Access Control (ACL)", "Kong / Nginx Lua plugin", "Enforces security boundaries and user authorization.")
+    Component(Rate_Limiting, "Rate Limiting", "Kong / Nginx plugin backed by Redis Cluster", "Tracks distributed rate-limit counters with sub-5ms latency.")
+    Component(Routing_Load_Balancer, "Routing & Load Balancer", "Kong / Nginx reverse proxy", "Routes requests to downstream services using gRPC over mTLS.")
+}
+
+Rel(WAF_Threat_Protection, JWT_Validator, "Evaluates sanitized payloads", "Internal Routing")
+Rel(JWT_Validator, External_Identity_Provider, "Validates token signatures", "HTTPS / OIDC")
+Rel(Rate_Limiting, Redis_Cluster, "Tracks distributed rate-limit counters", "TCP / RESP over TLS")
+Rel(Routing_Load_Balancer, Catalog_Search_Service, "Routes search queries", "gRPC over mTLS")
+Rel(Routing_Load_Balancer, Circulation_Core_Service, "Routes transactions", "gRPC over mTLS")
+Rel(Routing_Load_Balancer, Observability_Platform, "Streams logs and distributed traces", "Fluentbit / W3C Trace Context")
+
+@enduml

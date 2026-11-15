@@ -1,0 +1,333 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled by dedicated elements: Patient Demographic Service (R-01), Scheduling Engine (R-02), EMR Management Service and Audit & Compliance Interceptor (R-03), and Billing API Controller with Claim Validation & Mapping Engine (R-04).",
+   "performance_efficiency": "The sub-second P95 requirement is well supported by Connection Pooler (PgBouncer), Local State Cache & Sync Coordinator (Caffeine/RocksDB), State Management & Caching Component, and Redis-backed rate limiting.",
+   "compatibility": "External interoperability is addressed via the HL7 FHIR Integration Container utilizing Apache Camel and HAPI FHIR for lab/imaging systems, as well as dedicated adapters for the Identity Provider and payment/clearinghouse systems.",
+   "usability": "All user personas (Patients, Receptionists, Clinicians, Billing Specialists) are routed to the Web Application Container featuring dedicated Feature Modules and responsive Next.js layouts, though patient and clinical portals are combined in a single application.",
+   "reliability": "Fault tolerance is addressed via Circuit Breaker, DLQ & Spool Manager, and Patroni failover. However, the database uses active-passive failover with asynchronous outbox sync rather than true active-active multi-region clustering required for 99.99% availability.",
+   "security": "Strong security controls are present: IdP authentication, Auth Filter with JWT validation, AES-256 encrypted writes, PostgreSQL Row-Level Security, mTLS, and immutable compliance auditing via pg_audit and WORM tables.",
+   "maintainability": "The architecture exhibits excellent modularity and separation of concerns across domain boundaries, separating Clinical & EMR Core, Billing & Claims, and HL7 FHIR Integration containers with explicit internal component boundaries.",
+   "portability": "The hybrid target (on-prem-k8s and eu-central-1) is addressed directly by the Edge Sync Container using transactional outboxes and cloud sync daemons to bridge edge and cloud tiers across standard container runtimes."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture incorporates multi-tier caching (React Query, Caffeine, RocksDB) and PgBouncer connection pooling explicitly designed to prevent CPU contention and meet the <1s P95 SLA under concurrent clinician load.",
+    "elements": [
+     "Web Application Container",
+     "API Gateway",
+     "Clinical & EMR Core Container",
+     "Local State Cache & Sync Coordinator",
+     "Connection Pooler",
+     "Primary DB & Audit Store"
+    ],
+    "sensitivity_points": [
+     "Connection pool sizing in PgBouncer",
+     "Cache hit ratio in Caffeine and React Query"
+    ],
+    "tradeoffs": [
+     "Memory consumption versus latency using multi-tier in-memory and local caching"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Apache Camel with Dead-Letter & Retry Manager buffers incoming HL7 FHIR payloads, while PgBouncer protects database connections, ensuring high-volume ingestion without starving interactive EMR read queries.",
+    "elements": [
+     "HL7 FHIR Integration Container",
+     "FHIR API Route Controller",
+     "Data Transformation & Mapping Engine",
+     "Dead-Letter & Retry Manager",
+     "Connection Pooler",
+     "Primary DB & Audit Store"
+    ],
+    "sensitivity_points": [
+     "Camel routing and concurrency configuration",
+     "Database write throughput during burst ingestion"
+    ],
+    "tradeoffs": [
+     "Asynchronous ingestion queuing latency versus immediate EMR data visibility"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "The Edge Sync Container relies on asynchronous transactional outbox polling between hybrid sites. While Patroni automates node failovers, cross-region asynchronous sync risks RPO greater than zero, failing the strict zero data loss requirement during sudden cloud outages.",
+    "elements": [
+     "Edge Sync Container",
+     "Outbox Poller",
+     "Cloud Sync Client",
+     "Primary DB & Audit Store",
+     "High Availability Manager"
+    ],
+    "sensitivity_points": [
+     "Asynchronous replication lag between on-prem and cloud sites",
+     "Patroni leader election failover latency"
+    ],
+    "tradeoffs": [
+     "Asynchronous replication preserves local write availability but sacrifices zero-data-loss guarantees during ungraceful regional failover"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Idempotent Dispatcher Middleware and Transaction & DLQ Manager ensure claim retries cannot produce duplicate submissions, while Patroni with etcd enables automated database failover within the required 30-second window.",
+    "elements": [
+     "Billing & Claims Container",
+     "Idempotent Dispatcher Middleware",
+     "Transaction & DLQ Manager",
+     "Ledger & Audit Writer",
+     "High Availability Manager",
+     "Primary DB & Audit Store"
+    ],
+    "sensitivity_points": [
+     "Patroni failover and leader lease timeouts",
+     "Idempotency key persistence and verification speed"
+    ],
+    "tradeoffs": [
+     "Strict idempotency checks add write latency to guarantee exactly-once claim submission semantics"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The EMR core is decoupled in a separate container. Within Billing & Claims, the Payment & Clearinghouse Integration Service isolates third-party protocols, ensuring new clearinghouse integrations require changes only within the integration service without impacting clinical modules.",
+    "elements": [
+     "Billing & Claims Container",
+     "Payment & Clearinghouse Integration Service",
+     "Claim Validation & Mapping Engine",
+     "Clinical & EMR Core Container"
+    ],
+    "sensitivity_points": [
+     "Coupling between clearinghouse schemas and the internal claim mapping engine"
+    ],
+    "tradeoffs": [
+     "Abstract integration interfaces increase development abstraction but prevent ripple changes to core services"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Adding an audited demographic field only requires modifying UI Feature Modules, Patient Demographic Service, and PostgreSQL schema. The AOP Audit Interceptor and pg_audit subsystem capture updates automatically without requiring custom audit code modifications.",
+    "elements": [
+     "Feature Modules",
+     "Patient Demographic Service",
+     "Transactional Data Store Component",
+     "Audit & Compliance Interceptor",
+     "Audit Logging Subsystem"
+    ],
+    "sensitivity_points": [
+     "AOP and pg_audit automatic interception of schema alterations"
+    ],
+    "tradeoffs": [
+     "Automated audit triggers minimize code changes but increase database trigger overhead"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "User authentication and MFA enforcement are delegated to an external enterprise Identity Provider, blocking single-factor intrusions. Security events are captured and streamed to an external SIEM via Fluentbit/Vector, though internal real-time alert dispatch rules are unspecified.",
+    "elements": [
+     "Identity Provider",
+     "Auth Filter",
+     "Authentication & Session Component",
+     "Log Shipper",
+     "Audit Logging Subsystem"
+    ],
+    "sensitivity_points": [
+     "Identity Provider MFA enforcement policy",
+     "Log shipping latency to the central SIEM"
+    ],
+    "tradeoffs": [
+     "Delegating MFA to an external IdP simplifies architecture but relies on external alerting SLAs"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Row-Level Security in PostgreSQL enforces fine-grained clinical data access policies, while the AOP Audit Interceptor and pg_audit track every read access. WORM tables and the Fluentbit/Vector Log Shipper ensure immutable, 10-year audit retention.",
+    "elements": [
+     "Security & Access Control Component",
+     "Audit & Compliance Interceptor",
+     "Audit Logging Subsystem",
+     "Log Shipper",
+     "Partitioning & Archival Worker"
+    ],
+    "sensitivity_points": [
+     "Completeness of PostgreSQL Row-Level Security policies across clinical entities",
+     "WORM storage immutability configuration"
+    ],
+    "tradeoffs": [
+     "Logging all read operations guarantees strict compliance but significantly inflates audit storage volumes"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Interceptor",
+     "Audit Logging Subsystem",
+     "GDPR Anonymization & Retention Worker",
+     "Security & Access Control Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "High Availability Manager",
+     "Circuit Breaker",
+     "Edge Sync Container",
+     "Primary DB & Audit Store"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Partitioning & Archival Worker",
+     "GDPR Anonymization & Retention Worker",
+     "Log Shipper"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Demographic Service",
+     "Feature Modules"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Engine",
+     "Feature Modules"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Management Service",
+     "Audit & Compliance Interceptor",
+     "Audit Logging Subsystem"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Container",
+     "Billing API Controller",
+     "Claim Validation & Mapping Engine",
+     "Payment & Clearinghouse Integration Service",
+     "Third-Party Payment Gateway & Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Identity Provider",
+     "Auth Filter",
+     "Authentication & Session Component",
+     "Ledger & Audit Writer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "High Availability Manager",
+     "Edge Sync Container",
+     "Primary DB & Audit Store"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Connection Pooler",
+     "Local State Cache & Sync Coordinator",
+     "State Management & Caching Component",
+     "Rate Limiter"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "HL7 FHIR Integration Container",
+     "FHIR API Route Controller",
+     "Data Transformation & Mapping Engine",
+     "External Connector Client",
+     "Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

@@ -1,0 +1,342 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "Requirements are fully met: Customer Portal serves customers and brokers (R-01), Adjuster Workspace supports adjusters and support agents (R-02), and Migration Control & Routing Engine with Routing Rules Evaluator orchestrates incremental claim type migration (R-03).",
+   "performance_efficiency": "R-05 is directly addressed by Adjuster Workspace employing Claim View Cache (Azure Redis Cache) for sub-2-second loads, isolating users from 5-second mainframe latency. Asynchronous processing via Azure Service Bus and Camel further decouples workloads.",
+   "compatibility": "The Anti-Corruption Layer & Integration (Route Mediator, Mainframe Adapter) interfaces cleanly with Legacy Mainframe System via IBM MQ and mTLS without excessive mainframe changes. External Azure Active Directory provides seamless enterprise identity integration.",
+   "usability": "Dedicated interfaces target every user group: Customer Portal (with Claim Submission Controller and Status Dashboard View) for customers and brokers, and Adjuster Workspace for internal adjusters and support agents.",
+   "reliability": "R-04 is secured through idempotent processing in Workflow Orchestrator, dead-letter handling, Mainframe Adapter circuit breakers, and nightly Reconciliation Worker cross-checks logged to the immutable Audit & Reconciliation Ledger.",
+   "security": "R-07 is satisfied via Azure Active Directory SSO and OAuth 2.0/OIDC enforcement at Azure API Management. Azure Key Vault manages secrets and keys, while Azure SQL Ledger ensures tamper-evident auditability.",
+   "maintainability": "R-06 is thoroughly addressed: Migration Control & Routing Engine (Control Plane API, Migration Registry Store) enables fast rollbacks of claim types within one day. Decoupled ACL and containerized microservices minimize coupling.",
+   "portability": "The solution fits the hybrid Azure/on-premise mandate using Azure Container Apps and Spring Boot containers. However, heavy reliance on proprietary services (Cosmos DB, Azure SQL Ledger) limits migration beyond Azure."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The Adjuster BFF utilizes an in-memory Azure Redis Cache to prefetch and serve claim data under two seconds. However, cold cache misses querying the mainframe directly may still exceed the threshold unless read-aside and background warming are strictly enforced.",
+    "elements": [
+     "Adjuster Workspace",
+     "Adjuster UI",
+     "Adjuster BFF / API Gateway",
+     "Claim View Cache",
+     "Azure API Management"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio determines whether the sub-two-second response target is achieved.",
+     "Cache pre-fetching strategy must preempt mainframe query latency."
+    ],
+    "tradeoffs": [
+     "Aggressive pre-fetching increases memory costs and risk of serving stale mainframe data.",
+     "Cache freshness versus sub-two-second read latency."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Azure API Management and Azure Service Bus buffer incoming claim submissions asynchronously. Messages destined for the mainframe are held in queues and ingested outside the batch window, entirely isolating the legacy system from month-end peak loads.",
+    "elements": [
+     "Azure API Management",
+     "Migration Control & Routing Engine",
+     "Anti-Corruption Layer & Integration",
+     "Azure Service Bus",
+     "Enterprise Service Bus / Message Queue"
+    ],
+    "sensitivity_points": [
+     "Message queue buffering capacity prevents downstream pressure on the mainframe batch window.",
+     "Autoscaling of API Management and Azure Functions absorbs submission surges."
+    ],
+    "tradeoffs": [
+     "Asynchronous queuing trades real-time mainframe confirmation for decoupling batch window constraints.",
+     "Storage queue depth increases during peak hours."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Online submissions are accepted and held in durable Azure Service Bus and ESB queues. The Anti-Corruption Layer uses circuit breakers and asynchronous messaging, forwarding submissions to the mainframe once the nightly batch window completes without dropping claims.",
+    "elements": [
+     "Azure API Management",
+     "Anti-Corruption Layer & Integration",
+     "Azure Service Bus",
+     "Route Mediator",
+     "Enterprise Service Bus / Message Queue"
+    ],
+    "sensitivity_points": [
+     "Durability and retention duration of Service Bus queues during mainframe batch downtime.",
+     "Circuit breaker responsiveness preventing cascading timeouts to clients."
+    ],
+    "tradeoffs": [
+     "Deferred persistence trades immediate transactional consistency across both systems for platform availability.",
+     "Eventual consistency during the batch window."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Reconciliation Worker extracts snapshots and compares platform state against mainframe records nightly. Combined with idempotent processing in the Workflow Orchestrator, dead-letter queues, and the tamper-evident Ledger, partial failures are detected and safely reconciled without duplicate processing.",
+    "elements": [
+     "Reconciliation Worker",
+     "Platform State Comparator",
+     "Audit & Reconciliation Ledger",
+     "Workflow Orchestrator",
+     "Dead-Letter & Audit Handler"
+    ],
+    "sensitivity_points": [
+     "Frequency and precision of nightly state comparison between mainframe snapshots and platform data.",
+     "Idempotency implementation across Workflow Orchestrator and integration adapters."
+    ],
+    "tradeoffs": [
+     "Reconciliation processing overhead versus strict dual-system data integrity guarantees.",
+     "Batch window duration consumed by extracting and comparing snapshots."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Migration Control Engine utilizes Cosmos DB and Azure Functions to direct claim types dynamically. Operators can reconfigure or instantly roll back motor claims to the mainframe via feature flags in the Control Plane API within minutes without code redeployments.",
+    "elements": [
+     "Migration Control & Routing Engine",
+     "Routing Rules Evaluator",
+     "Migration Registry Store",
+     "Control Plane API",
+     "Anti-Corruption Layer & Integration"
+    ],
+    "sensitivity_points": [
+     "Granularity of routing rules stored in Cosmos DB.",
+     "Dynamic routing flag propagation latency across API Management and functions."
+    ],
+    "tradeoffs": [
+     "Dynamic routing evaluation adds slight runtime latency to claim routing decisions.",
+     "Maintaining dual-path adapters in ACL until migration finishes."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Customer Portal and Adjuster Workspace communicate exclusively through APIM and BFF layers with normalized domain models. When the mainframe is retired, routing simply points permanently to the Claims Processing Core, requiring no modifications to user interfaces.",
+    "elements": [
+     "Customer Portal",
+     "Adjuster Workspace",
+     "Azure API Management",
+     "Migration Control & Routing Engine",
+     "Claims Processing Core"
+    ],
+    "sensitivity_points": [
+     "Decoupling of frontends from legacy protocols through APIM and Core domain models.",
+     "Decommissioning ACL routes cleanly via routing engine flags."
+    ],
+    "tradeoffs": [
+     "Earlier investment in Anti-Corruption Layers simplifies final legacy decommissioning.",
+     "Temporary architectural overhead during the multi-year transition period."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Azure API Management enforces OAuth 2.0 tokens and policy checks, while the Claims Processing Core validates domain aggregate access. Unauthorized cross-broker access attempts are blocked and logged in the immutable Audit Ledger, though fine-grained object-level authorization rules are partly implicit.",
+    "elements": [
+     "Azure API Management",
+     "Security & Policy Enforcer",
+     "Claims Processing Core",
+     "Claim State Service",
+     "Audit & Reconciliation Ledger"
+    ],
+    "sensitivity_points": [
+     "Validation of fine-grained tenant and broker claims within APIM policies or domain services.",
+     "Complete audit logging of rejected cross-tenant authorization attempts."
+    ],
+    "tradeoffs": [
+     "Granular authorization checks at every layer add processing latency.",
+     "Policy complexity versus domain-level data authorization logic."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Revoking the adjuster in Azure Active Directory invalidates cloud sessions and APIM token verification quickly. However, the architecture provides no mechanism or synchronization flow to revoke credentials on the on-premises legacy mainframe within the 15-minute response window.",
+    "elements": [
+     "Azure Active Directory / Identity Provider",
+     "Adjuster Workspace",
+     "Azure API Management",
+     "Legacy Mainframe System"
+    ],
+    "sensitivity_points": [
+     "Access token lifetime and instant revocation support in Azure AD.",
+     "Propagation mechanism for user deprovisioning from cloud identity to the mainframe."
+    ],
+    "tradeoffs": [
+     "Short token lifetimes increase authentication handshake frequency.",
+     "Manual versus automated synchronization of deprovisioned users to legacy security subsystems."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe System",
+     "Anti-Corruption Layer & Integration",
+     "Claims Processing Core",
+     "Reconciliation Worker"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Enterprise Service Bus / Message Queue",
+     "Reconciliation Worker",
+     "Mainframe Data Extractor"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Anti-Corruption Layer & Integration",
+     "Mainframe Adapter",
+     "Route Mediator"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Azure API Management",
+     "API Gateway"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer Portal",
+     "Claim Submission Controller",
+     "Status Dashboard View",
+     "End Customers",
+     "Brokers"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Workspace",
+     "Adjuster UI",
+     "Adjuster BFF / API Gateway",
+     "Claims Adjusters"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Migration Control & Routing Engine",
+     "Routing Rules Evaluator",
+     "Migration Registry Store",
+     "Traffic Splitter & Scheduler"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Workflow Orchestrator",
+     "Dead-Letter & Audit Handler",
+     "Audit & Reconciliation Ledger",
+     "Reconciliation Worker",
+     "Platform State Comparator"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Adjuster Workspace",
+     "Claim View Cache",
+     "Adjuster BFF / API Gateway"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Migration Control & Routing Engine",
+     "Control Plane API",
+     "Migration Registry Store",
+     "Fallback Rule Evaluator"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Azure Active Directory / Identity Provider",
+     "Auth Client Module",
+     "Security & Policy Enforcer",
+     "Azure API Management"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

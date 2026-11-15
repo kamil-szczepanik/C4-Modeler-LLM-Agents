@@ -1,0 +1,298 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 2,
+   "security": 3,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.25,
+  "justifications": {
+   "functional_suitability": "While 'Scheduling', 'Billing Reconciliation', and 'EMR' cover appointments, billing, and clinical records, explicit patient registration and demographic capture mechanisms are missing. The mandatory immutable audit trail for EMR and 10-year data retention mechanisms are not defined in the architecture.",
+   "performance_efficiency": "Edge CDN caches static assets for 'React SPA', and DLQs decouple external billing. However, no data caching, database tier, or backend read-optimization mechanisms exist to support the strict sub-second P95 screen load target for 'EMR'.",
+   "compatibility": "'External Labs and Imaging Systems' interface via dedicated 'HL7 FHIR APIs' with an 'HL7 FHIR Validator'. External 'Insurance Payers/Clearinghouses' communicate over asynchronous queue-based buffering and dead-letter queues, directly fulfilling interoperability requirements.",
+   "usability": "Patients are served well via 'Patient Portal' with 'React SPA' supporting WCAG 2.1 AA and multiple languages. However, Clinicians, Receptionists, and Billing Specialists lack dedicated user interfaces, connecting directly to the 'API Gateway'.",
+   "reliability": "Dead-letter queues provide fault tolerance for billing messages. However, mechanisms to achieve the 99.99% active-active requirement across on-prem and cloud environments—such as global traffic management, multi-region database replication, or automated failover—are omitted entirely.",
+   "security": "Strong ingress controls exist via 'Web Application Firewall (WAF)', 'OAuth2 / MFA Enforcer', and Istio mTLS. However, HIPAA-mandated AES-256 data at rest encryption is missing, as are persistence-layer data protection and EMR audit trail mechanisms.",
+   "maintainability": "Container boundaries separate concerns across 'Patient Portal', 'API Gateway', 'Clinical Core', and 'Notification & Reminder Container'. 'Clinical Core' is further cleanly decomposed into 'EMR', 'Scheduling', and 'Billing Reconciliation' components with distinct responsibilities.",
+   "portability": "Deployment on Kubernetes and Istio supports container-based portability across on-premise and cloud environments. However, explicit mechanisms addressing hybrid multi-region data replication, configuration management, or state portability across 'on-prem-k8s' and 'eu-central-1' are not detailed."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 2,
+   "PERF-02": 2,
+   "SEC-01": 3,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.375,
+  "by_quality_attribute": {
+   "Performance": 2.0,
+   "Availability": 2.0,
+   "Modifiability": 3.5,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "justification": "The architecture lacks a caching layer, read replicas, and persistence tier definitions. Concurrent requests pass directly through the API Gateway to the EMR component, posing a severe bottleneck to achieving sub-second P95 load times.",
+    "elements": [
+     "API Gateway",
+     "Istio Ingress Gateway",
+     "Clinical Core",
+     "EMR"
+    ],
+    "sensitivity_points": [
+     "Absence of caching directly impacts P95 response latency under concurrent load."
+    ],
+    "tradeoffs": [
+     "Introducing read caching improves latency but increases cache invalidation complexity."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "justification": "HL7 FHIR results are validated and ingested directly into EMR without an intermediate queue or worker pool. High-volume bursts will contend with interactive clinical traffic, degrading screen response times.",
+    "elements": [
+     "API Gateway",
+     "HL7 FHIR Validator",
+     "Clinical Core",
+     "EMR"
+    ],
+    "sensitivity_points": [
+     "Synchronous ingestion of bulk lab data directly threatens interactive EMR response times."
+    ],
+    "tradeoffs": [
+     "Asynchronous queuing buffers spikes but introduces eventual consistency to lab data visibility."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The model references hybrid deployment regions but provides no global traffic routing, cross-site database replication, or failover automation mechanisms to resume services within one minute without data loss.",
+    "elements": [
+     "API Gateway",
+     "Istio Ingress Gateway",
+     "Clinical Core"
+    ],
+    "sensitivity_points": [
+     "Failover execution speed depends heavily on global load balancing and replication topology."
+    ],
+    "tradeoffs": [
+     "Active-active synchronous state replication prevents data loss but adds inter-region latency."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "While Billing Reconciliation specifies dead-letter queues, the architecture completely omits database containers, persistence failure recovery, and transactional outbox or idempotency mechanisms to prevent lost or duplicate claims.",
+    "elements": [
+     "Clinical Core",
+     "Billing Reconciliation",
+     "Insurance Payers/Clearinghouses"
+    ],
+    "sensitivity_points": [
+     "Claim integrity during node crashes depends on idempotent retries and persistence crash recovery."
+    ],
+    "tradeoffs": [
+     "Strict claim deduplication checks increase processing overhead but eliminate duplicate billing risks."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Billing Reconciliation is segregated from EMR within the Clinical Core, and queue-based external boundaries isolate clearinghouse integration logic. Integrating a new payer requires changes only within the billing component.",
+    "elements": [
+     "Clinical Core",
+     "Billing Reconciliation",
+     "Insurance Payers/Clearinghouses"
+    ],
+    "sensitivity_points": [
+     "Decoupling billing workflows from EMR confines external protocol changes to one component."
+    ],
+    "tradeoffs": [
+     "Isolating payer adapters within Billing Reconciliation limits reuse across other external integrations."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "Updates are confined to the React SPA and EMR component, satisfying the three-component limit. However, the model lacks dedicated audit storage and database representations to implement the audited field fully.",
+    "elements": [
+     "Patient Portal",
+     "React SPA",
+     "Clinical Core",
+     "EMR"
+    ],
+    "sensitivity_points": [
+     "Field updates require synchronized schema evolution across frontend and backend services."
+    ],
+    "tradeoffs": [
+     "Embedding audit logic into EMR avoids additional components but increases domain service complexity."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The API Gateway includes an OAuth2 / MFA Enforcer that prevents access with stolen passwords alone. However, the design does not define security monitoring or alerting infrastructure to meet the one-minute alert requirement.",
+    "elements": [
+     "API Gateway",
+     "OAuth2 / MFA Enforcer",
+     "Web Application Firewall (WAF)"
+    ],
+    "sensitivity_points": [
+     "Enforcing MFA at the gateway stops unauthorized single-factor credential access."
+    ],
+    "tradeoffs": [
+     "Mandatory multi-factor validation adds network hops and authentication latency during sign-in."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "Although ABAC is mentioned in context relationships, no policy enforcement point or fine-grained authorization component is defined in Clinical Core. Furthermore, tamper-evident audit storage with ten-year retention is completely omitted.",
+    "elements": [
+     "API Gateway",
+     "Clinical Core",
+     "EMR"
+    ],
+    "sensitivity_points": [
+     "Read-level auditing requires explicit inline policy checks and append-only tamper-evident storage."
+    ],
+    "tradeoffs": [
+     "Logging every record read guarantees compliance but significantly increases storage overhead and I/O latency."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "R-01": "partial",
+   "R-02": "partial",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "none",
+   "R-08": "full"
+  },
+  "coverage": 0.5,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Clinical IT Environment",
+     "Istio Ingress Gateway",
+     "Web Application Firewall (WAF)",
+     "OAuth2 / MFA Enforcer"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Clinical IT Environment",
+     "Clinical Core"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Receptionists",
+     "Patient Portal",
+     "Clinical Core",
+     "EMR"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Scheduling",
+     "Clinical Core",
+     "Patient Portal",
+     "React SPA"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "EMR",
+     "Clinical Core"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Specialists",
+     "Insurance Payers/Clearinghouses",
+     "Billing Reconciliation",
+     "Clinical Core"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "OAuth2 / MFA Enforcer",
+     "Patients"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Clinical IT Environment"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "External Labs and Imaging Systems",
+     "HL7 FHIR Validator",
+     "EMR",
+     "Clinical Core"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

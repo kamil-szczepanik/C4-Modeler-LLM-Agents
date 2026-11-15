@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Audit Logging Service container
+
+System_Ext(ApacheKafka, "Apache Kafka", "Apache Kafka", "Event broker for asynchronous log streams.")
+System_Ext(PostgreSQLS3compatibleWORMStorage, "PostgreSQL & S3-compatible WORM Storage", "PostgreSQL & S3 Storage", "Primary and cold tier storage backend.")
+
+Container_Boundary(AuditLoggingService, "Audit Logging Service") {
+    Component(AuditLogIngestor, "Audit Log Ingestor", "Spring WebFlux", "Reactive endpoint for capturing high-throughput security and compliance events.")
+    Component(EventNormalizationEngine, "Event Normalization Engine", "Jackson", "Payload sanitizer and PII masker for normalizing event data.")
+    Component(ImmutableWriterComponent, "Immutable Writer Component", "Spring Data JDBC", "Append-only writer with cryptographic hash chaining for secure persistence.")
+    Component(RetentionPolicyManager, "Retention Policy Manager", "Quartz Scheduler", "Job scheduling component for cold S3-compatible WORM storage tiering.")
+    Component(ComplianceExportFacade, "Compliance Export Facade", "REST API", "Service providing authenticated and rate-limited endpoints for external regulatory auditors.")
+}
+
+Rel(ApacheKafka, AuditLogIngestor, "Streams events via TCP using consumer groups with mutual TLS (mTLS).", "TCP / mTLS")
+Rel(AuditLogIngestor, EventNormalizationEngine, "Invokes via internal function calls.", "Function Call")
+Rel(EventNormalizationEngine, ImmutableWriterComponent, "Sends normalized payloads for secure persistence.", "Internal")
+Rel(ImmutableWriterComponent, PostgreSQLS3compatibleWORMStorage, "Persists records to PostgreSQL via TLS with driver-level AES-256 encryption.", "TLS / AES-256")
+Rel(RetentionPolicyManager, PostgreSQLS3compatibleWORMStorage, "Moves aged logs to S3-compatible WORM storage utilizing Object Lock in compliance mode.", "HTTPS")
+Rel(ComplianceExportFacade, PostgreSQLS3compatibleWORMStorage, "Queries archived records to serve external auditors.", "HTTPS")
+
+@enduml

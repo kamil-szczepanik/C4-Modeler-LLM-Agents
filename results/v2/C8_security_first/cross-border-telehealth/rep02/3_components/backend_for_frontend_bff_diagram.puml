@@ -1,0 +1,21 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Component(Clients, "Clients", "HTTPS", "Cross-border telehealth patients and clinicians.")
+Component_Ext(Domain_Microservices, "Domain Microservices (Consent Manager, AI Triage, E-Prescription)", "gRPC over mTLS (Istio)", "Downstream domain services accessed via gRPC.")
+
+Container_Boundary(BFF, "Backend-for-Frontend (BFF)") {
+    Component(GraphQL_API_Gateway_Layer_Apollo_Server, "GraphQL API Gateway Layer (Apollo Server)", "Apollo Server, Zod / Joi", "Handles query parsing, schema validation, depth limiting, and complexity analysis.")
+    Component(Authentication_Token_Translator, "Authentication & Token Translator", "Node.js", "Terminates client JWTs, validates scopes, and issues internal mTLS tokens.")
+    Component(Resilience_Batching_Middleware, "Resilience & Batching Middleware", "Node.js", "Manages query batching, optimistic mutations, and connectivity status for rural users.")
+    Component(Resolver_Aggregator_Engine, "Resolver & Aggregator Engine", "Node.js", "Orchestrates domain-specific data fetching and field-level authorization.")
+    Component(Telemetry_Audit_Interceptor, "Telemetry & Audit Interceptor", "OpenTelemetry", "Injects OpenTelemetry context and regional audit headers for EU MDR traceability.")
+}
+
+Rel(Clients, GraphQL_API_Gateway_Layer_Apollo_Server, "Sends aggregated queries and mutations", "HTTPS")
+Rel(GraphQL_API_Gateway_Layer_Apollo_Server, Authentication_Token_Translator, "Delegates user session validation", "In-process")
+Rel(Authentication_Token_Translator, Resilience_Batching_Middleware, "Passes validated operations", "In-process middleware")
+Rel(Resilience_Batching_Middleware, Resolver_Aggregator_Engine, "Forwards batched requests", "In-process function call")
+Rel(Resolver_Aggregator_Engine, Domain_Microservices, "Dispatches calls", "gRPC over mTLS (Istio)")
+@enduml

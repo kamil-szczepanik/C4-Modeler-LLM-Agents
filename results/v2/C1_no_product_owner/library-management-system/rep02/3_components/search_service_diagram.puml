@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Search Service container
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway routing requests.")
+System_Ext(managed_event_bus, "Managed Event Bus", "Kafka / EventBridge event streaming platform.")
+System_Ext(search_index, "Search Index", "Managed OpenSearch cluster (AWS OpenSearch Service EU-hosted).")
+
+Container_Boundary(search_service, "Search Service") {
+    Component(search_controller, "Search Controller", "Spring gRPC", "Exposes gRPC endpoints for searching items.")
+    Component(query_parser_validator, "Query Parser & Validator", "Apache Lucene Query Parser", "Sanitizes user inputs and validates query syntax.")
+    Component(index_synchronizer, "Index Synchronizer", "Spring Kafka", "Consumes domain events to keep the search index synchronized.")
+    Component(search_client, "Search Client", "OpenSearch Java Client with Resilience4j", "Executes queries against the search index and prevents cascading failures.")
+    Component(reindexing_worker, "Reindexing Worker", "Spring Batch", "Handles batch reindexing operations.")
+    Component(telemetry_interceptor, "Telemetry Interceptor", "Micrometer and OpenTelemetry", "Collects metrics and ensures observability for latency SLAs.")
+}
+
+Rel(api_gateway, search_controller, "gRPC over mTLS")
+Rel(index_synchronizer, managed_event_bus, "Kafka consumption")
+Rel(search_client, search_index, "REST over HTTPS, mTLS, AWS SigV4")
+Rel(reindexing_worker, search_index, "REST over HTTPS Bulk API")
+Rel(search_controller, query_parser_validator, "In-process validation")
+Rel(query_parser_validator, search_client, "In-process execution")
+
+@enduml

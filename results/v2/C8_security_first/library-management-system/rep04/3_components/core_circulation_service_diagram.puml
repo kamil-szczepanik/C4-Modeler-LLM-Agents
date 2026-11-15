@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway routing requests")
+System_Ext(message_broker, "Message Broker", "Apache Kafka / RabbitMQ", "Message broker for downstream circulation events.")
+
+Container_Boundary(core_circulation_service, "Core Circulation Service") {
+    Component(circulation_api_controller, "Circulation API Controller", "Go", "Handles catalogue circulation and self-service portal requests.")
+    Component(transaction_manager, "Transaction Manager", "Go", "Manages circulation states and transactional persistence.")
+    Component(loan_policy_engine, "Loan & Policy Engine", "Go", "Evaluates loan policies and rules.")
+    Component(event_publisher_component, "Event Publisher Component", "Go", "Publishes circulation events asynchronously.")
+    ComponentDb(postgresql, "PostgreSQL", "PostgreSQL (Primary & Read-Replicas, AES-256 encrypted via EU Cloud HSM)", "Persists circulation states and stores loan rules.")
+}
+
+Rel(api_gateway, circulation_api_controller, "Routes circulation requests", "Internal mTLS and gRPC")
+Rel(circulation_api_controller, transaction_manager, "Internal function calls", "Go interfaces")
+Rel(circulation_api_controller, loan_policy_engine, "Internal function calls", "Go interfaces")
+Rel(transaction_manager, postgresql, "Persists circulation states", "SQL over TLS 1.3")
+Rel(loan_policy_engine, postgresql, "Queries loan rules", "SQL over TLS 1.3")
+Rel(transaction_manager, event_publisher_component, "Internal handoff", "Go channels / interfaces")
+Rel(event_publisher_component, message_broker, "Publishes circulation events", "AMQP / gRPC over TLS 1.3")
+
+@enduml

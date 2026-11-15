@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Core Domain Microservice container
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway routing incoming requests.")
+System_Ext(rabbitmq, "RabbitMQ", "Message broker receiving asynchronous domain events via AMQPS.")
+System_Ext(postgresql, "PostgreSQL", "Relational database storing catalog data, loan states, and outbox tables with TLS 1.3 and column-level PII encryption.")
+System_Ext(vault, "HashiCorp Vault", "Secrets manager providing dynamic credentials and transit encryption keys.")
+System_Ext(observability, "OpenTelemetry Collector / Grafana", "Observability stack tracking W3C trace contexts and metrics.")
+
+Container_Boundary(core_domain_microservice, "Core Domain Microservice") {
+    Component(CirculationController, "CirculationController", "Spring MVC", "Handling REST ingress, JWT claims verification, and Bean Validation.")
+    Component(CatalogDomainService, "CatalogDomainService", "Spring @Service", "Managing core circulation rules and audit logging.")
+    Component(LoanRepository, "LoanRepository", "Spring Data JPA", "Managing relational persistence.")
+    Component(OutboxDispatcher, "OutboxDispatcher", "Scheduled Spring component", "Processing reliable event dispatching.")
+    Component(EventPublisher, "EventPublisher", "Spring AMQP", "Emitting messages to RabbitMQ.")
+}
+
+Rel(api_gateway, CirculationController, "Routes HTTP requests with RBAC", "mTLS, REST/JSON")
+Rel(CirculationController, CatalogDomainService, "Invokes business rules", "Java Method Call")
+Rel(CatalogDomainService, LoanRepository, "Persists domain entities and outbox records in a single database transaction", "JPA/JDBC")
+Rel(CatalogDomainService, EventPublisher, "Triggers asynchronous event emission", "Java Method Call")
+Rel(OutboxDispatcher, EventPublisher, "Relays pending outbox messages with Resilience4j circuit breaking", "Java Method Call")
+Rel(EventPublisher, rabbitmq, "Publishes catalog and circulation state-change events", "AMQPS")
+Rel(CatalogDomainService, postgresql, "Reads and writes relational data", "JDBC, TLS 1.3")
+@enduml

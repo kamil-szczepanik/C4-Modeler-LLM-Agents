@@ -1,0 +1,36 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Clinical Core & E-Prescription Service container
+
+System_Ext(api_gateway, "API Gateway / BFF", "External API gateway routing client requests.")
+System_Ext(consent_service, "Consent & Identity Management Service", "Manages patient consent and identity verification.")
+System_Ext(notification_service, "Notification & Pharmacy Integration Service", "Handles notifications and pharmacy integrations.")
+System_Ext(audit_sidecar, "Audit & Compliance Logger Sidecar", "Sidecar capturing structured audit logs.")
+System_Ext(external_pharmacy, "External Pharmacy Gateways", "External pharmacy endpoints for prescriptions.")
+
+Container_Boundary(clinical_core, "Clinical Core & E-Prescription Service") {
+    Component(Clinical_Record_Manager_Component, "Clinical Record Manager Component", "Java / Spring Data JPA", "Manages clinical records and persistence.")
+    Component(EPrescription_Engine_Component, "E-Prescription Engine Component", "Java / Spring Integration", "Handles e-prescription processing flows.")
+    Component(Prescription_Validation__Signer_Component, "Prescription Validation & Signer Component", "Java / Bouncy Castle", "Signs and validates prescription payloads.")
+    Component(Clinical_Audit_Interceptor_Component, "Clinical Audit Interceptor Component", "Java / AspectJ", "Interprets and triggers clinical audit events.")
+    Component(Tenant__Region_Context_Resolver_Component, "Tenant & Region Context Resolver Component", "Java / Spring Interceptor", "Resolves tenant and regional metadata.")
+    Component(Interoperability_Mapper_Component, "Interoperability Mapper Component", "Java / MapStruct", "Performs format conversion for regional interoperability.")
+    Component(Outbox_Event_Dispatcher_Component, "Outbox Event Dispatcher Component", "Java / Debezium-lite pattern", "Dispatches transactional outbox records.")
+    Component(Terminology_Code_Resolver_Component, "Terminology Code Resolver Component", "Java / Spring Cache", "Resolves terminology codes with caching.")
+    Component(Consent_Enforcement_Validator_Component, "Consent Enforcement Validator Component", "Java / Spring Security", "Validates consent enforcement for requests.")
+}
+
+Rel(api_gateway, Tenant__Region_Context_Resolver_Component, "Passes regional metadata", "gRPC Headers")
+Rel(Tenant__Region_Context_Resolver_Component, Consent_Enforcement_Validator_Component, "Passes request context", "In-memory method")
+Rel(Consent_Enforcement_Validator_Component, consent_service, "Verifies patient consent status", "gRPC over mTLS")
+Rel(Clinical_Record_Manager_Component, Outbox_Event_Dispatcher_Component, "Writes transactional outbox records", "PostgreSQL JDBC")
+Rel(Outbox_Event_Dispatcher_Component, notification_service, "Publishes domain events", "Cloud Pub/Sub")
+Rel(Clinical_Record_Manager_Component, Clinical_Audit_Interceptor_Component, "Triggers audit events", "Spring Application Events")
+Rel(Clinical_Audit_Interceptor_Component, audit_sidecar, "Forwards structured audit logs", "Local Unix Domain Sockets / gRPC")
+Rel(EPrescription_Engine_Component, Interoperability_Mapper_Component, "Requests format conversion", "In-memory method")
+Rel(Interoperability_Mapper_Component, Prescription_Validation__Signer_Component, "Signs payload", "In-memory Java method")
+Rel(Prescription_Validation__Signer_Component, external_pharmacy, "Submits signed prescriptions", "HTTPS / mTLS")
+
+@enduml

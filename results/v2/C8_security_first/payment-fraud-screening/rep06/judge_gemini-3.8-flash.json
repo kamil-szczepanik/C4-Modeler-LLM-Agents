@@ -1,0 +1,312 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 3,
+   "portability": 4
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "Requirements R-01 to R-03 are satisfied: 'Real-Time Scoring Engine' scores transactions, 'Case Management API' manages analyst review workflows, and 'Rule & Model Distribution Service' distributes model updates and rule hashes dynamically.",
+   "performance_efficiency": "Low latency at 3,000 RPS is enabled by C++/Lua stateless FPE in 'Tokenization Filter Component', lightweight Go execution on ECS Fargate, 'Redis Cluster' for velocity counters, and asynchronous decoupling through 'Event Broker'.",
+   "compatibility": "Interoperates smoothly with 'Merchant / Payment Gateway' via TLS 1.3/mTLS and references 'Card Schemes / External Enrichment APIs', though integration details for external enrichment APIs are omitted inside the lower-level scoring components.",
+   "usability": "Fraud Analysts and Compliance Auditors access the system via 'Case Management Controller', but no dedicated UI container or analyst portal frontend is defined to support operational case inspection directly.",
+   "reliability": "While 'Storage & Replication Engine' provides 3-AZ MSK replication, the architecture lacks an explicit circuit breaker, fallback, or fail-open mechanism in 'API Gateway / Tokenization Proxy' to guarantee payments are not blocked (R-07).",
+   "security": "PCI-DSS compliance is supported by stateless FPE tokenization in 'Tokenization Filter Component', strict mTLS, and tamper-evident audit storage in 'AWS QLDB / S3 Object Lock' signed via 'AWS KMS'.",
+   "maintainability": "Modularity is well-defined, but maintaining four distinct runtimes (Go, Rust, Java, Python) and self-managed Envoy filters imposes an excessive cognitive and operational burden on a three-engineer team.",
+   "portability": "Containerized workloads (Go, Spring Boot, Rust, FastAPI) allow portability, though components are tightly coupled to AWS-specific primitives like 'AWS MSK', 'AWS QLDB', and 'S3 Object Lock'."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 3,
+   "MOD-02": 3,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 3.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Stateless FPE tokenization in Envoy, Go on ECS, Redis velocity caches, and async Kafka logging provide low latency. However, synchronous HTTPS calls to external card schemes/enrichment APIs pose an unaddressed tail-latency risk against the 50 ms P99 target.",
+    "elements": [
+     "API Gateway / Tokenization Proxy",
+     "Tokenization Filter Component",
+     "Real-Time Scoring Engine",
+     "Redis Cluster",
+     "Card Schemes / External Enrichment APIs"
+    ],
+    "sensitivity_points": [
+     "External enrichment latency directly degrades P99 decision budgets",
+     "Redis cluster network round-trip latency under high concurrency"
+    ],
+    "tradeoffs": [
+     "Stateless FPE tokenization optimizes latency over centralized hardware security module guarantees"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Workloads are completely separated. Fraud analyst queries hit Case Management API backed by RDS PostgreSQL, decoupled from real-time scoring by Kafka. Scoring performance is fully protected from heavy analyst database queries.",
+    "elements": [
+     "Case Management API",
+     "Persistence Repository",
+     "Event Broker",
+     "Real-Time Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Database connection pool sizing on RDS PostgreSQL during bulk batch operations"
+    ],
+    "tradeoffs": [
+     "Eventual consistency between scoring decisions and analyst queue availability in exchange for workload isolation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture lacks an explicit fallback mechanism or circuit breaker in Envoy/API Gateway. If the scoring engine crashes, there is no defined stand-in processing path, default rule evaluation, or fallback audit mechanism to unblock authorizations within 1 minute.",
+    "elements": [
+     "API Gateway / Tokenization Proxy",
+     "Edge Router Component",
+     "Real-Time Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Circuit breaker timeout configurations and fail-open routing policies in Envoy"
+    ],
+    "tradeoffs": [
+     "Allowing stand-in approvals increases fraud risk to protect merchant transaction continuity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Real-Time Scoring offloads audit events asynchronously to AWS MSK. If S3 Object Lock or QLDB slows or fails, Kafka partitions buffer events, and Audit Log Sitter isolates backpressure and retries via dead-letter routing without blocking scoring.",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Event Broker",
+     "Audit Log Sitter",
+     "Resilience & DLQ Router Component",
+     "AWS QLDB / S3 Object Lock"
+    ],
+    "sensitivity_points": [
+     "MSK retention periods and disk capacity during prolonged downstream WORM storage outages"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging sacrifices instant audit durability verification to maintain sub-50ms scoring latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Rule & Model Distribution Service validates and stages models to S3 with SQS notifications. However, the internal scoring engine component model does not specify dynamic hot-reloading mechanisms or atomic traffic switching to guarantee zero-downtime and 5-minute rollbacks.",
+    "elements": [
+     "Rule & Model Distribution Service",
+     "Model Ingestion API",
+     "Artifact Storage Client",
+     "Real-Time Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Memory overhead of loading multiple concurrent model versions in Fargate tasks"
+    ],
+    "tradeoffs": [
+     "In-process model evaluation enables sub-50ms latency but complicates zero-downtime hot reloading"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "While Redis velocity counters and model ingestion validation exist, the path for fraud analysts to deploy rules into the distribution service is missing. Case Management API has no connection to Rule & Model Distribution Service.",
+    "elements": [
+     "Rule & Model Distribution Service",
+     "Case Management API",
+     "Real-Time Scoring Engine",
+     "Redis Cluster"
+    ],
+    "sensitivity_points": [
+     "Validation and dry-run execution speed for rapid rule activation"
+    ],
+    "tradeoffs": [
+     "Strict dry-run validation prevents bad rules but slows down emergency rule activation"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Stateless FPE tokenization at the API gateway ensures clear-text PANs never enter downstream case management or analyst systems. However, the architecture specifies no SIEM, UEBA, or audit anomaly detection mechanism to detect compromised accounts within 15 minutes.",
+    "elements": [
+     "API Gateway / Tokenization Proxy",
+     "Tokenization Filter Component",
+     "Case Management API",
+     "Case Management Controller"
+    ],
+    "sensitivity_points": [
+     "Strength and secrecy of KMS format-preserving encryption keys"
+    ],
+    "tradeoffs": [
+     "Irreversible masking restricts analyst investigations while eliminating PCI PAN scope"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Decisions, features, and model hashes are cryptographically signed with KMS and persisted into immutable WORM storage (S3 Object Lock / AWS QLDB) via Audit Log Sitter, enabling audit reproduction and compliance review years later.",
+    "elements": [
+     "Audit Log Sitter",
+     "Payload Normalizer & Signer Component",
+     "WORM Storage Batcher Component",
+     "AWS QLDB / S3 Object Lock",
+     "Case Management API"
+    ],
+    "sensitivity_points": [
+     "S3 Object Lock retention compliance mode enforcement over 7 years"
+    ],
+    "tradeoffs": [
+     "Storing full decision payloads increases long-term storage costs to ensure audit fidelity"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "none"
+  },
+  "coverage": 0.6818181818181818,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "API Gateway / Tokenization Proxy",
+     "Tokenization Filter Component",
+     "Payload Sanitizer Component",
+     "Access Control & Auth Enforcer",
+     "Storage & Replication Engine"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "AWS QLDB / S3 Object Lock",
+     "Audit Log Sitter",
+     "Payload Normalizer & Signer Component",
+     "WORM Storage Batcher Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "API Gateway / Tokenization Proxy"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management API",
+     "Case Management Controller",
+     "Case Service",
+     "Batch Processor",
+     "Event Consumer",
+     "Persistence Repository"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Rule & Model Distribution Service",
+     "Model Ingestion API",
+     "Distribution Publisher",
+     "Artifact Storage Client",
+     "Real-Time Scoring Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Real-Time Scoring Engine",
+     "Redis Cluster",
+     "Tokenization Filter Component",
+     "API Gateway / Tokenization Proxy"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "API Gateway / Tokenization Proxy",
+     "Tokenization Filter Component",
+     "Case Management API"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Log Sitter",
+     "Payload Normalizer & Signer Component",
+     "WORM Storage Batcher Component",
+     "AWS QLDB / S3 Object Lock",
+     "Event Broker"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

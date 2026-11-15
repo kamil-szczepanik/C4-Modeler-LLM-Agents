@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Analytics Ingestion Pipeline container
+
+System_Ext(Amazon_API_Gateway, "Amazon API Gateway", "External gateway routing traffic.")
+
+Container_Boundary(Analytics_Ingestion_Pipeline, "Analytics Ingestion Pipeline") {
+    Component(Ingestion_API_Controller, "Ingestion API Controller", "Go, gRPC", "Receives high-volume operational and behavioral event streams with high-throughput and low-latency.")
+    Component(Event_Schema_Validator, "Event Schema Validator", "Protocol Buffers / JSON Schema", "Validates incoming event payloads to ensure data integrity.")
+    Component(Event_Buffer, "Event Buffer", "Amazon Kinesis Data Streams", "Decouples high-throughput ingestion from processing to absorb traffic spikes and guarantee at-least-once delivery.")
+    Component(Stream_Processor_Anonymizer, "Stream Processor / Anonymizer", "AWS Lambda / Apache Flink on ECS", "Performs stateless stream processing, payload sanitization, and PII anonymization.")
+    Component(Data_Sink_Loader, "Data Sink Loader", "Amazon S3 / Amazon Timestream", "Loads processed data into columnar storage for training recommendation models and long-term analytics retention.")
+    Component(Dead_Letter_Queues, "Dead Letter Queues", "Amazon S3 / SQS", "Captures failed or invalid events for later inspection and error handling.")
+}
+
+Rel(Amazon_API_Gateway, Ingestion_API_Controller, "gRPC over HTTP/2 via AWS App Mesh", "gRPC / HTTP/2")
+Rel(Ingestion_API_Controller, Event_Schema_Validator, "In-memory function call", "In-memory")
+Rel(Ingestion_API_Controller, Event_Buffer, "AWS SDK / TCP", "AWS SDK / TCP")
+Rel(Stream_Processor_Anonymizer, Event_Buffer, "AWS SDK", "AWS SDK")
+Rel(Stream_Processor_Anonymizer, Data_Sink_Loader, "AWS SDK", "AWS SDK")
+
+@enduml

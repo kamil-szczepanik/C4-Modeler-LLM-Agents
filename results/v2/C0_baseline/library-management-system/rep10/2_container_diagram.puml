@@ -1,0 +1,47 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Library Management System
+
+Person(LibraryPatrons, "Library Patrons", "Students and public citizens who use the self-service portals for catalog searches and library services.")
+Person(LibrariansandCirculationStaff, "Librarians and Circulation Staff", "Staff members who manage circulation, cataloging, and day-to-day library operations.")
+Person(LibraryAdministrators, "Library Administrators", "Administrators responsible for managing the system and configuration.")
+
+System_Ext(ExternalNotificationService, "External Notification Service", "EU-hosted service for sending notifications to patrons and staff.")
+System_Ext(ExternalPaymentGateway, "External Payment Gateway", "EU-compliant gateway for processing library payments and financial records.")
+System_Ext(ExternalIdentityProvidingIdP, "External Identity Provider (IdP)", "Handles centralized authentication and OIDC/OAuth 2.0 token issuance.")
+System_Ext(InterlibraryLoanILLNetwork, "Interlibrary Loan (ILL) Network", "External network used for cross-library catalog searches and loans.")
+System_Ext(ObservabilityPlatformSIEM, "Observability Platform & SIEM", "Collects security events, logs, and telemetry data.")
+
+System_Boundary(LibraryManagementSystem, "Library Management System") {
+    Container(APIGateway, "API Gateway", "Kong/Envoy", "Handles TLS termination, JWT validation, and rate limiting.")
+    Container(PatronWebAppAPI, "Patron Web App & API", "Node.js/Next.js", "Provides cataloging, circulation, and self-service portals for library patrons.")
+    Container(StaffManagementAPI, "Staff Management API", "Java/Spring Boot", "Manages circulation, cataloging, and day-to-day library operations for staff.")
+    Container(SearchEngine, "Search Engine", "Managed OpenSearch/Elasticsearch (EU-hosted)", "Provides sub-800ms catalog and data search performance.")
+    ContainerDb(Database, "Database", "Managed PostgreSQL (EU-hosted, AES-256 encrypted)", "Persists transactional data with strict EU-only data residency.")
+    Container(IntegrationMessagingContainer, "Integration/Messaging Container", "Managed Apache Kafka / Amazon MQ (EU-hosted)", "Handles asynchronous decoupling and message brokering.")
+    Container(NotificationDispatcher, "Notification Dispatcher", "Go/Worker service", "Dispatches notifications to external services asynchronously.")
+}
+
+Rel(LibraryPatrons, APIGateway, "Accesses self-service portal and catalog searches", "HTTPS/REST")
+Rel(LibrariansandCirculationStaff, APIGateway, "Accesses staff management tools", "HTTPS/REST")
+Rel(LibraryAdministrators, APIGateway, "Accesses administration features", "HTTPS/REST")
+Rel(APIGateway, PatronWebAppAPI, "Routes patron traffic via mTLS", "gRPC via mTLS")
+Rel(APIGateway, StaffManagementAPI, "Routes staff traffic via mTLS", "gRPC via mTLS")
+Rel(PatronWebAppAPI, SearchEngine, "Queries library catalog and data", "HTTPS/REST")
+Rel(PatronWebAppAPI, Database, "Reads and writes patron data", "PostgreSQL Protocol")
+Rel(StaffManagementAPI, Database, "Reads and writes staff and inventory data", "PostgreSQL Protocol")
+Rel(StaffManagementAPI, IntegrationMessagingContainer, "Publishes asynchronous events", "AMQP / Kafka protocol")
+Rel(IntegrationMessagingContainer, NotificationDispatcher, "Consumes notification events", "AMQP / Kafka protocol")
+Rel(NotificationDispatcher, ExternalNotificationService, "Dispatches external notifications", "REST/JSON over TLS 1.3")
+Rel(StaffManagementAPI, ExternalPaymentGateway, "Processes library payments", "REST/JSON over TLS 1.3")
+Rel(PatronWebAppAPI, ExternalIdentityProvidingIdP, "Authenticates users and validates tokens", "OpenID Connect (OIDC) / OAuth 2.0")
+Rel(StaffManagementAPI, ExternalIdentityProvidingIdP, "Authenticates staff and validates tokens", "OpenID Connect (OIDC) / OAuth 2.0")
+Rel(StaffManagementAPI, InterlibraryLoanILLNetwork, "Performs cross-library searches and loans", "HTTPS/REST")
+Rel(APIGateway, ObservabilityPlatformSIEM, "Streams telemetry and metrics", "OpenTelemetry (OTel) / Prometheus over TLS")
+Rel(PatronWebAppAPI, ObservabilityPlatformSIEM, "Streams telemetry and metrics", "OpenTelemetry (OTel) / Prometheus over TLS")
+Rel(StaffManagementAPI, ObservabilityPlatformSIEM, "Streams telemetry and metrics", "OpenTelemetry (OTel) / Prometheus over TLS")
+Rel(NotificationDispatcher, ObservabilityPlatformSIEM, "Streams telemetry and metrics", "OpenTelemetry (OTel) / Prometheus over TLS")
+
+@enduml

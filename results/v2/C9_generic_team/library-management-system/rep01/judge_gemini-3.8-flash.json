@@ -1,0 +1,244 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "The Cataloguing Controller, Circulation Controller, and Domain Service Logic directly address cataloguing and circulation management, while Self-Service Portals and Kiosks enable self-service. However, explicit mechanisms differentiating digital vs. physical item cataloguing workflows (such as digital asset storage or DRM) are lightly specified.",
+   "performance_efficiency": "The dedicated Search Index Service is explicitly designed to meet the < 800 ms p99 latency target. It is augmented by the Caching Layer (Redis), asynchronous indexing via Asynchronous Event Bus, and non-blocking orchestration in the API Composition / BFF Container.",
+   "compatibility": "The architecture incorporates industry-standard integration mechanisms including OpenAPI, REST, gRPC, and AMQP/Kafka via the Schema Registry. Standard library protocol interoperability (such as SIP2, NCIP, or Z39.50/MARC) is not explicitly detailed, though generic external contracts are well supported.",
+   "usability": "The Web and Mobile UI Frontend within Self-Service Portals and Kiosks accommodates both Library Patrons and Staff across public and academic environments, though specific workflows customized to diverse staff administration roles versus self-checkout kiosk constraints are bundled into a single frontend.",
+   "reliability": "Fault tolerance is comprehensively addressed using Resilience Handler circuit breakers, bulkheads, Transactional Outbox Processor, Redis Distributed Lock Manager, dead-letter queues in Event Publisher / Consumer, and localized backups via the Backup and Snapshot Manager.",
+   "security": "Strict EU data residency is thoroughly enforced via geo-routing in the API Gateway, localized storage, EU-certified Secrets Management Vault, client-side Compliance and Telemetry Redactor, and Security and Storage Manager using short-lived tokens and TLS/mTLS transport.",
+   "maintainability": "High modularity is achieved through Hexagonal Architecture in Domain Service Logic, explicit BFF separation, OpenAPI Schema Validation and Contract Enforcer, and configuration-as-code managed by the Configuration Management Service.",
+   "portability": "The system utilizes standard containerized environments and Kubernetes CronJobs via Job Scheduler, standard S3 API Client interfaces, and decoupled AMQP/Kafka protocols, facilitating portability across compliant EU cloud or on-premise infrastructures."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 3,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 4.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The dedicated search tier, Redis caching layer, and non-blocking BFF orchestrator directly support low-latency search. However, explicit elastic scaling and cluster replica sizing for 2,000 concurrent requests are not detailed in the model.",
+    "elements": [
+     "API Gateway",
+     "API Composition / BFF Container",
+     "Dedicated Search Tier",
+     "Search Index Service",
+     "Caching Layer (Redis)"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios on common search queries",
+     "Search tier index partitioning and concurrency limits"
+    ],
+    "tradeoffs": [
+     "Caching reduces datastore load but risks brief index staleness"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "CQRS and asynchronous event decoupling via transactional outbox and message broker prevent writes from impacting search query latency. Asynchronous index consumption ensures updates propagate well within the 5-minute requirement without degrading p99 search performance.",
+    "elements": [
+     "Core Domain Services",
+     "Cataloguing Controller",
+     "Transactional Outbox Processor",
+     "Asynchronous Event Bus (Message Broker)",
+     "Idempotent Event Consumer",
+     "Search Index Service"
+    ],
+    "sensitivity_points": [
+     "Event broker processing throughput and consumer lag under peak load"
+    ],
+    "tradeoffs": [
+     "Eventual consistency in search indices in exchange for non-blocking catalog updates"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Circulation transactions are isolated in the relational datastore and unaffected by search index node failures. The search tier includes circuit breakers and bulkheads, though search replica failover and automated cluster healing are largely implicit.",
+    "elements": [
+     "Core Domain Services",
+     "Primary Transactional Datastore",
+     "Dedicated Search Tier",
+     "Resilience Handler"
+    ],
+    "sensitivity_points": [
+     "Search cluster node heartbeat detection and replica promotion time"
+    ],
+    "tradeoffs": [
+     "Bulkheading preserves core circulation availability while gracefully degrading search accuracy"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Self-service portals are stateless web and mobile clients backed by an API Gateway and client-side resilience handlers with exponential retries. Redundant instances handle redirected traffic seamlessly without losing transactional state stored in backend databases.",
+    "elements": [
+     "Self-Service Portals and Kiosks",
+     "Web and Mobile UI Frontend",
+     "Resilience Handler",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Gateway health check intervals to detect failed frontend instances quickly"
+    ],
+    "tradeoffs": [
+     "Stateless frontends shift state tracking complexity to token mechanisms and backend services"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "While Hexagonal Architecture isolates business rules, the architecture lacks a dedicated digital content provider gateway or extensible provider adapter plugin structure, requiring modifications directly within Core Domain Services.",
+    "elements": [
+     "Core Domain Services",
+     "Cataloguing Controller",
+     "Domain Service Logic"
+    ],
+    "sensitivity_points": [
+     "Tight coupling between cataloguing controllers and specific item provider formats"
+    ],
+    "tradeoffs": [
+     "Centralizing provider logic within core domain services simplifies initial builds but increases modification effort"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Configuration & Feature Management container directly provides dynamic runtime configuration and feature flag toggles via GitOps workflows and schema-per-version contracts, allowing circulation rule adjustments without code deployment.",
+    "elements": [
+     "Configuration & Feature Management Container",
+     "Configuration Management Service",
+     "Feature Flag Engine",
+     "Core Domain Services"
+    ],
+    "sensitivity_points": [
+     "Dynamic rule distribution latency to Core Domain Services via cache invalidation"
+    ],
+    "tradeoffs": [
+     "Runtime rule evaluation introduces minor latency overhead compared to compiled business logic"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Enforced geo-routing, EU-certified secret vaults, client-side telemetry redaction, and EU-constrained datastores and backup pipelines reinforce residency. However, formal infrastructure-as-code guardrails or automated egress blocking to non-EU networks are not fully formalized.",
+    "elements": [
+     "API Gateway",
+     "Compliance and Telemetry Redactor",
+     "Primary Transactional Datastore",
+     "EU-certified Secrets Management Vault",
+     "Data Migration and Backup Container"
+    ],
+    "sensitivity_points": [
+     "Egress firewall filtering rules and region enforcement across all cloud dependencies"
+    ],
+    "tradeoffs": [
+     "Strict EU residency limits integration options with external global SaaS providers"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "API Gateway enforces OAuth2/JWT token introspection, and Core Domain Services govern authorization. Denied requests and security telemetry are routed to the Observability & Logging container, though fine-grained object-level access control logic is not explicitly isolated.",
+    "elements": [
+     "API Gateway",
+     "Routing and Security Router",
+     "Core Domain Services",
+     "Circulation Controller",
+     "Observability & Logging Container"
+    ],
+    "sensitivity_points": [
+     "Thorough validation of resource ownership in user authorization tokens"
+    ],
+    "tradeoffs": [
+     "Fine-grained token and payload authorization checks add slight processing overhead to requests"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "Primary Transactional Datastore",
+     "EU-certified Secrets Management Vault",
+     "Compliance and Telemetry Redactor",
+     "Backup and Snapshot Manager",
+     "Secrets and Certificate Handler",
+     "Integrity and Compliance Validator"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Core Domain Services",
+     "Cataloguing Controller",
+     "Domain Service Logic",
+     "Web and Mobile UI Frontend"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Dedicated Search Tier",
+     "Search Index Service",
+     "Resilience Handler",
+     "Caching Layer (Redis)",
+     "Redis In-Memory Store",
+     "Resource Throttling and Rate-Limiter"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

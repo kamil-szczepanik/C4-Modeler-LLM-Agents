@@ -1,0 +1,323 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are met: R-01 via 'Customer Portal', R-02 via 'Adjuster Workspace', and R-03 through 'Topic Router Component' and 'Modernization Switcher Component' supporting incremental claim type migrations.",
+   "performance_efficiency": "R-05 is explicitly achieved using 'Azure Redis Cache', 'Session Cache Manager' for materialized claim views, and the 'Circuit Breaker / Fallback Manager' to decouple adjuster screen loads from 5-second mainframe response latencies.",
+   "compatibility": "Extensive coexistence with 'Legacy Mainframe' is provided by 'Mainframe Integration Adapter' and 'Mainframe Translation Engine' translating COBOL copybooks over mTLS, while 'Identity Provider' integrates Active Directory using OAuth2/OIDC.",
+   "usability": "User groups are provided tailored interfaces: 'Customer Portal' serves customers and brokers with self-service submission, while 'Adjuster Workspace' provides claims adjusters with an optimized, responsive management UI.",
+   "reliability": "Zero claim loss (R-04) is addressed via 'Azure Service Bus', 'Mainframe Sync Queue Component' buffering during batch windows, and 'Dead-Letter Handler Component'. Concrete deduplication mechanisms are not fully detailed.",
+   "security": "SSO with Active Directory (R-07) is handled via 'Authentication Component' and 'API Gateway'. 'Azure Key Vault', mTLS certificates, private endpoints, and RBAC via Managed Identities safeguard transport and credentials.",
+   "maintainability": "R-06 is directly satisfied by 'Modernization Switcher Component' coupled with 'Azure App Configuration' feature flags to rollback claim types within one day, supported by 'Mainframe ACL Adapter' decoupling domain logic.",
+   "portability": "Effectively implements the hybrid target across on-premises and Azure West Europe. Deep reliance on Azure PaaS services (Service Bus, Key Vault, Container Apps) slightly limits multi-cloud replaceability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Redis caching and circuit breaker patterns isolate adjusters from 5 s mainframe latency by serving pre-materialized claim views. However, cold cache misses on unmigrated mainframe claims lack explicit asynchronous frontend polling or partial rendering mechanisms.",
+    "elements": [
+     "Adjuster Workspace",
+     "Claim Processing Controller",
+     "Distributed Cache Client",
+     "Azure Redis Cache",
+     "Circuit Breaker / Fallback Manager",
+     "Adjuster Backend Service"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio for legacy claim view models directly dictates screen latency"
+    ],
+    "tradeoffs": [
+     "Serving stale cached views improves response time but risks reading uncommitted mainframe updates"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Online submissions are ingested via scalable Azure Container Apps and queued asynchronously in Azure Service Bus. The Mainframe Sync Queue throttles and buffers delivery to the mainframe, entirely protecting its batch window.",
+    "elements": [
+     "Customer Portal",
+     "API Gateway",
+     "Azure Service Bus",
+     "Mainframe Sync Queue Component",
+     "Mainframe Integration Adapter"
+    ],
+    "sensitivity_points": [
+     "Message buffering capacity and queue depth in Azure Service Bus during peak bursts"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission decoupling ensures intake availability while deferring mainframe consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "During nightly batch windows, incoming submissions are buffered in Azure Service Bus queues while portals stay fully operational. Once the window closes, the Mainframe Sync Queue forwards payloads to the Mainframe Integration Adapter without data loss.",
+    "elements": [
+     "Azure Service Bus",
+     "Mainframe Sync Queue Component",
+     "Dead-Letter Handler Component",
+     "Mainframe Integration Adapter",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue retention limits spanning the duration of the nightly window"
+    ],
+    "tradeoffs": [
+     "Decoupled asynchronous ingestion trades immediate legacy verification for platform continuous availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Azure SQL Database uses Change Data Capture and Temporal Tables alongside Service Bus Dead-Letter Queues to trace updates and capture failures. However, an explicit end-to-end distributed compensation or two-way reconciliation pipeline is not fully articulated.",
+    "elements": [
+     "Azure Service Bus",
+     "Dead-Letter Handler Component",
+     "Azure SQL Database",
+     "Migration & Audit Sync Component",
+     "Mainframe Integration Adapter"
+    ],
+    "sensitivity_points": [
+     "Idempotency mechanisms and correlation IDs between cloud message queues and DB2 updates"
+    ],
+    "tradeoffs": [
+     "Automated reconciliation overhead increases database storage and operational monitoring complexity"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The architecture incorporates a Modernization Switcher backed by Azure App Configuration feature flags and an Anti-Corruption Layer. Switching routing rules or rolling back claim types to the mainframe can be executed dynamically without codebase redeployment.",
+    "elements": [
+     "Azure Service Bus",
+     "Modernization Switcher Component",
+     "Azure App Configuration",
+     "Mainframe ACL Adapter",
+     "Mainframe Translation Engine"
+    ],
+    "sensitivity_points": [
+     "Centralized feature flag propagation speed across distributed routing components"
+    ],
+    "tradeoffs": [
+     "Dynamic routing rules introduce slight routing hop latency in exchange for instant rollback"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Presentation tiers depend strictly on the API Gateway and backend domain controllers. The legacy dependency is fully encapsulated behind the Anti-Corruption Layer and integration adapter, allowing mainframe retirement without modifying adjuster or customer user interfaces.",
+    "elements": [
+     "Customer Portal",
+     "Adjuster Workspace",
+     "API Gateway",
+     "Adjuster Backend Service",
+     "Mainframe ACL Adapter"
+    ],
+    "sensitivity_points": [
+     "Strict separation between presentation contracts and legacy mainframe copybook schemas"
+    ],
+    "tradeoffs": [
+     "Maintaining ACL translation abstraction increases upfront development effort for backend services"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "APIM and Identity Provider manage authentication and token validation, but explicit fine-grained tenant isolation and customer-to-broker authorization checks are not specified in the backend services or database layers, creating risk of horizontal privilege escalation.",
+    "elements": [
+     "API Gateway",
+     "Azure API Management (APIM)",
+     "Identity Provider",
+     "Adjuster Backend Service",
+     "Azure SQL Database"
+    ],
+    "sensitivity_points": [
+     "Enforcement point for broker-to-claim ownership validation within API authorization logic"
+    ],
+    "tradeoffs": [
+     "Granular tenancy checks at the gateway or domain layer add compute overhead"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Central authentication relies on Active Directory / Entra ID. However, standard JWT bearer token expiration intervals (typically 60 minutes) will allow continued access unless Continuous Access Evaluation (CAE) or active token revocation mechanisms are explicitly integrated.",
+    "elements": [
+     "Identity Provider",
+     "API Gateway",
+     "Azure API Management (APIM)",
+     "Authentication Component"
+    ],
+    "sensitivity_points": [
+     "Configured lifespan and revocation propagation latency of issued OAuth2/OIDC bearer tokens"
+    ],
+    "tradeoffs": [
+     "Frequent token revalidation or CAE verification increases latency and identity provider load"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Mainframe Integration Adapter",
+     "Mainframe Sync Queue Component",
+     "Migration & Audit Sync Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Mainframe Sync Queue Component",
+     "Azure Service Bus"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Mainframe Integration Adapter",
+     "Mainframe Translation Engine",
+     "Mainframe ACL Adapter"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer Portal",
+     "Claim Submission UI Component",
+     "API Client Component",
+     "API Gateway"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Workspace",
+     "Workspace UI Shell",
+     "Claim Processing Controller",
+     "Adjuster Backend Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Topic Router Component",
+     "Modernization Switcher Component",
+     "Azure App Configuration",
+     "Azure Service Bus"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Azure Service Bus",
+     "Dead-Letter Handler Component",
+     "Messaging Publisher"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Azure Redis Cache",
+     "Session Cache Manager",
+     "Redis Master-Replica Engine",
+     "Distributed Cache Client",
+     "Circuit Breaker / Fallback Manager",
+     "Cache Manager Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Modernization Switcher Component",
+     "Azure App Configuration",
+     "Claim Entity Store",
+     "Migration & Audit Sync Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Identity Provider",
+     "Authentication Component",
+     "Azure API Management (APIM)",
+     "API Gateway"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

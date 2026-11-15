@@ -1,0 +1,321 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are met: R-01 via 'React SPA Frontend' for customers and brokers, R-02 via adjuster interfaces in 'Web Application Container', and R-03 via 'Migration Router Component' and 'Feature Flag Store' enabling incremental, claim-type by claim-type migration.",
+   "performance_efficiency": "Requirement R-05 is directly addressed by 'Read Model Cache Component' (Azure Cache for Redis) serving pre-aggregated claim views under 2 s, decoupled from mainframe latency via asynchronous event synchronization using 'Transactional Store Component' change feeds.",
+   "compatibility": "System constraints are respected: 'Mainframe Connector Client' integrates via IBM MQ/TCP, 'Batch Window Gatekeeper' enforces batch timing limits, and 'Legacy Protocol Adapter' acts as an anti-corruption layer to minimize costly mainframe interface changes.",
+   "usability": "Both Customers/Brokers and Claims Adjusters are explicitly supported with specialized workflows via 'React SPA Frontend' and 'Node.js BFF', though consolidating both external public users and internal claims adjusters into a single frontend container slightly blurs distinct persona needs.",
+   "reliability": "R-04 consistency is ensured via 'Azure Service Bus' queues, 'DLQ Management Service', 'Audit & Reconciliation Component', and 'Resilience4j Circuit Breaker' in 'Migration Router Component', preventing data loss and duplicate processing across batch and real-time processing.",
+   "security": "Requirement R-07 is satisfied using 'Active Directory / Azure AD' with OIDC/OAuth2 across frontends and APIs. 'Audit & Compliance Interceptor' and 'Audit & Compliance Logger' ensure transaction integrity, end-to-end traceability, and accountability.",
+   "maintainability": "R-06 is fully realized: 'Dynamic Routing Store' and 'Feature Flag Store' in 'Configuration' allow one-day rollbacks of migrated claim types to the mainframe. The anti-corruption architecture ensures loose coupling between cloud microservices and legacy components.",
+   "portability": "Target hybrid deployment (azure-westeurope and on-prem-mainframe) is well mapped via Azure Container Apps, App Service, and ExpressRoute. However, high dependency on Azure-specific PaaS services (Cosmos DB, App Configuration) slightly limits portability outside Azure."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Pre-aggregated views in Azure Cache for Redis decouple adjuster queries from 5-second mainframe latency. However, handling cache misses for mainframe-resident data without incurring synchronous legacy call penalties is not fully specified.",
+    "elements": [
+     "Adjuster Web App",
+     "Claims Core Service Container",
+     "Read Model Cache Component",
+     "Transactional Store Component"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios for unmigrated or hybrid claim records",
+     "Asynchronous read-model projection latency from mainframe feeds"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of cached adjuster views versus strict real-time accuracy"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Submissions are absorbed by scalable Azure Container Apps and queued asynchronously via Azure Service Bus. The Batch Window Gatekeeper throttles dispatching to protect the fixed 23:00-05:00 nightly batch window.",
+    "elements": [
+     "Web Application Container",
+     "Claims Core Service Container",
+     "Mainframe Adapter Container",
+     "Batch Window Gatekeeper",
+     "Azure Service Bus"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue storage capacity during multi-day submission spikes",
+     "Batch Window Gatekeeper dispatch rate limits"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission acceptance versus immediate transactional confirmation on mainframe"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Claims Core persists submissions to Cosmos DB and queues them in Azure Service Bus. The Batch Window Gatekeeper explicitly suspends dispatching during batch windows and flushes queued transactions once the window concludes.",
+    "elements": [
+     "Mainframe Adapter Container",
+     "Batch Window Gatekeeper",
+     "Azure Service Bus",
+     "Transactional Store Component"
+    ],
+    "sensitivity_points": [
+     "Queue depth and message time-to-live configuration during extended batch processing",
+     "Reliable state detection of mainframe batch start and end"
+    ],
+    "tradeoffs": [
+     "Decoupled availability during maintenance versus delayed mainframe claim visibility"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Resilience is provided by Dead Letter Queue management and an Audit & Reconciliation Component reconciling records against legacy batch exports. Exact deduplication keys and distributed two-phase rollback mechanics are not fully detailed.",
+    "elements": [
+     "Audit & Reconciliation Component",
+     "DLQ Management Service",
+     "Audit & Reconciliation Log Component",
+     "Mainframe Connector Client"
+    ],
+    "sensitivity_points": [
+     "Idempotency key enforcement across hybrid transactional boundaries",
+     "Timeliness and granularity of legacy batch export reconciliation"
+    ],
+    "tradeoffs": [
+     "Asynchronous reconciliation complexity versus synchronous cross-system two-phase locking"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The API Gateway, Migration Router, and Azure App Configuration feature flags allow traffic routing by claim type and rapid rollback within minutes without code redeployments or intrusive mainframe modifications.",
+    "elements": [
+     "API Router and Policy Enforcer",
+     "Dynamic Routing Store",
+     "Feature Flag Store",
+     "Migration Router Component"
+    ],
+    "sensitivity_points": [
+     "Propagation latency of dynamic routing rules and feature flags",
+     "Granularity of routing keys per claim type"
+    ],
+    "tradeoffs": [
+     "Dynamic configuration management overhead versus deployment simplicity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "User interfaces interact purely with the BFF and API Gateway. Modern data persistence and core logic already reside in Azure, allowing decommissioning of mainframe adapters without modifying frontend components.",
+    "elements": [
+     "Web Application Container",
+     "Node.js BFF",
+     "API Gateway / Integration Container",
+     "Claims Core Service Container",
+     "Transactional Store Component"
+    ],
+    "sensitivity_points": [
+     "Clean separation between legacy adapter contracts and modern core domain models",
+     "Completeness of data migration to Cosmos DB"
+    ],
+    "tradeoffs": [
+     "Maintaining anti-corruption layers during migration versus direct point-to-point integration"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The architecture authenticates via Azure AD and validates tokens at the Node.js BFF and API Gateway. However, fine-grained object-level authorization (broker tenancy and ownership policies) is not explicitly modeled.",
+    "elements": [
+     "Node.js BFF",
+     "API Router and Policy Enforcer",
+     "Claims Core Service Container",
+     "Active Directory / Azure AD"
+    ],
+    "sensitivity_points": [
+     "Enforcement point of fine-grained multi-tenant claim ownership checks",
+     "Comprehensive security audit logging for unauthorized access attempts"
+    ],
+    "tradeoffs": [
+     "Centralized authorization policies at gateway versus domain-level enforcement in core services"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Centralized Azure AD handles frontend SSO, but token lifetimes, immediate revocation mechanisms, and propagation of access revocation to on-premises mainframe permissions are unaddressed.",
+    "elements": [
+     "Active Directory / Azure AD",
+     "Adjuster Web App",
+     "Node.js BFF",
+     "Mainframe COBOL/DB2 System"
+    ],
+    "sensitivity_points": [
+     "OAuth2 access token expiration windows and continuous access evaluation",
+     "Synchronization between Azure AD and mainframe security facilities"
+    ],
+    "tradeoffs": [
+     "Short-lived tokens and token introspection overhead versus stateless performance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Mainframe COBOL/DB2 System",
+     "Audit & Reconciliation Component",
+     "Audit & Reconciliation Log Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Batch Window Gatekeeper",
+     "Mainframe Adapter Container"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "API Gateway / Integration Container",
+     "Integration Gateway / ACL",
+     "Legacy Protocol Adapter"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer Portal SPA",
+     "Web Application Container",
+     "React SPA Frontend",
+     "Node.js BFF"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Web App",
+     "Web Application Container",
+     "React SPA Frontend",
+     "Node.js BFF"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Migration Router Component",
+     "Dynamic Routing Store",
+     "Feature Flag Store",
+     "Claims Core Service Container"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Azure Service Bus",
+     "DLQ Management Service",
+     "Audit & Reconciliation Component",
+     "Transactional Store Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Azure Cache for Redis",
+     "Read Model Cache Component",
+     "Data & Caching Container"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Configuration Manager",
+     "Feature Flag Store",
+     "Dynamic Routing Store",
+     "Configuration Sync Agent",
+     "Migration Router Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Active Directory / Azure AD",
+     "Node.js BFF"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

@@ -1,0 +1,47 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patients, "Patients", "Patients accessing the system for admissions, scheduling, and medical records via Multi-Factor Authentication (MFA).")
+Person(Doctors, "Doctors", "Medical doctors accessing electronic medical records and scheduling tools via Multi-Factor Authentication (MFA).")
+Person("Billing Staff", "Billing Staff", "Billing staff managing patient billing and insurance claims via Multi-Factor Authentication (MFA).")
+
+System_Ext("Third-party Insurance Gateways", "Third-party Insurance Gateways", "External systems used to submit billing claims asynchronously.")
+System_Ext("Lab/Imaging Systems", "Lab/Imaging Systems", "External systems that exchange medical data using HL7 FHIR standards.")
+System_Ext("External Identity Providers", "External Identity Providers", "External identity providers used for authentication and access control.")
+
+System_Boundary(cms, "Clinic Management System") {
+    Container("API Gateway", "API Gateway", "Kubernetes Ingress, Reverse Proxy", "Routes incoming HTTPS, REST, and GraphQL requests from users to appropriate domain services.")
+    Container("Patient/EMR Service", "Patient/EMR Service", "Microservice, Kubernetes, Database-per-service", "Manages patient admissions and electronic medical records.")
+    Container("Scheduling Service", "Scheduling Service", "Microservice, Kubernetes, Database-per-service", "Handles appointments and scheduling for clinical operations.")
+    Container("Billing Service", "Billing Service", "Microservice, Kubernetes, Database-per-service", "Manages billing operations and insurance claims.")
+    Container("Distributed Cache", "Distributed Cache", "Redis", "Provides distributed caching for system performance and sub-second EMR access.")
+    Container("Message Broker", "Message Broker", "Kafka / RabbitMQ", "Handles asynchronous event publishing and consumption for HL7 FHIR payloads and insurance claims, featuring Dead Letter Queues.")
+    Container("HashiCorp Vault", "HashiCorp Vault", "HashiCorp Vault", "Provides externalized encrypted configuration and secrets management.")
+    Container("Observability & Security Sidecars", "Observability & Security Sidecars", "Prometheus, OpenTelemetry, Falco/Trivy Operator", "Monitors metrics, distributed tracing, and ensures runtime security and vulnerability compliance.")
+}
+
+Rel(Patients, "API Gateway", "Patient registration, scheduling, EMR access, and billing queries", "HTTPS / REST / GraphQL")
+Rel(Doctors, "API Gateway", "Patient registration, scheduling, EMR access, and billing queries", "HTTPS / REST / GraphQL")
+Rel("Billing Staff", "API Gateway", "Patient registration, scheduling, EMR access, and billing queries", "HTTPS / REST / GraphQL")
+
+Rel("API Gateway", "Patient/EMR Service", "Routes requests to domain services", "gRPC / REST")
+Rel("API Gateway", "Scheduling Service", "Routes requests to domain services", "gRPC / REST")
+Rel("API Gateway", "Billing Service", "Routes requests to domain services", "gRPC / REST")
+
+Rel("Patient/EMR Service", "Message Broker", "Asynchronous event publishing and consumption for HL7 FHIR payloads", "Kafka / RabbitMQ")
+Rel("Billing Service", "Message Broker", "Asynchronous event publishing and consumption for insurance claims", "Kafka / RabbitMQ")
+
+Rel("Patient/EMR Service", "Lab/Imaging Systems", "Connects to lab and imaging systems with circuit breakers", "HTTPS / HL7 FHIR APIs")
+Rel("Billing Service", "Third-party Insurance Gateways", "Connects to third-party insurance gateways with circuit breakers", "HTTPS / HL7 FHIR APIs")
+
+Rel("Patient/EMR Service", "Distributed Cache", "Caches frequently accessed data for low latency", "Redis Protocol")
+Rel("Scheduling Service", "Distributed Cache", "Caches scheduling data", "Redis Protocol")
+
+Rel("Patient/EMR Service", "HashiCorp Vault", "Retrieves encrypted configurations and secrets", "HTTPS / Vault API")
+Rel("Scheduling Service", "HashiCorp Vault", "Retrieves encrypted configurations and secrets", "HTTPS / Vault API")
+Rel("Billing Service", "HashiCorp Vault", "Retrieves encrypted configurations and secrets", "HTTPS / Vault API")
+
+@enduml

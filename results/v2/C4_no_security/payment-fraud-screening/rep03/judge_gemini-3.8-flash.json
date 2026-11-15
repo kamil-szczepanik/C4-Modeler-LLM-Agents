@@ -1,0 +1,322 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 2
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "Requirements R-01 to R-03 are addressed via Scoring Engine Container, Case Management & Reporting Container, and Redis Pub/Sub for hot-reloads. However, the direct pipeline routing payments flagged for 'review' from the scoring engine into the Case Management DynamoDB is not explicitly defined.",
+   "performance_efficiency": "The 50 ms P99 latency at 3,000 req/s is well supported by Go/Rust compiled Execution Core Component, in-memory ElastiCache Redis lookups, and fully asynchronous audit logging via crossbeam channels to Amazon SQS / Kinesis Data Firehose.",
+   "compatibility": "Interoperability is thoroughly handled via gRPC/HTTPS for the external Payment Gateway, mTLS for the external Tokenization / Vault Service, and standard REST/OpenTelemetry interfaces for downstream monitoring and compliance queries.",
+   "usability": "Fraud analysts and risk managers are directly served by a dedicated Frontend SPA with reporting and review APIs, while compliance auditors are provided access via Amazon Athena SQL queries and CloudWatch dashboards.",
+   "reliability": "Availability is well addressed with Redis Multi-AZ automatic failover, SQS buffering, and PagerDuty composite alarms. The ALB description includes circuit-breaker fallback to prevent blocking payments over 1 minute, though native ALB circuit-breaker capabilities have minor specification ambiguities.",
+   "security": "PAN is isolated via Tokenization / Vault Service and mTLS. Immutable audit logs use Amazon S3 Object Lock. However, S3 Object Lock is specified in GOVERNANCE rather than strict COMPLIANCE mode, leaving potential override risks under PCI-DSS Level 1 audit standards.",
+   "maintainability": "The system cleanly decouples scoring, case management, and audit ingestion, fitting a 3-engineer team using managed AWS serverless services. Modeling vendor internals (e.g. Presto/Trino inside Amazon Athena) creates minor container decomposition awkwardness.",
+   "portability": "The design is tightly coupled to proprietary AWS services (ALB Target Groups, Kinesis Firehose, S3 Object Lock, Athena, DynamoDB, Glue Data Catalog), making migration or multi-cloud deployment require substantial architectural refactoring."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "In-memory evaluation in Go/Rust and asynchronous audit dispatch protect the critical path, but synchronous tokenization calls across the network may jeopardize the sub-50 ms P99 threshold under 3,000 RPS.",
+    "elements": [
+     "AWS ALB",
+     "Scoring Engine Container",
+     "ElastiCache Redis",
+     "Tokenization / Vault Service",
+     "Audit Dispatcher Component"
+    ],
+    "sensitivity_points": [
+     "Latency of synchronous external tokenization service calls",
+     "Redis connection pool saturation under 3,000 requests per second"
+    ],
+    "tradeoffs": [
+     "Calling external tokenization synchronously ensures security but increases scoring latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Case management workloads are fully decoupled into separate containers and datastores (DynamoDB and Athena) on ECS Fargate, preventing analyst queries from impacting scoring engine compute and memory.",
+    "elements": [
+     "Case Management & Reporting Container",
+     "Amazon DynamoDB",
+     "Amazon Athena",
+     "Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Complete compute and storage isolation between operational scoring and analyst reporting"
+    ],
+    "tradeoffs": [
+     "Maintaining separate datastores increases operational complexity for the small engineering team"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "While ALB target group health checks detect failures, standard ALB components cannot autonomously execute complex fallback decision logic (approve/decline rules) nor generate and dispatch audited fallback events without the scoring engine.",
+    "elements": [
+     "AWS ALB",
+     "Routing and Health Check",
+     "Scoring Engine Container",
+     "AWS CloudWatch & PagerDuty"
+    ],
+    "sensitivity_points": [
+     "ALB lacks native capability to execute and audit application fallback scoring logic"
+    ],
+    "tradeoffs": [
+     "Relying on standard load balancers for fallback limits custom business decision capabilities"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Audit Dispatcher buffers payloads asynchronously in-memory and offloads them to SQS and Kinesis Firehose, fully insulating real-time scoring latency and preventing record loss during downstream S3 slowdowns.",
+    "elements": [
+     "Audit Dispatcher Component",
+     "Amazon SQS / Kinesis Data Firehose",
+     "Amazon S3 Object Lock"
+    ],
+    "sensitivity_points": [
+     "Queue retention window and buffer capacity in SQS during long downstream outages"
+    ],
+    "tradeoffs": [
+     "Asynchronous buffering guarantees low scoring latency but delays immediate consistency of audit logs"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Redis Pub/Sub facilitates runtime notifications, and audit payloads record model versions. However, dynamic in-memory hot-swapping of compiled scoring models in Go/Rust without container redeployment requires complex custom runtime execution mechanisms.",
+    "elements": [
+     "ElastiCache Redis",
+     "Redis Pub/Sub Channel",
+     "Execution Core Component",
+     "Scoring Engine Container"
+    ],
+    "sensitivity_points": [
+     "Runtime compilation and safe loading of scoring models inside compiled binaries"
+    ],
+    "tradeoffs": [
+     "In-process model hot-reloading avoids container deployment latency but increases runtime memory complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Rules managed via the Case Management API are published through Redis Pub/Sub to the execution core within seconds, with rule identifiers propagated directly into the asynchronous audit trail.",
+    "elements": [
+     "Case Management & Reporting Container",
+     "ElastiCache Redis",
+     "Execution Core Component",
+     "Audit Dispatcher Component"
+    ],
+    "sensitivity_points": [
+     "Propagation delay across Redis Pub/Sub subscribers on all scoring engine tasks"
+    ],
+    "tradeoffs": [
+     "Distributing rules via Redis enables sub-minute updates but requires robust local rule validation"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "PAN exposure is mitigated as analysts only access tokenized references and masked data. While CloudWatch and PagerDuty alert on system events, explicit anomalous behavior detection for compromised analyst accounts is minimally specified.",
+    "elements": [
+     "Case Management & Reporting Container",
+     "Tokenization / Vault Service",
+     "AWS CloudWatch & PagerDuty"
+    ],
+    "sensitivity_points": [
+     "Absence of clear-text card data in Case Management API responses",
+     "Latency of behavioral anomaly detection rules within CloudWatch logs"
+    ],
+    "tradeoffs": [
+     "Restricting analysts to tokenized data protects compliance but restricts deep fraud investigations"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Audit payloads containing inputs, model versions, and explanations are stored immutably in S3 Object Lock with 7-year retention and are queryable within minutes using Athena and Glue Data Catalog.",
+    "elements": [
+     "Amazon S3 Object Lock",
+     "Amazon Athena",
+     "AWS Glue Data Catalog",
+     "Case Management & Reporting Container"
+    ],
+    "sensitivity_points": [
+     "Partitioning strategy in Athena and Glue to optimize 7-year historical query speed"
+    ],
+    "tradeoffs": [
+     "WORM compliance on S3 prevents modification but increases long-term storage data retention costs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Tokenization / Vault Service",
+     "SSL Termination and WAF",
+     "Redis AUTH / IAM Authentication"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Amazon S3 Object Lock",
+     "Compliance Archive Bucket",
+     "Amazon SQS / Kinesis Data Firehose",
+     "Audit Dispatcher Component",
+     "Amazon Athena"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Athena Workgroups",
+     "AWS Glue Data Catalog",
+     "Amazon DynamoDB"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "AWS CloudWatch & PagerDuty",
+     "PagerDuty Integration",
+     "Scoring Engine Container",
+     "Case Management & Reporting Container"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Scoring Engine Container",
+     "API Handler Component",
+     "Feature Assembler Component",
+     "Execution Core Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management & Reporting Container",
+     "Case Management API",
+     "Frontend SPA",
+     "Amazon DynamoDB",
+     "Fraud Analyst & Risk Manager"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "ElastiCache Redis",
+     "Redis Engine OSS 7.x",
+     "Redis Pub/Sub Channel",
+     "Execution Core Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scoring Engine Container",
+     "Execution Core Component",
+     "ElastiCache Redis",
+     "Feature Assembler Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Tokenization / Vault Service",
+     "Redis AUTH / IAM Authentication",
+     "Feature Assembler Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Scoring Engine Container",
+     "Audit Dispatcher Component",
+     "Amazon SQS / Kinesis Data Firehose",
+     "Amazon S3 Object Lock",
+     "Compliance Archive Bucket"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "AWS ALB",
+     "Routing and Health Check",
+     "AWS CloudWatch & PagerDuty"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

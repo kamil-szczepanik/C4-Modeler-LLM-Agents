@@ -1,0 +1,21 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container_Boundary(fraud_scoring_engine, "Fraud Scoring Engine") {
+    Component(Scoring API Controller, "Scoring API Controller", "Rust (tonic gRPC)", "Managing incoming requests.")
+    Component(Rule Execution Engine, "Rule Execution Engine", "Rust compiled evaluation component", "For deterministic fraud rules.")
+    Component(Model Ingestion & Hot-Swap Coordinator, "Model Ingestion & Hot-Swap Coordinator", "Rust (arc-swap, ONNX Runtime via ort)", "For zero-downtime model updates.")
+    Component(Feature Assembler, "Feature Assembler", "Rust (tokio async)", "Coordinating parallel data gathering.")
+    Component(In-Memory Feature Cache Client, "In-Memory Feature Cache Client", "Rust (redis-rs)", "For low-latency feature retrieval.")
+    Component(Decision Publisher, "Decision Publisher", "Rust (aws-sdk-sqs)", "For asynchronous event dispatch.")
+}
+
+System_Ext(AWS SQS, "AWS SQS", "Enqueues audit logs.")
+
+Rel(Scoring API Controller, Feature Assembler, "Gathers context", "in-process async")
+Rel(Feature Assembler, In-Memory Feature Cache Client, "Fetches velocity features", "TCP/RESP")
+Rel(Rule Execution Engine, Model Ingestion & Hot-Swap Coordinator, "Evaluates rules against active models", "in-process lock-free read")
+Rel(Scoring API Controller, Decision Publisher, "Dispatches audit events", "async channel")
+Rel(Decision Publisher, AWS SQS, "Enqueues audit logs", "HTTPS/AWS API")
+@enduml

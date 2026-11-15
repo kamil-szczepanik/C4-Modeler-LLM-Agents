@@ -1,0 +1,345 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Scoring Engine Container and Rule Engine Component handle real-time scoring (R-01), Case Management API Container and Fraud Analyst SPA support analyst workflows (R-02), and Model Manager Component facilitates zero-downtime updates from S3 (R-03).",
+   "performance_efficiency": "The design achieves 3,000 TPS under 50 ms P99 using AWS NLB, a high-throughput Rust Tonic gRPC API Listener Component, an in-memory Wasm Rule Engine Component, and asynchronous audit decoupling via an in-memory channel and Amazon SQS.",
+   "compatibility": "Interoperability is thoroughly addressed with gRPC and mTLS for Payment Gateway communication, OIDC/PKCE integration for external Identity Providers, and standard REST/JSON APIs for analyst frontends.",
+   "usability": "Fraud Analysts & Risk Managers are directly served by a dedicated Fraud Analyst SPA featuring React SPA UI and a Batch Action & Workflow Engine Component that streamlines case reviews and operational workflows.",
+   "reliability": "Reliability is supported by Fallback Heuristics Component in the scoring engine and an audit DLQ. However, there is no explicit upstream fail-open mechanism or gateway circuit breaker to guarantee payments are unblocked within 1 minute (R-07).",
+   "security": "PCI-DSS Level 1 requirements are addressed via Data Masking Middleware Component, KMS envelope encryption, mTLS, and S3 Object Lock with AWS QLDB. However, a dedicated card data tokenization service or vault is not explicitly modeled.",
+   "maintainability": "The system features modular decomposition into decoupled containers with clear boundaries (Scoring Engine Container, Case Management API Container). Heavy use of managed AWS services (Fargate, SQS, QLDB) effectively fits the small three-engineer operations team.",
+   "portability": "While containers can be moved, the architecture is deeply coupled to proprietary AWS services (AWS QLDB, AWS KMS, S3 Object Lock, Fargate), making migration away from AWS eu-west-1 difficult without substantial re-engineering."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 3,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.0,
+   "Modifiability": 4.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The Rust-based gRPC listener and in-memory WebAssembly engine eliminate runtime overhead, while asynchronous SQS dispatching prevents I/O blocking, comfortably achieving P99 sub-50ms at 3,000 TPS.",
+    "elements": [
+     "AWS Network Load Balancer (NLB)",
+     "Scoring Engine Container",
+     "API Listener Component",
+     "Rule Engine Component",
+     "Audit Dispatcher Component"
+    ],
+    "sensitivity_points": [
+     "Zero-copy serialization efficiency in the gRPC layer",
+     "Non-blocking memory buffer throughput of the audit dispatcher"
+    ],
+    "tradeoffs": [
+     "Fargate autoscaling overhead versus maintaining provisioned baseline capacity",
+     "Wasm execution flexibility versus native compilation execution speed"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Ingress paths and compute are strictly partitioned between the NLB/gRPC scoring engine and the API Gateway/REST case management API, preventing analyst read operations from impacting scoring latency.",
+    "elements": [
+     "AWS API Gateway (HTTP API)",
+     "AWS Network Load Balancer (NLB)",
+     "Scoring Engine Container",
+     "Case Management API Container",
+     "AWS QLDB"
+    ],
+    "sensitivity_points": [
+     "Physical compute and network isolation between scoring and review workloads",
+     "Independent database scaling for ledger reads"
+    ],
+    "tradeoffs": [
+     "Maintaining dual ingress infrastructures versus consolidated API management",
+     "Eventual consistency in case views versus inline synchronized queries"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Fallback heuristics exist within the Scoring Engine to handle rule failures, but if the container itself crashes, there is no upstream gateway fail-open or bypass mechanism to prevent payment blockage.",
+    "elements": [
+     "Scoring Engine Container",
+     "Fallback Heuristics Component",
+     "AWS Network Load Balancer (NLB)",
+     "Payment Gateway"
+    ],
+    "sensitivity_points": [
+     "NLB target health check and failover detection latency",
+     "Absence of edge bypass logic during total scoring container crash"
+    ],
+    "tradeoffs": [
+     "Embedded fallback resilience versus separate high-availability fallback microservice",
+     "Fail-open authorization risks versus strict fraud prevention enforcement"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Scoring Engine decouples persistence through a non-blocking in-memory buffer pushing to Amazon SQS, which buffers events with a DLQ, completely isolating scoring latency from downstream QLDB outages.",
+    "elements": [
+     "Scoring Engine Container",
+     "Audit Dispatcher Component",
+     "Amazon SQS (Audit Queue)",
+     "audit-events-queue",
+     "audit-events-dlq",
+     "AWS QLDB"
+    ],
+    "sensitivity_points": [
+     "SQS retention limits and buffer depth during prolonged ledger downtime",
+     "Asynchronous error handling through the dead-letter queue"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit durability risk during process crash versus latency protection",
+     "Queue management complexity versus simple synchronous writes"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Model Manager hot-reloads models in the background from S3 into the Wasm engine without container restarts, and the Version Injector ensures every decision logs the active model version.",
+    "elements": [
+     "Model Manager Component",
+     "S3 Model Registry & S3 Object Lock",
+     "Rule Engine Component",
+     "Telemetry & Version Injector Component"
+    ],
+    "sensitivity_points": [
+     "Atomic pointer swap latency during in-memory model replacement",
+     "Model artifact validation speed prior to hot activation"
+    ],
+    "tradeoffs": [
+     "In-process memory overhead for hot-reloading versus blue-green container deployments",
+     "Polling S3 for model updates versus push-based event triggers"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "Wasm modules can be updated without downtime, but the architecture lacks a distributed cache or state store (such as Redis/DynamoDB) necessary to execute stateful velocity checks across distributed instances.",
+    "elements": [
+     "Rule Engine Component",
+     "Model Manager Component",
+     "Telemetry & Version Injector Component"
+    ],
+    "sensitivity_points": [
+     "Missing shared state store for inter-request velocity rule calculations",
+     "Wasm engine sandboxing and state accessibility"
+    ],
+    "tradeoffs": [
+     "Stateless scoring speed versus distributed stateful fraud feature aggregation",
+     "Rapid rule deployment via S3 versus formal code release pipelines"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The Data Masking Middleware prevents PAN exposure to compromised analyst sessions, but the architecture defines no SIEM, behavioral analytics, or anomaly detection mechanism to alert on compromised accounts within 15 minutes.",
+    "elements": [
+     "Data Masking Middleware Component",
+     "Case Controller Component",
+     "Identity Provider (AWS Cognito/Okta)",
+     "Authentication Client"
+    ],
+    "sensitivity_points": [
+     "Strictness of field-level masking in API middleware",
+     "Missing automated SIEM or security anomaly detection pipeline"
+    ],
+    "tradeoffs": [
+     "Application-layer masking versus full tokenization vault isolation",
+     "Token lifetime duration versus analyst re-authentication friction"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "AWS QLDB provides a cryptographically verifiable ledger paired with S3 Object Lock in Compliance Mode for 7-year immutable retention, preserving model versions, inputs, and explanations for easy retrieval.",
+    "elements": [
+     "AWS QLDB",
+     "Immutable Ledger",
+     "Journal S3 Export Bucket",
+     "S3 Model Registry & S3 Object Lock",
+     "Case Repository Component"
+    ],
+    "sensitivity_points": [
+     "Immutability enforcement via S3 Object Lock compliance mode",
+     "Cryptographic proof verification speed in QLDB ledger exports"
+    ],
+    "tradeoffs": [
+     "Cold archival storage costs in S3 versus immediate interactive query availability",
+     "Ledger export latency versus operational cost optimization"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "partial"
+  },
+  "coverage": 0.7272727272727273,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Data Masking Middleware Component",
+     "Key Management Service (KMS) Component",
+     "AWS KMS & AWS Secrets Manager",
+     "AWS Network Load Balancer (NLB)"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "AWS QLDB",
+     "Immutable Ledger",
+     "Journal S3 Export Bucket",
+     "S3 Model Registry & S3 Object Lock",
+     "Object Lock Manager",
+     "Telemetry & Version Injector Component",
+     "Audit Dispatcher Component",
+     "Amazon SQS (Audit Queue)"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "AWS ECS Fargate",
+     "Journal S3 Export Bucket"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "AWS ECS Fargate",
+     "Identity Provider (AWS Cognito/Okta)",
+     "AWS QLDB",
+     "Amazon SQS (Audit Queue)"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Scoring Engine Container",
+     "API Listener Component",
+     "Rule Engine Component",
+     "Fallback Heuristics Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Fraud Analyst SPA",
+     "React SPA UI",
+     "Case Management API Container",
+     "Case Controller Component",
+     "Batch Action & Workflow Engine Component",
+     "Case Repository Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model Manager Component",
+     "S3 Model Registry & S3 Object Lock",
+     "Model Repository Bucket"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scoring Engine Container",
+     "API Listener Component",
+     "Rule Engine Component",
+     "AWS Network Load Balancer (NLB)",
+     "Audit Dispatcher Component",
+     "audit-events-queue"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Data Masking Middleware Component",
+     "AWS KMS & AWS Secrets Manager",
+     "Key Management Service (KMS) Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Telemetry & Version Injector Component",
+     "Audit Dispatcher Component",
+     "Amazon SQS (Audit Queue)",
+     "AWS QLDB",
+     "Immutable Ledger",
+     "Journal S3 Export Bucket"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Fallback Heuristics Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

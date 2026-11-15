@@ -1,0 +1,320 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively addressed: 'Claim Submission UI' for customers and brokers (R-01), 'Adjuster Dashboard' for adjusters (R-02), and 'Dynamic Routing & Feature Dispatcher' alongside the 'ACL Router & Circuit-Breaker Component' to support phased claim type migration (R-03).",
+   "performance_efficiency": "Requirement R-05 is explicitly targeted via 'Azure Redis Cache' (Cache Manager), denormalized views in 'Claim Read Service & Materializer', and asynchronous messaging through 'Azure Service Bus' to decouple user response times from the 5-second mainframe latency.",
+   "compatibility": "The 'Integration & ACL' container and 'Data Mapper & Sanitizer Component' coexist effectively with the 'Legacy Mainframe System' and 'Insurer's Active Directory'. However, specific mechanisms respecting the unalterable 23:00-05:00 nightly batch window are not explicitly defined.",
+   "usability": "Both user groups have tailored interfaces ('Claim Submission UI' and 'Adjuster Dashboard') backed by dedicated BFFs ('Customer BFF', 'Adjuster BFF'). Usability is further reinforced by the 'Accessibility & Localization Module' and 'User Analytics & Telemetry Tracking'.",
+   "reliability": "Zero data loss and idempotent processing (R-04) are guaranteed using 'Outbox/Inbox Processor Component', 'Azure Service Bus' dead-letter queues, idempotency validation in 'Claim Command Handler', and 'Audit & Reconciliation Log Store', backed by 'Resilience4j' circuit breakers.",
+   "security": "R-07 is satisfied via SSO integration with 'Insurer's Active Directory' using OAuth2/OIDC with PKCE in 'Auth Client Module'. Security is reinforced by 'Row-Level Security Engine', 'Data Mapper & Sanitizer Component' (PII sanitization), and 'Azure Key Vault'.",
+   "maintainability": "R-06 is directly solved by 'Dynamic Routing & Feature Dispatcher' allowing one-day claim-type rollback via feature flags. Domain logic is cleanly isolated from legacy changes using the 'Integration & ACL' anti-corruption layer.",
+   "portability": "The hybrid topology is respected across on-premises and Azure West Europe. Services utilize portable Java Spring Boot containers, though components are closely coupled to Azure proprietary offerings like Azure Service Bus and Azure App Configuration."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.9375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Adjuster screens utilize Azure Redis Cache and pre-materialized denormalized views in Azure SQL, bypassing the 5-second mainframe latency. However, cold cache reads for non-materialized legacy attributes may still experience latency unless explicitly pre-fetched.",
+    "elements": [
+     "Adjuster BFF",
+     "Azure Redis Cache",
+     "Claim Read Service & Materializer",
+     "Circuit Breaker & Fallback Manager"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios for active adjuster claim records",
+     "Denormalized view materialization sync frequency"
+    ],
+    "tradeoffs": [
+     "Serving stale cached claim data versus waiting for direct mainframe consistency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Online submissions are buffered through Azure Service Bus and processed asynchronously using the Outbox pattern. The ACL Router provides rate-limiting and circuit-breaking to protect the mainframe and isolate the nightly batch window.",
+    "elements": [
+     "Web Frontend",
+     "BFF / API Gateway",
+     "Claims Processing Service",
+     "Azure Service Bus",
+     "Outbox/Inbox Processor Component",
+     "ACL Router & Circuit-Breaker Component"
+    ],
+    "sensitivity_points": [
+     "Azure Service Bus queue retention and partitioning capacity",
+     "Rate-limiting thresholds on the legacy mainframe connector"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of claim ingestion versus real-time mainframe confirmation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Incoming claims are reliably committed to Azure SQL and held in transactional outboxes and Azure Service Bus queues during the batch window. The circuit breaker suspends mainframe dispatching and resumes processing after the batch window finishes.",
+    "elements": [
+     "Claims Processing Service",
+     "Azure SQL Database",
+     "Outbox/Inbox Processor Component",
+     "Azure Service Bus",
+     "ACL Router & Circuit-Breaker Component"
+    ],
+    "sensitivity_points": [
+     "Queue capacity during extended nightly mainframe downtime",
+     "Automatic circuit-breaker recovery detection"
+    ],
+    "tradeoffs": [
+     "Deferred batch forwarding preserves mainframe window at the cost of processing delay"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The architecture incorporates an Outbox/Inbox Processor, Claim Command idempotency checks, Azure Service Bus Dead-Letter Queues, and a dedicated Audit & Reconciliation Log Store to detect, retry, and reconcile partial synchronization failures without data duplication.",
+    "elements": [
+     "Outbox/Inbox Processor Component",
+     "Claim Command Handler",
+     "Azure Service Bus",
+     "Audit & Reconciliation Log Store",
+     "Change Data Capture (CDC)"
+    ],
+    "sensitivity_points": [
+     "Idempotency key enforcement across distributed transactional boundaries",
+     "Automated reconciliation interval for resolving dead-lettered entries"
+    ],
+    "tradeoffs": [
+     "Transactional outbox overhead and dual-write reconciliation complexity versus simple direct dispatch"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Migration per claim type is governed by Dynamic Routing & Feature Dispatcher (Azure App Configuration) and isolated by the Data Mapper and ACL. Switching traffic back to the legacy mainframe is accomplished via configuration changes within minutes.",
+    "elements": [
+     "Dynamic Routing & Feature Dispatcher",
+     "ACL Router & Circuit-Breaker Component",
+     "Data Mapper & Sanitizer Component",
+     "Claims Processing Service"
+    ],
+    "sensitivity_points": [
+     "Dynamic configuration propagation latency across BFF instances",
+     "Mapping symmetry between modern domain schemas and legacy copybooks"
+    ],
+    "tradeoffs": [
+     "Maintaining dual routing logic in ACL increases maintenance cost for flexibility"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Web Frontend communicates exclusively with the BFF and Claims Processing Service. The legacy mainframe interface is fully encapsulated behind the Integration & ACL container, allowing mainframe decommissioning without modifying customer or adjuster frontends.",
+    "elements": [
+     "Claim Submission UI",
+     "Adjuster Dashboard",
+     "BFF / API Gateway",
+     "Claims Processing Service",
+     "Integration & ACL"
+    ],
+    "sensitivity_points": [
+     "Strict decoupling of UI components from legacy mainframe schema conventions",
+     "Completeness of domain data migration in Azure SQL Database"
+    ],
+    "tradeoffs": [
+     "Layering BFF and ACL adds architectural tiers but decouples UI from legacy systems"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Access is validated at the API Gateway using OAuth2/OIDC tokens, while data isolation is enforced at the data tier via Row-Level Security in Azure SQL Database. Unauthorized access attempts are rejected and logged in the Audit Log Store.",
+    "elements": [
+     "API Gateway Proxy",
+     "Customer BFF",
+     "Row-Level Security Engine",
+     "Audit & Reconciliation Log Store"
+    ],
+    "sensitivity_points": [
+     "Proper tenant/broker context propagation in JWT claims",
+     "Row-Level Security predicate correctness in Azure SQL"
+    ],
+    "tradeoffs": [
+     "Database-level RLS provides defense-in-depth but adds query processing overhead"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Adjusters authenticate via Entra ID (Active Directory) Single Sign-On. Revoking AD credentials prevents new session creation and token refresh. However, achieving strict 15-minute revocation requires Continuous Access Evaluation (CAE) or short-lived access tokens, which are not explicitly specified.",
+    "elements": [
+     "Insurer's Active Directory",
+     "Auth Client Module",
+     "API Gateway Proxy",
+     "Adjuster BFF"
+    ],
+    "sensitivity_points": [
+     "Access token validity duration and token revocation list checks",
+     "Adoption of Continuous Access Evaluation between Entra ID and API Gateway"
+    ],
+    "tradeoffs": [
+     "Short-lived token lifetimes enforce fast revocation but increase token refresh traffic"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe System",
+     "Core Integration Hub",
+     "Integration & ACL",
+     "Outbox/Inbox Processor Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Core Integration Hub",
+     "Integration & ACL",
+     "Data Mapper & Sanitizer Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers & Brokers",
+     "Claim Submission UI",
+     "Customer BFF",
+     "Claims Processing Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Adjuster Dashboard",
+     "Adjuster BFF",
+     "Claims Processing Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Dynamic Routing & Feature Dispatcher",
+     "ACL Router & Circuit-Breaker Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Claim Command Handler",
+     "Outbox/Inbox Processor Component",
+     "Azure Service Bus",
+     "Audit & Reconciliation Log Store",
+     "Azure SQL Database"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Azure Redis Cache",
+     "Cache Manager",
+     "Adjuster BFF",
+     "Claim Read Service & Materializer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Dynamic Routing & Feature Dispatcher",
+     "ACL Router & Circuit-Breaker Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Insurer's Active Directory",
+     "Auth Client Module",
+     "API Gateway Proxy"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

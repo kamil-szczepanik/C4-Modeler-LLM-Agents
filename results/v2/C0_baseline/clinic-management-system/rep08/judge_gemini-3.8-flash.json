@@ -1,0 +1,326 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "Clinical Core Service addresses EMR and patient admissions, and Billing & Claims Service covers billing and insurance (R-01, R-03, R-04). However, appointment scheduling with resource clash checks (R-02) is only superficially referenced across Patient Portal App components without explicit clash-detection logic.",
+   "performance_efficiency": "The sub-1s EMR load target (R-07) is well supported using Redis/RocksDB edge caches in Clinical Core Service, gRPC over mTLS, asynchronous RabbitMQ messaging in Billing & Claims Service, and Rate Limiting via Envoy/Redis in API Gateway.",
+   "compatibility": "Interoperability (R-08) is thoroughly realized by Interoperability Engine featuring HAPI FHIR JPA Server, FHIR API Gateway & Validator, Apache Camel integration routing, and standard SMART-on-FHIR OAuth2 connections to External Lab & Imaging Systems.",
+   "usability": "Patient Portal App provides a WCAG 2.1 AA accessible React SPA for Patients. However, dedicated interfaces or frontends for Clinicians and Administrative Staff (e.g., admissions, EMR workflows) are largely absent or conflated into backend components.",
+   "reliability": "High availability (99.99% active-active, R-06) is directly enabled by Sync Orchestrator using Raft consensus, vector clocks in Conflict Resolver, edge caches in Clinical Core Service, and persistent DLQs in Interoperability Engine.",
+   "security": "R-05, HIPAA, and GDPR are completely addressed via mTLS Istio service mesh, AES-256/TDE databases, Auth & Session Manager MFA, WAF, and tamper-evident audit log streaming to SIEM & Immutable Cold Storage across all services.",
+   "maintainability": "Clear modular separation exists across containers (Clinical Core, Billing & Claims, Interoperability Engine). However, Clinical Core Service bundles admissions, workflows, and EMR together, while Sync Orchestrator also hosts an administrative dashboard backend, slightly blurring boundaries.",
+   "portability": "Hybrid deployment (on-prem-k8s and eu-central-1) is well supported through containerization, Envoy proxies, edge caches (RocksDB/Redis), and Raft-based state sync, though specific multi-region Kubernetes configurations or cloud-specific deployment bindings remain mostly implicit."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.90625,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 5.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The architecture incorporates Redis and RocksDB edge caches within the Clinical Core Service to accelerate read paths. While API Gateway and local caching support sub-second P95 loads, heavy cache misses hitting PostgreSQL under concurrent morning spikes could present an unbenchmarked latency risk.",
+    "elements": [
+     "API Gateway / Reverse Proxy",
+     "Clinical Core Service",
+     "Edge Cache & Sync Component",
+     "EMR Management Component"
+    ],
+    "sensitivity_points": [
+     "Edge cache hit ratio during concurrent clinical morning spikes",
+     "PostgreSQL connection pooling under burst query loads"
+    ],
+    "tradeoffs": [
+     "Increased memory overhead for local caching to achieve sub-second latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Interoperability Engine decouples ingestion through HAPI FHIR, Apache Camel, and persistent Kafka/ActiveMQ messaging. This asynchronous queuing absorbs the 10,000-message burst within the target window without congesting the Clinical Core Service or degrading synchronous clinician read performance.",
+    "elements": [
+     "Interoperability Engine",
+     "FHIR API Gateway & Validator",
+     "Integration Router & Message Processor",
+     "Persistent Dead-Letter Queue",
+     "Clinical Core Service"
+    ],
+    "sensitivity_points": [
+     "Message queue throughput and ingestion buffer capacity",
+     "Backpressure handling on internal gRPC sync to Clinical Core"
+    ],
+    "tradeoffs": [
+     "Temporary eventual consistency in EMR views during heavy asynchronous ingestion queues"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The architecture specifies a hybrid on-premises and eu-central-1 deployment coordinated by Sync Orchestrator with Raft and vector clocks. However, edge-level global DNS failover and ingress traffic re-routing mechanisms between regions are not explicitly detailed to guarantee the 1-minute failover SLA.",
+    "elements": [
+     "Sync Orchestrator",
+     "Sync State Engine",
+     "Conflict Resolver",
+     "Clinical Core Service",
+     "Edge Cache & Sync Component"
+    ],
+    "sensitivity_points": [
+     "Raft consensus re-election time across hybrid network partitions",
+     "Replication lag between on-prem k8s and cloud database instances"
+    ],
+    "tradeoffs": [
+     "Active-active multi-region synchronization increases operational and conflict-resolution complexity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Claim processing uses asynchronous RabbitMQ messaging, isolating client submissions from database failures. While message durability and the ledger component support retries, automated transaction idempotency and deduplication mechanisms during in-flight database failovers are not formally specified.",
+    "elements": [
+     "Billing & Claims Service",
+     "Claim Management Component",
+     "Payment Processing Component",
+     "Billing Engine / Ledger Component"
+    ],
+    "sensitivity_points": [
+     "Idempotency token tracking across database reconnects",
+     "RabbitMQ message acknowledgment guarantees and broker failover latency"
+    ],
+    "tradeoffs": [
+     "Strict transactional consistency in ledger vs message processing throughput"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The modular architecture decouples billing and claims entirely from clinical systems. Adding an insurance clearinghouse only requires updating the Payment Processing or Claim Management components within the Billing & Claims Service, leaving the Clinical Core Service completely unaffected.",
+    "elements": [
+     "Billing & Claims Service",
+     "Payment Processing Component",
+     "Claim Management Component",
+     "Payment Gateway / Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Decoupling of clearinghouse communication protocols from core ledger logic"
+    ],
+    "tradeoffs": [
+     "Custom clearinghouse adapters require maintaining distinct transformation modules"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Adding an audited demographic field is isolated to three components: Presentation Controller, BFF Router, and EMR Management Component. Auditing is captured automatically by the decoupled Audit Interceptor, allowing implementation and verification well within a single sprint.",
+    "elements": [
+     "Patient Portal App",
+     "Presentation Controller",
+     "BFF Router",
+     "Clinical Core Service",
+     "EMR Management Component",
+     "Audit Interceptor"
+    ],
+    "sensitivity_points": [
+     "Schema evolution rigidity across database models and API contracts"
+    ],
+    "tradeoffs": [
+     "End-to-end schema changes across presentation, BFF, and core service layers"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Authentication strictly requires multi-factor authentication via the external Identity Provider, validated at the API Gateway. Stolen passwords fail without the second factor, and failed authentication events are immediately emitted to SIEM and immutable cold storage for instant alerting.",
+    "elements": [
+     "API Gateway / Reverse Proxy",
+     "Authentication",
+     "Identity Provider (IdP)",
+     "SIEM & Immutable Cold Storage"
+    ],
+    "sensitivity_points": [
+     "Strict MFA enforcement policies configured at the central Identity Provider",
+     "Immediate latency of security event ingestion into the SIEM"
+    ],
+    "tradeoffs": [
+     "Enforcing multi-factor authentication increases authentication latency and user friction"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The architecture incorporates fine-grained ABAC/RBAC validation via token transformation and a dedicated Audit Interceptor within the Clinical Core Service. Every medical record access is intercepted and streamed as a tamper-evident audit log to SIEM & Immutable Cold Storage, satisfying the 10-year retention rule.",
+    "elements": [
+     "Clinical Core Service",
+     "Audit Interceptor",
+     "EMR Management Component",
+     "Identity Provider (IdP)",
+     "SIEM & Immutable Cold Storage"
+    ],
+    "sensitivity_points": [
+     "Coverage completeness of read interceptors across all EMR query paths",
+     "Cryptographic immutability and compliance retention settings of cold storage"
+    ],
+    "tradeoffs": [
+     "Synchronous audit interception introduces slight processing overhead on read operations"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "R-01": "partial",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8181818181818182,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "SIEM & Immutable Cold Storage",
+     "Telemetry & Audit Interceptor",
+     "Audit Interceptor",
+     "Audit & Export Dispatcher",
+     "Audit & Retention Publisher"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Sync Orchestrator",
+     "Sync State Engine",
+     "Edge Cache & Sync Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "SIEM & Immutable Cold Storage",
+     "Audit & Retention Publisher"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Patient Portal App",
+     "Appointment & Profile Client",
+     "Clinical Core Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Patient Portal App",
+     "Appointment & Profile Client"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Clinical Core Service",
+     "EMR Management Component",
+     "Audit Interceptor",
+     "SIEM & Immutable Cold Storage"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Service",
+     "Claim Management Component",
+     "Payment Processing Component",
+     "Payment Gateway / Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Auth & Session Manager",
+     "Billing Engine / Ledger Component",
+     "Persistent Dead-Letter Queue"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Sync Orchestrator",
+     "Sync State Engine",
+     "Edge Cache & Sync Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Clinical Core Service",
+     "Edge Cache & Sync Component",
+     "EMR Management Component"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "External Lab & Imaging Systems",
+     "Interoperability Engine",
+     "FHIR API Gateway & Validator",
+     "EMR Management Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

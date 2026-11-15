@@ -1,0 +1,314 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "Patient Admission Controller (R-01), Scheduling Service (R-02), EMR Service (R-03), and Billing Service (R-04) explicitly address functional requirements. However, specific mechanisms for resource clash checks and insurance claim submissions are not detailed within the service boundaries.",
+   "performance_efficiency": "EMR <1s P95 latency is supported by Redis Distributed Rate Limiting Store caching, Next.js SPA frontend, CDN, and asynchronous Kafka/RabbitMQ processing. However, transactional database topology and query caching strategies supporting core domain reads remain unspecified.",
+   "compatibility": "The Integration / FHIR Adapter Container with FHIR API Router and Anti-Corruption Layer (ACL) Transformer thoroughly handles external HL7 FHIR communication with lab and imaging systems, adhering to target interoperability standards.",
+   "usability": "The Frontend Container SPA provides dedicated user workflows for staff and patients, featuring a WCAG 2.1 AA Component Library, client-side deduplication, and OpenTelemetry RUM monitoring, though specific portal distinctions are merged into one SPA.",
+   "reliability": "Dead Letter Queues, rate limiting, and Nginx reverse proxies support fault tolerance. However, achieving 99.99% active-active availability across hybrid cloud (on-prem-k8s and eu-central-1) lacks concrete multi-region data replication, failover routing, and consensus mechanisms.",
+   "security": "Addressed thoroughly with JWT/MFA validation in the API Gateway, Secret Management Sidecar, AES-256 encrypted archival, WORM Storage Writer for tamper-evident compliance, and TLS/Envelope Encryption across the Message Broker.",
+   "maintainability": "Decoupled domain services, schema registries, sidecar patterns, and Database Migration Container with distributed locking ensure modularity and evolution. Grouping core domain services under a generic 'Core Domain Containers' boundary slightly obscures deployability limits.",
+   "portability": "Kubernetes-native deployment primitives (Jobs, Sidecars, CronJobs) facilitate portability across on-prem-k8s and cloud environments. Long-term storage relies on AWS S3/Glacier abstractions, though on-prem equivalents are acknowledged for the hybrid target."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 3,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.625,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 2.0,
+   "Modifiability": 3.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Redis caching and API client deduplication offload reads, while Next.js SPA and gRPC optimize round-trips. However, primary database read scaling and connection pooling under peak concurrency are omitted.",
+    "elements": [
+     "Frontend Container (Single Page Application)",
+     "API Gateway",
+     "EMR Service",
+     "Caching Store"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in the Redis distributed store",
+     "Internal gRPC latency between gateway and EMR service"
+    ],
+    "tradeoffs": [
+     "Aggressive caching improves response time but risks reading stale clinical records"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "The Integration / FHIR Adapter decouples incoming traffic using Redis rate limiting and offloads ingestion asynchronously to the message broker, isolating synchronous EMR query workloads from ingestion spikes.",
+    "elements": [
+     "FHIR API Router",
+     "Rate Limiting Middleware",
+     "Anti-Corruption Layer (ACL) Transformer",
+     "Message Broker",
+     "EMR Service"
+    ],
+    "sensitivity_points": [
+     "Message broker queue ingestion throughput under sustained bursts",
+     "ACL transformation overhead for complex FHIR bundles"
+    ],
+    "tradeoffs": [
+     "Asynchronous event queuing prevents service degradation but introduces eventual consistency to EMR views"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "Although a hybrid cloud target is stated, the architecture lacks global traffic management, DNS failover, and cross-region active-active database replication mechanisms required for zero data loss and sub-minute recovery.",
+    "elements": [
+     "Nginx Reverse Proxy",
+     "API Gateway",
+     "Core Domain Containers"
+    ],
+    "sensitivity_points": [
+     "Cross-site replication latency between on-premise and AWS eu-central-1",
+     "Automated health checking and global failover routing speed"
+    ],
+    "tradeoffs": [
+     "Synchronous hybrid replication ensures zero data loss but increases cross-region write latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The architecture includes dead letter queues and event brokers, but completely omits a primary transactional database layer, clustering configuration, or distributed transaction/outbox mechanisms for billing claims.",
+    "elements": [
+     "Billing Service",
+     "Message Broker",
+     "Dead Letter Queues (DLQ)",
+     "Redis Distributed Rate Limiting Store"
+    ],
+    "sensitivity_points": [
+     "Database failover detection time and transaction retry boundaries",
+     "Idempotency token validation under unacknowledged claim retries"
+    ],
+    "tradeoffs": [
+     "Idempotent claim retries ensure integrity but require distributed coordination locks"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Billing logic is decoupled from EMR via gRPC/events. However, external billing integration lacks a dedicated integration adapter/ACL container (unlike FHIR for labs), requiring modifications directly within Core Domain Containers.",
+    "elements": [
+     "Billing Service",
+     "Asynchronous Event Bus",
+     "EMR Service"
+    ],
+    "sensitivity_points": [
+     "Coupling between Billing Service internal domain logic and third-party clearinghouse protocols"
+    ],
+    "tradeoffs": [
+     "Embedding clearinghouse logic inside Billing Service avoids new containers but complicates updates"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are isolated to the UI component, Patient Admission Controller, and the Database Migration Container/Schema Registry, supported by automated migration jobs and backward-compatible schema management.",
+    "elements": [
+     "Frontend Container (Single Page Application)",
+     "Patient Admission Controller",
+     "Centralized Schema Registry",
+     "Migration Execution Engine"
+    ],
+    "sensitivity_points": [
+     "Schema registry compatibility rules across microservice boundaries",
+     "Database migration execution and backward compatibility window"
+    ],
+    "tradeoffs": [
+     "Strict schema evolution controls guarantee audit consistency but require version coordination"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Authentication enforces multi-factor authentication at the API Gateway using JWT & MFA Validator components. Non-MFA logins are blocked, and security telemetry is streamed directly to observability and audit systems.",
+    "elements": [
+     "API Gateway",
+     "Authentication & Authorization Module",
+     "Audit Logging & Compliance Container",
+     "Observability Container"
+    ],
+    "sensitivity_points": [
+     "Strict enforcement of MFA before token issuance at the edge gateway",
+     "Latency of security incident alert generation from audit streams"
+    ],
+    "tradeoffs": [
+     "Mandatory MFA validation on all endpoints enhances security but increases authentication latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "EMR read events can be emitted to the Compliance Validation Engine and written directly by the WORM Storage Writer using AWS S3 Object Lock, ensuring immutable 10-year retention for all clinical access.",
+    "elements": [
+     "EMR Service",
+     "Audit Event Receiver",
+     "Compliance Validation Engine",
+     "WORM Storage Writer",
+     "Data Archival Worker"
+    ],
+    "sensitivity_points": [
+     "Completeness of audit interception on all EMR read queries",
+     "WORM storage lock policy enforcement and retention lifecycle"
+    ],
+    "tradeoffs": [
+     "Logging every single read operation guarantees total compliance but creates massive audit volumes"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit Logging & Compliance Container",
+     "Compliance Validation Engine",
+     "WORM Storage Writer",
+     "Log Aggregator",
+     "Frontend Container (Single Page Application)"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Nginx Reverse Proxy",
+     "Message Broker"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Data Archival Worker",
+     "Cold Storage",
+     "Compliance Validation Engine"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Patient Admission Controller"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Scheduling Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "Audit Logging & Compliance Container",
+     "Audit Event Receiver",
+     "WORM Storage Writer"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Billing Service"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "Authentication & Authorization Module",
+     "Audit Logging & Compliance Container",
+     "Cold Storage"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Nginx Reverse Proxy"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "Frontend Container (Single Page Application)",
+     "Caching Store"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration / FHIR Adapter Container",
+     "FHIR API Router",
+     "Anti-Corruption Layer (ACL) Transformer",
+     "External Lab and Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

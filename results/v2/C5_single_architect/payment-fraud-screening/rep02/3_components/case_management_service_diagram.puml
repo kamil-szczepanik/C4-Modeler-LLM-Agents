@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(FraudAnalyst, "Fraud Analyst", "External user who accesses the case management interface to investigate suspicious payment authorizations.")
+
+System_Ext(AmazonAuroraPostgreSQL, "Amazon Aurora PostgreSQL", "Stores transactional case data and transactional audit logs.")
+System_Ext(AmazonS3ImmutableVault, "Amazon S3 Immutable Vault", "Archives audit logs to ensure compliance and immutability.")
+System_Ext(AmazonSQSSNS, "Amazon SQS / SNS", "Publishes asynchronous log batches.")
+
+Container_Boundary(CaseManagementService, "Case Management Service") {
+    Component(CaseAPIController, "Case API Controller", "Express.js/Fastify", "Handles incoming HTTP requests from fraud analysts and provides secure case workflows.")
+    Component(CaseDomainService, "Case Domain Service", "Node.js / TypeScript", "Contains business logic for managing investigative cases and orchestrates domain operations.")
+    Component(AuditLoggerComponent, "Audit Logger Component", "Node.js / TypeScript", "Ensures tamper-evident 7-year auditability by logging transactions and archiving logs.")
+    Component(TokenizationMaskingProxyComponent, "Tokenization / Masking Proxy Component", "AWS KMS SDK / Custom Tokenization Utility", "Sanitizes input payloads and performs PAN masking and deterministic hashing for PCI-DSS compliance.")
+}
+
+Rel(FraudAnalyst, CaseAPIController, "Accesses case management interface", "HTTPS")
+Rel(CaseAPIController, TokenizationMaskingProxyComponent, "Sanitizes input payload", "In-process function call")
+Rel(TokenizationMaskingProxyComponent, CaseDomainService, "Forwards scrubbed payloads", "In-process function call")
+Rel(CaseDomainService, AmazonAuroraPostgreSQL, "Reads/writes transactional case data", "PostgreSQL Wire Protocol via TypeORM/Prisma")
+Rel(AuditLoggerComponent, AmazonAuroraPostgreSQL, "Writes transactional audit logs", "PostgreSQL Wire Protocol")
+Rel(AuditLoggerComponent, AmazonSQSSNS, "Publishes asynchronous log batches", "AWS SDK / SQS API")
+Rel(AuditLoggerComponent, AmazonS3ImmutableVault, "Archives audit logs", "AWS SDK / S3 API with Object Lock")
+
+@enduml

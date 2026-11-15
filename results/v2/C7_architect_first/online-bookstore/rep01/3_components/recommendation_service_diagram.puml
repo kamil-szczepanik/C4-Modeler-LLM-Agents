@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+System_Ext(api_gateway, "API Gateway", "External API Gateway")
+
+Container_Boundary(recommendation_service, "Recommendation Service") {
+    Component(Recommendation_API_Router, "Recommendation API Router", "Python, FastAPI", "Handles incoming recommendation requests and routes them for scoring.")
+    Component(Scoring_Engine, "Scoring Engine", "Python, NumPy", "Generates personalized 'Customers also bought' suggestions.")
+    Component(Model_Ingestion_Worker, "Model Ingestion Worker", "Python", "Consumes clickstream and order events to ingest ML models.")
+    Component(Data_Access_Repository, "Data Access Repository", "Python, boto3", "Manages data reads and writes to Amazon DynamoDB.")
+    Component(Fallback_Handler_Component, "Fallback Handler Component", "Python", "Provides fallback handling to ensure high availability and low latency.")
+    Component(Amazon_DynamoDB, "Amazon DynamoDB", "AWS DynamoDB with Global Tables and TTL", "Stores cached scores with active-active multi-region replication.")
+    Component(Amazon_SQS, "Amazon SQS", "AWS SQS", "Decouples offline ML ingestion from real-time read paths.")
+}
+
+Rel(api_gateway, Recommendation_API_Router, "HTTPS / mTLS via AWS App Mesh")
+Rel(Recommendation_API_Router, Scoring_Engine, "In-process Python call")
+Rel(Recommendation_API_Router, Data_Access_Repository, "Read cached scores / TCP / AWS SDK")
+Rel(Data_Access_Repository, Amazon_DynamoDB, "Low-latency read/write / HTTPS / AWS SDK")
+Rel(Amazon_SQS, Model_Ingestion_Worker, "Consume clickstream/order events / AMQP / AWS SDK")
+
+@enduml

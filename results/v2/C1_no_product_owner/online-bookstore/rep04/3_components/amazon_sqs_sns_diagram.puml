@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Amazon SQS / SNS container
+
+System_Ext(background_worker, "Background Worker Service", "External or related service consuming messages.")
+System_Ext(aws_kms, "AWS Secrets Manager & KMS", "Provides encryption keys for data at rest.")
+
+Container_Boundary(amazon_sqs_sns, "Amazon SQS / SNS") {
+    Component(order_events_sns_topic, "Order Events SNS Topic", "Amazon SNS", "Fan-out broker utilizing HTTPS and IAM to distribute order events.")
+    Component(checkout_sqs_queue, "Checkout SQS Queue", "Amazon SQS Standard", "Buffers checkout orders asynchronously.")
+    Component(shipping_sqs_fifo_queue, "Shipping SQS FIFO Queue", "Amazon SQS FIFO", "Handles strictly ordered third-party shipping payloads.")
+    Component(processing_dlqs, "Processing DLQs", "Amazon SQS Dead Letter Queues", "Captures poisoned messages after max receives.")
+    Component(event_publisher_component, "Event Publisher Component", "AWS SDK for JavaScript", "Embedded in the Core E-Commerce Service to publish standardized JSON event payloads.")
+    Component(subscription_filter_component, "Subscription Filter Component", "SNS Subscription Filters", "Routes messages conditionally via HTTPS.")
+}
+
+Rel(event_publisher_component, order_events_sns_topic, "Publishes standardized JSON event payloads via AWS SDK (HTTPS/TLS 1.2+)", "AWS SDK / HTTPS")
+Rel(order_events_sns_topic, checkout_sqs_queue, "Routes messages using SNS Subscription Filters", "HTTPS")
+Rel(order_events_sns_topic, shipping_sqs_fifo_queue, "Routes messages using SNS Subscription Filters", "HTTPS")
+Rel(checkout_sqs_queue, background_worker, "Consumes asynchronous messages using Long Polling (TLS/IAM)", "Long Polling / TLS")
+Rel(shipping_sqs_fifo_queue, background_worker, "Consumes asynchronous messages using Long Polling (TLS/IAM)", "Long Polling / TLS")
+Rel(checkout_sqs_queue, aws_kms, "Encrypts messages at rest using customer-managed keys", "AWS KMS")
+Rel(shipping_sqs_fifo_queue, aws_kms, "Encrypts messages at rest using customer-managed keys", "AWS KMS")
+Rel(order_events_sns_topic, aws_kms, "Encrypts messages at rest using customer-managed keys", "AWS KMS")
+
+@enduml

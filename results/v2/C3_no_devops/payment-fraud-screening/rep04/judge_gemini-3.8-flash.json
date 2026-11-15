@@ -1,0 +1,332 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "The architecture addresses R-01 through R-03 directly. 'Scoring Engine' and 'Model Evaluator' perform real-time scoring, 'Model Hot-Swapper' enables zero-downtime rule and model updates, and 'Case Management Backend' with 'Amazon DynamoDB' and 'Amazon Aurora Serverless v2 PostgreSQL' fully supports analyst workflows.",
+   "performance_efficiency": "Sub-50ms P99 latency at 3,000 TPS is achieved by 'Scoring Engine' using an in-memory 'Model Evaluator', 'Feature Store Cache' (Go LRU), and asynchronous logging via 'Audit Dispatcher' into 'Amazon SQS / SNS', keeping database I/O off the critical path.",
+   "compatibility": "'Ingress Router and TLS Terminator' supports gRPC over mTLS with 'Payment Processor'. 'Case API Controller' integrates with 'Identity Provider' via OIDC. 'Auditor Query Service' and 'Athena Client' provide standard SQL access over S3, ensuring seamless interoperability with external systems.",
+   "usability": "'Fraud Analyst & Risk Manager' accesses review workflows via 'Case API Controller' with 'Data Masking Middleware' hiding card numbers. 'Compliance / Auditor' uses 'Auditor Query Service' with 'Query Translator' for straightforward audit log queries. Dedicated interfaces match both user groups.",
+   "reliability": "'API Handler' incorporates circuit-breaker fallback logic to prevent blocking payment authorizations if scoring fails, addressing R-07. 'Dead-Letter Queues (DLQ)' isolate poison pills in 'Amazon SQS / SNS', while ECS on AWS Fargate and Aurora Serverless ensure high availability.",
+   "security": "PCI-DSS compliance and R-05/R-06 are met via 'API Handler' tokenization boundary checks, 'Data Masking Middleware', 'AWS KMS Custom Managed Key', 'PostgreSQL RLS Enforcement Component', 'Audit Dispatcher' cryptographic signing, and 'Audit Ledger Schema' with cryptographic extensions for tamper evidence.",
+   "maintainability": "Clear separation between 'Scoring Engine' and 'Case Management Backend' limits coupling. 'Model Hot-Swapper' isolates model updates without redeployments. Using managed services like AWS Fargate, Aurora Serverless, and DynamoDB minimizes operational maintenance overhead for a three-engineer team.",
+   "portability": "Workloads are packaged as containerized applications on AWS Fargate (Go, Node.js), enabling execution environment portability. However, heavy architectural coupling to proprietary services ('Amazon DynamoDB', 'AWS Athena', and AWS IAM Auth) restricts easy migration to other cloud providers."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.0,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The Scoring Engine is implemented in Go on ECS Fargate using in-memory ONNX model evaluation, a local LRU feature cache, and asynchronous audit dispatch via SQS/SNS, keeping synchronous evaluation well under 50 ms P99 at 3,000 rps.",
+    "elements": [
+     "AWS Application Load Balancer",
+     "Scoring Engine",
+     "API Handler",
+     "Model Evaluator",
+     "Feature Store Cache",
+     "Audit Dispatcher",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "In-memory evaluation speed and local feature store cache hit ratios",
+     "Network latency on DynamoDB PrivateLink lookups during cache misses"
+    ],
+    "tradeoffs": [
+     "In-memory caching improves evaluation latency but risks brief cache coherence lags across instances"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The ALB completely isolates scoring traffic (/v1/score) from administrative traffic (/v1/cases/*). Real-time scoring and case management run on distinct Fargate services with independent data storage layers (DynamoDB vs Aurora), preventing analyst operations from impacting scoring latency.",
+    "elements": [
+     "AWS Application Load Balancer",
+     "Scoring Traffic Router",
+     "Administrative Traffic Router",
+     "Scoring Engine",
+     "Case Management Backend",
+     "Amazon Aurora Serverless v2 PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "ALB path-based routing isolation and independent Fargate task resource allocations"
+    ],
+    "tradeoffs": [
+     "Operating separate containers and databases increases architectural complexity to safeguard scoring performance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "While the API Handler has circuit-breaker fallback logic for internal dependencies, a total crash of the Scoring Engine container leaves fallback handling dependent on external client behavior or ECS container replacement, as the ALB lacks automated fallback mock or redirect rules.",
+    "elements": [
+     "AWS Application Load Balancer",
+     "Scoring Engine",
+     "API Handler"
+    ],
+    "sensitivity_points": [
+     "Fargate container restart duration upon unhandled crash",
+     "Upstream client timeout and fallback handling when ALB returns 502/504 errors"
+    ],
+    "tradeoffs": [
+     "Co-locating fallback logic within the service handler simplifies deployment but fails during container-level crashes"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Audit Dispatcher cryptographically signs payloads and dispatches them asynchronously to Amazon SNS/SQS with Dead-Letter Queues. Aurora slowness or downtime does not block synchronous scoring decisions, and messages buffer safely in SQS without data loss.",
+    "elements": [
+     "Audit Dispatcher",
+     "Amazon SQS / SNS",
+     "FraudEventTopic",
+     "AuditLogQueue",
+     "Dead-Letter Queues (DLQ)",
+     "Amazon Aurora Serverless v2 PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "SQS queue retention period and sizing during extended database maintenance or downtime"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging decouples transaction latency from database health at the cost of eventual consistency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Model Hot-Swapper background loader verifies cryptographic signatures and hot-swaps ONNX models in memory without downtime or container restarts. Every decision captures model version and explainability feature vectors via the Model Evaluator and Audit Dispatcher.",
+    "elements": [
+     "Scoring Engine",
+     "Model Hot-Swapper",
+     "Model Evaluator",
+     "Audit Dispatcher"
+    ],
+    "sensitivity_points": [
+     "Memory overhead when holding old and new model binaries concurrently during hot-swap"
+    ],
+    "tradeoffs": [
+     "Dynamic runtime hot-swapping minimizes deployment downtime but introduces internal state synchronization complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Fraud analysts access rule update interfaces via the Case Management Backend and rules/models evaluate dynamically. However, the precise synchronization pipeline propagating new rules from the Case Management Backend to the Scoring Engine instances is not fully detailed.",
+    "elements": [
+     "Case Management Backend",
+     "Scoring Engine",
+     "Model Evaluator",
+     "Model Hot-Swapper",
+     "Amazon DynamoDB"
+    ],
+    "sensitivity_points": [
+     "Propagation delay of rule updates across all active Scoring Engine Fargate instances"
+    ],
+    "tradeoffs": [
+     "Decoupled rule configuration enables quick updates but requires synchronization to maintain cross-instance consistency"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Data Masking Middleware and tokenization checks effectively protect cardholder data so clear-text PANs are unreachable by analysts. However, the architecture does not specify automated anomaly detection, behavioral auditing, or alerting mechanisms to detect compromised accounts within 15 minutes.",
+    "elements": [
+     "Case API Controller",
+     "Data Masking Middleware",
+     "Identity Provider",
+     "PostgreSQL RLS Enforcement Component"
+    ],
+    "sensitivity_points": [
+     "Data masking coverage across all analyst endpoints and query outputs"
+    ],
+    "tradeoffs": [
+     "Strict masking and tokenization protect PANs but add processing overhead on API controllers"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The architecture addresses long-term compliance via immutable Aurora tables with cryptographic extensions and long-term Athena queries over S3. Decisions persistently store inputs, model versions, and feature weights, enabling reproducible, tamper-evident explainability within the required SLA.",
+    "elements": [
+     "Auditor Query Service",
+     "API Controller",
+     "Query Translator",
+     "Athena Client",
+     "Amazon Aurora Serverless v2 PostgreSQL",
+     "Audit Ledger Schema"
+    ],
+    "sensitivity_points": [
+     "Schema compatibility and retention lifecycle configuration across S3 and Aurora over seven years"
+    ],
+    "tradeoffs": [
+     "Serverless queries over archived cold storage reduce recurring costs while easily meeting single-day retrieval SLAs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Ingress Router and TLS Terminator",
+     "API Handler",
+     "Case API Controller",
+     "AWS KMS Custom Managed Key",
+     "PostgreSQL RLS Enforcement Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Auditor Query Service",
+     "Model Evaluator",
+     "Audit Dispatcher",
+     "Audit Ledger Schema",
+     "AuditLogQueue"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Scoring Engine",
+     "Amazon Aurora Serverless v2 PostgreSQL",
+     "Amazon DynamoDB",
+     "Auditor Query Service"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Scoring Engine",
+     "Case Management Backend",
+     "Amazon Aurora Serverless v2 PostgreSQL",
+     "Amazon DynamoDB"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "Scoring Traffic Router",
+     "API Handler",
+     "Model Evaluator"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Backend",
+     "Case API Controller",
+     "Case Service",
+     "Case State Table",
+     "Case Management Schema",
+     "CaseRoutingQueue"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Model Hot-Swapper",
+     "Model Evaluator"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Scoring Engine",
+     "Scoring Traffic Router",
+     "Feature Store Cache",
+     "Model Evaluator",
+     "Feature Store Table"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "API Handler",
+     "Case API Controller",
+     "AWS KMS Custom Managed Key"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Model Evaluator",
+     "Audit Dispatcher",
+     "AuditLogQueue",
+     "Audit Ledger Schema"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "API Handler"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

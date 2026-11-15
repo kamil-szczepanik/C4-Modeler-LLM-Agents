@@ -1,0 +1,45 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patient, "Patient", "End user of the healthcare facility who interacts with the system for admissions, scheduling, and viewing medical records.")
+Person(Clinician, "Clinician", "Medical professional who accesses and updates electronic medical records and manages patient care.")
+Person(ReceptionistAdmin, "Receptionist/Admin", "Administrative staff responsible for patient admissions, scheduling, and front-desk clinic operations.")
+Person(BillingSpecialist, "Billing Specialist", "Staff member responsible for managing billing, invoices, and insurance claims.")
+Person(ComplianceOfficer, "Compliance Officer", "Officer responsible for monitoring system audit logs, security, and ensuring HIPAA and GDPR compliance.")
+
+System_Ext(EnterpriseIdentityProvderIdP, "Enterprise Identity Provider (IdP)", "External identity provider used for enterprise single sign-on via OIDC/SAML.")
+System_Ext(ExternalLabsImagingSystems, "External Labs & Imaging Systems", "External clinical systems integrated for exchanging medical lab and imaging data.")
+System_Ext(InsuranceClaimGateways, "Insurance Claim Gateways", "External gateways used for processing and submitting insurance claims.")
+
+System_Boundary(ClinicManagementSystem, "Clinic Management System") {
+    Container(NginxWebApp, "Nginx Web App", "Nginx / Single Page Application", "Serves the web application frontend for staff users.")
+    Container(APIGateway, "API Gateway", "Kong / Envoy", "Routes, secures, and manages API requests across core clinical and auxiliary containers.")
+    Container(CoreClinicalEMRContainer, "Core Clinical & EMR Container", "Spring Boot / Go / PostgreSQL", "Manages core clinical workflows, patient admissions, and EMR data with AES-256 encryption.")
+    Container(BillingClaimsContainer, "Billing & Claims Container", "Spring Boot / Go", "Handles billing, invoices, and communicates with insurance claim gateways.")
+    Container(HL7FHIRInteroperabilityContainer, "HL7 FHIR Interoperability Container", "Node.js / Apache Camel", "Integrates with external labs and imaging systems using HL7 FHIR standards.")
+    Container(PatientPortalContainer, "Patient Portal Container", "Next.js / React", "Provides a secure portal for patients to view records, schedule, and interact with the clinic.")
+    Container(SyncReplicationContainer, "Sync/Replication Container", "Apache Kafka / Outbox pattern", "Handles offline resilience, data synchronization, and multi-region replication.")
+    Container(AuditSidecarContainer, "Audit Sidecar Container", "OpenTelemetry / HashiCorp Vault", "Captures distributed tracing, secrets management, and immutable audit logs for compliance.")
+}
+
+Rel(Patient, PatientPortalContainer, "Interacts with portal for health records and scheduling", "HTTPS (TLS)")
+Rel(Clinician, NginxWebApp, "Accesses clinical workflows and EMR", "HTTPS (TLS)")
+Rel(ReceptionistAdmin, NginxWebApp, "Manages admissions and scheduling", "HTTPS (TLS)")
+Rel(BillingSpecialist, NginxWebApp, "Manages billing and financial processes", "HTTPS (TLS)")
+Rel(ComplianceOfficer, NginxWebApp, "Monitors audit logs and security compliance", "HTTPS (TLS)")
+
+Rel(NginxWebApp, APIGateway, "Sends API requests and queries", "HTTPS / REST / GraphQL via TLS")
+Rel(PatientPortalContainer, APIGateway, "Sends patient-facing API requests and queries", "HTTPS / REST / GraphQL via TLS")
+
+Rel(APIGateway, CoreClinicalEMRContainer, "Routes internal service requests", "gRPC over mTLS (Istio/Linkerd)")
+Rel(APIGateway, BillingClaimsContainer, "Routes billing service requests", "gRPC over mTLS (Istio/Linkerd)")
+Rel(APIGateway, HL7FHIRInteroperabilityContainer, "Routes interoperability requests", "gRPC over mTLS (Istio/Linkerd)")
+
+Rel(CoreClinicalEMRContainer, SyncReplicationContainer, "Replicates and syncs transaction events", "Apache Kafka")
+Rel(BillingClaimsContainer, InsuranceClaimGateways, "Sends and receives insurance claims", "HTTPS / TLS with message queues")
+Rel(HL7FHIRInteroperabilityContainer, ExternalLabsImagingSystems, "Exchanges clinical and lab data", "HL7 FHIR APIs over TLS")
+
+@enduml

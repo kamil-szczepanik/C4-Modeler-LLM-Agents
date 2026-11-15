@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(IT_Administrator, "IT Administrator", "Escalates unresolved reconciliation failures")
+System_Ext(Mainframe_Integration_Adapter, "Mainframe Integration Adapter", "IBM MQ on-premises")
+System_Ext(Primary_Datastore, "Primary Datastore", "Azure SQL Database")
+System_Ext(Claim_Routing_Service, "Claim Routing Service", "Azure Service Bus")
+
+Container_Boundary(audit_and_reconciliation_service, "Audit and Reconciliation Service") {
+    Component(Reconciliation_Job_Scheduler, "Reconciliation Job Scheduler", "Azure Timer Trigger", "Triggers reconciliation jobs on a schedule.")
+    Component(Reconciliation_API, "Reconciliation API", "HTTP Trigger", "Exposes endpoints for manual spot-checks or overrides.")
+    Component(Mainframe_Delta_Extractor, "Mainframe Delta Extractor", "C# .NET isolated worker", "Pulls daily transaction ledgers from the mainframe.")
+    Component(Ledger_Comparison_Engine, "Ledger Comparison Engine", ".NET Component", "Compares system of record state with expected ledgers.")
+    Component(Reconciliation_State_Repository, "Reconciliation State Repository", "Azure Table Storage / Azure SQL", "Stores reconciliation state and metrics.")
+    Component(Remediation_Dispatcher, "Remediation Dispatcher", "C# .NET Component", "Publishes correction events to resolve discrepancies.")
+    Component(Discrepancy_Notifier, "Discrepancy Notifier", "Azure Monitor / HTTPS", "Escalates unresolved reconciliation failures to IT administrators.")
+}
+
+Rel(Reconciliation_Job_Scheduler, Mainframe_Delta_Extractor, "Schedules delta extraction", "Timer Trigger")
+Rel(IT_Administrator, Reconciliation_API, "Initiates manual spot-checks or overrides", "HTTPS")
+Rel(Mainframe_Delta_Extractor, Mainframe_Integration_Adapter, "Pulls daily transaction ledgers", "IBM MQ / AMQP")
+Rel(Ledger_Comparison_Engine, Primary_Datastore, "Queries system of record state", "ADO.NET over TDS / TLS")
+Rel(Remediation_Dispatcher, Claim_Routing_Service, "Publishes correction events", "AMQP")
+Rel(Discrepancy_Notifier, IT_Administrator, "Escalates unresolved reconciliation failures", "HTTPS / Azure Monitor")
+@enduml

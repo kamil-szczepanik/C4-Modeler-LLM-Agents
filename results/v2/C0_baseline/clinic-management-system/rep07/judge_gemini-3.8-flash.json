@@ -1,0 +1,343 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "All requirements are addressed via EMR Service, Scheduling Engine for clash checks, Billing Container with Claim Validation Engine, and Audit & Compliance Container. Dedicated patient registration and demographic capture are not explicitly distinguished, appearing implicitly within Appointment Service and EMR Service.",
+   "performance_efficiency": "Targets are achieved through concrete mechanisms: Redis 7 caching layer, Local Emergency Cache, and PgBouncer for <1 s P95 EMR retrieval, complemented by Apache Kafka and Remittance Ingestion Worker for asynchronous background processing.",
+   "compatibility": "Directly satisfies interoperability requirements through the HL7 FHIR Interoperability Service using FHIR API Router, Pydantic Schema Validator, External Lab Integration Client over mTLS, and ERA/835 insurance clearinghouse exchanges in Remittance Ingestion Worker.",
+   "usability": "All target personas are identified and connected via API Gateway and Patient Portal App. However, no front-end presentation containers or web applications are modeled for Clinicians, Receptionists, Billing Specialists, or Auditors, who connect directly to API Gateway.",
+   "reliability": "Fault tolerance includes Kafka KRaft Quorum, Local Emergency Cache, and DLQ. However, concrete active-active multi-region replication mechanisms across on-prem-k8s and eu-central-1 for PostgreSQL and stateful services to meet the 99.99% target are missing.",
+   "security": "Extensive security controls fully address HIPAA/GDPR: Identity Provider (IdP) for MFA, Vault + pgcrypto for AES-256 at rest, Row-Level Security Policies Engine, mTLS, and S3 Glacier Vault Lock WORM with Log Integrity & Hash Chain Service.",
+   "maintainability": "The architecture shows clean modular microservice boundaries (EMR Service, Appointment Service, Billing Container) decoupled via Apache Kafka and Schema Registry, with strict internal layering into controllers, domain engines, and data access layers.",
+   "portability": "Workloads use portable containerized stacks (Go, Node.js, Python FastAPI, PostgreSQL). However, hybrid deployment mechanisms spanning on-prem-k8s and eu-central-1 are not modeled, and components depend on cloud-specific AWS S3 Glacier Vault Lock without on-prem abstraction."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 5,
+   "PERF-02": 3,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.0,
+   "Modifiability": 4.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The dedicated Redis 7 caching layer and local emergency cache directly offload PostgreSQL, while PgBouncer mitigates connection exhaustion during concurrent spikes, maintaining sub-second EMR screen loads.",
+    "elements": [
+     "API Gateway",
+     "EMR Service",
+     "Local Emergency Cache",
+     "Data Access Layer",
+     "PgBouncer",
+     "Redis 7 caching layer",
+     "Relational Storage Engine (PostgreSQL 16)"
+    ],
+    "sensitivity_points": [
+     "Redis cache hit ratio for active clinician patient lists",
+     "PgBouncer pool sizing under concurrent morning peak connections"
+    ],
+    "tradeoffs": [
+     "Memory footprint of caching vs sub-second response latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "justification": "Kafka decouples asynchronous ingestion, but the container architecture lacks a direct persistence route from HL7 FHIR Interoperability Service to PostgreSQL or EMR Service, creating ambiguity in data flow.",
+    "elements": [
+     "HL7 FHIR Interoperability Service",
+     "FHIR API Router",
+     "Pydantic Schema Validator",
+     "Apache Kafka",
+     "Kafka Brokers",
+     "EMR Service"
+    ],
+    "sensitivity_points": [
+     "Consumer throughput from Kafka to backend persistence",
+     "Validation overhead of Pydantic schema parsing under burst traffic"
+    ],
+    "tradeoffs": [
+     "Strict runtime FHIR schema validation vs ingestion latency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "While hybrid regions are targeted, the architecture omits global server load balancing, cross-region active-active data replication, and automated failover mechanisms between eu-central-1 and on-premise Kubernetes.",
+    "elements": [
+     "API Gateway",
+     "PostgreSQL",
+     "Apache Kafka",
+     "Relational Storage Engine (PostgreSQL 16)"
+    ],
+    "sensitivity_points": [
+     "Cross-region replication latency and active-active conflict resolution",
+     "Automated DNS/GSLB failover detection interval"
+    ],
+    "tradeoffs": [
+     "Active-active data consistency across hybrid cloud vs zero recovery time"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The Billing Container leverages Kafka with transactional Outbox and Dead Letter Queue patterns to ensure in-flight claims can be safely replayed without duplicate submissions if PostgreSQL crashes.",
+    "elements": [
+     "Billing Container",
+     "Billing Data Access Layer",
+     "Payment & Claims Service",
+     "Apache Kafka",
+     "PgBouncer",
+     "Relational Storage Engine (PostgreSQL 16)"
+    ],
+    "sensitivity_points": [
+     "Idempotency enforcement within Payment & Claims Service",
+     "Kafka transactional outbox commit synchronization"
+    ],
+    "tradeoffs": [
+     "Transactional outbox polling overhead vs guaranteed at-least-once delivery"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Billing integration is isolated within the Billing Container. Changes are strictly confined to the Payment & Claims Service and Remittance Ingestion Worker, leaving the EMR Service entirely untouched.",
+    "elements": [
+     "Billing Container",
+     "Payment & Claims Service",
+     "Remittance Ingestion Worker",
+     "External Payment Gateway / Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Loose coupling of clearinghouse adapters behind Payment & Claims Service"
+    ],
+    "tradeoffs": [
+     "Abstraction layer maintenance vs ease of adding clearinghouse protocols"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Demographic updates are restricted to the EMR Service and PostgreSQL. Database schema adjustments and pg_audit automatically capture alterations alongside the Clinical Record Manager and Audit Trail Interceptor.",
+    "elements": [
+     "EMR Service",
+     "Clinical Record Manager",
+     "Audit Trail Interceptor",
+     "Data Access Layer",
+     "Relational Storage Engine (PostgreSQL 16)",
+     "pg_audit extension"
+    ],
+    "sensitivity_points": [
+     "Automated schema propagation across Data Access Layer and audit interceptors"
+    ],
+    "tradeoffs": [
+     "Automated pg_audit logging vs specific business-level audit payload tailoring"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Authentication delegation to the IdP enforces MFA before token issuance. Invalid attempts trigger events through the API Gateway interceptor to Kafka, where the Anomaly Detection Engine alerts within one minute.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "API Gateway",
+     "Authentication & Authorization Filter",
+     "Telemetry & Audit Interceptor",
+     "Apache Kafka",
+     "Audit & Compliance Container",
+     "Anomaly Detection & Alert Engine"
+    ],
+    "sensitivity_points": [
+     "Zero-trust JWT validation and token expiration policies at API Gateway",
+     "Latency of real-time stream processing in Anomaly Detection Engine"
+    ],
+    "tradeoffs": [
+     "Synchronous edge token validation vs edge routing latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Access Policy Enforcer and Row-Level Security enforce ABAC. All access triggers Audit Trail Interceptor and Log Integrity Service, storing tamper-evident hash-chained logs in S3 Glacier Vault Lock with 10-year WORM retention.",
+    "elements": [
+     "EMR Service",
+     "Access Policy Enforcer",
+     "Audit Trail Interceptor",
+     "PostgreSQL",
+     "Row-Level Security Policies Engine",
+     "Log Integrity & Hash Chain Service",
+     "Compliance Storage Repository"
+    ],
+    "sensitivity_points": [
+     "Cryptographic hash chain computation overhead on read paths",
+     "S3 Glacier Vault Lock immutable retention policy configuration"
+    ],
+    "tradeoffs": [
+     "Storage cost and latency of immutable auditing vs strict compliance guarantee"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Container",
+     "Log Integrity & Hash Chain Service",
+     "Compliance Storage Repository",
+     "pg_audit extension",
+     "Row-Level Security Policies Engine",
+     "Telemetry & Audit Interceptor",
+     "Access Policy Enforcer"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Reverse Proxy & Load Balancer",
+     "PgBouncer",
+     "KRaft Quorum"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Compliance Storage Repository",
+     "Kafka Connect Sink"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Appointment Service",
+     "EMR Service",
+     "PostgreSQL"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Appointment Service",
+     "Appointment API Controller",
+     "Scheduling Engine"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "Clinical Record Manager",
+     "Audit Trail Interceptor",
+     "Audit & Compliance Container",
+     "pg_audit extension"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Container",
+     "Billing API Controller",
+     "Claim Validation Engine",
+     "Payment & Claims Service",
+     "Payment Gateway / Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Authentication & Authorization Filter",
+     "Vault + pgcrypto",
+     "Compliance Storage Repository",
+     "PostgreSQL"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Reverse Proxy & Load Balancer",
+     "PgBouncer",
+     "KRaft Quorum"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "Local Emergency Cache",
+     "Redis 7 caching layer"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "HL7 FHIR Interoperability Service",
+     "FHIR API Router",
+     "Pydantic Schema Validator",
+     "External Lab Integration Client",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

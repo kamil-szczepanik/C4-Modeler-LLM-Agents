@@ -1,0 +1,44 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Tenant Context & Authorization Proxy Container container
+
+System_Ext(API_Gateway_Container, "API Gateway Container", "External API Gateway")
+System_Ext(Redis_Container_tier, "Redis Container tier", "Redis Enterprise distributed caching and sliding windows")
+System_Ext(Audit_Compliance_Sidecar_Container, "Audit & Compliance Sidecar Container", "Sidecar for auditing and compliance logs")
+System_Ext(Data_Encryption_Key_Management_Container, "Data Encryption & Key Management Container", "PKCS#11, HSM for token verification and signatures")
+System_Ext(OCI_compliant_secure_registry, "OCI-compliant secure registry", "Secure registry for policy bundles")
+System_Ext(Envoy_Service_Mesh_Container, "Envoy Service Mesh Container", "Service mesh for downstream microservices")
+
+Container_Boundary(Tenant_Context_Authorization_Proxy_Container, "Tenant Context & Authorization Proxy Container") {
+    Component(Open_Policy_Agent_OPA, "Open Policy Agent (OPA)", "Rego", "Evaluates security policies for sub-millisecond, attribute-based policy enforcement.")
+    Component(Go_based_Custom_Policy_Enforcement_Daemon, "Go-based Custom Policy Enforcement Daemon", "Go", "Powers the custom policy enforcement daemon for high performance and low memory overhead.")
+    Component(In_Memory_Policy_Cache_Component, "In-Memory Policy Cache Component", "In-Memory Storage", "Caches policies locally for rapid retrieval and low latency.")
+    Component(Tenant_Context_Resolver_Component, "Tenant Context Resolver Component", "Go", "Resolves and evaluates tenant context for incoming requests.")
+    Component(Dynamic_Role_Mapping_Component, "Dynamic Role Mapping Component", "Go", "Dynamically maps roles and permissions for fine-grained authorization.")
+    Component(Embedded_SQLite_Database, "Embedded SQLite Database", "SQLite", "Used for localized offline fallback role-cache storage during network partitions.")
+    Component(Context_Propagation_Header_Sanitization_Component, "Context Propagation & Header Sanitization Component", "Go", "Sanitizes headers and propagates security contexts downstream.")
+    Component(Metrics_Telemetry_Emitter_Component, "Metrics & Telemetry Emitter Component", "OpenTelemetry", "Enables real-time tracing and metrics collection.")
+    Component(Policy_Bundle_Synchronizer_Component, "Policy Bundle Synchronizer Component", "HTTPS / OCI", "Polls OCI-compliant secure registries over HTTPS to synchronize policy bundles.")
+    Component(Rate_Limiting_Token_Bucket_Component, "Rate Limiting & Token Bucket Component", "Go / Redis Enterprise", "Enforces rate limiting and token bucket algorithms for traffic management.")
+    Component(Denial_of_Wallet_Threat_Mitigation_Component, "Denial-of-Wallet & Threat Mitigation Component", "Go", "Mitigates denial-of-wallet attacks and ensures threat protection.")
+    Component(Tenant_Metadata_Lookup_Component, "Tenant Metadata Lookup Component", "Go", "Performs tenant metadata lookups to support isolation and compliance.")
+}
+
+Rel(Go_based_Custom_Policy_Enforcement_Daemon, Open_Policy_Agent_OPA, "Evaluates security policies via", "Rego")
+Rel(Go_based_Custom_Policy_Enforcement_Daemon, In_Memory_Policy_Cache_Component, "Reads cached policies from", "In-Memory")
+Rel(Go_based_Custom_Policy_Enforcement_Daemon, Tenant_Context_Resolver_Component, "Utilizes for tenant context", "Go")
+Rel(Go_based_Custom_Policy_Enforcement_Daemon, Dynamic_Role_Mapping_Component, "Maps roles using", "Go")
+Rel(Go_based_Custom_Policy_Enforcement_Daemon, Embedded_SQLite_Database, "Falls back to offline role-cache via", "SQLite")
+Rel(Go_based_Custom_Policy_Enforcement_Daemon, Context_Propagation_Header_Sanitization_Component, "Sanitizes and propagates context via", "Go")
+Rel(Go_based_Custom_Policy_Enforcement_Daemon, Metrics_Telemetry_Emitter_Component, "Emits telemetry and metrics through", "OpenTelemetry")
+Rel(Policy_Bundle_Synchronizer_Component, Open_Policy_Agent_OPA, "Syncs bundles into", "Internal")
+Rel(Rate_Limiting_Token_Bucket_Component, Redis_Container_tier, "Queries sliding windows and session caches via", "Network")
+Rel(Go_based_Custom_Policy_Enforcement_Daemon, Audit_Compliance_Sidecar_Container, "Interacts via Unix domain socket and asynchronous logs with", "Unix Domain Socket")
+Rel(Go_based_Custom_Policy_Enforcement_Daemon, Data_Encryption_Key_Management_Container, "Connects for token verification and bundle signatures to", "PKCS#11 / HSM")
+Rel(Policy_Bundle_Synchronizer_Component, OCI_compliant_secure_registry, "Polls securely over HTTPS", "HTTPS / OCI")
+Rel(API_Gateway_Container, Go_based_Custom_Policy_Enforcement_Daemon, "Intercepts inbound traffic via gRPC (/authz.v1.Authorizer/Check)", "gRPC")
+Rel(Go_based_Custom_Policy_Enforcement_Daemon, Envoy_Service_Mesh_Container, "Communicates with downstream microservices via Envoy-managed mTLS over HTTP/2", "HTTP/2 / mTLS")
+
+@enduml

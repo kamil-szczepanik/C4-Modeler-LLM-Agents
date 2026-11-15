@@ -1,0 +1,240 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 and brief requirements via 'Catalogue & Search Container', 'Catalog & Search Component', and integrations with 'Digital Content Providers' for digital assets, along with 'Loan Management Component' and 'Circulation & Self-Service Component' for circulation.",
+   "performance_efficiency": "R-05 (< 800 ms search) is explicitly addressed by decoupling search into a dedicated 'Catalogue & Search Container' querying an optimized 'Elasticsearch' cluster over gRPC, supplemented by PgBouncer pooling, local NVMe storage, and asynchronous event indexing.",
+   "compatibility": "Well-defined external interfaces exist for 'Identity Provider (IdP)' using OIDC/OAuth 2.0, 'Digital Content Providers' via LTI/REST, 'Payment Gateway' via REST/JSON, and 'Notification Service' via standard SMTP/APNs/FCM protocols.",
+   "usability": "All specified user groups ('Library Patrons', 'Librarians', 'Library Administrators') are supported through dedicated interfaces in 'Web Application (SPA)' via 'Routing & Shell Component', 'Catalog & Search Component', and 'Circulation & Self-Service Component'.",
+   "reliability": "Robust fault tolerance and recovery mechanisms are detailed, including 'Patroni with etcd' automated failover, WAL replication, RabbitMQ Quorum Queues, DLX routing, and Celery background workers with circuit breakers.",
+   "security": "EU data residency constraints are enforced using 'TLS Termination & Geo-Filter Plugin', EU-pinned PostgreSQL volumes, and EU CDN hosting. Strong authentication, authorization, and accountability are ensured via JWT plugins, HashiCorp Vault, and 'pgaudit'.",
+   "maintainability": "High modularity with clear separation between search, circulation, and worker services connected via gRPC and RabbitMQ. However, Level 3 of 'Circulation & Core Container' redundantly re-declares parent container elements as internal components.",
+   "portability": "The architecture leverages containerized technologies (Docker/Kubernetes, Node.js, Spring Boot, Celery) and cloud-agnostic databases capable of running in any EU-region cloud infrastructure, though explicit infrastructure-as-code or multi-cloud abstraction is unspecified."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 2,
+   "MOD-02": 4,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 5.0,
+   "Modifiability": 3.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Elasticsearch with dedicated NVMe storage and Lucene query engine, accessed via Spring Boot gRPC services, directly satisfies the sub-800 ms latency requirement under heavy concurrent search loads.",
+    "elements": [
+     "Web Application (SPA)",
+     "API Gateway",
+     "Catalogue & Search Container",
+     "Elasticsearch"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch shard allocation and NVMe I/O throughput",
+     "API gateway gRPC connection pooling and network latency"
+    ],
+    "tradeoffs": [
+     "Maintaining a dedicated search index introduces eventual consistency with core database"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalogue mutations are published to RabbitMQ and consumed asynchronously by the Catalogue & Search Container, isolating write operations from read queries and keeping search latency low while indexing updates rapidly.",
+    "elements": [
+     "Circulation & Core Container",
+     "RabbitMQ Message Broker",
+     "Catalogue & Search Container",
+     "Elasticsearch"
+    ],
+    "sensitivity_points": [
+     "RabbitMQ consumer processing latency under high mutation rates",
+     "Elasticsearch index refresh interval configuration"
+    ],
+    "tradeoffs": [
+     "Asynchronous indexing ensures search isolation but introduces momentary read lag"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Elasticsearch cluster coordination handles index node failures with replica shards, while circulation transactions run independently against PostgreSQL with Patroni HA and PgBouncer, preventing loan transaction loss.",
+    "elements": [
+     "Elasticsearch",
+     "Catalogue & Search Container",
+     "Circulation & Core Container",
+     "PostgreSQL Database"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch replica shard count and cluster failover timing",
+     "Decoupling of circulation persistence from search cluster health"
+    ],
+    "tradeoffs": [
+     "Replica shards increase storage footprint to ensure zero search downtime"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The SPA is delivered via an EU CDN, and backend requests are distributed by the Kong load balancer. If an instance fails, traffic seamlessly shifts without losing transactional state.",
+    "elements": [
+     "Web Application (SPA)",
+     "API Gateway",
+     "Circulation & Core Container",
+     "PostgreSQL Database"
+    ],
+    "sensitivity_points": [
+     "CDN availability and edge caching configuration",
+     "Kong upstream health checking and failover speed"
+    ],
+    "tradeoffs": [
+     "Stateless client architecture requires externalized session state validation on every request"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "While Digital Content Providers is identified as an external system, Level 2 contains no relationships to it, and Level 3 lacks an ingestion or integration adapter component, requiring structural additions.",
+    "elements": [
+     "Catalogue & Search Container",
+     "Digital Content Providers"
+    ],
+    "sensitivity_points": [
+     "Lack of an explicit external provider integration adapter component"
+    ],
+    "tradeoffs": [
+     "Adding provider integrations directly to search or core services risks coupling"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The Policy Validation Engine in the Circulation & Core Container encapsulates rule evaluation separate from core loan workflows, though an explicit runtime configuration interface or dynamic schema is not fully specified.",
+    "elements": [
+     "Circulation & Core Container"
+    ],
+    "sensitivity_points": [
+     "Separation of policy configuration data from enforcement logic"
+    ],
+    "tradeoffs": [
+     "Dynamic rule evaluation adds minor runtime latency compared to hardcoded logic"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "EU residency is enforced across layers using Kong Geo-Filter plugins, EU-pinned PostgreSQL volumes, EU-hosted CDN assets, encrypted EU backups, and EU-restricted telemetry endpoints.",
+    "elements": [
+     "API Gateway",
+     "PostgreSQL Database",
+     "Elasticsearch",
+     "Web Application (SPA)"
+    ],
+    "sensitivity_points": [
+     "Geo-filter IP accuracy and strict regional volume pinning enforcement"
+    ],
+    "tradeoffs": [
+     "Geo-blocking non-EU traffic may prevent legitimate traveling patrons from accessing portals"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Kong JWT authentication validates patron identity, the Core container validates authorization policies against patron loan records, and unauthorized access attempts are recorded via the Audit Logging Plugin and pgaudit.",
+    "elements": [
+     "API Gateway",
+     "Circulation & Core Container",
+     "PostgreSQL Database"
+    ],
+    "sensitivity_points": [
+     "Fine-grained patron ID claims validation against requested resource IDs",
+     "Audit log integrity and forwarding immediacy"
+    ],
+    "tradeoffs": [
+     "Comprehensive per-request authorization and audit logging add processing overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "TLS Termination & Geo-Filter Plugin",
+     "PostgreSQL Database",
+     "Web Application (SPA)",
+     "Audit & Compliance Module",
+     "Data Storage & Translog Engine",
+     "Notification Service"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Component",
+     "Digital Content Providers",
+     "Catalogue & Search Container",
+     "Search Service",
+     "Cataloguing Event Consumer",
+     "Relational Schema / Core Tables"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Elasticsearch",
+     "Catalogue & Search Container",
+     "Query & Search Engine",
+     "Data Storage & Translog Engine",
+     "OpenTelemetry Plugin",
+     "Index Repository",
+     "Search Controller"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

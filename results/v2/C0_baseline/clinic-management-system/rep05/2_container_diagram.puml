@@ -1,0 +1,51 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patient, "Patient", "Patients accessing the platform for scheduling, admissions, and viewing EMR or billing details.")
+Person(ReceptionistFrontDesk, "Receptionist / Front Desk", "Front desk staff managing patient check-ins, admissions, and basic scheduling.")
+Person(ClinicianDoctor, "Clinician / Doctor", "Medical professionals managing patient health records, examinations, and clinical notes.")
+Person(BillingSpecialist, "Billing Specialist", "Staff members handling insurance claims, invoices, and payment processing.")
+
+System_Ext(IdentityProviderIdP, "Identity Provider (IdP)", "Manages authentication and IAM via OAuth2/OIDC.")
+System_Ext(ExternalLabImagingSystems, "External Lab & Imaging Systems", "External systems providing medical lab results and imaging data.")
+System_Ext(InsuranceClearinghouses, "Insurance Clearinghouses", "External networks for transmitting medical insurance claims.")
+System_Ext(PaymentGateway, "Payment Gateway", "External service provider for processing patient co-pays and payments.")
+System_Ext(CentralizedVault, "Centralized Vault", "Secret management system for dynamic secrets.")
+System_Ext(SIEMObservabilitySystem, "SIEM / Observability System", "Centralized system for OpenTelemetry metrics, logs, and audit trails.")
+
+System_Boundary(ClinicManagementSystem, "Clinic Management System") {
+    Container(APIGateway, "API Gateway", "NGINX / Kong", "Handles incoming requests, TLS termination, token validation, and routing.")
+    Container(WebApplication, "Web Application", "React SPA", "Provides the high-performance user interface for users.")
+    Container(CoreServices, "Core Services", "Spring Boot / Java", "Manages patient admissions, electronic medical records (EMR), and scheduling.")
+    Container(BillingService, "Billing Service", "Node.js / Express", "Handles billing and insurance claim workflows.")
+    Container(IntegrationService, "Integration Service", "Apache Camel", "Handles HL7 FHIR translation and communication with external lab and imaging systems.")
+    ContainerDb(DataInfrastructureTier, "Data & Infrastructure Tier", "PostgreSQL with Citus, Redis, Kafka/RabbitMQ, Istio, ArgoCD", "Provides database persistence, caching, message brokering, and infrastructure orchestration.")
+}
+
+Rel(Patient, APIGateway, "Accesses clinical IT capabilities", "HTTPS / WSS, TLS 1.3, OAuth2 token validation, MFA")
+Rel(ReceptionistFrontDesk, APIGateway, "Manages patient check-ins and admissions", "HTTPS / WSS, TLS 1.3, OAuth2 token validation, MFA")
+Rel(ClinicianDoctor, APIGateway, "Accesses EMR and clinical tools", "HTTPS / WSS, TLS 1.3, OAuth2 token validation, MFA")
+Rel(BillingSpecialist, APIGateway, "Manages billing and claims", "HTTPS / WSS, TLS 1.3, OAuth2 token validation, MFA")
+Rel(APIGateway, WebApplication, "Serves React SPA", "NGINX")
+Rel(WebApplication, CoreServices, "Performs EMR interactions", "gRPC over mTLS (Istio)")
+Rel(CoreServices, BillingService, "Asynchronous event streaming for billing workflows", "Kafka/RabbitMQ with payload-level message encryption")
+Rel(CoreServices, IntegrationService, "Asynchronous event streaming for integration workflows", "Kafka/RabbitMQ with payload-level message encryption")
+Rel(IntegrationService, ExternalLabImagingSystems, "Integrates lab orders and imaging results", "HL7 FHIR APIs")
+Rel(BillingService, PaymentGateway, "Processes patient payments", "Secure HTTPS")
+Rel(BillingService, InsuranceClearinghouses, "Transmits insurance claims", "Secure HTTPS")
+Rel(APIGateway, CentralizedVault, "Fetches dynamic secrets", "AppRole tokens")
+Rel(CoreServices, CentralizedVault, "Fetches dynamic secrets", "AppRole tokens")
+Rel(BillingService, CentralizedVault, "Fetches dynamic secrets", "AppRole tokens")
+Rel(IntegrationService, CentralizedVault, "Fetches dynamic secrets", "AppRole tokens")
+Rel(APIGateway, SIEMObservabilitySystem, "Sends tracing telemetry", "OpenTelemetry")
+Rel(CoreServices, SIEMObservabilitySystem, "Sends tracing telemetry", "OpenTelemetry")
+Rel(BillingService, SIEMObservabilitySystem, "Sends tracing telemetry", "OpenTelemetry")
+Rel(IntegrationService, SIEMObservabilitySystem, "Sends tracing telemetry", "OpenTelemetry")
+Rel(CoreServices, DataInfrastructureTier, "Persists and caches operational data", "PostgreSQL with Citus, Redis")
+Rel(CoreServices, DataInfrastructureTier, "Publishes and consumes asynchronous messages", "Kafka/RabbitMQ")
+
+@enduml

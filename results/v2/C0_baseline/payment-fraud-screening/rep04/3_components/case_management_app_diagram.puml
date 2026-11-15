@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Case Management App container
+
+Person(FraudAnalyst, "Fraud Analyst", "Reviews cases and manages screening workflows.")
+Person(RiskComplianceOfficer, "Risk / Compliance Officer", "Inspects audit trails and logs read-only.")
+
+System_Ext(IdentityProviderIdP, "Identity Provider / IdP", "Handles authentication and authorization.")
+ContainerDb(CaseAuditReadStore, "Case & Audit Read Store", "Amazon DynamoDB", "Indexed read store for fast, secure audit retrieval and case caching.")
+Container(AuditStorage, "Audit Storage", "Amazon S3 with Object Lock", "Secure storage for tamper-evident audit data.")
+Container(AuditStreamingPipeline, "Audit & Streaming Pipeline", "Amazon Kinesis Data Streams / Firehose", "Pipeline for streaming feedback and telemetry data.")
+
+Container_Boundary(CaseManagementApp, "Case Management App") {
+    Component(CaseAPIController, "Case API Controller", "TypeScript / NestJS", "Handles API requests for case management and screening workflows.")
+    Component(CaseOrchestratorService, "Case Orchestrator Service", "TypeScript", "Dispatches workflow commands and manages case states.")
+    Component(AuditEvidenceProxy, "Audit & Evidence Proxy", "TypeScript", "Queries tamper-evident decision logs and model explanations.")
+    Component(FeedbackTelemetryEmitter, "Feedback & Telemetry Emitter", "TypeScript", "Streams analyst feedback tags for offline model retraining.")
+}
+
+Rel(FraudAnalyst, CaseAPIController, "Reviews cases and manages screening workflows", "HTTPS / mTLS")
+Rel(RiskComplianceOfficer, CaseAPIController, "Inspects audit trails and logs read-only", "HTTPS / mTLS")
+Rel(CaseAPIController, CaseOrchestratorService, "Dispatches workflow commands", "In-memory function calls")
+Rel(CaseOrchestratorService, CaseAuditReadStore, "Reads and updates case state", "HTTPS / AWS SDK via VPC Endpoints")
+Rel(AuditEvidenceProxy, CaseAuditReadStore, "Queries tamper-evident decision logs and model explanations", "HTTPS / AWS SDK via VPC Endpoints")
+Rel(FeedbackTelemetryEmitter, AuditStreamingPipeline, "Streams analyst feedback tags for offline model retraining", "HTTPS / Kinesis API")
+
+@enduml

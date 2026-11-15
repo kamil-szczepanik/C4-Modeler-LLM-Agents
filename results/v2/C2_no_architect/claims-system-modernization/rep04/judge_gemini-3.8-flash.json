@@ -1,0 +1,291 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 4,
+   "reliability": 2,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.5,
+  "justifications": {
+   "functional_suitability": "R-01 and R-02 are met via 'Customer & Broker Portal Container' and 'Adjuster Workspace Container'. However, R-03 lacks a persistent modern domain datastore for migrated claim types—relying solely on 'Azure Cache for Redis' and the legacy mainframe. Nightly batch constraints are also unaddressed.",
+   "performance_efficiency": "R-05 is explicitly targeted: 'Claim State & Caching Service' reads from 'Redis Data Cache' to guarantee sub-2s adjuster screen loads despite 5s mainframe latencies. 'Async Queue Publisher' decouples submissions via Azure Service Bus to prevent portal timeouts.",
+   "compatibility": "The 'Anti-Corruption Layer (ACL)' translates modern models to legacy formats for the 'On-Premises COBOL/DB2 Mainframe'. Secure hybrid coexistence is maintained using mTLS and ExpressRoute, though batch integration interfaces are not explicitly detailed.",
+   "usability": "Dedicated interfaces are provided for each user group: 'Customer & Broker Portal Container' for customers/brokers and 'Workspace UI Controller' in the BFF for claims adjusters. Operations teams interact via gateway monitoring endpoints.",
+   "reliability": "R-04 requires no claim loss or double processing, but mechanisms for deduplication, idempotent processing, two-phase commits, or transactional outbox/reconciliation between the modern platform and DB2 system of record are omitted.",
+   "security": "R-07 is fulfilled by 'Workspace UI Controller' and 'Security and Authentication Enforcer' supporting OIDC SSO. Secrets are managed via 'Azure Key Vault' and Managed Identities, with mTLS securing mainframe transit and tamper-evident audit logging.",
+   "maintainability": "The 'Strangler Fig Router' enables switching migrated claim types back to the mainframe within one day (R-06). Clear separation between BFF, portal, and ACL promotes low coupling, though AKS/ACA complexity may challenge a team with little cloud experience.",
+   "portability": "Applications run on portable container technologies (ACA/AKS), but the architecture is tightly coupled to proprietary Azure PaaS offerings ('Azure API Gateway', 'Azure Key Vault', 'Azure Cache for Redis', and Azure-specific IAM)."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 2,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.46875,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 2.5,
+   "Modifiability": 2.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The BFF queries Azure Cache for Redis directly to serve cached claim state, meeting the sub-2s latency requirement despite slow mainframe responses. However, cache pre-warming and cache-miss fallback paths are not fully defined.",
+    "elements": [
+     "Adjuster Workspace Container & Backend-For-Frontend (BFF)",
+     "Claim State & Caching Service",
+     "Azure Cache for Redis",
+     "Redis Data Cache"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio and expiration policies directly impact UI response latency."
+    ],
+    "tradeoffs": [
+     "Serving stale cached claim states versus waiting for mainframe 5-second response times."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "justification": "The Portal uses an Async Queue Publisher to buffer submission spikes. However, Azure Service Bus is not defined as an architectural container, and explicit throttling logic to protect the mainframe batch window is absent.",
+    "elements": [
+     "Customer & Broker Portal Container",
+     "Async Queue Publisher",
+     "Azure API Gateway / Integration Container"
+    ],
+    "sensitivity_points": [
+     "Queue buffering capacity and ingestion rate throttling during peak end-of-month submission bursts."
+    ],
+    "tradeoffs": [
+     "Decoupled asynchronous ingestion improves customer throughput but delays immediate validation against the mainframe."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Submissions are queued via Service Bus during mainframe unavailability. However, Service Bus is omitted from the container model, and no consumer worker or scheduled batch-release mechanism is modeled to forward messages post-window.",
+    "elements": [
+     "Customer & Broker Portal Container",
+     "Async Queue Publisher",
+     "Azure API Gateway / Integration Container"
+    ],
+    "sensitivity_points": [
+     "Durability and retention limits of asynchronous message buffers during extended mainframe outages."
+    ],
+    "tradeoffs": [
+     "Buffering requests ensures intake availability but complicates transactional consistency tracking across systems."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The architecture lacks dedicated mechanisms for dual-write reconciliation, idempotency tracking, or distributed compensation transactions across the hybrid boundary when in-flight synchronization fails.",
+    "elements": [
+     "Azure API Gateway / Integration Container",
+     "Anti-Corruption Layer (ACL)",
+     "Strangler Fig Router"
+    ],
+    "sensitivity_points": [
+     "Absence of idempotent keys and compensation workflows between Azure and mainframe."
+    ],
+    "tradeoffs": [
+     "Simpler point-to-point integration reduces complexity but risks duplicate processing or orphan records."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "The Strangler Fig Router and ACL enable gradual claim type routing and fast fallback switching. However, the architecture defines no cloud-native datastore to hold migrated claim types independently of the mainframe.",
+    "elements": [
+     "Strangler Fig Router",
+     "Anti-Corruption Layer (ACL)",
+     "Azure API Gateway / Integration Container"
+    ],
+    "sensitivity_points": [
+     "Routing rule agility in the API Gateway policies for rapid switch-backs."
+    ],
+    "tradeoffs": [
+     "Reversible routing minimizes migration risk but adds latency through translation layers."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "While BFF and API Gateway isolate frontends from backend modifications, the architecture completely lacks a persistent operational database container in Azure to take over DB2's role as the system of record.",
+    "elements": [
+     "Azure API Gateway / Integration Container",
+     "Strangler Fig Router",
+     "Adjuster Workspace Container & Backend-For-Frontend (BFF)",
+     "Customer & Broker Portal Container"
+    ],
+    "sensitivity_points": [
+     "Absence of an Azure persistence layer to store claims data long-term."
+    ],
+    "tradeoffs": [
+     "Gateway decoupling protects UI investments but leaves data storage unaddressed for decommissioning."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The architecture enforces OAuth 2.0 / OIDC at the gateway and portal boundaries, but multi-tenant data isolation and resource-level authorization checks between distinct brokers are not explicitly detailed.",
+    "elements": [
+     "Azure API Gateway / Integration Container",
+     "Security and Authentication Enforcer",
+     "Customer & Broker Portal Container",
+     "Portal UI & API Controller"
+    ],
+    "sensitivity_points": [
+     "Fine-grained claim ownership validation at the API and portal controller level."
+    ],
+    "tradeoffs": [
+     "Centralized gateway auth simplifies perimeter security but risks missing tenant-level resource isolation."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "SSO with Active Directory is handled via OpenID Connect in the Adjuster BFF and API Gateway. However, mechanisms for short-lived access tokens, immediate session invalidation, or token revocation checking within 15 minutes are unspecified.",
+    "elements": [
+     "Adjuster Workspace Container & Backend-For-Frontend (BFF)",
+     "Workspace UI Controller",
+     "Security and Authentication Enforcer"
+    ],
+    "sensitivity_points": [
+     "Access token TTL and active session invalidation across Redis and BFF."
+    ],
+    "tradeoffs": [
+     "Stateless JWT validation improves BFF performance but delays rapid off-boarding revocation."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial"
+  },
+  "coverage": 0.6363636363636364,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "On-Premises COBOL/DB2 Mainframe",
+     "Azure API Gateway / Integration Container"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none"
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Anti-Corruption Layer (ACL)",
+     "Azure API Gateway / Integration Container"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none"
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "End Customers & Brokers",
+     "Customer & Broker Portal Container",
+     "Portal UI & API Controller"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Adjuster Workspace Container & Backend-For-Frontend (BFF)",
+     "Workspace UI Controller"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Azure API Gateway / Integration Container",
+     "Strangler Fig Router"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Async Queue Publisher",
+     "Operations & Finance Teams"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Azure Cache for Redis",
+     "Redis Session Store",
+     "Redis Data Cache",
+     "Claim State & Caching Service",
+     "Adjuster Workspace Container & Backend-For-Frontend (BFF)"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Strangler Fig Router"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Security and Authentication Enforcer",
+     "Workspace UI Controller"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

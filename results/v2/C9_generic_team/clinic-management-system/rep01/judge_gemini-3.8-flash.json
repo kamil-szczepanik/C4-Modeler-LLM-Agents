@@ -1,0 +1,312 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 3,
+   "compatibility": 5,
+   "usability": 2,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 3
+  },
+  "mean": 3.75,
+  "justifications": {
+   "functional_suitability": "Core Domain Containers includes Patient Registration Component, Appointment Scheduling Component, EMR Component, and Billing Component, addressing R-01 through R-04. However, specific mechanisms for resource clash checking and insurance claim submission workflows remain unspecified.",
+   "performance_efficiency": "Asynchronous Event Bus Container and Cache Lookup Manager support asynchronous processing and integration caching. However, there are no dedicated caching or read-optimization mechanisms around EMR Component or Storage Management Layer to satisfy the sub-second P95 screen load target.",
+   "compatibility": "Addressed thoroughly by Integration Engine Container, featuring HL7 FHIR Translator and Claims Check Store for medical imaging, facilitating standardized clinical data exchange with External Lab and Imaging Systems via HL7 FHIR over TLS.",
+   "usability": "Patients, Practitioners, and Billing Staff are grouped into a single persona interacting directly with API Gateway / Reverse Proxy Container. The model omits dedicated frontends, user portals, or clinical interfaces tailored to each distinct user group.",
+   "reliability": "Fault tolerance is aided by circuit breakers in Schema Validation & Security Component and Translation Event Router. However, the architecture lacks concrete mechanisms to achieve active-active 99.99% availability and replication across on-prem-k8s and eu-central-1 regions.",
+   "security": "Strong security controls are implemented: MFA enforced by Centralized Identity and Access Management, AES-256 encryption at rest in Storage Management Layer, secret rotation in Secrets Management Engine, and automated compliance auditing via Audit Trail Manager.",
+   "maintainability": "The design enforces clean modularity with decoupled Core Domain Containers, standardized contracts via Schema Registry, event-driven integration through Event Broker Core, and unified telemetry via Prometheus, Fluentbit, and OpenTelemetry.",
+   "portability": "Workloads are containerized for Kubernetes and use portable technologies like Kafka and Vault. However, the architecture does not specify how services and persistent storage adapt to or synchronize across the hybrid on-prem-k8s and eu-central-1 deployment environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 2,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.5625,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 2.5,
+   "Modifiability": 3.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "EMR Component and Data Access Layer handle queries with sub-second goals, but caching is only specified for HL7 translation, not for EMR screen reads.",
+    "elements": [
+     "API Gateway / Reverse Proxy Container",
+     "Edge Routing & TLS Termination Component",
+     "EMR Component",
+     "Data Access & Governance Container Layer",
+     "Storage Management Layer"
+    ],
+    "sensitivity_points": [
+     "Database read concurrency and connection pool capacity under concurrent morning peak",
+     "Absence of dedicated EMR data caching layer"
+    ],
+    "tradeoffs": [
+     "Strict real-time data consistency versus read latency optimizations via caching"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "HL7 FHIR Translator decouples high-volume ingress via Kafka event broker and claims check store, isolating the EMR synchronous read path from background ingestion load.",
+    "elements": [
+     "HL7 FHIR Translator",
+     "Translation Event Router",
+     "Event Broker Core",
+     "Claims Check Store",
+     "EMR Component",
+     "Storage Management Layer"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer throughput and backpressure handling during batch ingestion",
+     "Storage write saturation impacting concurrent read queries"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of ingested lab results versus immediate EMR visibility"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The model identifies hybrid regions, but specifies no cross-region active-active database replication, global traffic routing, or failover synchronization mechanisms to guarantee RPO=0 and 1-minute RTO.",
+    "elements": [
+     "API Gateway / Reverse Proxy Container",
+     "Storage Management Layer",
+     "Event Broker Core"
+    ],
+    "sensitivity_points": [
+     "Cross-site replication latency between on-prem-k8s and eu-central-1",
+     "Lack of global server load balancer or automated DNS failover"
+    ],
+    "tradeoffs": [
+     "Synchronous multi-region replication for zero data loss versus write latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Distributed SQL provides database node resilience and Kafka supports retries, but specific claim deduplication, idempotency tokens, and distributed transaction semantics are not defined.",
+    "elements": [
+     "Billing Component",
+     "Storage Management Layer",
+     "Event Broker Core",
+     "Schema Validation & Security Component"
+    ],
+    "sensitivity_points": [
+     "Idempotency enforcement across retried billing submissions",
+     "Distributed SQL failover election time"
+    ],
+    "tradeoffs": [
+     "Strict exactly-once claim submission guarantees versus retry latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "The Integration Engine handles external HL7 FHIR systems, but Billing is directly coupled as an internal microservice with no dedicated clearinghouse integration adapter.",
+    "elements": [
+     "Billing Component",
+     "Integration Engine Container",
+     "Event Broker Core"
+    ],
+    "sensitivity_points": [
+     "Coupling between Billing domain logic and external payment clearinghouse protocols",
+     "Scope boundary of Integration Engine limited to HL7 FHIR"
+    ],
+    "tradeoffs": [
+     "Centralized integration engine versus domain-managed external clearinghouse connectors"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are strictly confined to Patient Registration Component, Schema Registry/Validation, and Storage Management Layer, which natively routes queries through Audit Trail Manager.",
+    "elements": [
+     "Patient Registration Component",
+     "Schema Registry",
+     "Schema Validation & Security Component",
+     "Storage Management Layer",
+     "Audit Trail Manager"
+    ],
+    "sensitivity_points": [
+     "Schema registry evolution and backwards compatibility",
+     "Automated auditing schema adjustments for new fields"
+    ],
+    "tradeoffs": [
+     "Strong schema contract governance versus speed of schema evolution"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The API Gateway and IAM boundary explicitly enforce MFA and zero-trust policies, while Fluentbit scrubbers and Prometheus generate alerts for authentication failures.",
+    "elements": [
+     "API Gateway / Edge Routing",
+     "Centralized Identity and Access Management",
+     "Schema Validation & Security Component",
+     "Fluentbit",
+     "Prometheus"
+    ],
+    "sensitivity_points": [
+     "Latency and enforcement reliability of centralized IAM edge inspection",
+     "Alert forwarding latency from Fluentbit to monitoring"
+    ],
+    "tradeoffs": [
+     "Mandatory edge MFA validation overhead versus low-latency user ingress"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "All domain queries route through Data Access & Governance Container Layer, where Audit Trail Manager logs data access and mutations under 10-year retention policies.",
+    "elements": [
+     "Data Access & Governance Container Layer",
+     "Storage Management Layer",
+     "Audit Trail Manager",
+     "EMR Component",
+     "Centralized Identity and Access Management"
+    ],
+    "sensitivity_points": [
+     "Mandatory routing of read queries through governance layer without bypass",
+     "Audit log storage capacity and tamper-proof write throughput"
+    ],
+    "tradeoffs": [
+     "Comprehensive read audit performance overhead versus storage compliance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Storage Management Layer",
+     "Audit Trail Manager",
+     "Data Access & Governance Container Layer"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "EMR Component",
+     "Storage Management Layer"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Storage Management Layer"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Registration Component",
+     "Core Domain Containers"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Appointment Scheduling Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Component",
+     "Audit Trail Manager"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Billing Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Centralized Identity and Access Management",
+     "API Gateway / Reverse Proxy Container",
+     "Configuration and Secret Management Boundary",
+     "Storage Management Layer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Storage Management Layer",
+     "Telemetry and Observability Plane"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "EMR Component"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Engine Container",
+     "HL7 FHIR Translator",
+     "External Lab and Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

@@ -1,0 +1,335 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are met: R-01 by 'Catalog & Search Service' and 'AWS OpenSearch', R-02 via 'Order & Checkout Service' and 'Payment Gateway', R-03 through 'Social Proof & Recommendation UI Component', R-04 via 'Recommendation Service', and multi-currency/shipping constraints by 'Pricing & Localization Service' and 'Shipping APIs'.",
+   "performance_efficiency": "The architecture incorporates 'CloudFront CDN', 'PgBouncer Connection Pooler', 'PostgreSQL Read Replicas', distributed caching via 'AWS ElastiCache (Redis)', and asynchronous pipelines using 'AWS EventBridge' and 'AWS SQS' to comfortably achieve sub-2s loads on 3G and sustain 1M MAU.",
+   "compatibility": "Interoperability is thoroughly established with explicit protocols (HTTPS, REST, OIDC/OAuth2) connecting to third parties including 'Payment Gateway', 'Shipping APIs', 'Tax & Compliance Service', and external 'Identity Provider'.",
+   "usability": "The 'Frontend SPA' accommodates 'Book Buyers', 'Registered Reviewers', and 'Store Administrators' with dedicated components like 'Localization & Consent Manager Component'. However, administrative workflows lack a dedicated back-office UI interface or console distinct from the customer-facing SPA.",
+   "reliability": "Achieving 99.95% availability is supported by 'PostgreSQL Primary Instance' in Multi-AZ with read replicas, cluster replication in 'Search Index', dead-letter queues in 'Order Queue', and decoupled saga workflows managed by 'Checkout Orchestrator Component'.",
+   "security": "Security is addressed across layers via 'Edge Router & WAF Integration' for OWASP Top-10 mitigations, token validation via 'Authentication & Authorization Filter', internal mTLS/gRPC, zero hardcoded credentials via 'AWS Secrets Manager', and 'Audit & Compliance Logger' for regulatory compliance.",
+   "maintainability": "Modularity is high with decoupled microservices ('Catalog & Search Service', 'Order & Checkout Service', 'Recommendation Service', 'Pricing & Localization Service') interacting asynchronously via 'AWS EventBridge' and 'EventBridge Schema Registry', promoting low coupling and maintainable domain boundaries.",
+   "portability": "Services are containerized on 'ECS Fargate' and deployable across target AWS regions. However, high reliance on proprietary AWS PaaS ('AWS EventBridge', 'AWS Secrets Manager', 'AWS API Gateway', 'AWS Kinesis') somewhat impedes portability to alternative cloud environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "CloudFront CDN caches edge assets while OpenSearch and Redis caching offload read queries. Scalable ECS Fargate containers and PgBouncer connection pooling protect database performance under high load.",
+    "elements": [
+     "CDN / Edge WAF",
+     "Frontend SPA",
+     "API Gateway",
+     "Catalog & Search Service",
+     "Search Index",
+     "Cache & Session Store",
+     "Relational Database"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios at CloudFront and ElastiCache directly determine latency",
+     "PgBouncer connection limits during burst traffic"
+    ],
+    "tradeoffs": [
+     "Aggressive edge caching improves response time but introduces eventual consistency for catalog updates"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Recommendation computation is isolated in its own ECS Fargate container and reads from read replicas and Redis cache. However, heavy historical purchase queries could contention-lock read replicas if unindexed.",
+    "elements": [
+     "Recommendation Service",
+     "Cache & Session Store",
+     "Relational Database",
+     "Event Bus / Messaging"
+    ],
+    "sensitivity_points": [
+     "Resource isolation between recommendation batch jobs and online transactions",
+     "Read replica query saturation"
+    ],
+    "tradeoffs": [
+     "Asynchronous recommendation generation saves online compute but risks stale recommendations"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The Checkout Orchestrator saga pattern combined with AWS SQS queues allows order placement to complete while deferring shipping fulfillment during third-party provider outages.",
+    "elements": [
+     "Order & Checkout Service",
+     "Event Bus / Messaging",
+     "Shipping APIs"
+    ],
+    "sensitivity_points": [
+     "Queue retention limits and dead-letter queue handling in AWS SQS",
+     "Saga compensation logic reliability"
+    ],
+    "tradeoffs": [
+     "Asynchronous shipping guarantees checkout availability but delays instant tracking number generation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Although deployed across three target cloud regions with edge routing, PostgreSQL is configured as Multi-AZ rather than cross-region Aurora Global Database, introducing failover delay and risk of state loss.",
+    "elements": [
+     "CDN / Edge WAF",
+     "API Gateway",
+     "Relational Database",
+     "Search Index"
+    ],
+    "sensitivity_points": [
+     "Database replication lag across distinct AWS regions",
+     "Automated DNS failover latency at edge WAF"
+    ],
+    "tradeoffs": [
+     "Multi-AZ failover simplifies consistency within a region but impairs cross-region disaster recovery"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Currency conversion and regional pricing are cleanly encapsulated in the Pricing & Localization Service and Payment Gateway. Minimal modifications are needed beyond updating exchange rate sync and currency lists.",
+    "elements": [
+     "Pricing & Localization Service",
+     "Payment Gateway",
+     "Frontend SPA"
+    ],
+    "sensitivity_points": [
+     "Decoupling of currency presentation logic from transactional billing logic",
+     "Exchange rate cache invalidation frequency"
+    ],
+    "tradeoffs": [
+     "Centralized pricing service increases network hops but isolates multi-currency business rules"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Recommendation Service exposes a decoupled gRPC contract and consumes events asynchronously. Replacing machine learning models or algorithms occurs entirely within the service container without impacting callers.",
+    "elements": [
+     "Recommendation Service",
+     "API Gateway",
+     "Event Bus / Messaging"
+    ],
+    "sensitivity_points": [
+     "Strict adherence to gRPC contract interfaces",
+     "Isolation of internal ML dependencies inside Fargate containers"
+    ],
+    "tradeoffs": [
+     "Encapsulating ML models in microservices enables independent deployments but adds network serialization overhead"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "OWASP Top-10 protection is enforced hierarchically via AWS WAF at the edge, token and rate checks at the API Gateway, and input sanitization before OpenSearch and database queries.",
+    "elements": [
+     "CDN / Edge WAF",
+     "API Gateway",
+     "Catalog & Search Service",
+     "Search Index",
+     "Relational Database"
+    ],
+    "sensitivity_points": [
+     "Edge WAF rule updates and schema validation thoroughness",
+     "Parameterized query enforcement across all ORM and OpenSearch queries"
+    ],
+    "tradeoffs": [
+     "Multi-layered request inspection increases latency slightly to guarantee defensive security posture"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "The architecture incorporates pseudonymization and database isolation, but lacks an explicit cross-service GDPR/CCPA deletion orchestration workflow to coordinate purging data across PostgreSQL, OpenSearch, Redis, and event streams.",
+    "elements": [
+     "Relational Database",
+     "Search Index",
+     "Event Bus / Messaging",
+     "Recommendation Service",
+     "Tax & Compliance Service"
+    ],
+    "sensitivity_points": [
+     "Traceability of personally identifiable data across polyglot datastores",
+     "Auditability of deletion propagation across distributed event backlogs"
+    ],
+    "tradeoffs": [
+     "Event-driven decoupling complicates centralized transactional cascading data deletion across all stores"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Tax & Compliance Service",
+     "Relational Database",
+     "Localization & Consent Manager Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Pricing & Localization Service",
+     "Currency Exchange Engine",
+     "Localization & Consent Manager Component",
+     "Price Cache Manager"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Providers",
+     "Shipping APIs",
+     "Third-Party Shipping APIs",
+     "Order & Checkout Service"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Service",
+     "Search Index",
+     "Catalog & Search UI Component",
+     "OpenSearch Query Builder",
+     "Query Processor",
+     "AWS OpenSearch"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Cart & Checkout UI Component",
+     "Order & Checkout Service",
+     "Checkout Orchestrator Component",
+     "Payment Gateway"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Social Proof & Recommendation UI Component",
+     "Registered Reviewers",
+     "Catalog & Search Service",
+     "Event Bus / Messaging"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation Engine",
+     "Social Proof & Recommendation UI Component",
+     "AWS RDS PostgreSQL"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "CDN / Edge WAF",
+     "API Gateway",
+     "Cache & Session Store",
+     "PgBouncer Connection Pooler",
+     "PostgreSQL Read Replicas",
+     "Cluster State & Storage"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Frontend SPA",
+     "CDN / Edge WAF",
+     "Cache & Session Store",
+     "Search Index"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "PostgreSQL Primary Instance",
+     "PostgreSQL Read Replicas",
+     "Cluster State & Storage",
+     "AWS S3"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Edge Router & WAF Integration",
+     "CDN / Edge WAF",
+     "Authentication & Authorization Filter",
+     "AWS Secrets Manager"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

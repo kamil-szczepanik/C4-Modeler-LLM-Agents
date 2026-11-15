@@ -1,0 +1,38 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Async Worker container
+
+Container_Boundary(async_worker, "Async Worker") {
+    Component(Event_Router___Consumer, "Event Router / Consumer", "Python, Celery, AWS Lambda", "Ingests asynchronous events from SQS.")
+    Component(Task_Processor, "Task Processor", "Python", "Executing business logic for notifications and shipping integrations.")
+    Component(Data_Access_Layer, "Data Access Layer", "SQLAlchemy", "Interacting with Amazon Aurora PostgreSQL.")
+    Component(State_Manager, "State Manager", "Python, Redis-Py", "Managing distributed locks via Redis ElastiCache.")
+    Component(DLQ_Handler, "DLQ Handler", "Python", "Routing poisoned messages to an AWS SQS Dead Letter Queue.")
+    Component(Telemetry_Publisher, "Telemetry Publisher", "Python, OpenTelemetry SDK", "Collecting metrics.")
+    Component(Worker_Runtime_Engine, "Worker Runtime Engine", "AWS ECS on AWS Fargate", "Hosting the worker process.")
+    Component(Data_Sanitizer___PII_Masker, "Data Sanitizer / PII Masker", "Python", "Masking sensitive customer data.")
+    Component(AWS_SQS, "AWS SQS", "Amazon SQS", "Message queueing for asynchronous decoupling.")
+    Component(Amazon_Aurora_PostgreSQL, "Amazon Aurora PostgreSQL", "Amazon Aurora PostgreSQL", "Relational database for transactional updates.")
+    Component(State_Manager_Cache, "State Manager Cache", "Redis ElastiCache", "In-memory data store for distributed locks and deduplication.")
+    Component(External_Shipping_APIs, "External Shipping APIs", "HTTPS / REST", "External shipping services.")
+    Component(Notification_Service, "Notification Service", "gRPC or HTTPS / REST", "Service for sending notifications.")
+    Component(AWS_SQS_DLQ, "AWS SQS DLQ", "Amazon SQS DLQ", "Dead-letter handling for asynchronous decoupling.")
+    Component(ADOT_Sidecar, "ADOT Sidecar", "AWS Distro for OpenTelemetry", "Telemetry sidecar for distributed tracing and metrics.")
+}
+
+Rel(AWS_SQS, Event_Router___Consumer, "Long-polling via AWS SDK (HTTPS)", "HTTPS")
+Rel(Event_Router___Consumer, Task_Processor, "Internal thread pool dispatch", "")
+Rel(Task_Processor, Amazon_Aurora_PostgreSQL, "SQL over TLS", "SQL/TLS")
+Rel(Task_Processor, State_Manager, "Redis RESP over TLS", "RESP/TLS")
+Rel(Task_Processor, External_Shipping_APIs, "HTTPS / REST", "HTTPS")
+Rel(Task_Processor, Notification_Service, "gRPC or HTTPS / REST", "gRPC/HTTPS")
+Rel(Event_Router___Consumer, DLQ_Handler, "Exception routing on max retry failures", "")
+Rel(DLQ_Handler, AWS_SQS_DLQ, "AWS SDK (HTTPS)", "HTTPS")
+Rel(Event_Router___Consumer, Telemetry_Publisher, "In-process function calls", "")
+Rel(Task_Processor, Telemetry_Publisher, "In-process function calls", "")
+Rel(Telemetry_Publisher, ADOT_Sidecar, "OTLP over gRPC", "gRPC")
+Rel(Task_Processor, Data_Sanitizer___PII_Masker, "In-process function call", "")
+
+@enduml

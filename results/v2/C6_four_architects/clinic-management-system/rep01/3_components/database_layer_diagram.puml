@@ -1,0 +1,32 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Database Layer container
+
+System_Ext(Core_Services_Container_EMR_Service, "Core Services Container & EMR Service", "External service interacting with the database layer")
+System_Ext(Key_Management_Service_HashiCorp_Vault_AWS_KMS, "Key Management Service (HashiCorp Vault/AWS KMS)", "External key management service")
+System_Ext(Cloud_Backup_AWS_S3_Glacier, "Cloud Backup (AWS S3 Glacier)", "External cloud backup service")
+System_Ext(Observability_Monitoring_Collector_OpenTelemetry_Prometheus, "Observability & Monitoring Collector (OpenTelemetry/Prometheus)", "External monitoring collector")
+
+Container_Boundary(Database_Layer, "Database Layer") {
+    Component(PostgreSQL_Primary_Active_Active_Nodes, "PostgreSQL Primary/Active-Active Nodes", "Citus/Postgres-BDR", "Distributed multi-master relational storage for scalability and cross-region sync.")
+    Component(PgBouncer, "PgBouncer", "PgBouncer Connection Pooler", "Connection pooling to support sub-second P95 performance.")
+    Component(Audit_Trail_Manager, "Audit Trail Manager", "Audit Trail Manager", "Tracks database actions for regulatory compliance.")
+    Component(Backup_Archival_Agent, "Backup & Archival Agent", "Backup & Archival Agent", "Streams WAL logs to cloud backup for long-term data retention.")
+    Component(Logical_Replication_Manager, "Logical Replication Manager", "Logical Replication Manager", "Manages cross-region synchronization across PostgreSQL nodes.")
+    Component(Distributed_Lock_Manager, "Distributed Lock Manager", "etcd/Redlock", "Coordinates distributed locking for active-active nodes.")
+    Component(Data_Encryption_Key_Handler, "Data Encryption & Key Handler", "Data Encryption & Key Handler", "Handles envelope encryption for AES-256 data at rest.")
+    Component(Failover_Health_Monitor, "Failover & Health Monitor", "Patroni", "Automated leader election and failover to ensure 99.99% uptime.")
+    Component(Query_Optimizer_Index_Manager, "Query Optimizer & Index Manager", "Query Optimizer & Index Manager", "Optimizes and executes query plans for incoming database queries.")
+}
+
+Rel(Core_Services_Container_EMR_Service, PgBouncer, "Connection pooling", "PostgreSQL wire protocol over TLS")
+Rel(PgBouncer, Query_Optimizer_Index_Manager, "Routes queries", "PostgreSQL wire protocol")
+Rel(Query_Optimizer_Index_Manager, PostgreSQL_Primary_Active_Active_Nodes, "Executes query plans", "Internal IPC")
+Rel(Data_Encryption_Key_Handler, Key_Management_Service_HashiCorp_Vault_AWS_KMS, "Fetches keys", "HTTPS/REST with mTLS")
+Rel(Backup_Archival_Agent, Cloud_Backup_AWS_S3_Glacier, "Streams WAL logs", "HTTPS/TLS 1.3")
+Rel(Database_Layer, Observability_Monitoring_Collector_OpenTelemetry_Prometheus, "Exports telemetry", "gRPC/OTLP over TLS")
+Rel(PostgreSQL_Primary_Active_Active_Nodes, Logical_Replication_Manager, "Cross-region sync", "Encrypted replication protocol")
+
+@enduml

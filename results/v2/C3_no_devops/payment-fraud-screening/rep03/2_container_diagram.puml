@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening
+
+Person(Fraud_Analysts, "Fraud Analysts", "Internal users reviewing suspicious transactions.")
+Person(Risk_Compliance_Officers, "Risk & Compliance Officers", "Internal users auditing compliance and historical logs.")
+
+System_Ext(Payment_Gateway___Processor_Systems, "Payment Gateway / Processor Systems", "External system sending payment authorizations for fraud screening.")
+System_Ext(Identity_Provider__IdP_, "Identity Provider (IdP)", "External system providing authentication and short-lived JWTs.")
+System_Ext(Notification_Service, "Notification Service", "External service used for notifications.")
+System_Ext(Audit_Ledger, "Audit Ledger", "S3 WORM / Amazon QLDB storing 7-year audit records.")
+
+System_Boundary(Real_Time_Payment_Fraud_Screening, "Real-Time Payment Fraud Screening") {
+    Container(API_Gateway___Application_Load_Balancer, "API Gateway / Application Load Balancer", "AWS API Gateway / ALB", "Ingress point for incoming requests.")
+    Container(Scoring_Engine, "Scoring Engine", "Rust, AWS ECS Fargate", "Performs low-latency fraud scoring on payment authorizations.")
+    Container(Case_Management_App, "Case Management App", "Node.js/Python backend + React SPA, AWS ECS Fargate", "Provides a case management interface for analysts to review suspicious transactions.")
+    Container(Model___Rule_Management_Service, "Model & Rule Management Service", "AWS ECS Fargate", "Manages fraud detection models and rules.")
+    ContainerDb(Amazon_Aurora_PostgreSQL, "Amazon Aurora PostgreSQL", "Amazon Aurora PostgreSQL", "Primary transactional database for the application.")
+    Container(Amazon_SQS, "Amazon SQS", "Amazon SQS", "Messaging queue for decoupling the latency-critical scoring path from audit logging.")
+    Container(AWS_Lambda, "AWS Lambda", "AWS Lambda", "Processes audit events and performs cryptographic signing.")
+}
+
+Rel(Payment_Gateway___Processor_Systems, API_Gateway___Application_Load_Balancer, "Sends payment authorizations for fraud screening", "Synchronous REST/gRPC, TLS 1.3")
+Rel(Fraud_Analysts, Case_Management_App, "Reviews suspicious transactions", "HTTPS, OAuth2/OIDC")
+Rel(Risk_Compliance_Officers, Case_Management_App, "Audits historical data and compliance logs", "HTTPS, OAuth2/OIDC")
+Rel(API_Gateway___Application_Load_Balancer, Scoring_Engine, "Forwards payment authorization requests for evaluation", "Synchronous REST/gRPC, mTLS")
+Rel(Case_Management_App, Identity_Provider__IdP_, "Authenticates users", "OAuth2/OIDC with short-lived JWTs")
+Rel(Scoring_Engine, Amazon_Aurora_PostgreSQL, "Reads and writes transactional data", "Synchronous SQL, TLS 1.3")
+Rel(Scoring_Engine, Amazon_SQS, "Publishes audit events asynchronously", "Asynchronous event streaming")
+Rel(Amazon_SQS, AWS_Lambda, "Triggers audit log processing", "Event-driven invocation")
+Rel(AWS_Lambda, Audit_Ledger, "Writes cryptographically signed audit logs", "Encrypted writes")
+
+@enduml

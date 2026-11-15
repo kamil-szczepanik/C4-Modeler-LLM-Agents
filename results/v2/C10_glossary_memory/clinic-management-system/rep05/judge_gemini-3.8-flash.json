@@ -1,0 +1,335 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "Core requirements are addressed via EMR Service, Scheduling Service with Resource Clash Engine, and Billing Service. However, patient registration and demographic capture (R-01) lack dedicated components, relying implicitly on general clinical domain logic.",
+   "performance_efficiency": "Sub-second EMR load (R-07) is supported through BFF Aggregator GraphQL tailoring, gRPC communication, PgBouncer connection pooling, PostgreSQL Read Replicas, and a Data Archival Worker offloading historical data.",
+   "compatibility": "Interoperability (R-08) is thoroughly addressed by the Integration Service Container featuring an Apache Camel HL7 FHIR Ingress Listener, HAPI FHIR transformation engine, and integration with external insurance payment gateways.",
+   "usability": "While the external Patient Portal serves patients, there are no internal web or desktop UI containers modeled for Clinicians, Receptionists, or Billing Specialists, leaving their interaction channels undefined.",
+   "reliability": "Reaching 99.99% active-active availability is undermined by a single PostgreSQL Primary Node pattern lacking cross-region multi-master synchronization between on-prem k8s and eu-central-1, despite PgBouncer and replica usage.",
+   "security": "The design satisfies HIPAA/GDPR via Identity Provider OIDC/SAML integration, Spring Security RBAC/ABAC, PostgreSQL RLS Enforcer, AES-256 storage, and tamper-evident logging to Secure WORM Storage via FluentBit.",
+   "maintainability": "The architecture exhibits modular microservices (EMR, Billing, Scheduling, Integration) with clear domain boundaries, localized sidecars for telemetry/logging, and decoupled internal gRPC/mTLS communication.",
+   "portability": "All services and databases use standard containerized stacks runnable across on-prem k8s and cloud environments, though specific hybrid cluster federation mechanisms are not elaborated."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.65625,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 2.5,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "BFF Aggregator tailors payloads specifically for sub-second EMR delivery, while PgBouncer and Read Replicas distribute database query contention under concurrent loads. However, the absence of a dedicated clinical data caching tier poses latency risks under extreme spikes.",
+    "elements": [
+     "BFF Aggregator Component",
+     "EMR API Controller Component",
+     "Clinical Record Domain Component",
+     "Connection Pooler",
+     "PostgreSQL Read Replicas"
+    ],
+    "sensitivity_points": [
+     "Payload shaping efficiency in BFF Aggregator",
+     "Database read replica replication lag and pool capacity"
+    ],
+    "tradeoffs": [
+     "BFF data aggregation reduces payload size but increases gateway processing overhead"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "justification": "The Integration Service leverages Camel and HAPI FHIR for parsing, and Read Replicas protect read latency. However, Camel dispatches synchronously to EMR over gRPC without an inbound buffer queue, risking write saturation on the primary database.",
+    "elements": [
+     "HL7 FHIR Ingress Listener",
+     "FHIR Transformation Engine",
+     "gRPC Integration Dispatcher",
+     "EMR Service Container",
+     "PostgreSQL Primary Node"
+    ],
+    "sensitivity_points": [
+     "Ingestion throughput of FHIR Transformation Engine",
+     "Write capacity of PostgreSQL Primary Node during bursts"
+    ],
+    "tradeoffs": [
+     "Direct gRPC delivery provides immediate consistency but risks overwhelming EMR storage"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "While a hybrid cloud deployment is specified, the persistence tier relies on a single PostgreSQL Primary with Read Replicas. Zero data loss failover within 1 minute across hybrid regions cannot be achieved without automated consensus clustering and synchronous cross-site replication.",
+    "elements": [
+     "Hybrid API Gateway",
+     "API Gateway / BFF Container",
+     "PostgreSQL Primary Node",
+     "PostgreSQL Read Replicas"
+    ],
+    "sensitivity_points": [
+     "Cross-region replication latency between on-prem and cloud",
+     "Automated failover detection and DNS/WAF rerouting speed"
+    ],
+    "tradeoffs": [
+     "Synchronous replication prevents data loss but severely impacts write latency across WAN"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "The Claim Dispatcher provides retry mechanisms with backoff, and Ledger Manager isolates financial transactions. However, PostgreSQL recovery within 30 seconds without duplicate transactions requires explicit automated failover orchestrators (e.g., Patroni) that are missing from the container design.",
+    "elements": [
+     "Claim Dispatcher",
+     "Ledger & Invoice Manager",
+     "Connection Pooler",
+     "PostgreSQL Primary Node"
+    ],
+    "sensitivity_points": [
+     "Idempotency handling in Claim Dispatcher during retries",
+     "Database primary promotion and connection pooling timeout"
+    ],
+    "tradeoffs": [
+     "Aggressive retry backoff prevents gateway exhaustion but increases transaction resolution time"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Billing Service is completely decoupled from the EMR Service via gRPC interfaces and separate container boundaries. Adding a new clearinghouse requires changes only to the Claim Validation Engine and Claim Dispatcher.",
+    "elements": [
+     "Claim Validation Engine",
+     "Claim Dispatcher",
+     "Billing Service Container"
+    ],
+    "sensitivity_points": [
+     "Coupling between clearinghouse-specific formats and internal claim models"
+    ],
+    "tradeoffs": [
+     "Dedicated billing service isolates changes but requires distributed coordination with EMR"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are confined to the Clinical Database schema, Clinical Record Domain Component, and BFF Aggregator. The Audit Trail Interceptor uses AspectJ to automatically capture data modifications, avoiding manual changes to audit logic.",
+    "elements": [
+     "Clinical Record Domain Component",
+     "Audit Trail Interceptor Component",
+     "BFF Aggregator Component",
+     "PostgreSQL Primary Node"
+    ],
+    "sensitivity_points": [
+     "Schema migration overhead and domain entity encapsulation",
+     "BFF Aggregator GraphQL schema extensibility"
+    ],
+    "tradeoffs": [
+     "Aspect-oriented auditing eliminates boilerplate updates but obscures explicit audit metadata changes"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Multi-factor authentication is enforced at perimeter via external Identity Provider and validated by Authentication & Token Relay Component. However, while FluentBit collects security logs, there is no SIEM or alerting component to trigger alerts within 1 minute.",
+    "elements": [
+     "Identity Provider",
+     "Ingress Router Component",
+     "Authentication & Token Relay Component",
+     "FluentBit Log Collector"
+    ],
+    "sensitivity_points": [
+     "Strict MFA enforcement policy at external Identity Provider",
+     "Log forwarding and processing latency in FluentBit"
+    ],
+    "tradeoffs": [
+     "Delegating MFA to external IdP simplifies compliance but limits local real-time alerting"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Security & Compliance Policy Component enforces ABAC/RBAC, while PostgreSQL RLS provides data isolation. Audit Trail Interceptor captures 100% of read accesses via AspectJ and forwards them to tamper-evident WORM storage for 10-year retention.",
+    "elements": [
+     "Security & Compliance Policy Component",
+     "Audit Trail Interceptor Component",
+     "PostgreSQL RLS Enforcer",
+     "FluentBit Log Collector",
+     "Secure WORM Storage"
+    ],
+    "sensitivity_points": [
+     "AspectJ interception coverage across all read access paths",
+     "Immutability guarantees of the Secure WORM Storage"
+    ],
+    "tradeoffs": [
+     "Auditing every single read operation introduces persistent I/O and storage overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "partial",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "EMR Service Container",
+     "Security & Compliance Policy Component",
+     "PostgreSQL RLS Enforcer",
+     "Clinical Database",
+     "Audit & Observability Sidecar",
+     "FluentBit Log Collector",
+     "Audit Trail Interceptor Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Hybrid API Gateway",
+     "Rate Limiting & Throttling Component",
+     "PostgreSQL Read Replicas",
+     "Prometheus Metrics Collector"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Data Archival Worker",
+     "FluentBit Log Collector"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Receptionists",
+     "Patient Portal",
+     "Clinical Record Domain Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Service Container",
+     "Scheduling API Controller",
+     "Resource Clash Engine",
+     "Appointment Manager",
+     "Clinical Database"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service Container",
+     "EMR API Controller Component",
+     "Clinical Record Domain Component",
+     "Audit Trail Interceptor Component",
+     "Audit & Observability Sidecar",
+     "FluentBit Log Collector"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service Container",
+     "Claim Validation Engine",
+     "Claim Dispatcher",
+     "Ledger & Invoice Manager",
+     "Insurance Payment Gateway"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Identity Provider",
+     "Authentication & Token Relay Component",
+     "Clinical Database"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Hybrid API Gateway",
+     "Rate Limiting & Throttling Component",
+     "PostgreSQL Primary Node",
+     "PostgreSQL Read Replicas"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "BFF Aggregator Component",
+     "Data Archival Worker",
+     "PostgreSQL Read Replicas",
+     "Connection Pooler"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Lab & Imaging Systems",
+     "Integration Service Container",
+     "HL7 FHIR Ingress Listener",
+     "FHIR Transformation Engine",
+     "gRPC Integration Dispatcher"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

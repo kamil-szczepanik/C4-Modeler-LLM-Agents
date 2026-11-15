@@ -1,0 +1,50 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Online Bookstore
+
+Person(Customers, "Customers", "End users accessing the platform via web browsers and native mobile apps to purchase books, read reviews, and view recommendations.")
+
+System_Ext(CDN, "CDN", "Content Delivery Network for fetching static assets and catalogue data to ensure sub-2-second page loads.")
+System_Ext(Payment_Gateway, "Payment Gateway", "External system for processing secure financial transactions during checkout.")
+System_Ext(Tax_Calculation_Service, "Tax Calculation Service", "External system for calculating applicable taxes during checkout.")
+System_Ext(Third_Party_Shipping_Provider, "Third-Party Shipping Provider", "External system handling order fulfillment and shipping asynchronously.")
+System_Ext(Notification_Services, "Notification Services", "External systems for sending emails and SMS notifications asynchronously.")
+System_Ext(Identity_Provider, "Identity Provider", "External SaaS IdP providing authentication and identity management.")
+System_Ext(Monitoring_and_Observability, "Monitoring and Observability", "External APM SaaS for monitoring system health and performance.")
+System_Ext(Secret_Management_Service, "Secret Management Service", "AWS Secrets Manager for credential security meeting OWASP Top-10 requirements.")
+System_Ext(Feature_Flag_Service, "Feature Flag Service", "External SaaS for managing feature flags.")
+System_Ext(Currency_Exchange_Rate_Service, "Currency Exchange Rate Service", "External SaaS providing currency conversion rates during checkout.")
+
+System_Boundary(Online_Bookstore, "Online Bookstore") {
+    Container(Web_Application_API_Gateway, "Web Application/API Gateway", "AWS ECS/EKS, Envoy Proxy", "Entry point for client requests, providing rate limiting, circuit breaking, OWASP top-10 mitigation, and routing to core containers.")
+    Container(Catalog_Search_Container, "Catalog & Search Container", "AWS ECS/EKS, Dedicated Data Store", "Manages product catalog data and search capabilities for physical and electronic books.")
+    Container(Checkout_Order_Container, "Checkout & Order Container", "AWS ECS/EKS, Dedicated Data Store", "Handles secure checkout flows, order processing, and payment/tax service integrations.")
+    Container(Recommendation_Container, "Recommendation Container", "AWS ECS/EKS, Dedicated Data Store", "Generates personalized book recommendations for customers.")
+    Container(Customer_Reviews_Container, "Customer & Reviews Container", "AWS ECS/EKS, Dedicated Data Store", "Manages customer profiles, account settings, and book reviews.")
+    Container(Background_Worker_Job_Processing_Container, "Background Worker / Job Processing Container", "AWS ECS/EKS, AWS SQS/SNS", "Processes asynchronous tasks, background jobs, event-driven workflows, and notifications.")
+}
+
+Rel(Customers, CDN, "Access static assets and content delivery", "HTTPS")
+Rel(Customers, Web_Application_API_Gateway, "Interact with the online bookstore platform", "HTTPS via CDN")
+
+Rel(Web_Application_API_Gateway, Catalog_Search_Container, "Routes catalogue and search requests", "gRPC/REST over TLS")
+Rel(Web_Application_API_Gateway, Checkout_Order_Container, "Routes checkout and order processing requests", "gRPC/REST over TLS")
+Rel(Web_Application_API_Gateway, Recommendation_Container, "Fetches recommendations for users", "gRPC/REST over TLS")
+Rel(Web_Application_API_Gateway, Customer_Reviews_Container, "Manages customer profile and review interactions", "gRPC/REST over TLS")
+
+Rel(Checkout_Order_Container, Payment_Gateway, "Processes financial transactions", "HTTPS")
+Rel(Checkout_Order_Container, Tax_Calculation_Service, "Calculates order taxes", "HTTPS")
+Rel(Checkout_Order_Container, Third_Party_Shipping_Provider, "Initiates shipping fulfillment", "HTTPS")
+Rel(Checkout_Order_Container, Currency_Exchange_Rate_Service, "Fetches exchange rates", "HTTPS")
+
+Rel(Web_Application_API_Gateway, Identity_Provider, "Authenticates users", "HTTPS")
+Rel(Web_Application_API_Gateway, Feature_Flag_Service, "Evaluates feature flags", "HTTPS")
+Rel(Web_Application_API_Gateway, Secret_Management_Service, "Retrieves secure credentials", "AWS Secrets Manager")
+Rel(Web_Application_API_Gateway, Monitoring_and_Observability, "Sends telemetry and trace data", "W3C Trace Context / AWS X-Ray")
+
+Rel(Checkout_Order_Container, Background_Worker_Job_Processing_Container, "Publishes asynchronous tasks and events", "AWS SQS/SNS")
+Rel(Background_Worker_Job_Processing_Container, Notification_Services, "Sends asynchronous notifications (Email/SMS)", "HTTPS")
+
+@enduml

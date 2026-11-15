@@ -1,0 +1,342 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Video Consultation Service handles consultations (R-01), E-Prescription Integration Container handles regional prescriptions (R-02), AI Symptom Checker Container provides triage recommendations (R-03), and Patient Consent & Profile Container with Consent Cryptography Service manages granular consent (R-04).",
+   "performance_efficiency": "Performance is achieved through Mediasoup WebRTC SFU, Bandwidth Adaptability Controller with Simulcast/SVC, GPU node pools in PyTorch Inference Core, Memorystore Redis caching, and asynchronous processing via Google Cloud Pub/Sub and the Outbox Pattern.",
+   "compatibility": "R-08 is directly addressed by US Pharmacy Network Adapter implementing HL7 FHIR over HTTPS and EU National Gateway Adapter supporting national formats with pinned mTLS, alongside Identity Providers using OAuth 2.0/OIDC.",
+   "usability": "Users (Patients, Clinicians, Compliance Officer) access appropriate capabilities via API Gateway / Ingress supporting FIDO2/WebAuthn. However, client-side frontends (mobile or web applications) for rural patients and clinicians are not modeled as containers.",
+   "reliability": "R-06 is explicitly addressed by Bandwidth Adaptability Controller dynamically tuning Simulcast/SVC layers for sub-300 kbit/s connections. Fault tolerance is bolstered by Resilience & Fallback Middleware, Outbox Pattern / Reliability Component, and Pub/Sub Dead-Letter Queues.",
+   "security": "Addresses GDPR/HIPAA with region-locked Data Tier using CMEK and Row-Level Security, Cloud Armor WAF, SPIFFE mTLS via Service Mesh Proxy, signed receipts via Consent Cryptography Service, and tamper-resistant WORM tables and Cloud Audit Logs.",
+   "maintainability": "High maintainability via modular containers and components with distinct responsibilities, such as separate EU National Gateway Adapter and US Pharmacy Network Adapter, decoupled SFU media pipelines, and event-driven integration through Event Broker Component.",
+   "portability": "Containers run standardized runtimes (Go, Node.js, Python, Envoy) across target GCP regions europe-west3 and us-central1, but components exhibit tight coupling to proprietary GCP services (Cloud Armor, Cloud KMS, Memorystore, Cloud Audit Logs)."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.8125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The Mediasoup SFU and decoupled Signaling & Room Manager support low-latency WebRTC session negotiation. However, cluster autoscaling and port management for 5,000 concurrent media streams are not fully detailed.",
+    "elements": [
+     "API Gateway / Ingress",
+     "Video Consultation Service",
+     "Signaling & Room Manager Component",
+     "SFU Media Worker Component"
+    ],
+    "sensitivity_points": [
+     "SFU media worker CPU and port allocation under high concurrent streams"
+    ],
+    "tradeoffs": [
+     "Decoupled signaling increases routing hops but enables horizontal scaling of media workers"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "PyTorch inference runs on dedicated GPU pools behind FastAPI routing, handling ~14 requests/second easily. Audit logging is offloaded asynchronously via Pub/Sub, preventing inference latency bottlenecks.",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Inference API Router",
+     "PyTorch Inference Core & Explainability Module",
+     "Asynchronous Event Publisher",
+     "Messaging & Observability"
+    ],
+    "sensitivity_points": [
+     "GPU node pool provisioning and batch inference concurrency"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit publishing reduces request latency but delays immediate log consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Bandwidth Adaptability Controller explicitly manages dynamic Simulcast and SVC layers to downgrade video gracefully below 300 kbit/s. Consultation notes persist independently to Cloud SQL.",
+    "elements": [
+     "Video Consultation Service",
+     "SFU Media Worker Component",
+     "Bandwidth Adaptability Controller Component",
+     "Data Tier"
+    ],
+    "sensitivity_points": [
+     "Threshold sensitivity of SVC/Simulcast layer degradation under rapid packet loss"
+    ],
+    "tradeoffs": [
+     "Dropping video resolution preserves audio quality and session continuity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The platform configures only one US region (us-central1). A full regional outage cannot be recovered within 1 hour without migrating data to the EU or having an architected secondary US region.",
+    "elements": [
+     "Data Tier",
+     "API Gateway / Ingress"
+    ],
+    "sensitivity_points": [
+     "Single US region dependency for strict US data residency constraints"
+    ],
+    "tradeoffs": [
+     "Strict regional residency prevents cross-region failover to EU during US outages"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Prescription Router Component isolates downstream country adapters. Adding an EU country requires writing a new adapter implementation without affecting existing US or EU integration logic.",
+    "elements": [
+     "E-Prescription Integration Container",
+     "Prescription Router Component",
+     "EU National Gateway Adapter"
+    ],
+    "sensitivity_points": [
+     "Standardized internal payload definition within Prescription Router"
+    ],
+    "tradeoffs": [
+     "Adapter encapsulation simplifies extensibility at the cost of per-adapter maintenance overhead"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Model execution is isolated in the inference core, and audit records capture model version and explainability outputs via Pub/Sub and WORM audit tables. Version rollback mechanisms in deployment pipelines are implied.",
+    "elements": [
+     "AI Symptom Checker Container",
+     "PyTorch Inference Core & Explainability Module",
+     "Asynchronous Event Publisher",
+     "Audit Logger Component",
+     "Data Tier"
+    ],
+    "sensitivity_points": [
+     "Inference metadata tagging and deterministic model version registration"
+    ],
+    "tradeoffs": [
+     "Capturing full explainability inputs ensures traceability but increases audit storage overhead"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Cross-region access is gated through Service Mesh Proxy, Consent Cryptography Service signing, and PostgreSQL Row-Level Security. Cloud Audit Logs capture all access requests immutably.",
+    "elements": [
+     "API Gateway / Ingress",
+     "Service Mesh Proxy",
+     "Patient Consent & Profile Container",
+     "Consent Cryptography Service",
+     "Data Tier",
+     "Messaging & Observability"
+    ],
+    "sensitivity_points": [
+     "Cryptographic token verification and Row-Level Security rule evaluation"
+    ],
+    "tradeoffs": [
+     "Strict token-based cross-region checks add latency to cross-border clinical queries"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Consent revocation is processed by Revocation Manager, immediately persisted in PostgreSQL, cached in Memorystore Redis blocklists, and broadcast across services via Pub/Sub within seconds.",
+    "elements": [
+     "Patient Consent & Profile Container",
+     "Revocation Manager",
+     "Data Tier",
+     "Messaging & Observability",
+     "Edge Router and WAF"
+    ],
+    "sensitivity_points": [
+     "Propagation latency of Pub/Sub revocation events to regional cache blacklists"
+    ],
+    "tradeoffs": [
+     "Immediate distributed cache invalidation increases messaging traffic across containers"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.9583333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Compliance Officer",
+     "API Gateway / Ingress",
+     "Data Tier",
+     "Cloud SQL PostgreSQL",
+     "Patient Consent & Profile Container",
+     "Audit Logger Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "API Gateway / Ingress",
+     "Data Tier",
+     "Cloud SQL PostgreSQL"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Container",
+     "PyTorch Inference Core & Explainability Module",
+     "Asynchronous Event Publisher",
+     "Audit Logger Component",
+     "Cloud SQL PostgreSQL"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Bandwidth Adaptability Controller Component",
+     "Resilience & Fallback Middleware",
+     "Video Consultation Service"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patients",
+     "Clinicians",
+     "Video Consultation Service",
+     "Signaling & Room Manager Component",
+     "SFU Media Worker Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "E-Prescription Integration Container",
+     "Prescription Router Component",
+     "EU National Gateway Adapter",
+     "US Pharmacy Network Adapter",
+     "National E-Prescription Gateways (EU)",
+     "US Pharmacy Networks"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Inference API Router",
+     "Clinical NLP & Preprocessing Engine",
+     "PyTorch Inference Core & Explainability Module"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Patient Consent & Profile Container",
+     "Consent Controller",
+     "Revocation Manager",
+     "Consent Cryptography Service"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "API Gateway / Ingress",
+     "Data Tier",
+     "Cloud SQL PostgreSQL",
+     "Patient Consent & Profile Container",
+     "Consent Cryptography Service",
+     "Memorystore Redis"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Video Consultation Service",
+     "Bandwidth Adaptability Controller Component",
+     "SFU Media Worker Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "AI Symptom Checker Container",
+     "PyTorch Inference Core & Explainability Module",
+     "Asynchronous Event Publisher",
+     "Audit Logger Component",
+     "Cloud SQL PostgreSQL"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "E-Prescription Integration Container",
+     "EU National Gateway Adapter",
+     "US Pharmacy Network Adapter",
+     "National E-Prescription Gateways (EU)",
+     "US Pharmacy Networks"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

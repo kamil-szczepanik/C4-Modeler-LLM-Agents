@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Insurance Claims Modernization Platform
+
+Person(EndCustomersBrokers, "End Customers & Brokers", "External users who submit and manage insurance claims.")
+Person(ClaimsAdjusters, "Claims Adjusters", "Internal users who review, process, and manage insurance claims.")
+
+System_Ext(LegacyMainframe, "Legacy Mainframe", "30-year-old z/OS, DB2, and CICS system acting as the system of record.")
+System_Ext(CorporateActiveDirectory, "Corporate Active Directory", "Microsoft Entra ID / AD providing centralized IAM for SSO and RBAC.")
+
+System_Boundary(InsuranceClaimsModernizationPlatform, "Insurance Claims Modernization Platform") {
+    Container(ApiGateway, "API Gateway", "Azure API Management / NGINX", "Provides dynamic routing, rate-limiting, and SSO validation.")
+    Container(CustomerPortal, "Customer Portal", "React / Node.js", "Enables online customer submissions and management.")
+    Container(AdjusterWorkspace, "Adjuster Workspace", "React / .NET Core API", "Low-latency adjuster workflows including Operations Dashboard.")
+    Container(IntegrationAntiCorruptionLayer, "Integration & Anti-Corruption Layer", ".NET Core / MassTransit", "Decouples legacy dependencies and ensures zero lost claims.")
+    ContainerDb(ClaimReadModelDatabase, "Claim Read Model Database", "Azure Cosmos DB", "Low-latency read models supporting sub-2-second UI requirements.")
+    Container(ConfigurationFeatureStore, "Configuration & Feature Store", "Azure App Configuration / Redis", "Managing feature flags and one-day claim-type fallbacks.")
+}
+
+Rel(EndCustomersBrokers, ApiGateway, "Accesses customer portal and submits claims", "HTTPS/REST")
+Rel(ClaimsAdjusters, ApiGateway, "Accesses adjuster workspace and processes claims", "HTTPS/REST")
+Rel(ApiGateway, CustomerPortal, "Routes customer traffic", "Internal HTTPS")
+Rel(ApiGateway, AdjusterWorkspace, "Routes adjuster traffic", "Internal HTTPS")
+Rel(ApiGateway, CorporateActiveDirectory, "Validates SSO and authentication", "OIDC/OAuth2")
+Rel(CustomerPortal, ApiGateway, "Calls backend APIs", "HTTPS/REST")
+Rel(AdjusterWorkspace, ApiGateway, "Calls backend APIs", "HTTPS/REST")
+Rel(AdjusterWorkspace, ClaimReadModelDatabase, "Reads claim data for low-latency views", "TCP/NoSQL")
+Rel(IntegrationAntiCorruptionLayer, LegacyMainframe, "Synchronizes data and migrates secure claim-types", "MQ/Enterprise Service Bus over mTLS")
+Rel(ApiGateway, IntegrationAntiCorruptionLayer, "Forwards integration requests", "Internal HTTPS/gRPC")
+
+@enduml

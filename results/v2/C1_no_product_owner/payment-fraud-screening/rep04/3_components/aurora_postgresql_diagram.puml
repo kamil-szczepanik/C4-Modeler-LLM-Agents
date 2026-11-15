@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Aurora PostgreSQL container
+
+System_Ext(amazon_msk_kafka, "Amazon MSK / Kafka", "External system")
+System_Ext(case_management, "Case Management", "External system")
+System_Ext(aws_kms, "AWS KMS", "Key management service for Transparent Data Encryption (TDE).")
+System_Ext(amazon_s3, "Amazon S3", "External system")
+
+Container_Boundary(aurora_postgresql, "Aurora PostgreSQL") {
+    Component(audit_ledger_table, "Audit Ledger Table", "PostgreSQL relation with database triggers and pgcrypto", "PostgreSQL relation with database triggers blocking updates/deletes for tamper-evidence.")
+    Component(case_management_store, "Case Management Store", "Relational tables with PostgreSQL Row-Level Security (RLS)", "Relational tables with PostgreSQL Row-Level Security (RLS) for analyst data segregation.")
+    Component(audit_ingestion_worker, "Audit Ingestion Worker", "Asynchronous consumer", "Asynchronous consumer executing batch upserts.")
+    Component(pgbouncer, "PgBouncer", "PgBouncer", "Connection pooling proxy preventing thread exhaustion.")
+}
+
+Rel(amazon_msk_kafka, audit_ingestion_worker, "Streams batched audit records", "TCP / SSL")
+Rel(audit_ingestion_worker, audit_ledger_table, "Appends immutable records", "Internal SQL")
+Rel(case_management, case_management_store, "Reads and updates analyst review workflows", "TCP / SSL")
+Rel(aurora_postgresql, amazon_s3, "Archives detached monthly table partitions for long-term retention", "HTTPS")
+
+@enduml

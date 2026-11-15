@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Event Broker Container container
+
+Container(Core Services Container, "Core Services Container", "Container", "External client container.")
+Container(Search Service Container, "Search Service Container", "Container", "External search service container.")
+Container(Background Worker Container, "Background Worker Container", "Container", "External background worker container.")
+
+System_Boundary(Event_Broker_Container, "Event Broker Container") {
+    Component(Access Control & mTLS Gateway, "Access Control & mTLS Gateway", "Kafka Authorizer", "Enforcing mutual TLS and ACLs.")
+    Component(Event Ingestion Engine, "Event Ingestion Engine", "Java/JVM Kafka broker component", "Handling writes with EU node partition replication.")
+    Component(Topic Routing & Schema Registry, "Topic Routing & Schema Registry", "Confluent Schema Registry", "Enforcing Avro/JSON schemas.")
+    Component(Stream Processing / Consumer Group Manager, "Stream Processing / Consumer Group Manager", "Kafka Connect / KStreams", "Managing asynchronous event consumption.")
+    Component(DLQ Manager, "DLQ Manager", "Kafka Topic & Consumer Router", "Capturing poisoned messages.")
+    Component(Broker Metrics & Health Monitor, "Broker Metrics & Health Monitor", "Prometheus JMX Exporter", "Tracking consumer lag.")
+}
+
+Rel(Core Services Container, Access Control & mTLS Gateway, "Authenticates and connects securely", "mTLS / Kafka Protocol")
+Rel(Access Control & mTLS Gateway, Event Ingestion Engine, "Forwards authorized message streams", "Internal TCP")
+Rel(Event Ingestion Engine, Topic Routing & Schema Registry, "Validates event schemas", "HTTP/REST over TLS")
+Rel(Event Ingestion Engine, Search Service Container, "Streams change data capture", "Kafka Protocol over TLS")
+Rel(Stream Processing / Consumer Group Manager, Background Worker Container, "Dispatches asynchronous background jobs", "Kafka Protocol over TLS")
+Rel(Stream Processing / Consumer Group Manager, DLQ Manager, "Routes failed messages after max retry exhaustion", "Internal Kafka routing")
+Rel(DLQ Manager, Background Worker Container, "Forwards failed events for manual inspection", "Kafka Protocol over TLS")
+Rel(Stream Processing / Consumer Group Manager, Broker Metrics & Health Monitor, "Reports consumer lag", "JMX / Prometheus scrape over TLS")
+
+@enduml

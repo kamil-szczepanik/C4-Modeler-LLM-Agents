@@ -1,0 +1,343 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 via Fraud Scoring Engine, R-02 via Case Management Backend and Fraud Analyst UI, and R-03 via AWS AppConfig in Rule Distribution Provider and ONNX Model Scorer Component without downtime.",
+   "performance_efficiency": "Low latency (P99 <50ms at 3,000 RPS) is supported by Rust Token Masking Engine, DAX Accelerator, in-memory LRU caching, and async Go channels. However, routing API Gateway synchronously through NLB to ECS introduces hop overhead.",
+   "compatibility": "Integrates Payment Gateway / Acquirer and Card Schemes / External Credit Bureaus using standard protocols (gRPC/TLS, HTTPS REST). However, L1 specifies gRPC for incoming authorizations while L2 shows API Gateway handling HTTPS REST.",
+   "usability": "Fraud Analysts are well-served with a dedicated React Fraud Analyst UI (Dashboard, Transaction Inspector, Rule Management). Compliance Auditors and non-technical users are provided BI Dashboard Interface (QuickSight) and direct audit query access.",
+   "reliability": "Reliability is addressed with Synthetic Monitoring canaries, NLB Health Checks, and SQS FIFO DLQs. However, explicit automated fail-open/fallback mechanisms to satisfy R-07 (unblocked payments within 1 minute of scoring failure) are vague.",
+   "security": "Security thoroughly targets PCI-DSS: PAN stripping via Token Masking Engine, envelope encryption using AWS KMS, Cognito MFA/JWTs, mTLS, least-privilege IAM, and tamper-evident Aurora PostgreSQL Ledger Tables with S3 Object Lock.",
+   "maintainability": "Clear modular separation between real-time scoring, case management, and analytics. Independent components (AppConfig for rules, ONNX for models) and managed serverless services (Athena, DynamoDB, Fargate) keep operational overhead low for a 3-engineer team.",
+   "portability": "Effectively targets AWS eu-west-1 using standard containerized workloads (ECS, Go, Node.js). However, heavy coupling to proprietary AWS primitives (DynamoDB DAX, AppConfig, Aurora Ledger Tables) limits portability to other environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 2.5,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The Go scoring engine with ONNX runtime and in-memory caching provides high throughput, but chaining AWS REST API Gateway and NLB introduces serialization and latency overheads that challenge the 50 ms P99 target at 3,000 RPS.",
+    "elements": [
+     "API Gateway",
+     "AWS API Gateway (REST)",
+     "Network Load Balancer",
+     "Fraud Scoring Engine",
+     "API Handler Component",
+     "Feature Fetcher & Cache Component",
+     "Model Scorer Component"
+    ],
+    "sensitivity_points": [
+     "Network hop latency across API Gateway and NLB under 3,000 RPS",
+     "In-memory cache hit ratio for feature retrieval"
+    ],
+    "tradeoffs": [
+     "Managed REST API Gateway convenience versus raw network latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Analyst workloads and fraud scoring operate on isolated compute and data paths. Case management uses Fargate, separate DynamoDB tables, and Aurora, avoiding resource contention on the critical scoring path.",
+    "elements": [
+     "Fraud Analyst UI",
+     "Case Management Backend",
+     "Fraud Scoring Engine",
+     "Feature/Rule Store & Hot Case Data",
+     "Hot Case Data Store"
+    ],
+    "sensitivity_points": [
+     "Isolation of DynamoDB provisioned throughput between scoring features and case data"
+    ],
+    "tradeoffs": [
+     "Maintaining distinct data stores and compute stacks increases operational complexity"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture lacks an automated fallback decision mechanism (e.g., fail-open/fail-closed rule lambda or gateway circuit breaker) if the Fraud Scoring Engine crashes, risking blocked payments beyond the 1-minute threshold.",
+    "elements": [
+     "API Gateway",
+     "Network Load Balancer",
+     "Health Check",
+     "Fraud Scoring Engine"
+    ],
+    "sensitivity_points": [
+     "Absence of an edge fallback decisioning handler when scoring instances fail"
+    ],
+    "tradeoffs": [
+     "Simpler routing topology versus resilient autonomous fallback behavior during major crashes"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Asynchronous Go channels in the scoring engine decouple decisions from audit writes. However, volatile in-memory buffers without persistent streaming (e.g., Kinesis/Kafka) risk dropping audit records during extended Aurora PostgreSQL outages.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Audit & Telemetry Dispatcher Component",
+     "Audit Log Store",
+     "Audit Ingestion Component",
+     "Ledger Storage Engine"
+    ],
+    "sensitivity_points": [
+     "In-memory Go channel buffer capacity under sustained peak database degradation"
+    ],
+    "tradeoffs": [
+     "In-memory asynchronous dispatch reduces latency but increases risk of data loss during persistence outages"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "ECS rolling updates enable zero-downtime model deployments with standard fast rollback. The Explanation Builder explicitly binds model version tags to decisions, though dynamic blue/green traffic shifting is not fully detailed.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Model Scorer Component",
+     "Explanation Builder Component"
+    ],
+    "sensitivity_points": [
+     "Model initialization time within ECS container startup",
+     "Consistent version tagging in explanation records"
+    ],
+    "tradeoffs": [
+     "Bundling models inside container images ensures version immutability but slows deploy cycles"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "AWS AppConfig provides dynamic, validated rule distribution without engine restarts. In-memory AST evaluation coupled with the Explanation Builder guarantees that active rules execute immediately and are referenced in decision logs.",
+    "elements": [
+     "Feature/Rule Store & Hot Case Data",
+     "Rule Distribution Provider",
+     "Fraud Scoring Engine",
+     "Rule Engine Component",
+     "Explanation Builder Component",
+     "Fraud Analyst UI"
+    ],
+    "sensitivity_points": [
+     "AppConfig polling interval and propagation latency to scoring workers"
+    ],
+    "tradeoffs": [
+     "Dynamic in-memory rule parsing provides agility but requires strict schema validation before rollout"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Edge and service token masking, Cognito MFA, and least-privilege IAM prevent analysts from viewing PANs. However, automated detection and 15-minute alerting for anomalous analyst behavior rely on generic observability without explicit SIEM/UEBA mechanisms.",
+    "elements": [
+     "Token Masking Engine",
+     "API Handler Component",
+     "Identity & Security Service",
+     "Authentication Component",
+     "Case Management Backend",
+     "Observability Service"
+    ],
+    "sensitivity_points": [
+     "Completeness of data masking at the API Gateway and DAL tiers",
+     "Coverage of anomaly detection rules in CloudWatch"
+    ],
+    "tradeoffs": [
+     "Masking data early protects privacy but restricts analysts to tokenized references"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Amazon Aurora ledger tables and S3 Object Lock in compliance mode guarantee tamper-evident, 7-year retention. S3 Parquet storage with Athena and the Auditor Query Service ensure archived explanations are retrieved well within one day.",
+    "elements": [
+     "Audit Log Store",
+     "Ledger Storage Engine",
+     "Retention & Archival Component",
+     "Auditor Query Service",
+     "Analytics Store",
+     "Data Lake Storage",
+     "Query Engine"
+    ],
+    "sensitivity_points": [
+     "Lifecycle offloading policy from Aurora ledger tables to S3 Object Lock",
+     "Cataloging of historical decision bundles in AWS Glue"
+    ],
+    "tradeoffs": [
+     "Offloading historical ledger data to cold S3 storage reduces database costs while maintaining WORM compliance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Token Masking Engine",
+     "Identity & Security Service",
+     "Key Management Component",
+     "Access Control & Policy Component",
+     "Telemetry Collector",
+     "Data Access Layer"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Explanation Builder Component",
+     "Audit Log Store",
+     "Ledger Storage Engine",
+     "Retention & Archival Component",
+     "Data Lake Storage",
+     "Log Ingestion & Retention Manager"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AWS API Gateway (REST)",
+     "Data Lake Storage",
+     "Query Engine",
+     "BI Dashboard Interface"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Query Engine",
+     "Rule Distribution Provider",
+     "Identity & Security Service",
+     "Observability Service"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "API Handler Component",
+     "Rule Engine Component",
+     "Model Scorer Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Fraud Analyst UI",
+     "Case Dashboard & Queue",
+     "Transaction Inspector with Decision Feedback Widget",
+     "Case Management Backend",
+     "Case Service",
+     "Hot Case Data Store"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Rule Distribution Provider",
+     "Rule & Model Management Panel",
+     "Model Scorer Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Token Masking Engine",
+     "Fraud Scoring Engine",
+     "Feature Fetcher & Cache Component",
+     "DAX Accelerator",
+     "Network Load Balancer"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Token Masking Engine",
+     "API Handler Component",
+     "Data Access Layer",
+     "Key Management Component",
+     "Telemetry Collector"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Explanation Builder Component",
+     "Audit & Telemetry Dispatcher Component",
+     "Audit Ingestion Component",
+     "Ledger Storage Engine"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Synthetic Monitoring",
+     "Health Check",
+     "Feature Fetcher & Cache Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

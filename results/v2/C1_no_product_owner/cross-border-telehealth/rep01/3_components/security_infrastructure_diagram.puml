@@ -1,0 +1,24 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Security & Infrastructure container
+
+Container_Boundary(security_infrastructure, "Security & Infrastructure") {
+    Component(IdentityAwareProxy, "Identity-Aware Proxy (IAP)", "Google Cloud IAP", "Provides edge authentication and zero-trust perimeter enforcement.")
+    Component(IstioServiceMesh, "Istio Service Mesh", "Istio with Envoy", "Secures service-to-service communication with strict mTLS and SPIFFE/SPIRE workload identities.")
+    Component(PolicyEnforcementEngine, "Policy Enforcement Engine", "OPA-Gatekeeper", "Integrated with Istio via Envoy for runtime data residency validation.")
+    Component(AuditLoggingCollector, "Audit Logging Collector", "Fluentbit and Google Cloud Audit Logs", "Pipelines routing audit logs to region-locked WORM storage.")
+    Component(ArgoCD, "ArgoCD", "Hub-and-Spoke ArgoCD", "Localized GitOps control planes per region (europe-west3 and us-central1).")
+    Component(ExternalSecretsOperator, "External Secrets Operator", "Kubernetes Operator", "Manages dynamic secrets retrieval from regional GCP Secret Manager instances.")
+    Component(GCPKMSSecertManager, "GCP KMS & Secret Manager", "Google Cloud KMS and Secret Manager", "Manages regional Customer-Managed Encryption Keys (CMEK) and cryptographic erasure.")
+}
+
+Rel(IdentityAwareProxy, IstioServiceMesh, "Forwards authenticated traffic to the service mesh", "HTTPS")
+Rel(PolicyEnforcementEngine, IstioServiceMesh, "Uses Envoy Ext-Authz to inspect inter-service traffic headers for regional compliance", "Envoy Ext-Authz")
+Rel(IstioServiceMesh, GCPKMSSecertManager, "Validates workload identities against SPIFFE/SPIRE via gRPC", "gRPC")
+Rel(AuditLoggingCollector, GCPKMSSecertManager, "Writes to Regional GCS Buckets using regional GCP KMS keys for WORM-compliant encryption", "HTTPS")
+Rel(ArgoCD, ExternalSecretsOperator, "Deploys and manages regional Kubernetes applications and operators", "Kubernetes API")
+Rel(ExternalSecretsOperator, GCPKMSSecertManager, "Reads from GCP Secret Manager via IAM Workload Identity for regional secret synchronization", "IAM Workload Identity")
+
+@enduml

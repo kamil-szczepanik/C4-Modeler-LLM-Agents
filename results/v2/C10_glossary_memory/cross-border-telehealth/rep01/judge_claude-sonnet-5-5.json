@@ -1,0 +1,339 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 2,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.125,
+  "justifications": {
+   "functional_suitability": "Video (WebRTC Video Module), e-prescriptions (E-Prescription Dispatcher) and consent (Consent Enforcement Interceptor, Consent Ledger Manager) are covered. AI Triage Service exists, but no patient-facing consent management UI or component is shown, and video signaling/media servers are missing. Some gaps remain.",
+   "performance_efficiency": "Only Static Asset Delivery (Cloud CDN), Rate Limiting & Resilience Proxy and local-first caching in Cross-Platform UI Layer are mentioned. No async messaging, autoscaling, or data caching; no scalability mechanisms for video or inference. Mostly superficial.",
+   "compatibility": "Pharmacy Client uses REST/HL7 FHIR and OIDC/SAML is supported for identity. However, national EU e-prescription standards (e.g., eHDSI) are not explicitly addressed, and no per-country adapters exist in the Dispatch Engine, which leaves important gaps.",
+   "usability": "Patients and clinicians are served by Web & Mobile Apps (Cross-Platform UI Layer) with offline caching, and the BFF optimizes for the frontend. However, there are no distinct clinician workflows, patient consent UI, or accessibility mechanisms; pharmacies and auditors have only APIs.",
+   "reliability": "Mechanisms include Consultation Session Manager session recovery, low-bandwidth WebRTC Video Module (<300 kbit/s), offline caching, and idempotent Dispatch Engine. Missing are multi-zone redundancy, retries/queues, circuit breakers, backups, and DR for Cloud SQL, leaving gaps.",
+   "security": "Strong: mTLS, WAF in Edge Router & TLS Terminator, CMEK with row-level security and pgcrypto in PostgreSQL Database Engine, Consent Enforcement Interceptor, PHI Sanitizer, immutable audit with cryptographic integrity, Audit Logger for MDR traceability. Minor gaps: no explicit secrets management or inference input/model-version logging detail.",
+   "maintainability": "Clear decomposition into containers with single responsibilities (AI Triage Service, E-Prescription Dispatcher, Consent & Audit Ledger) and layered components in API Gateway & BFF. Minor issues: the Core Telehealth Service is a monolith with several concerns, and the Consent Ledger is coupled to the core via direct DB access.",
+   "portability": "Regional isolation across europe-west3 and us-central1 is stated, but the design depends on GCP-specific services (Vertex AI, Cloud KMS, Cloud SQL, Cloud CDN). No containerization or orchestration layer is shown, and deployment details are absent, so infrastructure replaceability is limited."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 2,
+   "PERF-02": 2,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.4375,
+  "by_quality_attribute": {
+   "Performance": 2.0,
+   "Availability": 2.5,
+   "Modifiability": 3.5,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "elements": [
+     "WebRTC Video Module",
+     "Consultation Session Manager",
+     "API Gateway & BFF",
+     "Core Telehealth Service"
+    ],
+    "sensitivity_points": [
+     "No media server/SFU/TURN described",
+     "Autoscaling not specified"
+    ],
+    "tradeoffs": [
+     "Peer-to-peer WebRTC scales cheaply but hurts reliability"
+    ],
+    "justification": "WebRTC client module exists, but no signaling, SFU/TURN, autoscaling or regional deployment for 5,000 concurrent sessions is shown. Join time under 10 s is unsupported by explicit mechanisms."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "elements": [
+     "AI Triage Service",
+     "PHI Sanitizer Component",
+     "Inference Orchestrator Component",
+     "AI Triage Model Provider",
+     "Rate Limiting & Resilience Proxy"
+    ],
+    "sensitivity_points": [
+     "Synchronous external Vertex AI call latency",
+     "Sanitization and audit logging on critical path"
+    ],
+    "tradeoffs": [
+     "Synchronous audit logging improves traceability but adds latency"
+    ],
+    "justification": "Dedicated stateless-looking service and rate limiting help, but no scaling, caching or latency budget is defined for about 14 requests/s. The 3 s p95 target is plausible yet unaddressed."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "elements": [
+     "WebRTC Video Module",
+     "Cross-Platform UI Layer",
+     "Consultation Session Manager"
+    ],
+    "sensitivity_points": [
+     "Adaptive bitrate behavior unspecified",
+     "Note persistence on reconnect unspecified"
+    ],
+    "tradeoffs": [
+     "Local-first caching improves resilience but risks sync conflicts"
+    ],
+    "justification": "Low-bandwidth video, offline caching and session state recovery are stated, which targets the scenario. However, no explicit mechanism for note sync, reconnection or adaptive codec is shown, so the no-loss guarantee is unverified."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Consent & Audit Ledger",
+     "PostgreSQL Database Engine",
+     "Core Telehealth Service",
+     "Static Asset Delivery"
+    ],
+    "sensitivity_points": [
+     "No in-region multi-zone or DR design",
+     "Failover must stay within US"
+    ],
+    "tradeoffs": [
+     "Strict residency prevents cross-region failover to the EU"
+    ],
+    "justification": "Regional isolation is mentioned, but no US redundancy, multi-zone deployment, backup or recovery procedure is shown. Residency is preserved by isolation, but 1-hour restoration is not supported."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "elements": [
+     "E-Prescription Dispatcher",
+     "Pharmacy Client",
+     "Dispatch Engine",
+     "Prescription Receiver"
+    ],
+    "sensitivity_points": [
+     "Pharmacy Client is a single component for all standards",
+     "Country routing logic unspecified"
+    ],
+    "tradeoffs": [
+     "Single dispatcher simplifies operations but risks coupling between standards"
+    ],
+    "justification": "A dedicated dispatcher with receiver, engine and pharmacy client isolates external integration. A new national standard likely touches the Pharmacy Client only, but no explicit per-country adapter or strategy is defined."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "elements": [
+     "AI Triage Service",
+     "Inference Orchestrator Component",
+     "Audit Logger Component",
+     "AI Triage Model Provider"
+    ],
+    "sensitivity_points": [
+     "Version pinning in API calls",
+     "No model registry or rollback mechanism shown"
+    ],
+    "tradeoffs": [
+     "Version pinning aids traceability but slows rollout of new models"
+    ],
+    "justification": "Version-pinned inference and an audit logger give traceability foundations. Rollout, rollback and canary mechanisms are not described, and logging of inputs and model version is not explicit."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "Consent Enforcement Interceptor",
+     "Consent & Audit Ledger",
+     "Identity & Consent Providers",
+     "Audit & Metadata Interceptor",
+     "Consent & Audit Ledger"
+    ],
+    "sensitivity_points": [
+     "How cross-region requests are routed is undefined",
+     "Interceptor only linked to session manager"
+    ],
+    "tradeoffs": [
+     "Strict regional isolation conflicts with legitimate cross-region consented access"
+    ],
+    "justification": "Consent enforcement before data access and an audit ledger address the control and logging. But cross-region request flow, regional separation of the ledger and consent lookup are not specified, leaving risk of bypass."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Consent Ledger Manager",
+     "Consent Enforcement Interceptor",
+     "Auditor Reporting API",
+     "PostgreSQL Database Engine"
+    ],
+    "sensitivity_points": [
+     "Propagation of withdrawal to downstream sharing",
+     "Per-purpose consent model not detailed"
+    ],
+    "tradeoffs": [
+     "Immutable ledger supports verification but complicates data erasure"
+    ],
+    "justification": "Consent ledger with immutable audit and auditor reporting supports verification, and interceptor checks consent before access. No mechanism propagates withdrawal to research sharing or guarantees the 24 h stop."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "full",
+   "C-04": "partial",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "partial"
+  },
+  "coverage": 0.625,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Consent & Audit Ledger",
+     "PostgreSQL Database Engine",
+     "Consent Enforcement Interceptor",
+     "PHI Sanitizer Component",
+     "Edge Router & TLS Terminator",
+     "Audit & Metadata Interceptor"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "PostgreSQL Database Engine",
+     "Static Asset Delivery",
+     "Consent Enforcement Interceptor"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Audit Logger Component",
+     "AI Triage Service",
+     "AI Triage Model Provider",
+     "Inference Orchestrator Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Cross-Platform UI Layer",
+     "WebRTC Video Module",
+     "Consultation Session Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "WebRTC Video Module",
+     "Consultation Session Manager",
+     "Core Telehealth Service",
+     "Cross-Platform UI Layer"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "E-Prescription Dispatcher",
+     "Prescription Receiver",
+     "Dispatch Engine",
+     "Pharmacy Client",
+     "Telehealth Orchestrator"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Triage Service",
+     "Inference Orchestrator Component",
+     "PHI Sanitizer Component",
+     "AI Triage Model Provider"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Consent & Audit Ledger",
+     "Consent Ledger Manager",
+     "Consent Enforcement Interceptor"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Consent Enforcement Interceptor",
+     "PostgreSQL Database Engine",
+     "Consent & Audit Ledger"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "WebRTC Video Module",
+     "Cross-Platform UI Layer",
+     "Consultation Session Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Audit Logger Component",
+     "Inference Orchestrator Component",
+     "AI Triage Model Provider",
+     "Consent & Audit Ledger"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "partial",
+    "elements": [
+     "Pharmacy Client",
+     "E-Prescription Dispatcher",
+     "Dispatch Engine"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

@@ -1,0 +1,39 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Cross-Border Telehealth Platform
+
+Person(Patients, "Patients", "Patients in the EU and US seeking video consultations, e-prescriptions, and AI symptom checking.")
+Person(LicensedClinicians, "Licensed Clinicians", "Licensed medical professionals providing video consultations and issuing e-prescriptions.")
+
+System_Ext(PharmaciesandNationalPharmacyNetworksEUUSPharmacySystems, "Pharmacies and National Pharmacy Networks (EU) / US Pharmacy Systems", "National and regional pharmacy systems for fulfilling e-prescriptions.")
+System_Ext(AISymptomCheckerEngine, "AI Symptom Checker Engine", "Engine providing AI symptom checking with immutable audit logging sidecars.")
+System_Ext(RegionalIdentityProviders, "Regional Identity Providers", "EU eIDAS-compliant and US OAuth via OIDC identity providers.")
+System_Ext(RegionalHealthAuthoritiesandAuditors, "Regional Health Authorities and Auditors", "Authorities accessing regional audit endpoints for compliance and oversight.")
+
+System_Boundary(CrossBorderTelehealthPlatform, "Cross-Border Telehealth Platform") {
+    Container(FlutterPatientMobileWebApp, "Flutter Patient Mobile/Web App", "Flutter", "Client-side application supporting local caching for low-bandwidth degradation used by patients across the EU and US.")
+    Container(ClinicianPortal, "Clinician Portal", "React / Node.js", "Clinician portal web application framework used by licensed clinicians.")
+    Container(GCPApiGateway, "GCP API Gateway", "Cloud Endpoints / Envoy", "API gateway managing incoming HTTPS, WebRTC, and OAuth2/JWT traffic.")
+    Container(CoreTelehealthService, "Core Telehealth Service", "Go / Spring Boot", "Core microservice runtime for high-throughput telehealth orchestration.")
+    Container(AIInferenceWrapper, "AI Inference Wrapper", "Python / FastAPI", "AI inference wrapper for symptom checker integration.")
+    Container(ConsentProfileManagementService, "Consent & Profile Management Service", "Go / Spring Boot", "Manages patient consent and profile data.")
+    Container(PharmacyIntegrationGateway, "Pharmacy Integration Gateway", "Apache Camel / Spring Integration", "Translates data to HL7 FHIR (US) and EU national standards for prescription delivery.")
+    Container(GCPGKERegionalClusters, "GCP GKE Regional Clusters", "GCP GKE (europe-west3, us-central1)", "Isolated regional container orchestration guaranteeing strict GDPR and HIPAA data residency compliance.")
+    ContainerDb(CloudSQLPostgreSQLDatabases, "Cloud SQL PostgreSQL Databases", "Cloud SQL PostgreSQL", "Region-locked primary data stores enforcing data residency.")
+    Container(GCPCloudPubSub, "GCP Cloud Pub/Sub", "GCP Cloud Pub/Sub", "Asynchronous messaging buffer for prescription reliability.")
+}
+
+Rel(Patients, GCPApiGateway, "Accesses video consultations, e-prescriptions, and AI symptom checker", "HTTPS, WebRTC, OAuth2/JWT")
+Rel(LicensedClinicians, GCPApiGateway, "Accesses clinician portal for video consultations and e-prescriptions", "HTTPS, WebRTC, OAuth2/JWT")
+Rel(GCPApiGateway, CoreTelehealthService, "Routes API requests to core telehealth orchestration", "gRPC")
+Rel(CoreTelehealthService, AIInferenceWrapper, "Sends requests for AI symptom checking", "gRPC")
+Rel(CoreTelehealthService, GCPCloudPubSub, "Sends prescription data asynchronously for pharmacy integration", "GCP Pub/Sub")
+Rel(CoreTelehealthService, CloudSQLPostgreSQLDatabases, "Reads and writes regional telehealth data", "TLS")
+Rel(ConsentProfileManagementService, CloudSQLPostgreSQLDatabases, "Stores and retrieves consent and profile data", "TLS")
+Rel(PharmacyIntegrationGateway, PharmaciesandNationalPharmacyNetworksEUUSPharmacySystems, "Delivers e-prescriptions using HL7 FHIR and national standards", "HL7 FHIR, HTTPS/REST")
+Rel(GCPApiGateway, RegionalIdentityProviders, "Authenticates users via OIDC", "OIDC, HTTPS")
+Rel(RegionalHealthAuthoritiesandAuditors, GCPApiGateway, "Accesses regional audit endpoints for compliance", "mTLS, signed JWTs, HTTPS")
+
+@enduml

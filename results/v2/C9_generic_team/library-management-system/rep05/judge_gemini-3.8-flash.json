@@ -1,0 +1,240 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 4,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "The 'Circulation and Cataloguing Module' and 'Web App Container' cover general cataloguing and circulation, satisfying R-01 and the brief. However, explicit architectural mechanisms specifically distinguishing physical item tracking from digital item asset management or licensing are lacking.",
+   "performance_efficiency": "The 'Search Service Container' (Elasticsearch/OpenSearch), 'Distributed Cache Container' (Redis), asynchronous indexing via 'Message Broker Container', and 'Autoscaling Controller Component' specifically address R-05, ensuring 99th-percentile search responses remain well below 800 ms.",
+   "compatibility": "The architecture explicitly defines interoperability mechanisms: 'Legacy Sync Component' interfaces with 'External Legacy ILS' via batch protocols, 'Authentication Validator' integrates external 'Identity Providers' over OAuth2/OIDC, and 'Payment Gateways' are handled via HTTPS.",
+   "usability": "'Patrons', 'Staff', and 'Librarians' are served by the 'Web App Container' featuring SSR with hydration for catalogue browsing and self-service portals. However, specific accommodations or operational workflows for distinct patron self-service use cases are minimally detailed.",
+   "reliability": "High reliability is achieved via the 'Transactional Outbox Processor' to avoid dual-write inconsistencies, 'Concurrency Control Manager' for item checkouts, circuit breakers in 'Legacy Sync Component', and 'EU-Hosted Backup and Archival Storage' with automated index snapshots.",
+   "security": "Data residency is enforced using 'EU-Hosted Backup and Archival Storage' and EU-compliant Redis caching. Security is bolstered by 'WAF', 'Authentication Validator' (OAuth2/OIDC), and TLS protocols, although detailed role-based authorization for staff versus patrons is omitted.",
+   "maintainability": "Maintained through strict modularity: 'Circulation and Cataloguing Module' applies DDD, write/read paths are decoupled through the 'Message Broker Container', and 'OpenTelemetry Collector Agent' standardizes observability across all components.",
+   "portability": "Containerized components and Kubernetes HPA in 'Autoscaling Controller Component' support deployment across EU-based cloud or on-premise infrastructure. Details regarding environment configuration management or underlying database portability are slightly sparse."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 5,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 2.5,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Dedicated Search Engine Core (Elasticsearch) combined with multi-tier Redis caching and stampede prevention directly ensures sub-800ms response times under load.",
+    "elements": [
+     "API Gateway / BFF Container",
+     "Routing Engine",
+     "Search Service Container",
+     "Search Engine Core",
+     "Distributed Cache Container",
+     "Redis Cache Engine"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio and Redis lookup latency under concurrent requests",
+     "Elasticsearch index sharding and query execution efficiency"
+    ],
+    "tradeoffs": [
+     "Memory overhead for distributed caching versus lower Elasticsearch CPU utilization"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Transactional Outbox and Message Broker decouple write operations from the Search Service, allowing near-real-time ingestion without locking search queries.",
+    "elements": [
+     "Core Transactional Service Container",
+     "Transactional Outbox Processor",
+     "Message Broker Container",
+     "Search Service Container",
+     "Indexing Consumer"
+    ],
+    "sensitivity_points": [
+     "Queue consumer throughput and indexing batching latency in Elasticsearch"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of catalog updates versus zero read latency impact on patrons"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Core circulation transactions run independently from the search index. Search node failures affect only queries, which can be partially mitigated by the cache.",
+    "elements": [
+     "Search Service Container",
+     "Search Engine Core",
+     "Distributed Cache Container",
+     "Core Transactional Service Container"
+    ],
+    "sensitivity_points": [
+     "Search cluster replica failover time and replica shard availability"
+    ],
+    "tradeoffs": [
+     "Storage cost for index replicas versus high availability of catalogue queries"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Web App Container is stateless with sessions and state offloaded to Redis, allowing immediate seamless failover via Gateway routing without transaction loss.",
+    "elements": [
+     "API Gateway / BFF Container",
+     "Routing Engine",
+     "Web App Container",
+     "Distributed Cache Container",
+     "Session Manager"
+    ],
+    "sensitivity_points": [
+     "Gateway health-check intervals and circuit-breaker tripping thresholds"
+    ],
+    "tradeoffs": [
+     "Network overhead of externalized Redis session storage versus instantaneous instance failover"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "The model provides background sync workers, but lacks an explicit, pluggable digital item provider integration module or adapter interface for third-party e-books.",
+    "elements": [
+     "Worker / Background Task Container",
+     "Legacy Sync Component",
+     "Payload Validation Component",
+     "Circulation and Cataloguing Module"
+    ],
+    "sensitivity_points": [
+     "Coupling between external e-book catalog schemas and internal domain models"
+    ],
+    "tradeoffs": [
+     "Generic ingestion contracts versus provider-specific connectors requiring domain updates"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "Circulation logic is encapsulated within the monolithic Circulation and Cataloguing Module, lacking a configurable rules engine or runtime policy service.",
+    "elements": [
+     "Core Transactional Service Container",
+     "Circulation and Cataloguing Module"
+    ],
+    "sensitivity_points": [
+     "Hardcoded domain business rules versus dynamic rule externalization"
+    ],
+    "tradeoffs": [
+     "Code-level rule verification versus runtime flexibility of dynamic rule engines"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "EU data residency is declared textually across components and backups, but there are no architectural controls or policy enforcement mechanisms preventing non-EU routing.",
+    "elements": [
+     "EU-Hosted Backup and Archival Storage",
+     "API Gateway / BFF Container",
+     "Core Transactional Service Container",
+     "Distributed Cache Container"
+    ],
+    "sensitivity_points": [
+     "Cloud hosting region configuration and egress filtering rules"
+    ],
+    "tradeoffs": [
+     "Restricting processing to EU regions versus latency for non-EU integration endpoints"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Authentication Validator validates tokens and OpenTelemetry/Enterprise Logging records audit trails; however, fine-grained object-level authorization (BOLA prevention) is not explicitly detailed.",
+    "elements": [
+     "API Gateway / BFF Container",
+     "Authentication Validator",
+     "Core Transactional Service Container",
+     "Enterprise Logging and Monitoring Service",
+     "Observability Sidecars"
+    ],
+    "sensitivity_points": [
+     "Granular patron identity validation against target loan record ownership"
+    ],
+    "tradeoffs": [
+     "Per-request authorization validation latency versus strict data privacy protection"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.6666666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Library Management System",
+     "EU-Hosted Backup and Archival Storage",
+     "Backup Service",
+     "Redis Cache Engine"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Web App Container",
+     "Librarians",
+     "Circulation and Cataloguing Module"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Service Container",
+     "Search Engine Core",
+     "Search Controller",
+     "Cache Manager",
+     "Distributed Cache Container",
+     "Redis Cache Engine",
+     "Autoscaling Controller Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

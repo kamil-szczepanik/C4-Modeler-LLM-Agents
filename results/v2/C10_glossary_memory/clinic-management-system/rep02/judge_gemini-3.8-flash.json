@@ -1,0 +1,321 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 5,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 5
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "Patient Registration, Scheduling, and Billing Microservices address R-01, R-02, and R-04. Scheduling includes resource clash management via Slot Reservation Manager. However, EMR Microservice lacks an explicit audit trail component as required by R-03, despite audit mechanisms appearing in Registration and Message Broker.",
+   "performance_efficiency": "EMR screen load is optimized using Go, gRPC, and Redis Enterprise caching. Async Claims Processing Worker with Apache Kafka offloads billing tasks. However, multi-region Raft consensus in CockroachDB across hybrid clouds could challenge the P95 latency target without explicitly detailed read-replica or locality-aware routing.",
+   "compatibility": "HL7 FHIR for Lab & Imaging Systems and EDI for Insurance Clearinghouses are referenced in system relationships and the EDI Formatter component. However, no internal microservice or adapter explicitly terminates and processes the incoming/outgoing HL7 FHIR interface.",
+   "usability": "Patients are served via Patient Portal / Mobile App. However, internal staff personas (Front-Desk Receptionists, Clinicians, Billing Specialists, IT/Compliance Administrators) route raw HTTPS requests directly to Unified API Gateway without dedicated web frontends or UI container representations.",
+   "reliability": "High availability (99.99%) is achieved via active-active hybrid deployment across on-prem-k8s and eu-central-1, backed by CockroachDB Raft consensus, Redis Enterprise Active-Active CRDTs, and Resilience4j circuit breakers in the Eligibility Verification Service and EDI integration.",
+   "security": "Enforces MFA via external Identity Provider, zero-trust token verification in Unified API Gateway Lua/Wasm Plugins, Vault certificate management, and TLS 1.3/mTLS everywhere. However, explicit AES-256 encryption-at-rest configurations are omitted for the primary CockroachDB storage layer.",
+   "maintainability": "Decomposition into autonomous microservices (EMR, Registration, Scheduling, Billing) ensures modularity and low coupling. Event-driven decoupling using Apache Kafka with Confluent Schema Registry prevents breaking changes across bounded contexts, though some diagram redundancies appear across Level 3 models.",
+   "portability": "Architecture supports the hybrid target (on-prem-k8s and eu-central-1) cleanly through containerized runtimes (Spring Boot, Go, Node.js), cloud-agnostic CockroachDB, Kafka, and IPsec VPN/mTLS interconnects without proprietary cloud provider lock-in."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 2,
+   "SEC-01": 4,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 4.0,
+   "Modifiability": 5.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Go and gRPC provide low latency for EMR queries, backed by Redis Enterprise caching. However, multi-region distributed SQL read latencies across hybrid clouds could impact P95 targets during cache misses.",
+    "elements": [
+     "Unified API Gateway",
+     "EMR Microservice",
+     "Distributed Cache (Redis Enterprise)",
+     "Cloud-Native Distributed SQL Database"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios for active clinician shifts",
+     "Cross-region read latency in CockroachDB"
+    ],
+    "tradeoffs": [
+     "Cache freshness versus read latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "justification": "The architecture lacks a dedicated asynchronous ingestion pipeline or FHIR gateway service. External FHIR traffic connects directly without message broker buffering, posing a severe bottleneck risk during spikes.",
+    "elements": [
+     "Lab & Imaging Systems",
+     "Unified API Gateway",
+     "EMR Microservice"
+    ],
+    "sensitivity_points": [
+     "Synchronous ingestion throughput of FHIR payloads"
+    ],
+    "tradeoffs": [
+     "Immediate EMR data availability versus system ingestion resilience"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "CockroachDB and Redis active-active replication are specified, but a two-region topology (on-prem and eu-central-1) cannot sustain a Raft quorum during a region outage without a third independent witness node.",
+    "elements": [
+     "Cloud-Native Distributed SQL Database",
+     "Distributed Cache (Redis Enterprise)",
+     "Unified API Gateway"
+    ],
+    "sensitivity_points": [
+     "Raft quorum node distribution across hybrid regions",
+     "Automated DNS/BGP traffic failover speed"
+    ],
+    "tradeoffs": [
+     "Consensus consistency guarantees versus availability during region partitions"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Asynchronous claims are buffered via Apache Kafka and isolated from database node failures. CockroachDB handles node failures transparently via Raft consensus, and claims workers use circuit breakers for safe retries.",
+    "elements": [
+     "Billing Microservice",
+     "Message Broker",
+     "Async Claims Processing Worker",
+     "Cloud-Native Distributed SQL Database"
+    ],
+    "sensitivity_points": [
+     "CockroachDB leaseholder re-election time",
+     "Kafka consumer group rebalancing intervals"
+    ],
+    "tradeoffs": [
+     "Asynchronous claim durability versus immediate clearinghouse confirmation"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Claims submission is fully decoupled through Kafka and specialized worker components. Adding a new clearinghouse requires changes only to the EDI Formatter and Clearinghouse Integration Client, leaving EMR unaffected.",
+    "elements": [
+     "Async Claims Processing Worker",
+     "Clearinghouse Integration Client",
+     "EDI Formatter",
+     "Billing Microservice"
+    ],
+    "sensitivity_points": [
+     "Coupling of EDI formatting to clearinghouse specifications"
+    ],
+    "tradeoffs": [
+     "Specialized worker microservices versus monolithic billing complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Modifications are strictly confined to the Patient Registration Microservice components (Registration Controller, Audit & Compliance Interceptor, and Registration Data Repository), fulfilling the requirement within three components.",
+    "elements": [
+     "Patient Registration Microservice",
+     "Registration Controller",
+     "Audit & Compliance Interceptor",
+     "Registration Data Repository"
+    ],
+    "sensitivity_points": [
+     "Data model encapsulation within Registration repository"
+    ],
+    "tradeoffs": [
+     "Per-service schema ownership versus unified enterprise reporting schemas"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Delegating authentication to an external IdP guarantees MFA enforcement, and API gateway plugins perform zero-trust JWT validation. However, explicit security alerting mechanisms within one minute are missing.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Unified API Gateway",
+     "Lua/Wasm Plugins"
+    ],
+    "sensitivity_points": [
+     "Strict enforcement of IdP token validation policies",
+     "Latency of real-time security alerting"
+    ],
+    "tradeoffs": [
+     "Offloading auth to IdP versus direct control of alerting pipelines"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "While Patient Registration has an audit interceptor, the EMR Microservice has no audit logger, policy enforcement point, or tamper-evident retention mechanism to audit 100% of EMR read accesses.",
+    "elements": [
+     "EMR Microservice",
+     "EMR API Handler",
+     "EMR Domain Service",
+     "Cloud-Native Distributed SQL Database"
+    ],
+    "sensitivity_points": [
+     "Absence of read-audit interceptors in EMR container",
+     "Long-term tamper-evident storage for EMR audit trails"
+    ],
+    "tradeoffs": [
+     "Performance optimization for read paths versus regulatory audit compliance"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Interceptor",
+     "In-Transit Data Masking & Tokenization",
+     "Broker Audit & Compliance Logger",
+     "IT/Compliance Administrators"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Cloud-Native Distributed SQL Database",
+     "Distributed Cache (Redis Enterprise)"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Cloud-Native Distributed SQL Database",
+     "Data Retention & Tiered Storage Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Registration Microservice",
+     "Registration Controller",
+     "Patient Matching Engine",
+     "Registration Data Repository"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Microservice",
+     "Appointment Controller",
+     "Scheduling Engine",
+     "Calendar Resource Manager",
+     "Slot Reservation Manager",
+     "Distributed Cache (Redis Enterprise)"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "EMR Microservice",
+     "EMR API Handler",
+     "EMR Domain Service",
+     "EMR Data Access Repository"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Microservice",
+     "Invoice API Controller",
+     "Claims Orchestrator",
+     "Clearinghouse Integration Adapter",
+     "Async Claims Processing Worker",
+     "Claims Consumer",
+     "EDI Formatter",
+     "Clearinghouse Integration Client",
+     "Insurance Clearinghouses"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Unified API Gateway",
+     "Lua/Wasm Plugins"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Cloud-Native Distributed SQL Database",
+     "Distributed Cache (Redis Enterprise)"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "EMR Microservice",
+     "Distributed Cache (Redis Enterprise)",
+     "Unified API Gateway"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Lab & Imaging Systems",
+     "Clinic Management System"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

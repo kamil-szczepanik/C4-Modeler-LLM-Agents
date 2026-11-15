@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container_Boundary(claims_core_service, "Claims Core Service") {
+    Component(ClaimSubmissionController, "Claim Submission Controller", "Spring MVC", "Exposes REST endpoints for claims handling and receives incoming HTTP requests.")
+    Component(ValidationPolicyComponent, "Validation & Policy Component", "Bean Validation / JSR-380", "Enforces structural payload validation and validates incoming DTOs.")
+    Component(ClaimRoutingEngine, "Claim Routing Engine", "Java / Spring Boot", "Routes validated domain commands and delegates unmigrated types.")
+    Component(ClaimProcessingDomainService, "Claim Processing Domain Service", "Spring Data JPA", "Manages database interactions, business logic, transactional outbox persistence, and audit events.")
+    Component(ReadThroughCacheComponent, "Read-Through Cache Component", "Spring Cache", "Powers the read-through cache integration for cached claim aggregates and sub-2s UI response times.")
+    Component(OutboxEventPublisher, "Outbox Event Publisher", "Java / Spring Boot", "Writes outbox messages and publishes domain events to the message broker.")
+    Component(ReconciliationAuditListener, "Reconciliation & Audit Listener", "Spring Application Event", "Emits and listens to domain audit events for reconciliation.")
+    Component(AntiCorruptionLayer, "Anti-Corruption Layer", "gRPC over VNet", "Interfaces safely with the legacy mainframe for unmigrated claim types.")
+}
+
+System_Ext(MessageBrokerAzureServiceBus, "Message Broker (Azure Service Bus)", "AMQP over TLS", "Facilitates secure messaging and event distribution.")
+
+Rel(ClaimSubmissionController, ValidationPolicyComponent, "Validates incoming DTOs", "In-process Method Call")
+Rel(ValidationPolicyComponent, ClaimRoutingEngine, "Passes validated domain commands", "In-process Method Call")
+Rel(ClaimRoutingEngine, ClaimProcessingDomainService, "Direct method invocation", "In-process")
+Rel(ClaimRoutingEngine, AntiCorruptionLayer, "Delegates unmigrated types", "gRPC over VNet")
+Rel(ClaimProcessingDomainService, ReadThroughCacheComponent, "Reads/writes cached claim aggregates", "In-process Method Call")
+Rel(ClaimProcessingDomainService, OutboxEventPublisher, "Writes outbox messages", "In-process Method Call")
+Rel(OutboxEventPublisher, MessageBrokerAzureServiceBus, "Publishes domain events", "AMQP over TLS")
+Rel(ClaimProcessingDomainService, ReconciliationAuditListener, "Emits domain audit events", "In-process Application Event")
+@enduml

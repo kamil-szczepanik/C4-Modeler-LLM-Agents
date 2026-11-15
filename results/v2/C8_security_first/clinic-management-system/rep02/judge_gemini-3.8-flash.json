@@ -1,0 +1,347 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.125,
+  "justifications": {
+   "functional_suitability": "All core functional requirements are addressed. 'Patient Portal Service' handles scheduling and resource checks, 'EMR Core Service' covers medical records, 'Billing Integration Service' manages claims, and 'Audit & Compliance Daemon' tracks actions. Specific patient demographic registration workflows, however, lack detailed component-level elaboration.",
+   "performance_efficiency": "Performance for EMR screens is supported by 'PgBouncer Connection Pooling Proxy', 'Read Replica Cluster', and asynchronous offloading via 'Message Broker'. However, caching layers (e.g., Redis) for clinical chart reads are not explicitly specified in 'EMR Core Service' to firmly guarantee sub-second P95 loads.",
+   "compatibility": "Interoperability is thoroughly handled. 'EMR Core Service' implements dedicated HL7 FHIR APIs over mTLS to exchange results with 'Lab & Imaging Systems'. Additionally, 'Clearinghouse Adapter' cleanly manages external communications with 'Insurance Clearinghouse' using secure HTTPS/mTLS.",
+   "usability": "While all user personas (Patients, Receptionists, Clinicians, Billing Specialists) connect via HTTPS, distinct UI presentation containers are omitted for staff. Only 'Patient Portal Container' is modeled, routing all administrative and clinical users directly into the 'API Gateway' without dedicated clinical or front-desk UI components.",
+   "reliability": "High availability is supported by 'Primary Relational Store' using Patroni and Citus, 'Resilience & Circuit Breaker Wrapper', and distributed consensus in 'Message Broker'. However, concrete mechanisms reconciling multi-master active-active replication between 'on-prem-k8s' and 'eu-central-1' under network partitions are underspecified.",
+   "security": "Security is thoroughly covered. 'Auth & Policy Enforcement Component' enforces OIDC/OAuth2, 'Data Access Repository' handles field-level encryption (AES-256), and 'Audit & Compliance Daemon' with 'Immutable Log Engine' enforces tamper-proof 10-year retention via 'WORM Storage' (S3 Object Lock/MinIO) for HIPAA/GDPR compliance.",
+   "maintainability": "The modular breakdown into bounded contexts ('EMR Core Service', 'Billing Integration Service', 'Audit & Compliance Daemon') enforces loose coupling. However, within 'EMR Core Service', only two components are defined, leaving clinical workflows clustered together without deeper decomposition.",
+   "portability": "The architecture utilizes containerized stacks (Kubernetes, Envoy, Spring Boot, Go) and provides hybrid storage parity via MinIO / S3 Object Lock across 'on-prem-k8s' and 'eu-central-1'. Minor gaps remain regarding automated cross-environment deployment descriptors and hybrid network routing definitions."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 3,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 4.0,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The architecture incorporates PgBouncer connection pooling, Citus horizontal sharding, and dedicated read replicas to handle concurrent read spikes. However, the EMR Core Service component diagram lacks an explicit connection routing split between read replicas and the primary store.",
+    "elements": [
+     "API Gateway",
+     "EMR Core Service",
+     "PgBouncer Connection Pooling Proxy",
+     "Primary Relational Store",
+     "Read Replica Cluster"
+    ],
+    "sensitivity_points": [
+     "Proper read/write query splitting between primary and read replicas",
+     "PgBouncer connection pool sizing under sudden morning round concurrency"
+    ],
+    "tradeoffs": [
+     "Read replication lag versus clinical data freshness on patient charts",
+     "Connection pooling memory footprint versus backend database connection overhead"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "justification": "The system features a robust Message Broker, but EMR Core receives HL7 FHIR payloads directly over synchronous mTLS rather than through a dedicated FHIR ingestion queue, risking resource contention and database lock pressure on the primary store during sudden 10,000-message bursts.",
+    "elements": [
+     "Lab & Imaging Systems",
+     "EMR Core Service",
+     "Primary Relational Store",
+     "Message Broker"
+    ],
+    "sensitivity_points": [
+     "Absence of an asynchronous FHIR ingestion buffer in front of EMR Core",
+     "Primary relational store write throughput during mass FHIR ingestion"
+    ],
+    "tradeoffs": [
+     "Synchronous FHIR validation simplicity versus ingest throughput and system responsiveness",
+     "Queue-based ingestion decoupling versus immediate visibility in clinical charts"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "While PostgreSQL with Citus and Patroni supports high availability, active-active cross-region hybrid replication (on-prem to eu-central-1) without data loss and with under 1 minute failover lacks explicit global traffic management, edge DNS failover, or latency mitigation mechanisms.",
+    "elements": [
+     "Data Tier",
+     "Primary Relational Store",
+     "API Gateway",
+     "Edge Listener Component"
+    ],
+    "sensitivity_points": [
+     "Hybrid WAN latency impacting synchronous multi-master database replication",
+     "Absence of global server load balancing (GSLB) for 1-minute regional cutover"
+    ],
+    "tradeoffs": [
+     "Synchronous replication zero data loss versus cross-region write latency",
+     "Active-active multi-region availability versus multi-master conflict resolution complexity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Billing Integration Service explicitly encapsulates Resilience4j circuit breakers, transactional outbox publishing via NATS JetStream, DLQ routing, and Spring Batch reconciliation, while the database tier leverages Patroni for automated 30-second failovers, preventing loss or duplication of in-flight claims.",
+    "elements": [
+     "Billing Integration Service",
+     "Claim Management Controller",
+     "Resilience & Circuit Breaker Wrapper",
+     "DLQ & Notification Router",
+     "Reconciliation & Batch Job Scheduler",
+     "Primary Relational Store",
+     "Message Broker"
+    ],
+    "sensitivity_points": [
+     "Patroni leader election and failover duration remaining under 30 seconds",
+     "Idempotency enforcement within Claim Management Controller and clearinghouse requests"
+    ],
+    "tradeoffs": [
+     "Strict transactional idempotency checks versus claim submission latency",
+     "Circuit breaker failure thresholds versus rapid recovery during transient database failovers"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The architecture cleanly isolates clearinghouse communication inside the dedicated Clearinghouse Adapter component of the Billing Integration Service. The EMR Core Service and other containers remain decoupled and unaffected by payer or clearinghouse specification changes.",
+    "elements": [
+     "Billing Integration Service",
+     "Clearinghouse Adapter",
+     "Validation & Rules Engine",
+     "Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Pluggability and interface modularity of the Clearinghouse Adapter",
+     "Rule configuration flexibility inside Validation & Rules Engine"
+    ],
+    "tradeoffs": [
+     "Adapter encapsulation overhead versus direct clearinghouse API calls",
+     "Generic claim models versus clearinghouse-specific EDI translation complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Adding an audited demographic field modifies the Patient Portal/EMR, the relational schema in Data Tier, and triggers audit ingestion. Changes are strictly confined within three components, though schema evolution across distributed Citus shards requires disciplined migration planning.",
+    "elements": [
+     "Patient Portal Container",
+     "EMR Core Service",
+     "Primary Relational Store",
+     "Audit & Compliance Daemon"
+    ],
+    "sensitivity_points": [
+     "Distributed database schema migration ease on Citus sharded tables",
+     "Dynamic schema support within Audit Ingestion Worker"
+    ],
+    "tradeoffs": [
+     "Strict relational schema enforcement versus schemaless JSON payload flexibility",
+     "Fine-grained field-level audit trails versus audit log storage expansion"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The API Gateway enforces OAuth2/OIDC validation backed by an external Identity Provider supporting MFA. However, while audit telemetry is published, automated generation of an actionable security alert within 1 minute relies on upstream IdP or external SIEM capabilities not explicitly modeled.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "API Gateway",
+     "Auth & Policy Enforcement Component",
+     "Audit & Compliance Daemon",
+     "Message Broker"
+    ],
+    "sensitivity_points": [
+     "Strict MFA enforcement delegation to the external Identity Provider",
+     "End-to-end latency of publishing failed authentication events to alerting pipelines"
+    ],
+    "tradeoffs": [
+     "Offloading MFA to external IdP versus centralized internal policy control",
+     "Comprehensive auth audit publishing versus edge gateway processing latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The EMR Core Authorization & Policy Component evaluates access rules, while the Audit & Compliance Daemon consumes access events, generates cryptographic hash-chains, and writes to WORM storage (S3 Object Lock in Compliance Mode) guaranteeing tamper-proof 10-year retention.",
+    "elements": [
+     "EMR Core Service",
+     "Authorization & Policy Component",
+     "Audit & Compliance Daemon",
+     "Immutable Log Engine",
+     "Audit & Compliance WORM Store"
+    ],
+    "sensitivity_points": [
+     "Synchronous policy enforcement blocking unauthorized record reads",
+     "Immutability enforcement of S3 Object Lock in Compliance Mode"
+    ],
+    "tradeoffs": [
+     "Synchronous access policy checks on reads versus EMR retrieval latency",
+     "Immutable WORM storage cost and lock rigor versus data purging capabilities"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Daemon",
+     "Immutable Log Engine",
+     "WORM Storage",
+     "Data Export Worker Component",
+     "Audit & Compliance WORM Store",
+     "Primary Relational Store",
+     "Data Access Repository"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Data Tier",
+     "Primary Relational Store",
+     "Read Replica Cluster",
+     "Replication & Persistence Engine",
+     "Resilience & Circuit Breaker Wrapper"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance WORM Store",
+     "Cold Data Archival Engine",
+     "WORM Storage",
+     "Immutable Log Engine"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Receptionists / Front Desk Staff",
+     "Patient Portal Container",
+     "Patient Portal Service",
+     "API Gateway"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Patient Portal Container",
+     "Patient Portal API Router",
+     "Patient Portal Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Core Service",
+     "Chart & Encounter Manager",
+     "Audit & Compliance Daemon",
+     "Immutable Log Engine",
+     "Audit & Compliance WORM Store"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Integration Service",
+     "Claim Management Controller",
+     "Validation & Rules Engine",
+     "Clearinghouse Adapter",
+     "Insurance Clearinghouse",
+     "Billing Event Publisher"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Auth & Policy Enforcement Component",
+     "Data Access Repository",
+     "Primary Relational Store"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Data Tier",
+     "Primary Relational Store",
+     "Replication & Persistence Engine",
+     "Read Replica Cluster"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Read Replica Cluster",
+     "PgBouncer Connection Pooling Proxy",
+     "Traffic Management Component"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "EMR Core Service",
+     "Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

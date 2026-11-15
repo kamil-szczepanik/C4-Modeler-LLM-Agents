@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Catalog Service container
+
+Container_Boundary(catalog_service, "Catalog Service") {
+    Component(CatalogAPIController, "Catalog API Controller", "Express (Node.js/TypeScript)", "Handles incoming Express routes and input validation.")
+    Component(CatalogServiceLayer, "Catalog Service Layer", "Node.js / TypeScript", "Implements core business logic for book details.")
+    Component(SearchFilterEngine, "Search & Filter Engine", "Node.js / @opensearch-project/opensearch", "Manages keyword searches via Amazon OpenSearch Service.")
+    Component(DataAccessRepository, "Data Access Repository", "Node.js / Native PostgreSQL drivers", "Handles persistence via Aurora PostgreSQL.")
+    Component(CacheManager, "Cache Manager", "Node.js / Amazon Redis / ioredis", "Manages hot catalog reads using Amazon Redis.")
+    Component(EventListenerComponent, "Event Listener Component", "Node.js / @aws-sdk/client-sqs", "Consumes inventory events from Amazon SQS.")
+    Component(InventoryManager, "Inventory Manager", "Node.js / TypeScript", "Encapsulates stock-availability read logic.")
+    Component(PricingCurrencyTranslator, "Pricing & Currency Translator", "Node.js / TypeScript", "Applies USD, EUR, and GBP currency conversions.")
+}
+
+System_Ext(AmazonOpenSearchService, "Amazon OpenSearch Service", "External search engine")
+System_Ext(AuroraPostgreSQL, "Aurora PostgreSQL (Region Read Replica)", "External database")
+System_Ext(AmazonSQS, "Amazon SQS", "External message queue")
+
+Rel(CatalogAPIController, CatalogServiceLayer, "In-process method calls")
+Rel(CatalogServiceLayer, CacheManager, "Read/Write hot items", "Redis Protocol / TCP")
+Rel(SearchFilterEngine, AmazonOpenSearchService, "Query catalog index", "HTTPS")
+Rel(DataAccessRepository, AuroraPostgreSQL, "SQL queries", "TCP/TLS")
+Rel(AmazonSQS, EventListenerComponent, "Consume inventory change events", "HTTPS / SQS SDK")
+Rel(EventListenerComponent, CacheManager, "Evict/Update stale keys", "Redis Protocol")
+Rel(EventListenerComponent, SearchFilterEngine, "Update document index", "OpenSearch REST API")
+Rel(CatalogServiceLayer, InventoryManager, "Verify stock availability", "In-process")
+Rel(InventoryManager, DataAccessRepository, "Stock-check queries", "TCP/TLS")
+Rel(CatalogServiceLayer, PricingCurrencyTranslator, "Enrich book prices", "In-process")
+
+@enduml

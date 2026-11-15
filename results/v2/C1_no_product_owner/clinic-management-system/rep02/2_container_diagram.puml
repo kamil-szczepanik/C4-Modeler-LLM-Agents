@@ -1,0 +1,34 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patients_and_Clinicians_Staff, "Patients and Clinicians/Staff", "Users interacting with the clinic management system for records, scheduling, and billing.")
+System_Ext(External_Lab_Imaging_Systems_and_Payment_Gateways_Insurance_Clearinghouses, "External Lab, Imaging Systems, and Payment Gateways/Insurance Clearinghouses", "External systems providing laboratory data, medical imaging, and payment processing.")
+
+System_Boundary(Clinic_Management_System, "Clinic Management System") {
+    Container(Envoy, "Envoy", "API Gateway / Reverse Proxy", "Chosen for rate limiting, TLS termination, and OAuth2/MFA validation.")
+    Container(Istio, "Istio", "Service Mesh", "Selected for zero-trust segmentation and mTLS enforcement.")
+    Container(Patient_Scheduling_Service, "Patient & Scheduling Service", "Node.js/Go", "Manages patient information and scheduling.")
+    Container(EMR_Core_Service, "EMR Core Service", "Java/Spring Boot", "Core service for managing electronic medical records.")
+    Container(Billing_Integration_Service, "Billing & Integration Service", "Python/FastAPI", "Handles billing and integrations with external systems.")
+    ContainerDb(PostgreSQL_with_Patroni, "PostgreSQL with Patroni", "PostgreSQL, Patroni", "Primary datastore with active-passive failover.")
+    Container(NATS_RabbitMQ_and_AWS_Kafka, "NATS / RabbitMQ and AWS Kafka", "NATS, RabbitMQ, AWS Kafka", "Edge and event brokers for messaging.")
+    Container(WORM_compliant_S3_MinIO, "WORM-compliant S3 / MinIO", "S3, MinIO", "Object storage archive.")
+    Container(HashiCorp_Vault, "HashiCorp Vault", "HashiCorp Vault", "Centralized secret management for dynamic token generation.")
+}
+
+Rel(Patients_and_Clinicians_Staff, Envoy, "Clients access API Gateway", "HTTPS / JSON")
+Rel(Envoy, Patient_Scheduling_Service, "Routes requests to microservices over service mesh", "gRPC over Istio mTLS")
+Rel(Envoy, EMR_Core_Service, "Routes requests to microservices over service mesh", "gRPC over Istio mTLS")
+Rel(Envoy, Billing_Integration_Service, "Routes requests to microservices over service mesh", "gRPC over Istio mTLS")
+Rel(Billing_Integration_Service, External_Lab_Imaging_Systems_and_Payment_Gateways_Insurance_Clearinghouses, "Integrates with external systems", "HTTPS / HL7 FHIR")
+Rel(Patient_Scheduling_Service, NATS_RabbitMQ_and_AWS_Kafka, "Publishes and consumes events", "TLS 1.3")
+Rel(EMR_Core_Service, NATS_RabbitMQ_and_AWS_Kafka, "Publishes and consumes events", "TLS 1.3")
+Rel(Billing_Integration_Service, NATS_RabbitMQ_and_AWS_Kafka, "Publishes and consumes events", "TLS 1.3")
+Rel(Patient_Scheduling_Service, PostgreSQL_with_Patroni, "Reads and writes relational data", "Encrypted SQL connections")
+Rel(EMR_Core_Service, PostgreSQL_with_Patroni, "Reads and writes relational data", "Encrypted SQL connections")
+Rel(Billing_Integration_Service, PostgreSQL_with_Patroni, "Reads and writes relational data", "Encrypted SQL connections")
+
+@enduml

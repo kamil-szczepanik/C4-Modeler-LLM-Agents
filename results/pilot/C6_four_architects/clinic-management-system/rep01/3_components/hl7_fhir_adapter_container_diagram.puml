@@ -1,0 +1,45 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the HL7 FHIR Adapter Container container
+
+System_Ext(patient_emr, "Patient & EMR Service", "External EMR service")
+System_Ext(external_labs, "External Lab, Imaging, and HIE Systems", "External health systems")
+System_Ext(audit_sidecar, "Audit & Compliance Sidecar Container", "Compliance monitoring")
+System_Ext(rabbitmq_cluster, "RabbitMQ Cluster", "Message broker cluster")
+System_Ext(kafka_statefulset, "Apache Kafka StatefulSet", "Streaming platform")
+
+Container_Boundary(hl7_fhir_adapter_container, "HL7 FHIR Adapter Container") {
+    Component(api_router, "API Router & Validator", "Express.js, Node.js", "Manages HTTP routing, REST API endpoints, and initial payload validation.")
+    Component(fhir_mapper, "FHIR Resource Mapper", "TypeScript classes", "Transforms clinical payloads into standardized FHIR resources.")
+    Component(outbound_tls_client, "Outbound TLS Client", "Axios, HTTPS/mTLS", "Transmits transformed FHIR resources securely to external health systems.")
+    Component(audit_logger, "Audit Logger Interceptor", "gRPC", "Dispatches audit events for compliance tracking.")
+    Component(hl7_validator, "HL7 Validation Engine", "fhir validator-wrapper", "Validates HL7 payloads against defined healthcare standards.")
+    Component(retry_manager, "Retry & Dead-Letter Queue Manager", "BullMQ, Redis", "Handles resilient message queuing, caching, and retry management.")
+    Component(mtls_proxy, "mTLS Ingress Terminating Proxy", "Envoy sidecar", "Provides edge cryptographic termination.")
+    Component(payload_sanitization, "Payload Sanitization & PII Redaction", "Regex-based", "Sanitizes payloads and redacts personally identifiable information.")
+    Component(fhir_sub_manager, "FHIR Subscription Manager", "WebSockets, gRPC, RabbitMQ", "Distributes real-time events and subscriptions.")
+    Component(bulk_processor, "Bulk Data Import/Export Processor", "JSONStream, KafkaJS, Apache Kafka", "Streams and processes large bulk FHIR data bundles.")
+    Component(rate_limiting, "Rate Limiting & Throttling Interceptor", "Bottleneck", "Regulates incoming traffic and prevents service overload.")
+    Component(schema_middleware, "Schema Version Negotiation Middleware", "Semantic versioning", "Manages schema versioning for compatibility across integrations.")
+    Component(circuit_breaker, "Circuit Breaker Pattern Manager", "Opossum", "Provides fault tolerance and graceful degradation during network anomalies.")
+    Component(token_exchange, "Token Exchange & Claims Verifier", "OAuth2/JWT, ABAC", "Verifies security tokens and handles attribute-based access control.")
+    Component(terminology_engine, "Terminology Mapping Engine", "Redis, LOINC, SNOMED-CT", "Maps clinical terminologies to standard coding systems.")
+    Component(metrics_interceptor, "Metrics & Tracing Interceptor", "OpenTelemetry SDK", "Collects metrics and provides end-to-end distributed tracing.")
+    Component(async_webhook, "Asynchronous Webhook Dispatcher", "Express.js, HMAC-SHA256, AMQP/RabbitMQ", "Offloads and dispatches webhook payloads asynchronously.")
+    Component(payload_compression, "Payload Compression & Decompression Middleware", "Node.js zlib", "Compresses and decompresses payloads for efficient transmission.")
+    Component(dlq_worker, "DLQ Purge & Replay Worker", "Cron, Notification Service", "Purges and replays messages from the dead-letter queue.")
+    Component(bundle_splitting, "FHIR Bundle Splitting Processor", "Node.js", "Splits large FHIR bundles into manageable parts.")
+}
+
+Rel(patient_emr, api_router, "Exchanges clinical payloads", "HTTPS/REST")
+Rel(api_router, fhir_mapper, "Forwards validated payloads", "In-memory")
+Rel(fhir_mapper, outbound_tls_client, "Transmits transformed FHIR resources", "HTTPS/mTLS")
+Rel(outbound_tls_client, external_labs, "Exchanges health data", "HTTPS/REST")
+Rel(audit_logger, audit_sidecar, "Dispatches audit events", "gRPC")
+Rel(fhir_sub_manager, rabbitmq_cluster, "Distributes real-time events", "gRPC/AMQP")
+Rel(bulk_processor, kafka_statefulset, "Streams large bundles", "KafkaJS")
+Rel(async_webhook, rabbitmq_cluster, "Offloads webhook payloads", "AMQP")
+
+@enduml

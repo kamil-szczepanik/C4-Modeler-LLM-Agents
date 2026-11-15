@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Circulation & Core Engine container
+
+Container(api_gateway_bff, "API Gateway / BFF", "Nginx/Envoy", "Handles edge routing, TLS termination, and rate limiting.")
+System_Ext(eu_compliance_audit_logging_service, "EU Compliance & Audit Logging Service", "Syslog/HTTPS", "Receives exported audit events for compliance tracking.")
+ContainerDb(primary_database, "Primary Database", "PostgreSQL, EU-hosted", "Persists application data with AES-256 encryption at rest.")
+Container(notification_worker, "Notification Worker", "Async Worker", "Dispatches notifications asynchronously.")
+
+Container_Boundary(circulation_core_engine, "Circulation & Core Engine") {
+    Component(circulation_api_auth_facade, "Circulation API & Auth Facade", "Go", "Handles edge communication, authentication, and request facade duties for the circulation engine.")
+    Component(loan_management_component, "Loan Management Component", "Go", "Manages core loan logic, item checkout, check-in, and renewal workflows.")
+    Component(patron_policy_component, "Patron Policy Component", "Go", "Evaluates patron privileges, borrowing limits, and circulation policies.")
+    Component(audit_event_dispatcher_component, "Audit & Event Dispatcher Component", "Go", "Dispatches audit events, compliance logs, and asynchronous notifications.")
+}
+
+Rel(api_gateway_bff, circulation_api_auth_facade, "gRPC", "gRPC")
+Rel(circulation_api_auth_facade, loan_management_component, "In-Process Function Call", "In-Process Function Call")
+Rel(circulation_api_auth_facade, patron_policy_component, "In-Process Function Call", "In-Process Function Call")
+Rel(loan_management_component, patron_policy_component, "In-Process Function Call", "In-Process Function Call")
+Rel(loan_management_component, primary_database, "Postgres Wire Protocol over mTLS", "Postgres Wire Protocol over mTLS")
+Rel(loan_management_component, audit_event_dispatcher_component, "In-Process Channel", "In-Process Channel")
+Rel(audit_event_dispatcher_component, notification_worker, "Async Message Queues (RabbitMQ/Redis)", "Async Message Queues (RabbitMQ/Redis)")
+Rel(audit_event_dispatcher_component, eu_compliance_audit_logging_service, "Syslog/HTTPS", "Syslog/HTTPS")
+
+@enduml

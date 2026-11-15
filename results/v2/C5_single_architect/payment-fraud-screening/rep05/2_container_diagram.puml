@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening
+
+Person(FraudAnalyst, "Fraud Analyst", "User reviewing suspicious transactions.")
+System_Ext(PaymentGatewayAcquirer, "Payment Gateway / Acquirer", "External system sending authorization requests.")
+System_Ext(CardNetworksFraudIntelligenceFeeds, "Card Networks & Fraud Intelligence Feeds", "External systems providing risk signals and blacklists.")
+System_Ext(ArchivalComplianceStorage, "Archival / Compliance Storage", "External AWS S3 and KMS services for 7-year auditability.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(AWSNetworkLoadBalancer, "AWS Network Load Balancer", "AWS NLB", "Low-latency ingress routing without API Gateway overhead.")
+    Container(FraudScoringEngine, "Fraud Scoring Engine", "Go / Rust, Amazon ECS on AWS Fargate", "Evaluates card-not-present payment authorizations to detect fraud.")
+    Container(CaseManagementBackend, "Case Management Backend", "Go / Rust, Amazon ECS on AWS Fargate", "Manages suspicious cases for fraud analysts.")
+    ContainerDb(AmazonAuroraPostgreSQL, "Amazon Aurora PostgreSQL", "Amazon Aurora PostgreSQL", "Relational database for transactional case management data.")
+    ContainerDb(Redis, "Redis", "Redis", "In-memory store for low-latency feature lookup.")
+    ContainerDb(AmazonS3withObjectLockandAWSKMS, "Amazon S3 with Object Lock and AWS KMS", "Amazon S3, AWS KMS", "Immutable, tamper-evident storage for 7-year compliance audit logs.")
+}
+
+Rel(PaymentGatewayAcquirer, AWSNetworkLoadBalancer, "Calls ingress at 3,000 TPS", "HTTPS/TCP")
+Rel(AWSNetworkLoadBalancer, FraudScoringEngine, "Routes requests to scoring engine", "TCP")
+Rel(FraudScoringEngine, AmazonAuroraPostgreSQL, "Queries transactional data", "TCP")
+Rel(FraudScoringEngine, Redis, "Performs low-latency feature lookup", "TCP")
+Rel(FraudAnalyst, CaseManagementBackend, "Accesses case management features", "HTTPS")
+Rel(CaseManagementBackend, AmazonAuroraPostgreSQL, "Reads and writes transactional case management data", "TCP")
+Rel(FraudScoringEngine, AmazonS3withObjectLockandAWSKMS, "Streams audit logs", "AWS SDK")
+Rel(CaseManagementBackend, AmazonS3withObjectLockandAWSKMS, "Streams audit logs", "AWS SDK")
+
+@enduml

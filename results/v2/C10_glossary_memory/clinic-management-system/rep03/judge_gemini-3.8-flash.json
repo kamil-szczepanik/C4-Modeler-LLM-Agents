@@ -1,0 +1,323 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: EMR Management Component and Audit Trail Interceptor handle R-01 and R-03, Scheduling Engine handles R-02 clash checks, and Claim Submission Handler with Payment Workflow Orchestrator handles R-04 billing and claims.",
+   "performance_efficiency": "EMR screen load < 1 s P95 is addressed via Distributed Cache Component (Redis), PgBouncer connection pooling, read-only replica offloading for reporting, and asynchronous event streaming via Kafka and Celery.",
+   "compatibility": "FHIR Integration Adapter provides dedicated HAPI FHIR Resource Mapper & Validator and FHIR API Endpoint Controller communicating via HL7 FHIR APIs over HTTPS with External Lab & Imaging Systems, satisfying R-08.",
+   "usability": "Patient Portal App serves patients well. However, clinical and administrative users (Clinicians, Receptionists, Billing Specialists) connect via API Gateway without dedicated front-end application containers explicitly defined in the C4 model.",
+   "reliability": "High availability (99.99%) is supported by PostgreSQL multi-node synchronous replication, Temporal.io sagas, and Resilience modules. However, active-active multi-region synchronization across on-prem-k8s and eu-central-1 is not explicitly detailed in the architecture.",
+   "security": "Comprehensive security is enforced: WAF with adaptive MFA, OIDC Identity Provider integration, TLS 1.3 / mTLS everywhere, encrypted SQL at rest, and an append-only, tamper-evident WORM Audit Log Store ensuring HIPAA/GDPR compliance.",
+   "maintainability": "Clean microservice decomposition separates Clinical Core, Billing, Analytics, Notifications, and FHIR Adapter. Modular boundaries, clear separation of concerns, and standard interfaces (REST, gRPC, AMQP) ensure high modularity and maintainability.",
+   "portability": "Containerized components (Spring Boot, Go, Node.js, FastAPI, Envoy) and Kubernetes compatibility allow execution across on-prem-k8s and cloud. Specific hybrid deployment configurations and cloud-agnostic abstraction layers are only partially elaborated."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Distributed Cache (Redis Cluster), PgBouncer connection pooling, and dedicated read replicas isolate read traffic, enabling EMR reads to stay well under the 1-second P95 threshold during morning concurrency peaks.",
+    "elements": [
+     "Distributed Cache Component",
+     "EMR Management Component",
+     "Database Connection Pooler",
+     "Primary Write Database"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio on clinician dashboard queries",
+     "PgBouncer pool sizing under burst clinician traffic"
+    ],
+    "tradeoffs": [
+     "Using Redis caching risks transient cache-invalidation latency for immediate updates"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "The FHIR Integration Adapter decouples external ingestion via HAPI FHIR and Temporal-backed workers. Analytics and queries run on replicas, protecting primary EMR throughput, though backpressure queuing into Clinical Core Service is not explicitly detailed.",
+    "elements": [
+     "FHIR Integration Adapter",
+     "Resource Mapper & Validator",
+     "Clinical Core Service",
+     "Primary Write Database"
+    ],
+    "sensitivity_points": [
+     "Throughput limit of the Resource Mapper & Validator during batch ingestion",
+     "Database write contention between FHIR writes and clinician updates"
+    ],
+    "tradeoffs": [
+     "Asynchronous FHIR ingestion delays immediate record visibility in exchange for protecting EMR latency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "The context specifies a hybrid cloud/on-prem deployment, but the C4 model lacks global traffic routing, cross-site database synchronization, and automated DNS/GSLB failover mechanisms between eu-central-1 and on-prem-k8s to achieve sub-minute RTO with zero RPO.",
+    "elements": [
+     "API Gateway / Reverse Proxy",
+     "Primary Write Database",
+     "Read-Only Replica Cluster"
+    ],
+    "sensitivity_points": [
+     "Replication lag between cloud and on-premise database instances",
+     "Failover detection time in perimeter routing"
+    ],
+    "tradeoffs": [
+     "Cross-region synchronous database replication ensures zero data loss but introduces network write latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Temporal.io manages distributed workflow sagas, retries, and stateful transactions in Billing & Integration Service, while PostgreSQL synchronous replication and Financial Ledger ensure idempotent recovery and zero claim loss or duplication.",
+    "elements": [
+     "Billing & Integration Service",
+     "Payment Workflow Orchestrator",
+     "Financial Ledger & Audit Store",
+     "Primary Write Database"
+    ],
+    "sensitivity_points": [
+     "Idempotency keys enforced across payment gateways",
+     "Database failover duration of the multi-node synchronous PostgreSQL cluster"
+    ],
+    "tradeoffs": [
+     "Strict saga idempotency checks increase claim processing overhead during database failovers"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Claim processing and gateway integration are isolated inside Billing & Integration Service via Gateway Integration Client and Claim Submission Handler. External integration modifications do not impact the Clinical Core Service or EMR components.",
+    "elements": [
+     "Billing & Integration Service",
+     "Gateway Integration Client",
+     "Claim Submission Handler",
+     "Clinical Core Service"
+    ],
+    "sensitivity_points": [
+     "Abstraction quality of the Gateway Integration Client interface"
+    ],
+    "tradeoffs": [
+     "Decoupling via separate services introduces gRPC and network boundaries instead of monolithic calls"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The change is strictly contained within Patient Portal Frontend, EMR Management Component, and Primary Write Database. Audit Trail Interceptor uses Spring AOP, automatically capturing entities without extra plumbing.",
+    "elements": [
+     "Patient Portal Frontend",
+     "EMR Management Component",
+     "Audit Trail Interceptor",
+     "Primary Write Database"
+    ],
+    "sensitivity_points": [
+     "Data schema migration agility and database schema versioning"
+    ],
+    "tradeoffs": [
+     "Automated AOP auditing reduces boilerplate at the expense of runtime reflection and debugging complexity"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Adaptive MFA is enforced at perimeter WAF and integrated with the central IdP over OIDC/OAuth2. Token validation occurs at the Gateway; however, specific mechanisms for 1-minute SIEM/security alert emission are not explicitly detailed in the gateway components.",
+    "elements": [
+     "API Gateway / Reverse Proxy",
+     "Authentication & Claims Filter",
+     "Identity Provider (IdP)",
+     "TLS Termination & WAF Module"
+    ],
+    "sensitivity_points": [
+     "IdP session validation latency and token verification",
+     "Immediate security alerting pipeline integration"
+    ],
+    "tradeoffs": [
+     "Enforcing adaptive MFA at the gateway increases login latency for clinicians"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Access is intercepted by Spring AOP Audit Trail Interceptor and streamed to an append-only, tamper-evident WORM-compliant Audit Log Store. Asynchronous Compliance & Audit Workers handle 10-year retention and reporting.",
+    "elements": [
+     "Audit Trail Interceptor",
+     "Audit Log Store",
+     "EMR Management Component",
+     "Compliance & Audit Worker"
+    ],
+    "sensitivity_points": [
+     "Append-only storage throughput under high concurrent read audits",
+     "Retention policy enforcement on WORM storage"
+    ],
+    "tradeoffs": [
+     "Auditing 100% of read accesses significantly multiplies storage volume over 10-year retention periods"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "partial",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit Trail Interceptor",
+     "Audit Log Store",
+     "Compliance & Audit Worker",
+     "Resource Mapper & Validator"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Resilience & Fault Injection Module",
+     "Primary Write Database",
+     "Read-Only Replica Cluster",
+     "Database Connection Pooler"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Compliance & Audit Worker",
+     "Audit Log Store"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Patient Portal App",
+     "Clinical Core Service",
+     "EMR Management Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Engine",
+     "Clinical Core Database"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Management Component",
+     "Audit Trail Interceptor",
+     "Audit Log Store",
+     "Clinical Core Database"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Integration Service",
+     "Claim Submission Handler",
+     "Payment Workflow Orchestrator",
+     "Gateway Integration Client",
+     "Financial Ledger & Audit Store",
+     "Payment Gateway"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Authentication & Claims Filter",
+     "Clinical Core Database",
+     "Financial Ledger & Audit Store"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Resilience & Fault Injection Module",
+     "Primary Write Database",
+     "Read-Only Replica Cluster"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Distributed Cache Component",
+     "EMR Management Component",
+     "Database Connection Pooler"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Integration Adapter",
+     "FHIR API Endpoint Controller",
+     "Resource Mapper & Validator",
+     "Outbound Sync Worker",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

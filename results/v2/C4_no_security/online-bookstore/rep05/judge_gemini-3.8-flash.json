@@ -1,0 +1,356 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "Most requirements are addressed via Catalog & Search Service, Checkout & Order Service, and Recommendation Service. However, R-03 (customer reviews and 5-star ratings) lacks dedicated backend components or persistence mechanisms, being mentioned only in user descriptions and SPA views.",
+   "performance_efficiency": "Performance and 1M MAU scalability are well addressed via Amazon CloudFront, Route 53 latency routing, OpenSearch indexing, DynamoDB cart caching, ElastiCache Redis, PgBouncer, and Aurora Cross-Region Read Replicas.",
+   "compatibility": "Integrations with external systems (Payment Gateway, Shipping Provider APIs, Tax Calculation Service, Identity Provider) are thoroughly detailed using REST/TLS 1.3, circuit breakers, and dedicated integration engines like Fulfillment & Integration Engine and Currency Exchange Engine.",
+   "usability": "The Single Page Application serves Shoppers, Authors/Publishers, and Store Administrators. However, Level 3 SPA decomposition only models Shopper cart, search, and checkout components, omitting explicit UI components for administrative and publisher operations.",
+   "reliability": "The 99.95% uptime target is supported across regions using Route 53, DynamoDB Global Tables, Aurora Cross-Region Replicas, SQS Dead Letter Queues, Circuit Breakers, CloudWatch Canaries, and Temporal-based checkout sagas.",
+   "security": "Strong security controls are implemented: AWS WAF for OWASP mitigations, AWS PrivateLink, IAM database authentication, TLS 1.3, and a dedicated Data Privacy Service (DSAR Orchestrator, Consent Manager, Anonymization Engine) for GDPR/CCPA compliance.",
+   "maintainability": "Maintains high modularity with independent microservices deployed on Amazon ECS on Fargate. Loose coupling is enforced through asynchronous Messaging Bus topics (SNS/SQS), domain-specific repositories, and explicit API gateways.",
+   "portability": "Multi-region deployment across AWS us-east-1, eu-west-1, and ap-southeast-1 is well-architected. However, deep lock-in to proprietary AWS primitives (DynamoDB, SNS/SQS, WAF, Route 53, Aurora) limits portability to alternative cloud providers."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.90625,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "CloudFront CDN, S3, Aurora read replicas, and OpenSearch absorb high read volumes effectively. However, achieving under 2s on 3G during 10x spikes requires strict bundle size and aggressive asset compression policies that are not explicitly detailed.",
+    "elements": [
+     "Single Page Application (SPA)",
+     "Amazon CloudFront",
+     "Catalog & Search Service",
+     "Search Index",
+     "Database Cluster",
+     "Cross-Region Read Replicas"
+    ],
+    "sensitivity_points": [
+     "CloudFront edge caching hit ratio directly determines backend load during spikes",
+     "OpenSearch query latency under concurrent heavy search traffic"
+    ],
+    "tradeoffs": [
+     "Aggressive read replica caching improves throughput but risks serving slightly stale stock data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The Recommendation Service is isolated on ECS Fargate, decoupled from catalog queries, and includes a Circuit Breaker and Fallback Manager. Heavy recomputation runs asynchronously without blocking core browsing or catalog retrieval.",
+    "elements": [
+     "Recommendation Service",
+     "Algorithm Engine",
+     "Circuit Breaker",
+     "Fallback Manager",
+     "Catalog & Search Service"
+    ],
+    "sensitivity_points": [
+     "Resource isolation between recommendation batch inference and catalog read paths",
+     "Circuit breaker timeout threshold configuration"
+    ],
+    "tradeoffs": [
+     "Serving cached or fallback recommendations during background recomputation trades accuracy for response speed"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Checkout Orchestrator utilizes Temporal saga workflows and circuit breakers alongside asynchronous messaging via SQS to decouple checkout from external logistics APIs, queuing shipping requests safely for deferred execution.",
+    "elements": [
+     "Checkout & Order Service",
+     "Checkout Orchestrator",
+     "Fulfillment & Integration Engine",
+     "Messaging Bus",
+     "Shipping Provider APIs"
+    ],
+    "sensitivity_points": [
+     "Temporal saga state persistence reliability during external outages",
+     "Dead-letter queue monitoring and retry policies for shipping dispatch"
+    ],
+    "tradeoffs": [
+     "Asynchronous fulfillment guarantees checkout completion but delays immediate tracking number generation for shoppers"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Route 53 routing, DynamoDB Global Tables, and Aurora Global Databases facilitate cross-region failover well within 99.95% uptime targets. Promoting Aurora read replicas on primary region failure involves brief write unavailability.",
+    "elements": [
+     "Amazon Route 53",
+     "Database Cluster",
+     "Primary Writer Instance",
+     "Cross-Region Read Replicas",
+     "Session Cache Store",
+     "ShoppingCartsTable"
+    ],
+    "sensitivity_points": [
+     "Aurora Global Database RPO/RTO replication lag during unplanned region failure",
+     "DNS TTL duration governing client traffic redirection speed"
+    ],
+    "tradeoffs": [
+     "Cross-region asynchronous database replication optimizes latency but introduces potential transactional lag during regional failovers"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Currency handling is encapsulated within the Localization Service's Currency Exchange Engine and ElastiCache store. Adding JPY requires updating exchange rate feeds and configuration without modifying core ordering or catalog logic.",
+    "elements": [
+     "Localization Service",
+     "Currency Exchange Engine",
+     "Amazon ElastiCache (Redis)",
+     "Locale Policy & Compliance Provider",
+     "Payment Gateway"
+    ],
+    "sensitivity_points": [
+     "Isolation of currency conversion logic from core transactional pricing rules",
+     "External payment gateway multi-currency support capabilities"
+    ],
+    "tradeoffs": [
+     "In-memory cached exchange rates improve throughput but introduce minor discrepancies against live exchange rates"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The recommendation logic is strictly isolated in the Algorithm Engine component behind standard API routers and evaluation layers, allowing algorithms to be swapped or retrained without impacting other containers.",
+    "elements": [
+     "Recommendation Service",
+     "Algorithm Engine",
+     "Recommendation API Router",
+     "A/B Experimentation Evaluator"
+    ],
+    "sensitivity_points": [
+     "Strict adherence of new algorithms to existing API router contracts",
+     "Decoupling of ML model pipelines from API consumption layers"
+    ],
+    "tradeoffs": [
+     "Maintaining generic abstraction layers across ML algorithms may slightly restrict algorithm-specific query optimizations"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "AWS WAF filters SQLi and XSS payloads at the perimeter, while Data Access Repositories use parameterized queries and ORM layers. However, review submission flows and specific review content moderation mechanisms are not explicitly detailed.",
+    "elements": [
+     "AWS WAF",
+     "API Gateway & Load Balancer",
+     "Catalog & Search Service",
+     "Search Facade Component",
+     "Data Access Repository"
+    ],
+    "sensitivity_points": [
+     "WAF rule coverage and inspection latency on incoming request bodies",
+     "Strict input validation and output encoding across frontend and backend components"
+    ],
+    "tradeoffs": [
+     "Deep WAF payload inspection adds slight request latency while preventing malicious injection attacks"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "A dedicated Data Privacy Service orchestrates DSAR deletion across Aurora, DynamoDB (via UserIndex), and S3 staging buckets using SQS messaging, ensuring end-to-end data erasure verification well within statutory deadlines.",
+    "elements": [
+     "Data Privacy Service",
+     "DSAR Orchestrator",
+     "Data Anonymization Engine",
+     "Database Cluster",
+     "Session Cache Store",
+     "Messaging Bus"
+    ],
+    "sensitivity_points": [
+     "Completeness of data discovery and deletion indexing across all persistent stores",
+     "Auditable logging of data deletion without retaining forbidden personal identifiers"
+    ],
+    "tradeoffs": [
+     "Asynchronous deletion cascades avoid operational disruptions but require distributed verification checks before completion"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Data Privacy Service",
+     "DSAR Orchestrator",
+     "Consent Manager",
+     "Data Anonymization Engine",
+     "Primary Writer Instance",
+     "Session Cache Store"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Localization Service",
+     "Localization Controller",
+     "Currency Exchange Engine",
+     "Amazon ElastiCache (Redis)",
+     "Upstream Rate APIs"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Provider APIs",
+     "Checkout & Order Service",
+     "Fulfillment & Integration Engine"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search UI Component",
+     "Catalog & Search Service",
+     "Search Facade Component",
+     "Search Index",
+     "Search Coordinator",
+     "Indexing Worker with Merchandising Rules Engine",
+     "Index Shards & Storage"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Cart & Checkout UI Component",
+     "Checkout & Order Service",
+     "Checkout Orchestrator",
+     "Order Management API",
+     "Session Cache Store",
+     "ShoppingCartsTable",
+     "Payment Gateway"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Customer (Shopper)",
+     "Single Page Application (SPA)"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Recommendation Service",
+     "Recommendation API Router",
+     "Algorithm Engine",
+     "A/B Experimentation Evaluator",
+     "Fallback Manager",
+     "Data Access Client"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Application Load Balancer",
+     "API Gateway & Load Balancer",
+     "Database Cluster",
+     "Cross-Region Read Replicas",
+     "PgBouncer Connection Pooler",
+     "Session Cache Store",
+     "Messaging Bus",
+     "Command & Event Queues"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Single Page Application (SPA)",
+     "Router Component",
+     "Amazon Route 53",
+     "Amazon ElastiCache (Redis)"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Amazon Route 53",
+     "Database Cluster",
+     "Cross-Region Read Replicas",
+     "ShoppingCartsTable",
+     "Circuit Breaker",
+     "Dead Letter Queues",
+     "CloudWatch Canaries"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "AWS WAF",
+     "API Gateway",
+     "Identity Provider",
+     "Authentication & User Context Component",
+     "Primary Writer Instance"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

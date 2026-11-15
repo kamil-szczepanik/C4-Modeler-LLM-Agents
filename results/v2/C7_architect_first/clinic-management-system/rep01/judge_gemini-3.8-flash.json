@@ -1,0 +1,332 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are directly realized: PatientDomainService handles demographic capture (R-01), SchedulingEngine performs resource clash checks (R-02), EMR Core Service and AuditInterceptor maintain clinical records and audit trails (R-03), and Claims Processor with Payment Integrator manages billing and insurance claims (R-04).",
+   "performance_efficiency": "Performance goals (<1s P95) are supported by Connection Pooling & Load Balancing (PgBouncer) separating read/write queries, AvailabilityCacheManager (Redis), Distributed Policy Cache, and asynchronous processing using Kafka Message Broker, Celery, and FHIR Message Queue Broker (NATS JetStream).",
+   "compatibility": "Interoperability is thoroughly supported by FHIR Interoperability Service using HAPI FHIR and Resource Mapping Engine for HL7 FHIR R4/R5 exchange with External Lab & Imaging Systems, along with standard integrations for Payment Gateway & Insurance Clearinghouse and External IdP.",
+   "usability": "Although Patients & Clinical Staff are identified and Billing API Controller includes a patient billing portal API, concrete UI containers (such as Web or Mobile applications) are omitted from Level 2, leaving frontend user interaction channels unmodeled.",
+   "reliability": "High availability (99.99%) is achieved via Relational Database Engine with Patroni/Citus active-active clustering. Data retention >=10 years is explicitly implemented in Object Storage Repository via MinIO/S3 Compliance WORM Object Lock, alongside Velero disaster recovery and automated WAL archiving.",
+   "security": "HIPAA and GDPR compliance are robustly addressed by Secrets & Key Management Service (Vault/AWS KMS, AES-256), Istio mTLS, External Identity Provider enforcing MFA, Break-Glass Interceptor, Policy & Identity Enforcement Engine (OPA ABAC), and PgAudit logging with PostgreSQL Row-Level Security.",
+   "maintainability": "Architecture exhibits high modularity with domain-bounded containers (EMR Core Service, Patient & Scheduling Service, Billing Service), loose coupling via Kafka and NATS, declarative infrastructure management via GitOps Deployment Engine (ArgoCD), and full Observability & Distributed Tracing Pipeline.",
+   "portability": "The hybrid target (on-prem-k8s and eu-central-1) is directly realized using GitOps Deployment Engine (ArgoCD) for multi-cluster sync, dual-compatible Object Storage Repository (MinIO and AWS S3), and cloud-agnostic container orchestration with Istio Service Mesh."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Envoy proxy, PgBouncer read pooling, and cached policy evaluations maintain sub-second P95 loads, though dedicated EMR view-caching is not explicitly designed.",
+    "elements": [
+     "API Gateway / Edge Proxy",
+     "EMR Core Service",
+     "Connection Pooling & Load Balancing",
+     "Distributed Policy Cache",
+     "Relational Database Engine"
+    ],
+    "sensitivity_points": [
+     "Connection pool sizing and database read-replica replication latency under morning peak loads."
+    ],
+    "tradeoffs": [
+     "Read-replica pooling reduces query latency at the expense of slight data replication delay."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Inbound FHIR bursts are buffered asynchronously via NATS JetStream and Kafka, isolating write processing from interactive EMR query pathways protected by PgBouncer.",
+    "elements": [
+     "FHIR Interoperability Service",
+     "FHIR Message Queue Broker",
+     "Kafka Message Broker",
+     "Connection Pooling & Load Balancing",
+     "EMR Core Service"
+    ],
+    "sensitivity_points": [
+     "NATS JetStream consumer concurrency and persistence buffer capacity during burst windows."
+    ],
+    "tradeoffs": [
+     "Asynchronous queuing protects screen load performance but delays real-time visibility in EMR."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Patroni clustering and Istio hybrid routing support failover, but guaranteed zero data loss with sub-minute cross-region RTO over WAN presents severe synchronization risks.",
+    "elements": [
+     "Relational Database Engine",
+     "Service Mesh Control Plane & Envoys",
+     "GitOps Deployment Engine",
+     "Backup and Disaster Recovery",
+     "Secrets & Key Replication Manager"
+    ],
+    "sensitivity_points": [
+     "Cross-region replication latency and automated DNS failover convergence time across hybrid sites."
+    ],
+    "tradeoffs": [
+     "Synchronous cross-site database replication prevents data loss but severely increases transaction commit latency."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The distributed Redis Idempotency State Store ensures duplicate-free transaction retries, while Patroni automated failover recovers database services within 30 seconds.",
+    "elements": [
+     "Billing Service",
+     "Claims Processor & Insurance Reconciliation Engine",
+     "Idempotency State Store",
+     "Relational Database Engine",
+     "Payment Integrator"
+    ],
+    "sensitivity_points": [
+     "Patroni leader election heartbeats and Redis idempotency token TTL settings."
+    ],
+    "tradeoffs": [
+     "Distributed idempotency checks guarantee claim consistency at the cost of additional cache lookup latency."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Clearinghouse interactions are encapsulated within the Billing Service's Payment Integrator and Claims Processor, isolating external protocol adaptations completely from the EMR service.",
+    "elements": [
+     "Billing Service",
+     "Payment Integrator",
+     "Claims Processor & Insurance Reconciliation Engine",
+     "External Payment Gateway & Insurance Clearinghouse",
+     "EMR Core Service"
+    ],
+    "sensitivity_points": [
+     "Coupling between Payment Integrator and specific external clearinghouse protocol specifications."
+    ],
+    "tradeoffs": [
+     "Encapsulating clearinghouse logic preserves modularity but requires maintaining dedicated external integration adapters."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Demographic updates are restricted to the PatientDomainService, DataRepository, and AuditInterceptor within Patient & Scheduling Service, supporting delivery within one sprint.",
+    "elements": [
+     "Patient & Scheduling Service",
+     "PatientDomainService",
+     "DataRepository",
+     "AuditInterceptor",
+     "PatientController & SchedulingController"
+    ],
+    "sensitivity_points": [
+     "TypeORM database migration safety and audit payload schema backward compatibility."
+    ],
+    "tradeoffs": [
+     "Colocating domain logic and audit interception simplifies updates but increases service deployment blast radius."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Authentication and MFA are enforced upstream by the External IdP via OIDC/OAuth2. Observability captures logs, but automated sub-minute alerting lacks explicit SIEM details.",
+    "elements": [
+     "External Identity Provider (IdP)",
+     "API Gateway / Edge Proxy",
+     "Observability & Distributed Tracing Pipeline",
+     "Policy & Identity Enforcement Engine"
+    ],
+    "sensitivity_points": [
+     "External IdP webhook latency and real-time security alert pipeline processing delays."
+    ],
+    "tradeoffs": [
+     "Delegating authentication simplifies compliance but creates external operational dependencies for initial access."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "OPA evaluates ABAC policies and break-glass overrides, PgAudit logs every query, and S3 Object Lock Compliance mode guarantees immutable 10-year audit retention.",
+    "elements": [
+     "EMR Core Service",
+     "Break-Glass Interceptor Sub-component",
+     "Policy & Identity Enforcement Engine",
+     "Object Storage Repository",
+     "Relational Database Engine"
+    ],
+    "sensitivity_points": [
+     "S3 Object Lock retention policy immutability and OPA policy evaluation response time."
+    ],
+    "tradeoffs": [
+     "Auditing every read access guarantees compliance but increases persistent storage volume significantly."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "PatientDomainService",
+     "AuditInterceptor",
+     "Audit & Compliance Interceptor",
+     "Policy & Identity Enforcement Engine",
+     "Database Audit & Encryption Proxy",
+     "Observability & Distributed Tracing Pipeline"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Relational Database Engine",
+     "Connection Pooling & Load Balancing",
+     "Service Mesh Control Plane & Envoys",
+     "GitOps Deployment Engine",
+     "Secrets & Key Replication Manager"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Object Storage Repository"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Service",
+     "PatientController & SchedulingController",
+     "PatientDomainService"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Patient & Scheduling Service",
+     "PatientController & SchedulingController",
+     "SchedulingEngine",
+     "AvailabilityCacheManager"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Core Service",
+     "EMR Controller Component",
+     "Clinical Data Processing Component",
+     "Persistence & Audit Repository Component",
+     "Database Audit & Encryption Proxy"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service",
+     "Billing API Controller & Patient Billing Portal API",
+     "Invoice & Ledger Engine",
+     "Claims Processor & Insurance Reconciliation Engine",
+     "Payment Integrator",
+     "Payment Gateway & Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "External Identity Provider (IdP)",
+     "Break-Glass Interceptor Sub-component",
+     "Secrets & Key Management Service",
+     "DataRepository",
+     "Persistence & Audit Repository Component",
+     "FHIR Message Queue Broker"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Relational Database Engine",
+     "Service Mesh Control Plane & Envoys",
+     "GitOps Deployment Engine",
+     "Secrets & Key Replication Manager"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Connection Pooling & Load Balancing",
+     "Distributed Policy Cache"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Interoperability Service",
+     "FHIR REST Controller",
+     "Resource Mapping Engine",
+     "External Integration Client",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

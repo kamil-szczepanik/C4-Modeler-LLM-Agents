@@ -1,0 +1,48 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patients, "Patients", "Individuals receiving care who interact with the clinic management system.")
+Person(Receptionists, "Receptionists", "Staff members managing patient admissions and scheduling.")
+Person(Clinicians, "Clinicians", "Medical professionals managing EMRs and patient care.")
+Person(Billing Specialists, "Billing Specialists", "Personnel handling financial transactions and insurance billing.")
+
+System_Ext(Identity Provider, "Identity Provider", "Authentication service such as Azure AD or Okta.")
+System_Ext(Payment Gateway, "Payment Gateway", "External service for processing financial payments.")
+System_Ext(Insurance Clearinghouse, "Insurance Clearinghouse", "External service for processing insurance claims.")
+System_Ext(Lab & Imaging Systems, "Lab & Imaging Systems", "External medical systems exchanging health data.")
+
+System_Boundary(Clinic Management System, "Clinic Management System") {
+    Container(API Gateway, "API Gateway", "Envoy / NGINX", "Routes requests to internal containers using TLS/JWT validation.")
+    Container(Web Application Container, "Web Application Container", "React / Next.js", "Frontend SPA/SSR for responsive user interfaces.")
+    Container(Clinical & EMR Core Container, "Clinical & EMR Core Container", "Spring Boot / Java", "High-performance internal EMR and scheduling services.")
+    Container(Billing & Claims Container, "Billing & Claims Container", "Node.js / Express", "Lightweight billing and third-party integration management.")
+    Container(HL7 FHIR Integration Container, "HL7 FHIR Integration Container", "Apache Camel", "Integration engine for HL7 FHIR interoperability with external systems.")
+    Container(Edge Sync Container, "Edge Sync Container", "Go Daemon", "Synchronizes local on-prem EMR data with cloud tier via asynchronous transactional outboxes.")
+    ContainerDb(Primary DB & Audit Store, "Primary DB & Audit Store", "PostgreSQL with Patroni", "Reliable relational data storage with automated active-passive failover and audit logging.")
+}
+
+Rel(Patients, Web Application Container, "Interacts with web application", "HTTPS")
+Rel(Receptionists, Web Application Container, "Interacts with web application", "HTTPS")
+Rel(Clinicians, Web Application Container, "Interacts with web application", "HTTPS")
+Rel(Billing Specialists, Web Application Container, "Interacts with web application", "HTTPS")
+
+Rel(Web Application Container, API Gateway, "Sends user requests via HTTPS", "HTTPS")
+Rel(API Gateway, Clinical & EMR Core Container, "Routes validated requests", "TLS / JWT / gRPC")
+Rel(API Gateway, Billing & Claims Container, "Routes validated requests", "TLS / JWT / HTTP")
+
+Rel(Clinical & EMR Core Container, Primary DB & Audit Store, "Reads and writes clinical data", "PostgreSQL Protocol")
+Rel(Billing & Claims Container, Primary DB & Audit Store, "Reads and writes billing data", "PostgreSQL Protocol")
+
+Rel(Clinical & EMR Core Container, HL7 FHIR Integration Container, "Communicates internally", "gRPC")
+Rel(HL7 FHIR Integration Container, Lab & Imaging Systems, "Connects to external Lab & Imaging Systems", "HL7 FHIR APIs")
+
+Rel(Billing & Claims Container, Payment Gateway, "Connects to external payment gateways", "HTTPS / REST")
+Rel(Billing & Claims Container, Insurance Clearinghouse, "Connects to external insurance clearinghouses", "HTTPS / REST")
+
+Rel(Edge Sync Container, Primary DB & Audit Store, "Synchronizes local on-prem EMR data with cloud tier", "Asynchronous Transactional Outboxes")
+Rel(Clinical & EMR Core Container, Identity Provider, "Authenticates users", "OIDC / SAML")
+
+@enduml

@@ -1,0 +1,47 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patients, "Patients", "Individuals receiving care who interact with the system for scheduling and appointments.")
+Person(Receptionists_Front_Desk_Staff, "Receptionists / Front Desk Staff", "Administrative staff managing patient admissions and front desk operations.")
+Person(Clinicians_Doctors, "Clinicians / Doctors", "Medical professionals managing electronic medical records and patient care.")
+Person(Billing_Specialists, "Billing Specialists", "Financial staff handling insurance billing and claims.")
+
+System_Ext(Identity_Provider_IdP, "Identity Provider (IdP)", "External system handling authentication and identity management.")
+System_Ext(Lab___Imaging_Systems, "Lab & Imaging Systems", "External clinical systems providing laboratory and imaging data.")
+System_Ext(Insurance_Clearinghouse, "Insurance Clearinghouse", "External system for processing insurance claims and billing.")
+
+System_Boundary(Clinic_Management_System, "Clinic Management System") {
+    Container(API_Gateway, "API Gateway", "Kong/Envoy, Rust/Go", "Handles rate-limiting, OAuth2/OIDC validation, and routing for incoming traffic.")
+    Container(Patient_Portal_Container, "Patient Portal Container", "Node.js/NestJS, Go", "Provides interface for patient interactions and scheduling.")
+    Container(EMR_Core_Service, "EMR Core Service", "Java/Spring Boot, .NET 8", "Manages electronic medical records and clinical data operations.")
+    Container(Billing_Integration_Service, "Billing Integration Service", "Java/Spring Boot", "Handles transactional billing and insurance claims processing.")
+    Container(Audit___Compliance_Daemon, "Audit & Compliance Daemon", "Go", "Manages cryptographically hashed immutable audit logging for WORM storage.")
+    ContainerDb(Data_Tier, "Data Tier", "PostgreSQL with Citus/Multi-Master", "Relational storage providing active-active and read replica support.")
+    Container(Message_Broker, "Message Broker", "NATS JetStream / Kafka", "Durable message broker for reliable asynchronous processing and transactional outbox patterns.")
+}
+
+Rel(Patients, API_Gateway, "Accesses appointments and admissions via portal", "HTTPS (REST/JSON)")
+Rel(Receptionists_Front_Desk_Staff, API_Gateway, "Manages patient front desk operations", "HTTPS (REST/JSON)")
+Rel(Clinicians_Doctors, API_Gateway, "Updates electronic medical records and manages care", "HTTPS (REST/JSON)")
+Rel(Billing_Specialists, API_Gateway, "Processes billing and claims", "HTTPS (REST/JSON)")
+
+Rel(API_Gateway, Identity_Provider_IdP, "Validates OAuth2/OIDC tokens", "HTTPS")
+Rel(API_Gateway, Patient_Portal_Container, "Routes client requests", "gRPC over mTLS")
+Rel(API_Gateway, EMR_Core_Service, "Routes clinical requests", "gRPC over mTLS")
+Rel(API_Gateway, Billing_Integration_Service, "Routes billing requests", "gRPC over mTLS")
+
+Rel(Patient_Portal_Container, Message_Broker, "Publishes asynchronous events", "NATS/Kafka protocol")
+Rel(EMR_Core_Service, Message_Broker, "Publishes transactional outbox events", "NATS/Kafka protocol")
+Rel(Billing_Integration_Service, Message_Broker, "Publishes billing events", "NATS/Kafka protocol")
+
+Rel(EMR_Core_Service, Data_Tier, "Reads and writes clinical data", "SQL over encrypted connections")
+Rel(Billing_Integration_Service, Data_Tier, "Reads and writes billing data", "SQL over encrypted connections")
+
+Rel(EMR_Core_Service, Lab___Imaging_Systems, "Exchanges clinical data and results", "HL7 FHIR APIs")
+Rel(Billing_Integration_Service, Insurance_Clearinghouse, "Submits insurance claims", "Secure APIs over HTTPS")
+Rel(Audit___Compliance_Daemon, Data_Tier, "Monitors and records audit logs", "SQL / WORM Storage")
+
+@enduml

@@ -1,0 +1,246 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "Catalog Component, Circulation Component, Core Domain Service, and Search Service directly fulfill cataloguing physical/digital items (R-01), managing circulation, and patron self-service workflows.",
+   "performance_efficiency": "The sub-800ms search SLA (R-05) is addressed via Search Service, Search Index with Query Parsing & Caching Component, gRPC communication, and asynchronous CDC via Debezium.",
+   "compatibility": "Standard integration protocols handle external systems effectively, including National Library Registry (SOAP/REST with mTLS), Payment Gateway, Identity Provider (OIDC), and Schema Registry (Avro/JSON).",
+   "usability": "Library Staff and Library Patrons are provided targeted interfaces via Web Application, using Catalog Component and Circulation Component for both administrative workflows and self-service portals.",
+   "reliability": "Fault tolerance and recoverability are thoroughly addressed by Routing & Resilience Mediator (Resilience4j), Retry & Resilience Policy Engine, pgBackRest backups, and decoupled event streaming via Managed Event Bus.",
+   "security": "Strict EU data residency is maintained. Security is enforced with Security & Authentication Filter (OIDC/JWT), end-to-end TLS 1.3/mTLS, pgaudit, and Relational Data Store AES-256 encryption.",
+   "maintainability": "Decoupled domain services (Core Domain Service, Search Service, Notification Service), modular frontend components, and Schema Registry contract enforcement provide high testability and low coupling.",
+   "portability": "Containers based on standard runtimes (Spring Boot, Node.js, React) and Kubernetes deployment (Strimzi operator) ensure high portability within EU Cloud Hosting Provider environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 5.0,
+   "Modifiability": 2.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "A dedicated search service querying an OpenSearch cluster equipped with node-level query caches and gRPC communication directly offloads search traffic from the transactional database, comfortably satisfying the sub-800ms P99 latency requirement.",
+    "elements": [
+     "API Gateway",
+     "Search Service",
+     "Search Index",
+     "Query Parsing & Caching Component"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in OpenSearch query cache",
+     "gRPC transport latency between API Gateway and Search Service"
+    ],
+    "tradeoffs": [
+     "Memory allocated to caching versus JVM heap headroom for complex queries"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Decoupling catalog updates via PostgreSQL WAL streaming (Debezium) through Kafka into OpenSearch bulk ingestion preserves sub-second search latencies while ensuring updates propagate into the search index well within the 5-minute threshold.",
+    "elements": [
+     "Core Domain Service",
+     "PostgreSQL Database",
+     "CDC Publisher",
+     "Managed Event Bus",
+     "Search Index"
+    ],
+    "sensitivity_points": [
+     "CDC replication lag from PostgreSQL WAL to OpenSearch",
+     "Bulk ingestion throughput during concurrent write spikes"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of search results traded for transactional write throughput"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The distributed OpenSearch architecture with replica nodes supports uninterrupted searching if a node fails. Loan transactions are completely isolated within Core Domain Service and PostgreSQL, preventing loan transaction loss.",
+    "elements": [
+     "Search Index",
+     "Search Client",
+     "Search Service",
+     "Core Domain Service",
+     "PostgreSQL Database"
+    ],
+    "sensitivity_points": [
+     "OpenSearch replica shard allocation and re-routing speed",
+     "Resilience4j circuit breaker thresholds in Search Client"
+    ],
+    "tradeoffs": [
+     "Storage overhead of index replicas versus rapid shard failover"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The React Web Application is deployed as a static client via CDN with stateless OIDC tokens, while backend routing through Envoy/Spring Cloud Gateway and transactional PostgreSQL prevents service interruption and data loss if a portal instance fails.",
+    "elements": [
+     "Web Application",
+     "API Gateway",
+     "Core Domain Service",
+     "PostgreSQL Database"
+    ],
+    "sensitivity_points": [
+     "CDN edge failover latency",
+     "Stateless session handling across API Gateway instances"
+    ],
+    "tradeoffs": [
+     "Stateless client architecture requires frequent token transmission"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "The architecture defines external integration with the National Library Registry but lacks a dedicated provider adapter or plugin component in the Core Domain Service. Introducing a new e-book provider requires modifying Core Domain Business Logic.",
+    "elements": [
+     "Core Domain Service",
+     "Domain Business Logic",
+     "National Library Registry"
+    ],
+    "sensitivity_points": [
+     "Coupling between Core Domain Service and external catalog providers"
+    ],
+    "tradeoffs": [
+     "Generic ingestion interfaces increase upfront design complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The model places all circulation rules inside the monolithic 'Domain Business Logic' component with no configuration-driven policy engine, rule repository, or externalized settings, requiring code changes and redeployment to modify library loan rules.",
+    "elements": [
+     "Core Domain Service",
+     "Domain Business Logic"
+    ],
+    "sensitivity_points": [
+     "Hardcoded circulation rules within Domain Business Logic"
+    ],
+    "tradeoffs": [
+     "Externalizing rules via a configuration engine increases operational complexity"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The architecture explicitly bounds infrastructure to ISO 27001 EU data centers with EU-region object storage and pgBackRest. However, third-party notification adapters (SendGrid/Twilio) represent an unaddressed risk unless explicitly configured for EU data residency.",
+    "elements": [
+     "EU Cloud Hosting Provider",
+     "PostgreSQL Database",
+     "Relational Data Store",
+     "Search Index",
+     "Notification Service"
+    ],
+    "sensitivity_points": [
+     "Geographic routing and processing by external notification providers",
+     "Cloud region pinning for storage and backups"
+    ],
+    "tradeoffs": [
+     "Restricting third-party dispatch to EU regions limits vendor choice"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "JWT authentication occurs at the API Gateway and pgaudit captures database operations, preventing broad unauthorized access. However, fine-grained patron-level authorization (preventing Insecure Direct Object References) and explicit security event logging for denied requests are not modeled.",
+    "elements": [
+     "API Gateway",
+     "Security & Authentication Filter",
+     "Core Domain Service",
+     "Domain Business Logic",
+     "PostgreSQL Database"
+    ],
+    "sensitivity_points": [
+     "Enforcement of object-level authorization in business logic",
+     "Audit logging granularity for access denials"
+    ],
+    "tradeoffs": [
+     "Fine-grained authorization checks add slight processing latency"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "EU Cloud Hosting Provider",
+     "PostgreSQL Database",
+     "Relational Data Store",
+     "Backup and Compliance Agent",
+     "Primary Data Node"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Web Application",
+     "Catalog Component",
+     "Core Domain Service",
+     "Domain Business Logic",
+     "Data Access Repository",
+     "PostgreSQL Database"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Service",
+     "Search Index",
+     "Search Client",
+     "Telemetry Interceptor",
+     "Primary Data Node",
+     "Query Parsing & Caching Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

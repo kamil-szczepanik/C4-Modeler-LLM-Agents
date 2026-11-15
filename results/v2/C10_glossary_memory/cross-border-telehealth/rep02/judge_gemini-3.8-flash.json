@@ -1,0 +1,346 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "While video consultations, AI triage, and consent management (R-01, R-03, R-04) are supported, there is no dedicated e-prescription service or component to create, validate, or manage prescription lifecycles (R-02); the Regional API Gateways connect directly to external pharmacy systems.",
+   "performance_efficiency": "Adaptive Quality & Fallback Controller Component dynamically adjusts WebRTC streams under low bandwidth. Vertex AI auto-scaling, asynchronous Pub/Sub messaging in Consent Event Publisher, and local caching in Offline Storage Module facilitate efficient regional processing with low latency.",
+   "compatibility": "Explicitly satisfies R-08 by integrating Regional API Gateways with Pharmacy Systems (US) via HL7 FHIR and National e-Prescription Gateways (EU) via national standards. Regional Identity Providers natively support eIDAS and OIDC/OAuth 2.0.",
+   "usability": "Frontend UI (with localization) serves Patients, Licensed Clinicians, Pharmacists, and Auditors via Flutter Web/Mobile widgets. The Localization Module addresses regional language needs, and the Offline Storage Module ensures usable sessions despite intermittent rural network connectivity.",
+   "reliability": "R-06 is directly met via the Adaptive Quality & Fallback Controller Component and TURN Relay Coordinator Component for sub-300 kbit/s degradation. Rate Limiting & Degradation Handler and Localized Error & Fallback Responder provide robust fault tolerance.",
+   "security": "Strong regional data residency (R-05) via Residency Enforcer & Policy Engine (OPA) and Regional Vault Manager with CMEK. Accountability (R-07) is thoroughly addressed using Cloud HSM Cryptographic Signer and Immutable Logging Service with WORM Storage Manager Component.",
+   "maintainability": "The architecture shows clear separation of concerns across consent, video, AI, and logging containers. However, coupling prescription routing directly into Regional API Gateways without a dedicated domain component slightly degrades component cohesion and modularity.",
+   "portability": "Targets GCP regions ('europe-west3' and 'us-central1') using portable standards (Envoy, Open Policy Agent, Flutter, WebRTC). Some vendor-specific dependencies like Cloud HSM and GCP Object Lock exist, but align directly with the mandated target cloud."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 3,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 3.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Media traffic is offloaded to WebRTC CPaaS and TURN relays, while the session manager coordinates signaling. However, regional gateway capacity under sudden traffic spikes lacks explicit auto-scaling specifications.",
+    "elements": [
+     "Regional API Gateways",
+     "Video Streaming Service",
+     "Signaling & Session Manager Component",
+     "Third-Party Video Infrastructure (WebRTC CPaaS)"
+    ],
+    "sensitivity_points": [
+     "Signaling session handshake latency under concurrent peak load"
+    ],
+    "tradeoffs": [
+     "Offloading media to third-party CPaaS reduces internal load but introduces external dependency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Vertex AI auto-scaling easily accommodates 14 requests/sec. Cloud HSM signing and Pub/Sub logging are present, though synchronous HSM signature generation could become a latency bottleneck under higher burst loads.",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Triage Controller",
+     "AI Inference Engine",
+     "Cryptographic Signer",
+     "Immutable Logging Service"
+    ],
+    "sensitivity_points": [
+     "Cryptographic signing throughput of Cloud HSM during triage requests"
+    ],
+    "tradeoffs": [
+     "Synchronous cryptographic signing ensures traceability at the expense of end-to-end response latency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Adaptive Quality & Fallback Controller dynamically drops video bitrate or falls back to audio/text, while the frontend Offline Storage Module safeguards clinical notes during network instability.",
+    "elements": [
+     "Frontend UI (with localization)",
+     "Offline Storage Module",
+     "Video Streaming Service",
+     "Adaptive Quality & Fallback Controller Component",
+     "Rate Limiting & Degradation Handler"
+    ],
+    "sensitivity_points": [
+     "Bandwidth detection thresholds triggering graceful degradation to audio-only"
+    ],
+    "tradeoffs": [
+     "Degrading to audio preserves session continuity but sacrifices visual consultation capabilities"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Target deployment only defines a single US region (us-central1). A full regional failure leaves no secondary US cloud infrastructure to restore service without violating data residency by failover to europe-west3.",
+    "elements": [
+     "Regional API Gateways",
+     "Regional Vault Manager",
+     "Consent & Data Management Service"
+    ],
+    "sensitivity_points": [
+     "Absence of secondary regional disaster recovery targets within the US"
+    ],
+    "tradeoffs": [
+     "Single-region deployment per continent lowers infrastructure costs but prevents regional failover"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "The model directly routes from Regional API Gateways to external EU systems without a dedicated e-prescription container or modular adapter component layer, risking modifications bleeding into gateway routing rules.",
+    "elements": [
+     "Regional API Gateways",
+     "Edge Routing & Residency Enforcer",
+     "National e-Prescription Gateways (EU)"
+    ],
+    "sensitivity_points": [
+     "Coupling of gateway routing with heterogenous national e-prescription protocol adapters"
+    ],
+    "tradeoffs": [
+     "Consolidating adapters in gateway simplifies deployment but increases gateway maintenance complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Vertex AI handles model versioning and rollback, while the Cryptographic Signer and WORM storage ensure immutable attribution. However, automated rollback mechanisms and model version verification components are not detailed.",
+    "elements": [
+     "AI Inference Engine",
+     "Cryptographic Signer",
+     "Immutable Logging Service",
+     "WORM Storage Manager Component"
+    ],
+    "sensitivity_points": [
+     "Immutability of model version identifiers attached to cryptographic log signatures"
+    ],
+    "tradeoffs": [
+     "Storing full input snapshots in WORM storage increases storage footprint for total traceability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Access is blocked at the edge and policy layers via Envoy Residency Enforcer, OPA Policy Engine, and isolated Regional Vaults, with audit logging recording cross-region attempts.",
+    "elements": [
+     "Edge Routing & Residency Enforcer",
+     "JWT & Consent Validator",
+     "Residency Enforcer & Policy Engine",
+     "Regional Vault Manager",
+     "Immutable Logging Service"
+    ],
+    "sensitivity_points": [
+     "Strictness of OPA residency and consent policy evaluation logic"
+    ],
+    "tradeoffs": [
+     "Multi-layered consent checks increase cross-region request latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Revocation is captured by the Consent API Controller, propagated instantly via GCP Pub/Sub across regions, enforced immediately by OPA, and audited in tamper-proof WORM storage.",
+    "elements": [
+     "Consent API Controller",
+     "Residency Enforcer & Policy Engine",
+     "Consent Event Publisher",
+     "Immutable Logging Service",
+     "WORM Storage Manager Component"
+    ],
+    "sensitivity_points": [
+     "Eventual consistency and propagation delay of Pub/Sub revocation events across regions"
+    ],
+    "tradeoffs": [
+     "Immediate asynchronous event broadcasting ensures fast propagation but requires distributed state synchronization"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Regional API Gateways",
+     "Consent & Data Management Service",
+     "Immutable Logging Service",
+     "JWT & Consent Validator",
+     "Residency Enforcer & Policy Engine",
+     "Regional Vault Manager"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Regional API Gateways",
+     "Consent & Data Management Service",
+     "Edge Routing & Residency Enforcer",
+     "Residency Enforcer & Policy Engine",
+     "Regional Vault Manager"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Cryptographic Signer",
+     "Immutable Logging Service",
+     "Cryptographic Verifier Component",
+     "WORM Storage Manager Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Frontend UI (with localization)",
+     "Offline Storage Module",
+     "Regional API Gateways",
+     "Rate Limiting & Degradation Handler",
+     "Video Streaming Service",
+     "Adaptive Quality & Fallback Controller Component",
+     "Third-Party Video Infrastructure (WebRTC CPaaS)"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patients (EU & US)",
+     "Licensed Clinicians",
+     "Video Streaming Service",
+     "Signaling & Session Manager Component",
+     "Adaptive Quality & Fallback Controller Component",
+     "TURN Relay Coordinator Component",
+     "Third-Party Video Infrastructure (WebRTC CPaaS)"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Regional API Gateways",
+     "National e-Prescription Gateways (EU)",
+     "Pharmacy Systems (US)",
+     "Pharmacists (EU/US)"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Triage Controller",
+     "AI Inference Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Consent & Data Management Service",
+     "Consent API Controller",
+     "Residency Enforcer & Policy Engine",
+     "Consent Event Publisher"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Regional API Gateways",
+     "Edge Routing & Residency Enforcer",
+     "Consent & Data Management Service",
+     "Residency Enforcer & Policy Engine",
+     "Regional Vault Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Video Streaming Service",
+     "Adaptive Quality & Fallback Controller Component",
+     "Regional API Gateways",
+     "Rate Limiting & Degradation Handler",
+     "Third-Party Video Infrastructure (WebRTC CPaaS)"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Cryptographic Signer",
+     "Immutable Logging Service",
+     "Log Ingestion Component",
+     "WORM Storage Manager Component"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Regional API Gateways",
+     "National e-Prescription Gateways (EU)",
+     "Pharmacy Systems (US)"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

@@ -1,0 +1,306 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively supported. Online submissions and adjuster workflows are handled by Customer & Broker Portal SPA and Adjuster Workspace SPA, while Claim Routing Component, New Domain Core, and Migration Routing & State Registry cleanly facilitate incremental claim type migration.",
+   "performance_efficiency": "The 2 s adjuster response target is achieved despite 5 s mainframe latency through API Client & Caching Layer, local storage in Claims Transactional Store, and asynchronous offloading via Transactional Outbox Table and Mainframe-Sync-Queue, respecting legacy batch constraints.",
+   "compatibility": "Interoperability with legacy mainframe and Active Directory is fully addressed. The Legacy Mainframe Adapter translates copybooks via IBM MQ or CICS sockets, Corporate Active Directory integrates via OAuth2/OIDC, and Mainframe-Sync-Queue coordinates updates with the on-premise system of record.",
+   "usability": "Dedicated interfaces are provided for all stakeholder groups: Customer & Broker Portal SPA serves policyholders and brokers, Adjuster Workspace SPA provides adjuster-specific workflows, and Business Operations Dashboard SPA provides operational and switchback monitoring for managers.",
+   "reliability": "Data consistency and zero claim loss are addressed via Transactional Outbox Table, Azure Service Bus, Claims Transactional Store with snapshot isolation, and DLQ-Replay-Processor. However, end-to-end deduplication and idempotent processing mechanisms across the mainframe sync boundary are not explicitly specified.",
+   "security": "Single sign-on is implemented via Corporate Active Directory, MSAL.js, and the APIM Authentication & Authorization Handler. Accountability and auditability are enforced via end-to-end TLS encryption and the WORM-compliant Audit & Compliance Archive.",
+   "maintainability": "Modular strangler design cleanly decouples services. The 1-day rollback requirement (R-06) is directly enabled by Claim Routing Component paired with the Migration Routing & State Registry feature flags, observed via Migration Metrics View & Switchback Alert Monitor.",
+   "portability": "The hybrid deployment across Azure and on-premise mainframe is well accommodated using Azure Container Apps and Hybrid Connections. However, tight reliance on proprietary Azure services like Azure Service Bus and Azure API Management limits multi-cloud portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "While client-side caching exists, the backend lacks a read-cache or replicated read-model for mainframe data, leaving initial synchronous fetches vulnerable to 5-second mainframe latency.",
+    "elements": [
+     "API Client & Caching Layer",
+     "Legacy Mainframe Adapter",
+     "COBOL/DB2 Mainframe",
+     "Claims Processing Core & Integration/Anti-Corruption Layer"
+    ],
+    "sensitivity_points": [
+     "Mainframe query latency directly affects un-cached read response times."
+    ],
+    "tradeoffs": [
+     "Data freshness versus sub-2-second response latency for legacy records."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Submissions are captured asynchronously through the Transactional Outbox and Mainframe-Sync-Queue, buffering peak loads and decoupling ingestion rate from the nightly mainframe batch constraints.",
+    "elements": [
+     "Azure API Management",
+     "Transactional Outbox Table",
+     "Azure Service Bus",
+     "Mainframe-Sync-Queue"
+    ],
+    "sensitivity_points": [
+     "Queue buffering capacity during month-end spikes."
+    ],
+    "tradeoffs": [
+     "Immediate customer acknowledgement versus delayed eventual synchronization with the mainframe."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Asynchronous persistence via the Transactional Outbox table and Azure Service Bus queues safely isolates online submissions during the batch window for subsequent processing.",
+    "elements": [
+     "Claims Processing Core & Integration/Anti-Corruption Layer",
+     "Transactional Outbox Table",
+     "Azure Service Bus",
+     "Mainframe-Sync-Queue"
+    ],
+    "sensitivity_points": [
+     "Transactional outbox drain reliability after batch window completion."
+    ],
+    "tradeoffs": [
+     "Eventual consistency with legacy system during the 6-hour batch window."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Transactional Outbox, dead-letter replay processors, and an operational reconciliation inspector handle failures and redeliveries, though exact mainframe idempotent-receiver semantics are not fully detailed.",
+    "elements": [
+     "Transactional Outbox Table",
+     "Azure Service Bus",
+     "DLQ-Replay-Processor",
+     "Audit & Reconciliation Inspector"
+    ],
+    "sensitivity_points": [
+     "Idempotency enforcement across hybrid messaging and mainframe adapter boundaries."
+    ],
+    "tradeoffs": [
+     "Automated DLQ replay versus manual reconciliation overhead."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Dynamic routing components driven by feature flags in the Migration Routing & State Registry allow switching claim types instantly without altering frontend applications or rebuilding services.",
+    "elements": [
+     "Claim Routing Component",
+     "Migration Routing & State Registry",
+     "Legacy Mainframe Adapter",
+     "New Domain Core"
+    ],
+    "sensitivity_points": [
+     "Dynamic routing rule evaluation performance and flag propagation."
+    ],
+    "tradeoffs": [
+     "Routing complexity within core services versus deployment independence."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Complete UI-backend decoupling via API Management and the Anti-Corruption Layer ensures decommissioning the mainframe requires only routing configuration and legacy adapter removal, preserving all frontends.",
+    "elements": [
+     "Azure API Management",
+     "Claim Routing Component",
+     "Legacy Mainframe Adapter",
+     "New Domain Core"
+    ],
+    "sensitivity_points": [
+     "Completeness of the New Domain Core domain model parity."
+    ],
+    "tradeoffs": [
+     "Maintaining abstraction layers throughout migration versus post-migration refactoring costs."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "API Management and Identity components provide authentication and token validation, but explicit object-level authorization (verifying broker ownership of claim instances) and mainframe-side tenancy enforcement are unspecified.",
+    "elements": [
+     "Azure API Management",
+     "Authentication & Authorization Handler",
+     "Audit-Relay",
+     "Audit & Compliance Archive"
+    ],
+    "sensitivity_points": [
+     "Enforcement of fine-grained multi-tenant domain authorization policies."
+    ],
+    "tradeoffs": [
+     "Centralized gateway policy enforcement versus distributed domain-level access control."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Central Active Directory federation revokes Azure session access, but token revocation latency (e.g. JWT expiry/CAE) and propagation of revocations to on-premise mainframe legacy sessions are omitted.",
+    "elements": [
+     "Corporate Identity Provider",
+     "Corporate Active Directory",
+     "Authentication & Authorization Handler",
+     "Legacy Mainframe Adapter"
+    ],
+    "sensitivity_points": [
+     "Token lifetime and revocation sync across cloud and mainframe environments."
+    ],
+    "tradeoffs": [
+     "Short-lived stateless tokens versus load on corporate Active Directory."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "COBOL/DB2 Mainframe",
+     "Legacy Mainframe",
+     "Claims Processing Core & Integration/Anti-Corruption Layer",
+     "Mainframe-Sync-Queue",
+     "Transactional Outbox Table"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Legacy Mainframe Adapter",
+     "Claims Processing Core & Integration/Anti-Corruption Layer"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer & Broker Portal SPA",
+     "Customer Portal & Adjuster Workspace SPAs",
+     "Azure API Management"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Workspace SPA",
+     "Customer Portal & Adjuster Workspace SPAs",
+     "Azure API Management"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Claim Routing Component",
+     "Migration Routing & State Registry",
+     "New Domain Core"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Transactional Outbox Table",
+     "DLQ-Replay-Processor",
+     "Audit & Reconciliation Inspector",
+     "Claims Transactional Store"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "API Client & Caching Layer",
+     "Claims Transactional Store",
+     "Mainframe-Sync-Queue"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Claim Routing Component",
+     "Migration Routing & State Registry",
+     "Migration Metrics View & Switchback Alert Monitor"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Corporate Identity Provider",
+     "Corporate Active Directory",
+     "Authentication & Authorization Handler",
+     "Authentication & Session Manager"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

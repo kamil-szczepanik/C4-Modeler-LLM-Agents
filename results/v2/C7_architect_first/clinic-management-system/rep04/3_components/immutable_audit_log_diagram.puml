@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(ComplianceOfficer, "Compliance Officer", "Generates tamper-proof reports via HTTPS / TLS 1.3.")
+System_Ext(CoreClinicalEMRService, "Core Clinical & EMR Service", "Appends event payloads to the Audit Ingestion API.")
+System_Ext(AWSCloudHSM, "AWS CloudHSM", "Provides secure, dedicated key custody and cryptographic operations.")
+System_Ext(S3ObjectLock, "S3 Object Lock", "Cost-effectively stores historical logs for the mandatory 10-year retention period.")
+
+Container_Boundary(ImmutableAuditLog, "Immutable Audit Log") {
+    Component(AuditIngestionAPI, "Audit Ingestion API", "Java / Spring Boot", "Appends event payloads via gRPC / TLS 1.3 and handles incoming audit events.")
+    Component(CryptographicSignerComponent, "Cryptographic Signer Component", "Java / Bouncy Castle", "Signs and chains log entries using cryptographic hashing and chaining algorithms.")
+    Component(LedgerStorageEngine, "Ledger Storage Engine", "AWS QLDB / Append-Only PostgreSQL", "Commits verifiable blocks and enforces write-once-read-many (WORM) immutability semantics.")
+    Component(ComplianceExportService, "Compliance Export Service", "Java / Spring Boot", "Generates tamper-proof reports and queries historical audit records.")
+}
+
+Rel(CoreClinicalEMRService, AuditIngestionAPI, "Appends event payloads", "gRPC / TLS 1.3")
+Rel(AuditIngestionAPI, CryptographicSignerComponent, "Requests event signing", "In-Process Method Call")
+Rel(CryptographicSignerComponent, AWSCloudHSM, "Signs and chains log entries", "PKCS#11 / TLS")
+Rel(CryptographicSignerComponent, LedgerStorageEngine, "Commits verifiable blocks", "JDBC / TLS")
+Rel(ComplianceOfficer, ComplianceExportService, "Generates tamper-proof reports", "HTTPS / TLS 1.3")
+Rel(ComplianceExportService, S3ObjectLock, "Queries historical audit records", "AWS SDK / HTTPS")
+@enduml

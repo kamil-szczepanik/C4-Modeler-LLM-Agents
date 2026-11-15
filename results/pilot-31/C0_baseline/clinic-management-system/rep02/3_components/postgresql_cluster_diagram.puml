@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+System_Ext(App_Services, "App Services", "External application services connecting to the database.")
+System_Ext(WORM_Storage, "WORM Storage", "Immutable storage for long-term backup retention.")
+
+System_Boundary(PostgreSQL_Cluster, "PostgreSQL Cluster") {
+    Component(PostgreSQL_Instance, "PostgreSQL Instance", "PostgreSQL", "Primary database engine for EMR, scheduling, and billing data.")
+    Component(Patroni, "Patroni", "Patroni", "Manages high availability, automated failover, and cluster state.")
+    Component(etcd, "etcd", "etcd", "Consensus store for cluster leader election and configuration.")
+    Component(PgBouncer, "PgBouncer", "PgBouncer", "Connection pooler for managing high-concurrency database requests.")
+    Component(pgBackRest, "pgBackRest", "pgBackRest", "Handles continuous WAL archiving and point-in-time recovery to WORM storage.")
+    Component(Audit_Logging_Sidecar, "Audit Logging Sidecar", "Logical Decoding", "Captures real-time DML/DDL events for immutable audit trails.")
+    Component(HashiCorp_Vault, "HashiCorp Vault", "HashiCorp Vault", "Provides dynamic, short-lived credential rotation for database access.")
+}
+
+Rel(Patroni, etcd, "Synchronizes cluster state and leader election", "gRPC/HTTP")
+Rel(App_Services, PgBouncer, "Establishes mTLS-encrypted SQL connections", "mTLS/TCP")
+Rel(PgBouncer, PostgreSQL_Instance, "Proxies session-based RLS context-propagated queries", "SQL")
+Rel(PostgreSQL_Instance, pgBackRest, "Streams WAL logs for continuous archival", "Internal")
+Rel(pgBackRest, WORM_Storage, "Writes immutable backups for long-term retention", "S3/HTTPS")
+Rel(PostgreSQL_Instance, Audit_Logging_Sidecar, "Streams DML/DDL events via logical decoding", "Logical Decoding")
+Rel(HashiCorp_Vault, PostgreSQL_Instance, "Injects dynamic credentials for service authentication", "API")
+
+@enduml

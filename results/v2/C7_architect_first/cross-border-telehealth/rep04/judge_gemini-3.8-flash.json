@@ -1,0 +1,336 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: Video Media Server handles video consultations (R-01), Interoperability Worker handles e-prescriptions (R-02), AI Symptom Service evaluates urgency (R-03), and ConsentManager with PatientPortalAPI enforces purpose-based consent management (R-04).",
+   "performance_efficiency": "Performance is addressed through asynchronous messaging via Cloud Pub/Sub, BigQuery Write API batching, PgBouncer pooling for surge management, and low-latency Envoy edge routing over regional VPC networks.",
+   "compatibility": "Prescription Translator and FhirAdapter explicitly implement HL7 FHIR and NCPDP for US Pharmacy Systems and REST/SOAP formats for EU National E-Prescription Gateways, satisfying R-08.",
+   "usability": "User personas (Patients, Licensed Clinicians, Compliance Authorities) interact through API Gateway and PatientPortalAPI, but specific frontend clients or mechanisms handling degraded patient feedback interfaces are omitted.",
+   "reliability": "Adaptive Bitrate Controller explicitly maintains degraded consultations below 300 kbit/s (R-06). Fault tolerance is reinforced by Distributed TURN Relays, Cloud Pub/Sub DLQ Handler, Retry & Backoff Controller, and Resilience & Fallback Handler.",
+   "security": "Strict GDPR and HIPAA controls are enforced via isolated regional Cloud SQL instances, Row-Level Security, Cloud KMS encryption, Web Security WAF, OAuth2/OIDC authentication, and pgAudit logging.",
+   "maintainability": "Clear modular decomposition separates domain boundaries: Core Telehealth Backend, AI Symptom Service, and Interoperability Worker. Internal modules like Prescription Translator and ConsentManager demonstrate low coupling and high cohesion.",
+   "portability": "The design deploys cleanly across required GCP regions (europe-west3 and us-central1) using Cloud Run and Envoy, though reliance on proprietary GCP services (BigQuery, Cloud Pub/Sub) limits multi-cloud portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "LiveKit SFU, Session Coordinator, and Redis Pub/Sub support scalable WebRTC media handling. However, automated horizontal scaling policies and TURN relay capacity provisioning for handling sudden surges of 5,000 concurrent sessions are not explicitly detailed.",
+    "elements": [
+     "Video Media Server",
+     "Adaptive Bitrate (ABR) Controller",
+     "WebRTC Ingress/Egress Handler",
+     "Session & Auth Coordinator",
+     "Redis Pub/Sub Event Bus"
+    ],
+    "sensitivity_points": [
+     "TURN relay throughput and SFU cluster autoscaling sensitivity under sudden traffic spikes."
+    ],
+    "tradeoffs": [
+     "In-memory Redis pub/sub delivers low signaling latency but adds cluster memory overhead."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "50,000 requests per hour (~14 req/s) is modest load easily handled by the FastAPI API Controller and Symptom Inference Engine running on Cloud Run, while audit telemetry is offloaded asynchronously via Pub/Sub and BigQuery Write API.",
+    "elements": [
+     "API Gateway",
+     "AI Symptom Service",
+     "Symptom Inference Engine",
+     "Traceability & Audit Logger",
+     "BigQuery Write API"
+    ],
+    "sensitivity_points": [
+     "Inference execution time per request directly governs overall response latency."
+    ],
+    "tradeoffs": [
+     "Asynchronous audit ingestion to BigQuery preserves response speed over synchronous persistence guarantees."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Adaptive Bitrate (ABR) Controller explicitly targets connections below 300 kbit/s to preserve audio/video continuity, while PgBouncer connection pooling and edge proxy rate-limiting handle reconnection surges and safeguard clinical notes.",
+    "elements": [
+     "Adaptive Bitrate (ABR) Controller",
+     "WebRTC Ingress/Egress Handler",
+     "Distributed TURN Relays",
+     "PgBouncer Connection Pooler",
+     "Core Telehealth Backend"
+    ],
+    "sensitivity_points": [
+     "Audio codec switching threshold sensitivity when network bandwidth drops below 200 kbit/s."
+    ],
+    "tradeoffs": [
+     "Degrading or dropping video stream quality ensures uncorrupted voice transmission and consultation survival."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The specification restricts US workloads to a single GCP region (us-central1). The architecture lacks a secondary US regional deployment or an automated cross-zone disaster recovery orchestration that restores service within 1 hour without moving data to the EU.",
+    "elements": [
+     "Cloud SQL",
+     "PostgreSQL Database Engine",
+     "API Gateway",
+     "Edge Routing Proxy"
+    ],
+    "sensitivity_points": [
+     "Availability depends entirely on single-region infrastructure resilience within us-central1."
+    ],
+    "tradeoffs": [
+     "Strict regional residency prevents geo-failover to europe-west3, increasing downtime risk during regional outages."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Adding an EU national standard is cleanly isolated to the Prescription Translator and Gateway Dispatcher components inside the Interoperability Worker container, leaving core business logic and messaging infrastructure unaffected.",
+    "elements": [
+     "Interoperability Worker",
+     "Prescription Translator",
+     "Gateway Dispatcher",
+     "Cloud Pub/Sub"
+    ],
+    "sensitivity_points": [
+     "Prescription transformation completeness depends on internal canonical model expressiveness."
+    ],
+    "tradeoffs": [
+     "Decoupled asynchronous worker improves extensibility but introduces eventual consistency for prescription statuses."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The Traceability & Audit Logger and BigQuery regional datasets log inputs, outputs, and model versions to fulfill EU MDR. However, runtime dynamic traffic shifting, canary routing, and automated model rollback mechanisms are not explicitly documented.",
+    "elements": [
+     "AI Symptom Service",
+     "Symptom Inference Engine",
+     "Traceability & Audit Logger",
+     "BigQuery",
+     "EU/US Analytics Datasets"
+    ],
+    "sensitivity_points": [
+     "Traceability schema consistency when new model versions introduce novel output parameters."
+    ],
+    "tradeoffs": [
+     "Strict regulatory logging in BigQuery guarantees auditability at the cost of additional storage overhead."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Cross-region requests are blocked by default. ConsentManager validates purpose-specific tokens, PostgreSQL Row-Level Security (RLS) enforcers isolate regional patient records, and pgAudit alongside Cloud KMS logs and encrypts unauthorized or granted cross-region access attempts.",
+    "elements": [
+     "ConsentManager",
+     "PatientPortalAPI",
+     "Row-Level Security (RLS) Policy Enforcer",
+     "Consent Indexing & Verification Engine",
+     "Audit Logging Extension (pgAudit)"
+    ],
+    "sensitivity_points": [
+     "Correctness and latency of cryptographic consent token verification before database row evaluation."
+    ],
+    "tradeoffs": [
+     "Strict row-level security and inline consent verification introduce slight database transaction overhead."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "ConsentManager revokes cryptographic tokens and updates the Consent Indexing Engine in Cloud SQL. Real-time updates propagate via Redis Pub/Sub, while Authorized Views in BigQuery enforce masking and exclude revoked consent records from downstream research queries.",
+    "elements": [
+     "ConsentManager",
+     "Consent Indexing & Verification Engine",
+     "Redis Pub/Sub Event Bus",
+     "Authorized Views",
+     "AuditLogger"
+    ],
+    "sensitivity_points": [
+     "Propagation latency of consent revocation events to analytical datasets and cache stores."
+    ],
+    "tradeoffs": [
+     "Enforcing consent validation on analytical views restricts direct raw access, slightly increasing query complexity."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.9583333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "PostgreSQL Database Engine",
+     "Data Residency Filter",
+     "EU/US Analytics Datasets",
+     "ConsentManager"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "PostgreSQL Database Engine",
+     "Data Residency Filter",
+     "EU/US Analytics Datasets",
+     "Cloud SQL",
+     "BigQuery"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Service",
+     "Traceability & Audit Logger",
+     "BigQuery"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Adaptive Bitrate (ABR) Controller",
+     "Distributed TURN Relays",
+     "PgBouncer Connection Pooler",
+     "Resilience & Fallback Handler",
+     "Edge Routing Proxy"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Video Media Server",
+     "WebRTC Ingress/Egress Handler",
+     "Session & Auth Coordinator"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Interoperability Worker",
+     "Prescription Translator",
+     "Gateway Dispatcher",
+     "EU National E-Prescription Gateways",
+     "US Pharmacy Systems"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Service",
+     "Symptom Inference Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "ConsentManager",
+     "Consent Indexing & Verification Engine",
+     "PatientPortalAPI"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "PostgreSQL Database Engine",
+     "Row-Level Security (RLS) Policy Enforcer",
+     "Data Residency Filter",
+     "ConsentManager",
+     "Edge Routing Proxy",
+     "EU/US Analytics Datasets"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Adaptive Bitrate (ABR) Controller",
+     "Video Media Server"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "AI Symptom Service",
+     "Traceability & Audit Logger",
+     "BigQuery"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Prescription Translator",
+     "FhirAdapter",
+     "Interoperability Worker",
+     "Gateway Dispatcher"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

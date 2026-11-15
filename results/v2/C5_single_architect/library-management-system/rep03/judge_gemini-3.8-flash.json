@@ -1,0 +1,242 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 and the brief via Catalogue Service, Item Management Service, and Digital Asset Adapter for physical and digital cataloguing, alongside Circulation Service and Web Application for self-service portals and circulation workflows.",
+   "performance_efficiency": "Search response <800 ms (R-05) is directly targeted by Elasticsearch and Redis Catalog Read-Through Cache. API Gateway uses reactive routing, while RabbitMQ offloads asynchronous notification workloads from critical request paths.",
+   "compatibility": "Integration with external systems is explicitly specified: Digital Content Proxy Service connects via HTTPS to Digital Content Provider, Payment Integration Client connects to External Payment Gateway, and Dispatch Adapter Component links to Notification Service.",
+   "usability": "Web Application provides dedicated access for both Library Patron and Library Staff via UI Component Library (Radix UI, Tailwind CSS) and modular feature sets, though both user types share a single frontend container.",
+   "reliability": "Fault tolerance is reinforced by Resilience Handler and Provider Client using Resilience4j circuit breaking and retries, RabbitMQ Dead Letter Exchange for failed processing, and PostgreSQL Write-Ahead Log for transaction durability.",
+   "security": "EU data residency and GDPR compliance are enforced by Compliance Audit Component and EU-restricted PostgreSQL. Authentication & Authorization Component, Data Sanitizer Component (stripping PII), and Row-Level Security Policy Enforcer provide thorough protection.",
+   "maintainability": "The system decomposes cleanly into decoupled microservices (Catalogue Service, Circulation Service, Notification Worker). However, modeling internal vendor processes inside PostgreSQL, Redis, and Elasticsearch at Level 3 introduces unnecessary COTS modeling overhead.",
+   "portability": "Services run on standard runtime platforms (Java Spring Boot, Node.js, React). The constraint for EU-only data residency is strictly localized to the PostgreSQL container and supporting cloud deployment environments without platform lock-in."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 3.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Elasticsearch cluster handles high-volume search queries directly while Redis provides catalog read-through caching and API Gateway handles rate limiting, comfortably keeping P99 response under 800 ms.",
+    "elements": [
+     "API Gateway",
+     "Catalogue Service",
+     "Elasticsearch",
+     "Redis"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch shard sizing and replica count",
+     "Redis cache hit ratio for frequent searches"
+    ],
+    "tradeoffs": [
+     "Read caching in Redis reduces search load but risks serving stale catalog data"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Catalogue Service persists writes to PostgreSQL and emits internal events to Search Indexing Service for Elasticsearch updates, keeping writes asynchronous from reads and easily fulfilling the 5-minute index lag.",
+    "elements": [
+     "Catalogue Service",
+     "Item Management Service",
+     "Search Indexing Service",
+     "PostgreSQL",
+     "Elasticsearch"
+    ],
+    "sensitivity_points": [
+     "Throughput of in-process search indexing events during high write volumes",
+     "Elasticsearch refresh interval settings"
+    ],
+    "tradeoffs": [
+     "Asynchronous search index syncing prioritizes search query performance over immediate consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Elasticsearch cluster coordination module manages shard replicas to recover from node failure within seconds. Circulation transactions are entirely independent, persisting to PostgreSQL and remaining completely unaffected.",
+    "elements": [
+     "Elasticsearch",
+     "Cluster Coordination Module",
+     "Document Routing & Shard Manager",
+     "Circulation Service",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch replica count configuration per index",
+     "Cluster election timeout duration"
+    ],
+    "tradeoffs": [
+     "Maintaining Elasticsearch replica shards increases infrastructure cost and write overhead"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Web Application instances are fronted by API Gateway with sessions offloaded to Redis Session Management. Failure of one instance allows traffic to seamlessly route to healthy instances without lost transactions.",
+    "elements": [
+     "Web Application",
+     "API Gateway",
+     "Redis",
+     "Spring Cloud Gateway Router"
+    ],
+    "sensitivity_points": [
+     "Session replication latency in Redis",
+     "Upstream health check intervals on the gateway"
+    ],
+    "tradeoffs": [
+     "Centralizing user sessions in Redis creates an operational dependency on the Redis cache cluster"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Digital Content Proxy Service encapsulates vendor communication via the Provider Client component and Digital Asset Adapter, isolating changes necessary for new external providers from the core catalogue.",
+    "elements": [
+     "Digital Content Proxy Service",
+     "Provider Client",
+     "Catalogue Service",
+     "Digital Asset Adapter"
+    ],
+    "sensitivity_points": [
+     "Extensibility of the Provider Client abstraction interface"
+    ],
+    "tradeoffs": [
+     "Maintaining a separate proxy service adds network latency for content streaming"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The Loan Management Component in Circulation Service hardcodes loan rules within Spring Boot services. There is no externalized rule engine, policy engine, or dynamic configuration mechanism to alter rules without redeploying code.",
+    "elements": [
+     "Circulation Service",
+     "Loan Management Component"
+    ],
+    "sensitivity_points": [
+     "Coupling of loan business logic to compiled Java application code"
+    ],
+    "tradeoffs": [
+     "Hardcoding rules in code ensures compile-time safety but sacrifices operational agility"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "PostgreSQL data persistence is explicitly constrained to EU regions, and the Compliance Audit Component intercepts writes to enforce residency. Notification Worker's Data Sanitizer strips PII before contacting external services.",
+    "elements": [
+     "PostgreSQL",
+     "Circulation Service",
+     "Compliance Audit Component",
+     "Notification Worker",
+     "Data Sanitizer Component"
+    ],
+    "sensitivity_points": [
+     "Coverage of Compliance Audit Component interceptors across all write paths",
+     "Hosting region configuration of cloud infrastructure"
+    ],
+    "tradeoffs": [
+     "Restricting processing and persistence to EU regions limits deployment options and cloud provider flexibility"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Authentication and authorization are verified at the API Gateway, while PostgreSQL Row-Level Security Policy Enforcer and the Compliance Audit Component actively intercept unauthorized cross-patron access and record audit trails.",
+    "elements": [
+     "API Gateway",
+     "Authentication & Authorization Component",
+     "Circulation Service",
+     "Compliance Audit Component",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Correctness of PostgreSQL row-level security policy predicates",
+     "Tamper-proof storage of audit records"
+    ],
+    "tradeoffs": [
+     "Enforcing row-level security policies in the database introduces minor query planning overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "PostgreSQL",
+     "Compliance Audit Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalogue Service",
+     "Digital Content Proxy Service",
+     "Item Management Service",
+     "Digital Asset Adapter",
+     "Digital Content Provider"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Elasticsearch",
+     "Search Indexing Service",
+     "Redis",
+     "Catalog Read-Through Cache Component",
+     "Query DSL Engine"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

@@ -1,0 +1,79 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patients, "Patients", "Patients interacting with admissions, scheduling, and portal access.")
+Person(CliniciansStaff, "Clinicians/Staff", "Clinicians and hospital staff using the system to manage electronic medical records, schedules, and clinical workflows.")
+Person(HospitalAdministrators, "Hospital Administrators", "Administrators managing billing, operations, and system oversight.")
+
+System_Ext(IdentityProviderIdP, "Identity Provider (IdP)", "Handles user authentication and security tokens.")
+System_Ext(InsuranceGateway, "Insurance Gateway", "Processes insurance claims and verification.")
+System_Ext(ExternalLabImagingSystems, "External Lab & Imaging Systems", "Exchanges clinical lab and imaging data.")
+System_Ext(NotificationGateway, "Notification Gateway", "Sends automated alerts and notifications to users.")
+System_Ext(CloudBackupAWSS3Glacier, "Cloud Backup (AWS S3 Glacier)", "Long-term cold storage for audit logs and backups.")
+
+System_Boundary(ClinicManagementSystem, "Clinic Management System") {
+    Container(GlobalLoadBalancer, "Global Load Balancer", "AWS Route 53 / Envoy Global", "Manages active-active multi-region health checks and geo-routing.")
+    Container(WebFrontend, "Web Frontend", "React/TypeScript / Nginx/CloudFront", "Provides the web interface for users.")
+    Container(APIGateway, "API Gateway", "Kong/Envoy", "Handles TLS termination, rate limiting, and JWT validation.")
+    Container(CoreServicesContainer, "Core Services Container", "Java/Spring Boot", "Manages patient registration, scheduling, and billing.")
+    Container(EMRService, "EMR Service", "Node.js/TypeScript", "Handles sub-second EMR performance and audit trails.")
+    Container(DatabaseLayer, "Database Layer", "PostgreSQL", "Provides multi-master replication and encrypted storage.")
+    Container(EventBroker, "Event Broker", "Apache Kafka", "Handles asynchronous decoupling across hybrid clusters.")
+    Container(IntegrationWorker, "Integration Worker", "Apache Camel/Python", "Performs asynchronous HL7 FHIR messaging.")
+    Container(BackgroundJobScheduler, "Background Job Scheduler", "Temporal.io", "Orchestrates complex clinical and insurance workflows.")
+    Container(AuditLogStore, "Audit Log Store", "PostgreSQL Append-Only tables / AWS S3 Glacier", "Maintains 10-year data retention for audit logs.")
+    Container(KeyManagementServiceKMS, "Key Management Service (KMS)", "HashiCorp Vault / AWS KMS", "Performs envelope encryption and key separation.")
+    Container(ObservabilityMonitoringCollector, "Observability & Monitoring Collector", "OpenTelemetry / Prometheus / Grafana Loki", "Collects aggregated metrics, traces, and logs.")
+}
+
+Rel(Patients, WebFrontend, "Interacts with portal", "HTTPS/WSS")
+Rel(CliniciansStaff, WebFrontend, "Interacts with clinical interface", "HTTPS/WSS")
+Rel(HospitalAdministrators, WebFrontend, "Interacts with administrative dashboard", "HTTPS/WSS")
+
+Rel(WebFrontend, APIGateway, "Interacts with API backend", "HTTPS/WSS")
+Rel(APIGateway, CoreServicesContainer, "Communicates with core business logic", "gRPC over mTLS")
+Rel(APIGateway, EMRService, "Communicates with electronic medical records", "gRPC over mTLS")
+
+Rel(CoreServicesContainer, DatabaseLayer, "Persists and queries operational data", "Encrypted PostgreSQL wire protocol")
+Rel(EMRService, DatabaseLayer, "Persists and queries EMR data", "Encrypted PostgreSQL wire protocol")
+
+Rel(CoreServicesContainer, EventBroker, "Streams messages asynchronously", "Kafka over TLS")
+Rel(IntegrationWorker, EventBroker, "Streams messages asynchronously", "Kafka over TLS")
+
+Rel(CoreServicesContainer, BackgroundJobScheduler, "Orchestrates clinical workflows", "gRPC over mTLS")
+Rel(EMRService, BackgroundJobScheduler, "Orchestrates EMR workflows", "gRPC over mTLS")
+
+Rel(APIGateway, KeyManagementServiceKMS, "Accesses keys and secrets", "HTTPS/REST with client certificate authentication")
+Rel(WebFrontend, KeyManagementServiceKMS, "Accesses keys and secrets", "HTTPS/REST with client certificate authentication")
+Rel(CoreServicesContainer, KeyManagementServiceKMS, "Accesses keys and secrets", "HTTPS/REST with client certificate authentication")
+Rel(EMRService, KeyManagementServiceKMS, "Accesses keys and secrets", "HTTPS/REST with client certificate authentication")
+Rel(DatabaseLayer, KeyManagementServiceKMS, "Accesses keys and secrets", "HTTPS/REST with client certificate authentication")
+Rel(IntegrationWorker, KeyManagementServiceKMS, "Accesses keys and secrets", "HTTPS/REST with client certificate authentication")
+Rel(EventBroker, KeyManagementServiceKMS, "Accesses keys and secrets", "HTTPS/REST with client certificate authentication")
+Rel(AuditLogStore, KeyManagementServiceKMS, "Accesses keys and secrets", "HTTPS/REST with client certificate authentication")
+Rel(BackgroundJobScheduler, KeyManagementServiceKMS, "Accesses keys and secrets", "HTTPS/REST with client certificate authentication")
+Rel(GlobalLoadBalancer, KeyManagementServiceKMS, "Accesses keys and secrets", "HTTPS/REST with client certificate authentication")
+Rel(ObservabilityMonitoringCollector, KeyManagementServiceKMS, "Accesses keys and secrets", "HTTPS/REST with client certificate authentication")
+
+Rel(APIGateway, ObservabilityMonitoringCollector, "Exports telemetry data", "gRPC/OTLP over TLS")
+Rel(WebFrontend, ObservabilityMonitoringCollector, "Exports telemetry data", "gRPC/OTLP over TLS")
+Rel(CoreServicesContainer, ObservabilityMonitoringCollector, "Exports telemetry data", "gRPC/OTLP over TLS")
+Rel(EMRService, ObservabilityMonitoringCollector, "Exports telemetry data", "gRPC/OTLP over TLS")
+Rel(DatabaseLayer, ObservabilityMonitoringCollector, "Exports telemetry data", "gRPC/OTLP over TLS")
+Rel(IntegrationWorker, ObservabilityMonitoringCollector, "Exports telemetry data", "gRPC/OTLP over TLS")
+Rel(EventBroker, ObservabilityMonitoringCollector, "Exports telemetry data", "gRPC/OTLP over TLS")
+Rel(AuditLogStore, ObservabilityMonitoringCollector, "Exports telemetry data", "gRPC/OTLP over TLS")
+Rel(KeyManagementServiceKMS, ObservabilityMonitoringCollector, "Exports telemetry data", "gRPC/OTLP over TLS")
+Rel(BackgroundJobScheduler, ObservabilityMonitoringCollector, "Exports telemetry data", "gRPC/OTLP over TLS")
+Rel(GlobalLoadBalancer, ObservabilityMonitoringCollector, "Exports telemetry data", "gRPC/OTLP over TLS")
+
+Rel(CoreServicesContainer, IdentityProviderIdP, "Authenticates users", "HTTPS/REST")
+Rel(CoreServicesContainer, InsuranceGateway, "Processes claims", "HTTPS/REST")
+Rel(IntegrationWorker, ExternalLabImagingSystems, "Exchanges clinical data", "HL7 FHIR")
+Rel(CoreServicesContainer, NotificationGateway, "Triggers notifications", "HTTPS")
+Rel(AuditLogStore, CloudBackupAWSS3Glacier, "Archives audit logs for long-term retention", "Encrypted Storage API")
+
+@enduml

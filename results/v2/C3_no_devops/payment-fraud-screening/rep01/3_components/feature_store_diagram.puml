@@ -1,0 +1,23 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Component(Fraud_Scoring_Engine, "Fraud Scoring Engine", "External Container", "Consumes real-time features to score payment fraud.")
+
+Container_Boundary(feature_store, "Feature Store") {
+    Component(Feature_API_Handler, "Feature API Handler", "Go, gRPC", "Provides low-latency real-time and historical feature data to power payment fraud screening.")
+    Component(Feature_Aggregator, "Feature Aggregator", "Go", "Aggregates real-time payment events and updates the feature cache.")
+    Component(Feature_Cache, "Feature Cache", "AWS ElastiCache for Redis", "In-memory store providing sub-millisecond retrieval and AES-256 encryption at rest.")
+    Component(Feature_Backfill_Worker, "Feature Backfill Worker", "Go", "Queries baseline historical features and seeds historical aggregates.")
+    Component(Amazon_RDS_for_PostgreSQL, "Amazon RDS for PostgreSQL", "Amazon RDS for PostgreSQL", "Durable relational storage for baseline historical features.")
+    Component(Amazon_SQS, "Amazon SQS", "Amazon SQS", "Message queue for processing real-time payment event streams.")
+}
+
+Rel(Fraud_Scoring_Engine, Feature_API_Handler, "Fetches real-time features", "gRPC / Low-latency TCP with mTLS")
+Rel(Feature_Aggregator, Feature_Cache, "Updates real-time features", "Redis RESP over TLS")
+Rel(Feature_API_Handler, Feature_Cache, "Reads feature values", "Redis RESP over TLS")
+Rel(Feature_Backfill_Worker, Amazon_RDS_for_PostgreSQL, "Queries baseline historical features", "JDBC over TLS")
+Rel(Feature_Backfill_Worker, Feature_Cache, "Seeds historical aggregates", "Redis RESP over TLS")
+Rel(Feature_Aggregator, Amazon_SQS, "Consumes real-time payment events", "AWS SDK over HTTPS")
+
+@enduml

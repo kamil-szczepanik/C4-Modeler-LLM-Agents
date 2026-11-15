@@ -1,0 +1,345 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.875,
+  "justifications": {
+   "functional_suitability": "Customer Portal (R-01), Adjuster Web App (R-02), and Feature/Routing Service plus Migration Router & Feature Toggles (R-03) cover all requirements, with Integration/ACA Worker bridging the mainframe. Gaps: Feature/Routing Service and Migration Router overlap, and the Core Banking payment path has no container.",
+   "performance_efficiency": "Mainframe latency is isolated by the ACA Worker with asynchronous Service Bus messaging, Mainframe Latency Handler, Polly circuit breakers, in-memory Feature Toggle Engine, Blob presigned uploads, and RUM telemetry. Gaps: no server-side read cache or replica of mainframe data; autoscaling is unspecified.",
+   "compatibility": "Legacy Adaptor Component uses TCP sockets over mTLS/ExpressRoute with a Translation/Mapper anti-corruption layer; OIDC/OAuth with Active Directory; payment gateway named. Gaps: the Core Banking integration is missing from the container level, and the mainframe's one-change-per-quarter limit is not addressed explicitly.",
+   "usability": "Customer Portal and Adjuster Web App SPAs serve both user groups, with Mainframe Latency Handler, Local Draft Cache, and Notification Service with Preference Manager. Gaps: no accessibility, UX, or broker-specific interface, and no explicit feedback channels.",
+   "reliability": "Transactional Outbox Table, Idempotency & Outbox Processor, Service Bus DLQs with DLQ Manager, circuit breakers, and Schema Validation Filter address R-04 well. Reconciliation Log and flag-based routing support rollback. Gaps: no HA/DR or multi-region, and no explicit reconciliation process for rollback.",
+   "security": "AD OIDC SSO, Edge Security Component (WAF, JWT), CBAC authorization, mTLS, TLS 1.3, Key Vault with managed identities, private endpoints, encrypted Local Draft Cache, and Audit Logger/Audit Log Table for accountability match R-07 thoroughly.",
+   "maintainability": "Clear decomposition into Claims Core Services, Notification Service, Feature/Routing Service, and ACA Worker with an anti-corruption layer; feature toggles in Azure App Configuration support one-day rollback. Gaps: routing responsibility is duplicated between Migration Router and Feature/Routing Service, and some model inconsistencies exist (PostgreSQL vs SQL).",
+   "portability": "The hybrid on-prem/Azure setup is addressed through ExpressRoute and containerized Azure Container Apps. However, heavy Azure-specific services (APIM, Service Bus, App Configuration, Static Web Apps) create lock-in with no abstraction. The context lists AKS/PostgreSQL but the containers use ACA/SQL, which is inconsistent."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 4,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 2,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.5625,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 4.0,
+   "Modifiability": 3.5,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Adjuster Web App",
+     "Mainframe Latency Handler",
+     "Integration / Anti-Corruption Layer (ACA Worker)",
+     "Resilience & Circuit Breaker Component",
+     "Claims Relational Tables"
+    ],
+    "sensitivity_points": [
+     "No read cache or replica of mainframe data in the new platform",
+     "Synchronous mainframe calls in the read path"
+    ],
+    "tradeoffs": [
+     "Async UI states improve perceived speed but not actual load time",
+     "Anti-corruption layer adds a hop"
+    ],
+    "justification": "Latency handler, circuit breaker and ACL isolate slowness, but no explicit mainframe data cache or read model guarantees under 2 s when data lives on the mainframe. The UI masks latency rather than removing it."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Messaging",
+     "Mainframe Sync Queue",
+     "Claims Core Services",
+     "Integration / Anti-Corruption Layer (ACA Worker)",
+     "Azure Container Apps"
+    ],
+    "sensitivity_points": [
+     "No explicit throttling or rate limiting of mainframe calls",
+     "No stated autoscaling rules"
+    ],
+    "tradeoffs": [
+     "Queue buffering gives elasticity but delays mainframe consistency"
+    ],
+    "justification": "Service Bus queue decouples submissions from the mainframe and Container Apps can scale, but there is no explicit load leveling, throttling or batch window guard in the ACL, and autoscaling is unstated."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "elements": [
+     "Mainframe Sync Queue",
+     "Idempotency & Outbox Processor",
+     "Transactional Outbox Table",
+     "Integration / Anti-Corruption Layer (ACA Worker)",
+     "DLQ Manager",
+     "Resilience & Circuit Breaker Component"
+    ],
+    "sensitivity_points": [
+     "Replay rate after window may load mainframe",
+     "Queue retention and TTL settings"
+    ],
+    "tradeoffs": [
+     "Eventual consistency between platforms during outage"
+    ],
+    "justification": "Submissions are persisted with an outbox and queued, and the ACL forwards them later with circuit breakers and a DLQ. No explicit window-aware scheduling of forwarding is shown, but no loss is expected."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "elements": [
+     "Idempotency & Outbox Processor",
+     "Transactional Outbox Table",
+     "Audit and Reconciliation Log Table",
+     "Outbox / Audit Dispatcher Component",
+     "DLQ Manager",
+     "Event-Sourced State Store Component"
+    ],
+    "sensitivity_points": [
+     "Mainframe side idempotency not defined",
+     "Reconciliation procedure not explicit"
+    ],
+    "tradeoffs": [
+     "At-least-once delivery requires idempotency overhead"
+    ],
+    "justification": "Outbox, idempotency, event-sourced state, audit log and DLQ support reconciliation without loss or duplicates. Gaps: no explicit reconciliation job and no dedupe on the mainframe side, which cannot change easily."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "elements": [
+     "Feature/Routing Service",
+     "Feature Toggle Engine",
+     "Azure App Configuration",
+     "Migration Router & Feature Toggles Component",
+     "Integration / Anti-Corruption Layer (ACA Worker)",
+     "Translation / Mapper Component"
+    ],
+    "sensitivity_points": [
+     "Data sync back to the mainframe on switch-back",
+     "Duplicate routing logic in two containers"
+    ],
+    "tradeoffs": [
+     "Toggle flexibility vs duplicated routing responsibility"
+    ],
+    "justification": "Per-claim-type toggles in App Configuration allow quick switch-back and the ACL confines the mapping changes. Dual routing components and the unspecified data re-sync on rollback are risks, though the interface change can plausibly be minimal."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "elements": [
+     "Claims API Gateway",
+     "Customer Portal",
+     "Adjuster Web App",
+     "Claims Core Services",
+     "Event-Sourced State Store Component",
+     "Feature/Routing Service"
+    ],
+    "sensitivity_points": [
+     "No explicit historical data migration mechanism",
+     "Gateway contract stability"
+    ],
+    "tradeoffs": [
+     "Stable API façade vs added indirection"
+    ],
+    "justification": "UIs are decoupled via the API gateway and BFF, so they need not be rewritten. However, the plan for cutting over system of record, migrating historical data and removing the ACL/routing is not described."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "elements": [
+     "Authorization & Context Injection Component",
+     "Edge Security Component",
+     "Claims API Gateway",
+     "Audit & Telemetry Component",
+     "Active Directory / Identity Provider"
+    ],
+    "sensitivity_points": [
+     "Ownership model of broker-to-customer data not defined",
+     "Authorization not enforced in services or mainframe"
+    ],
+    "tradeoffs": [
+     "Central gateway authorization simplifies policy but risks bypass"
+    ],
+    "justification": "The gateway has CBAC and JWT checks, but there is no explicit broker-customer ownership rule, no record of denied access in the core, and no enforcement in the mainframe path. The measure of no unauthorized access in either system is not met."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "Active Directory / Identity Provider",
+     "Edge Security Component",
+     "Claims API Gateway",
+     "Integration / Anti-Corruption Layer (ACA Worker)"
+    ],
+    "sensitivity_points": [
+     "Token lifetime and revocation interval unspecified",
+     "Mainframe access uses a service identity, not the user"
+    ],
+    "tradeoffs": [
+     "Stateless JWT scales but delays revocation"
+    ],
+    "justification": "OIDC with AD and JWT validation at the gateway removes access to the new platform once tokens expire. The mainframe is reached via ACL service credentials, so user revocation depends on the gateway. Token lifetime of 15 minutes is not stated."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "full"
+  },
+  "coverage": 0.6818181818181818,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Integration / Anti-Corruption Layer (ACA Worker)",
+     "Legacy Mainframe System (COBOL/DB2)",
+     "Mainframe Sync Queue"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Integration / Anti-Corruption Layer (ACA Worker)",
+     "Translation / Mapper Component",
+     "Legacy Adaptor Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Azure Container Apps",
+     "Azure Static Web Apps",
+     "Azure API Management",
+     "Azure Key Vault"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer Portal",
+     "Customer Portal SPA",
+     "Azure Blob Storage",
+     "Claims API Gateway",
+     "Claims Core Services"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Adjuster Web App",
+     "Claim Workspace Shell",
+     "BFF Proxy Layer",
+     "Optimized Claim View & Form Engine",
+     "Claims API Gateway"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Feature/Routing Service",
+     "Feature Toggle Engine",
+     "Azure App Configuration",
+     "Routing Dispatcher",
+     "Migration Router & Feature Toggles Component",
+     "Integration / Anti-Corruption Layer (ACA Worker)"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Idempotency & Outbox Processor",
+     "Transactional Outbox Table",
+     "Messaging",
+     "Azure Service Bus with DLQs",
+     "Outbox / Audit Dispatcher Component",
+     "Schema Validation Filter",
+     "DLQ Manager"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Mainframe Latency Handler",
+     "Integration / Anti-Corruption Layer (ACA Worker)",
+     "Resilience & Circuit Breaker Component",
+     "Local Draft Cache",
+     "Claims Core Services",
+     "Database"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Feature Toggle Engine",
+     "Azure App Configuration",
+     "Feature/Routing Service",
+     "Audit and Reconciliation Log Table",
+     "Mainframe Sync Queue"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Active Directory / Identity Provider",
+     "Claims API Gateway",
+     "Edge Security Component",
+     "Authorization & Context Injection Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

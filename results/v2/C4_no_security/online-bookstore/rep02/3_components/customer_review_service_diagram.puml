@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Customer Review Service container
+
+System_Ext(api_gateway, "AWS API Gateway", "External API Gateway routing requests.")
+
+Container_Boundary(customer_review_service, "Customer Review Service") {
+    Component(review_controller, "Review Controller", "Node.js / Express Router", "Manages customer reviews, 5-star ratings, and content moderation REST/HTTPS endpoints.")
+    Component(review_validation_sanitization_engine, "Review Validation & Sanitization Engine", "Joi / DOMPurify", "Sanitizes and validates review inputs for OWASP Top-10 XSS mitigations.")
+    Component(moderation_compliance_manager, "Moderation & Compliance Manager", "Node.js", "Handles content moderation and ensures GDPR/CCPA compliance.")
+    Component(review_data_access_layer, "Review Data Access Layer", "AWS SDK", "Interfaces with Amazon DynamoDB to read and write review records.")
+    Component(event_publisher, "Event Publisher", "AWS SDK", "Emits review-related events to Amazon EventBridge.")
+    Component(amazon_dynamodb, "Amazon DynamoDB", "NoSQL Database", "Provides single-digit millisecond latency storage for review records.")
+    Component(amazon_eventbridge_with_sqs_dead_letter_queues, "Amazon EventBridge with SQS Dead Letter Queues", "AWS EventBridge / SQS", "Handles asynchronous event deliveries and failed message processing.")
+    Component(aws_ecs_fargate_application_load_balancer, "AWS ECS Fargate & Application Load Balancer", "AWS ECS Fargate / ALB", "Hosts and scales the containerized service instances.")
+    Component(redis, "Redis", "AWS ElastiCache", "Distributed cache used for API rate limiting against bot spam.")
+}
+
+Rel(api_gateway, review_controller, "Routes review REST/HTTPS requests", "HTTPS / JSON")
+Rel(review_controller, review_validation_sanitization_engine, "Invokes internal validation workflows", "In-memory")
+Rel(review_controller, moderation_compliance_manager, "Invokes internal moderation workflows", "In-memory")
+Rel(moderation_compliance_manager, review_data_access_layer, "Reads and writes review records", "AWS SDK")
+Rel(review_controller, review_data_access_layer, "Reads and writes review records", "AWS SDK")
+Rel(review_data_access_layer, amazon_dynamodb, "Persists review data", "AWS SDK")
+Rel(event_publisher, amazon_eventbridge_with_sqs_dead_letter_queues, "Emits ReviewSubmitted, ReviewDeleted, and UserAnonymized events", "AWS SDK")
+Rel(amazon_eventbridge_with_sqs_dead_letter_queues, amazon_eventbridge_with_sqs_dead_letter_queues, "Handles failed asynchronous event deliveries", "AWS SQS")
+
+@enduml

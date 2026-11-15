@@ -1,0 +1,327 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 2,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: video consultations via Media Streaming Container, e-prescriptions via E-Prescription Integration Service, AI symptom triage via AI Symptom Checker Service, and granular consent management via Jurisdiction & Consent Engine Component and Wasm/Lua Auth Filter.",
+   "performance_efficiency": "Addressed well using Envoy Proxy, Rate Limiter (Redis), and Adaptive Bitrate (ABR) Controller Component for dynamic stream adaptation. However, underlying database performance, query caching, and persistence mechanisms for Core Telehealth Service are not explicitly modeled.",
+   "compatibility": "Explicitly fulfills interoperability standards: US Interoperability Adapter uses HAPI FHIR, EU Gateway Adapter utilizes Apache Camel for national REST/SOAP gateways, and Federated Identity Providers interface via OAuth 2.0/OIDC. WebRTC handles media transport.",
+   "usability": "Client-facing presentation layers (e.g., patient portal, clinician mobile app) are entirely omitted from Level 2 and Level 3, leaving Patients & Clinicians connecting directly to the API Gateway. Dedicated interfaces for Regulatory Auditors are also missing.",
+   "reliability": "Addressed thoroughly: Adaptive Bitrate Controller Component provides audio-first fallback for degraded rural connections (<300 kbit/s), Appointment Orchestrator Component uses Temporal SDK for fault-tolerant state, and Circuit Breaker Manager with Event & DLQ Handler mitigates external failures.",
+   "security": "Strict controls are detailed: Wasm/Lua Auth Filter for edge JWT validation and consent enforcement, gRPC over mTLS internally, DTLS-SRTP AES-256 in Media Relay & Encryption Engine, and WORM storage with CMEK in Audit Logger for EU MDR traceability.",
+   "maintainability": "High maintainability achieved through modular container separation and clear adapter patterns (EU Gateway Adapter, US Interoperability Adapter). Core domains (prescriptions, consultations, AI inference) are isolated, enabling independent updates, testing, and technology choices.",
+   "portability": "Docker containers deployed across GCP regions (europe-west3, us-central1) on GKE provide high portability. However, there is moderate provider lock-in through direct reliance on Vertex AI endpoints, Google Cloud Pub/Sub, and Google Cloud KMS without abstraction layers."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 4.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "The architecture includes an Envoy API Gateway and Janus WebRTC SFU with GKE NodePorts. However, scaling 5,000 concurrent video sessions requires explicit SFU clustering, horizontal scaling orchestration, and media TURN autoscaling, which are not detailed in the container or component definitions.",
+    "elements": [
+     "API Gateway",
+     "Media Streaming Container",
+     "Signaling & Session Manager Component",
+     "Media Relay & Encryption Engine Component"
+    ],
+    "sensitivity_points": [
+     "SFU media node bandwidth and CPU capacity under concurrent WebRTC stream loads"
+    ],
+    "tradeoffs": [
+     "Centralized media distribution vs distributed regional SFU scaling costs"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "A throughput of 50,000 requests/hour (~14 req/s) is modest. Envoy with Redis-based edge rate limiting and FastAPI routing inference to managed Vertex AI endpoints easily achieves sub-3 second latency for 95% of symptom check requests.",
+    "elements": [
+     "API Gateway",
+     "Rate Limiter",
+     "AI Symptom Checker Service",
+     "Symptom Router API",
+     "Inference Coordinator"
+    ],
+    "sensitivity_points": [
+     "Latency overhead from synchronous WORM audit logging during AI inference"
+    ],
+    "tradeoffs": [
+     "Strict synchronous audit trail vs inference turnaround latency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The architecture explicitly includes an Adaptive Bitrate (ABR) Controller Component implementing audio-first fallback and real-time bandwidth throttling. In addition, Temporal SDK in the Core Telehealth Service ensures workflow state resilience without loss during degraded network conditions.",
+    "elements": [
+     "Media Streaming Container",
+     "Adaptive Bitrate (ABR) Controller Component",
+     "Media Relay & Encryption Engine Component",
+     "Core Telehealth Service",
+     "Appointment Orchestrator Component"
+    ],
+    "sensitivity_points": [
+     "Sensitivity of WebRTC ABR thresholds to erratic packet loss and high jitter"
+    ],
+    "tradeoffs": [
+     "Dropping video quality to preserve audio fidelity and session state"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The target infrastructure only specifies a single US region (us-central1). Because data residency strictly forbids migrating US patient data to europe-west3, a complete US region outage cannot be recovered within 1 hour without an explicit secondary US region or automated multi-region DR failover.",
+    "elements": [
+     "Cross-Border Telehealth Platform",
+     "Core Telehealth Service",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Strict geographic data boundaries preventing cross-continental disaster recovery"
+    ],
+    "tradeoffs": [
+     "Compliance with data residency vs multi-region redundancy and infrastructure cost"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The E-Prescription Integration Service decouples workflow orchestration from gateway integration using an Apache Camel-based EU Gateway Adapter. Changes for adding new national standards are largely confined to that component without altering core prescription logic.",
+    "elements": [
+     "E-Prescription Integration Service",
+     "Prescription Workflow Coordinator",
+     "EU Gateway Adapter"
+    ],
+    "sensitivity_points": [
+     "Standardization of internal prescription models across disparate European national schemas"
+    ],
+    "tradeoffs": [
+     "Adapter modularity vs maintenance overhead of heterogeneous national translation routes"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The AI Symptom Checker Service separates the Symptom Router API from the Inference Coordinator and Audit Logger with CMEK and WORM storage. This allows model versioning, controlled rollbacks via Vertex AI, and immutable recommendation logging required for EU MDR traceability.",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Symptom Router API",
+     "Inference Coordinator",
+     "Audit Logger"
+    ],
+    "sensitivity_points": [
+     "Strict association of inference logs with immutable model versions in WORM storage"
+    ],
+    "tradeoffs": [
+     "Immutable audit write latency vs rapid model version rollout and rollback"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Cross-region access is governed at the edge by the Wasm/Lua Auth Filter and validated internally by the Jurisdiction & Consent Engine Component. Unauthorized cross-region requests are blocked and logged through the Audit & Traceability Logger Component.",
+    "elements": [
+     "API Gateway",
+     "Wasm/Lua Auth Filter",
+     "Core Telehealth Service",
+     "Jurisdiction & Consent Engine Component",
+     "Audit & Traceability Logger Component"
+    ],
+    "sensitivity_points": [
+     "Enforcement point latency when evaluating multi-jurisdiction consent rules"
+    ],
+    "tradeoffs": [
+     "Fine-grained consent evaluation overhead vs zero-trust jurisdictional compliance"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "The Jurisdiction & Consent Engine allows patients to manage consent profiles dynamically. However, the architecture lacks specific downstream components, data retention mechanisms, or asynchronous event pipelines to propagate research data revocation or verify deletion across analytic stores within 24 hours.",
+    "elements": [
+     "Core Telehealth Service",
+     "Jurisdiction & Consent Engine Component",
+     "Audit & Traceability Logger Component",
+     "Notification Dispatcher Component"
+    ],
+    "sensitivity_points": [
+     "Propagation delay of consent revocation across asynchronous and analytical data pipelines"
+    ],
+    "tradeoffs": [
+     "Real-time consent invalidation complexity vs eventual consistency in downstream systems"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.75,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Jurisdiction & Consent Engine Component",
+     "Audit & Traceability Logger Component",
+     "Audit Logger",
+     "Regulatory Auditors"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Jurisdiction & Consent Engine Component",
+     "Regional GCP Cloud Storage",
+     "Inference Coordinator"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Audit Logger",
+     "Inference Coordinator"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Appointment Orchestrator Component",
+     "Adaptive Bitrate (ABR) Controller Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Media Streaming Container",
+     "Signaling & Session Manager Component",
+     "Media Relay & Encryption Engine Component",
+     "Adaptive Bitrate (ABR) Controller Component",
+     "Patients & Clinicians"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "E-Prescription Integration Service",
+     "Prescription Workflow Coordinator",
+     "EU Gateway Adapter",
+     "US Interoperability Adapter",
+     "EU National E-Prescription Gateways",
+     "US Healthcare Networks/Pharmacies"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "AI Symptom Checker Service",
+     "Symptom Router API",
+     "Inference Coordinator"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Core Telehealth Service",
+     "Jurisdiction & Consent Engine Component",
+     "Wasm/Lua Auth Filter"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Jurisdiction & Consent Engine Component",
+     "Wasm/Lua Auth Filter",
+     "Inference Coordinator"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Adaptive Bitrate (ABR) Controller Component",
+     "Media Streaming Container"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Audit Logger",
+     "AI Symptom Checker Service"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "E-Prescription Integration Service",
+     "US Interoperability Adapter",
+     "EU Gateway Adapter",
+     "EU National E-Prescription Gateways",
+     "US Healthcare Networks/Pharmacies"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

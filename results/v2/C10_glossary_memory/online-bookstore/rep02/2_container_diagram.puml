@@ -1,0 +1,63 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Online Bookstore
+
+Person(customer, "Book Buyer / Customer and Site Visitor", "People interacting with the platform via HTTPS to browse catalogues, make purchases, write reviews, and receive recommendations.")
+
+System_Ext(payment_gateway, "Payment Gateway", "External payment processing service such as Stripe or PayPal.")
+System_Ext(shipping_providers, "Third-Party Shipping Providers", "External shipping services such as FedEx and UPS APIs for fulfillment.")
+System_Ext(tax_service, "Tax & Compliance Service", "External tax and compliance service such as Avalara.")
+System_Ext(recommendation_engine, "Recommendation Engine", "AWS Personalize service providing personalized book recommendations.")
+System_Ext(email_service, "Email/Notification Service", "Amazon SES for sending emails and notifications.")
+System_Ext(siem, "Centralized Logging & SIEM", "Centralized logging and security information and event management system.")
+
+System_Boundary(online_bookstore, "Online Bookstore") {
+    Container(spa, "Public Catalog & Search SPA & Authenticated Customer Portal SPA", "Amazon S3, Amazon CloudFront, AWS WAF", "Single page applications providing public catalogue browsing, search, and the authenticated customer portal.")
+    Container(api_gateway, "AWS API Gateway", "AWS API Gateway, AWS App Mesh", "Manages and routes incoming API requests to internal microservices with mutual TLS.")
+    Container(catalog_service, "Catalog & Search Service", "Node.js/Express, Java/Spring Boot, Python/FastAPI, AWS ECS on Fargate", "Handles book catalog browsing and search functionalities.")
+    Container(order_service, "Order & Checkout Service", "Node.js/Express, Java/Spring Boot, Python/FastAPI, AWS ECS on Fargate", "Manages secure checkout and order processing workflows.")
+    Container(recommendation_service, "Recommendation & Review Service", "Node.js/Express, Java/Spring Boot, Python/FastAPI, AWS ECS on Fargate", "Provides book recommendations and customer reviews.")
+    Container(review_service, "Customer Review & Moderation Service", "Node.js/Express, Java/Spring Boot, Python/FastAPI, AWS ECS on Fargate", "Moderates and manages customer submitted reviews.")
+    Container(notification_worker, "Notification & Engagement Worker", "Node.js/Express, Java/Spring Boot, Python/FastAPI, AWS ECS on Fargate", "Processes asynchronous notification tasks and engagement messages.")
+    ContainerDb(rds, "Amazon RDS", "Amazon RDS", "Relational database storage for persistent application data.")
+    ContainerDb(redis, "Redis on Amazon ElastiCache", "Redis, Amazon ElastiCache", "In-memory caching layer for performance optimization and protecting checkout availability.")
+    Container(sqs, "Amazon SQS", "Amazon SQS", "Message queue for decoupled asynchronous messaging between services.")
+    Container(secrets_manager, "AWS Secrets Manager", "AWS Secrets Manager, AWS KMS", "Manages secrets, encryption keys, and sensitive configuration data.")
+}
+
+Rel(customer, spa, "Accesses catalogue browsing, secure checkout, reviews, and personalized recommendations", "HTTPS (TLS 1.3)")
+Rel(spa, api_gateway, "Sends API requests for application data and actions", "HTTPS")
+Rel(api_gateway, catalog_service, "Routes catalog and search requests", "gRPC over TLS (with mutual TLS via AWS App Mesh)")
+Rel(api_gateway, order_service, "Routes checkout and order placement requests", "gRPC over TLS (with mutual TLS via AWS App Mesh)")
+Rel(api_gateway, recommendation_service, "Routes recommendation and review requests", "gRPC over TLS (with mutual TLS via AWS App Mesh)")
+Rel(api_gateway, review_service, "Routes review submission and moderation requests", "gRPC over TLS (with mutual TLS via AWS App Mesh)")
+
+Rel(order_service, payment_gateway, "Processes payments securely", "REST over HTTPS with circuit breakers")
+Rel(order_service, shipping_providers, "Coordinates fulfillment and shipping", "REST over HTTPS with circuit breakers")
+Rel(order_service, tax_service, "Calculates applicable taxes", "REST over HTTPS with circuit breakers")
+Rel(recommendation_service, recommendation_engine, "Fetches personalized recommendations", "REST over HTTPS")
+Rel(notification_worker, email_service, "Sends emails and user notifications", "HTTPS")
+
+Rel(catalog_service, rds, "Reads and writes catalog data", "AWS SDK")
+Rel(catalog_service, redis, "Caches catalog search results", "RESP")
+Rel(order_service, rds, "Stores order and transaction details", "AWS SDK")
+Rel(order_service, sqs, "Publishes asynchronous order events", "AWS SDK")
+Rel(recommendation_service, rds, "Reads and writes reviews and recommendations data", "AWS SDK")
+Rel(review_service, rds, "Stores review submissions and moderation statuses", "AWS SDK")
+Rel(notification_worker, sqs, "Consumes background notification tasks", "AWS SDK")
+
+Rel(catalog_service, secrets_manager, "Retrieves configuration and secrets", "AWS SDK")
+Rel(order_service, secrets_manager, "Retrieves configuration and secrets", "AWS SDK")
+Rel(recommendation_service, secrets_manager, "Retrieves configuration and secrets", "AWS SDK")
+Rel(review_service, secrets_manager, "Retrieves configuration and secrets", "AWS SDK")
+Rel(notification_worker, secrets_manager, "Retrieves configuration and secrets", "AWS SDK")
+
+Rel(catalog_service, siem, "Streams operational logs and telemetry", "HTTPS / AWS Infrastructure")
+Rel(order_service, siem, "Streams operational logs and telemetry", "HTTPS / AWS Infrastructure")
+Rel(recommendation_service, siem, "Streams operational logs and telemetry", "HTTPS / AWS Infrastructure")
+Rel(review_service, siem, "Streams operational logs and telemetry", "HTTPS / AWS Infrastructure")
+Rel(notification_worker, siem, "Streams operational logs and telemetry", "HTTPS / AWS Infrastructure")
+
+@enduml

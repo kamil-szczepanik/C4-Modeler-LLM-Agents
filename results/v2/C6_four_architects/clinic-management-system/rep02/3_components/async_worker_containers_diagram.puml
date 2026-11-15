@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Async Worker Containers container
+
+System_Ext(Message_Broker, "Message Broker", "AMQP / Kafka", "External message broker supplying tasks to the Task Dispatcher.")
+System_Ext(Data_Layer, "Data Layer", "PostgreSQL", "Persistent storage for workflow states and audit logs.")
+System_Ext(External_Systems, "External Systems", "HTTPS / mTLS", "External systems invoked securely by the Integration Dispatcher.")
+System_Ext(Kubernetes, "Kubernetes", "Container Orchestration", "Infrastructure scraping metrics from the Worker Health & Metrics Exporter.")
+
+Container_Boundary(async_worker_containers, "Async Worker Containers") {
+    Component(Task_Dispatcher, "Task Dispatcher", "Python / Celery", "Consumes messages from Message Broker via AMQP/Kafka.")
+    Component(Workflow_Orchestrator, "Workflow Orchestrator", "Temporal", "Manages durable, multi-step clinical sagas with built-in audit trails and persists state to Data Layer.")
+    Component(Integration_Dispatcher, "Integration Dispatcher", "Python / httpx", "Invokes External Systems securely via HTTPS/mTLS.")
+    Component(Encryption_Sanitization_Component, "Encryption / Sanitization Component", "Python cryptography", "Ensures HIPAA/GDPR compliance and secure handling of sensitive data.")
+    Component(Batch_Export_Formatter, "Batch Export Formatter", "Python / Jinja2 / Marshmallow", "Formats and sends payloads to Integration Dispatcher.")
+    Component(Audit_Logger_Component, "Audit Logger Component", "Python structlog", "Flushes encrypted records to Data Layer (PostgreSQL) via TLS 1.3.")
+    Component(Dead_Letter_Queue_DLQ_Handler, "Dead-Letter Queue (DLQ) Handler", "Celery DLQ extensions", "Handles failed task messages for error management.")
+    Component(Worker_Health_Metrics_Exporter, "Worker Health & Metrics Exporter", "Prometheus Python Client", "Exposes endpoints scraped by Kubernetes via HTTP/GET.")
+}
+
+Rel(Task_Dispatcher, Message_Broker, "Consumes messages from", "AMQP/Kafka")
+Rel(Workflow_Orchestrator, Data_Layer, "Persists state to", "encrypted SQL/TLS 1.3")
+Rel(Integration_Dispatcher, External_Systems, "Invokes securely via", "HTTPS/mTLS")
+Rel(Batch_Export_Formatter, Integration_Dispatcher, "Sends payloads to", "gRPC/HTTP")
+Rel(Audit_Logger_Component, Data_Layer, "Flushes encrypted records to", "TLS 1.3")
+Rel(Worker_Health_Metrics_Exporter, Kubernetes, "Exposes endpoints scraped by", "HTTP/GET")
+
+@enduml

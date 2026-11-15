@@ -1,0 +1,303 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: Scoring Executor Component evaluates transactions (R-01), Case Management API with Case Service facilitates reviews (R-02), and In-Memory Model Cache Component with Rule & Model Cache enables zero-downtime model and rule hot-reloading (R-03).",
+   "performance_efficiency": "The sub-50ms P99 target at 3,000 RPS is addressed using Go on ECS, gRPC over mTLS, local WASM evaluation, Redis Feature Store caching, and decoupling heavy audit writes via Asynchronous Messaging (Amazon SQS).",
+   "compatibility": "Standard protocols ensure seamless integration: gRPC/mTLS interfaces with Payment Gateway / Acquirer, OIDC/OAuth 2.0 integrates Identity Provider (IdP), and standard PostgreSQL Wire Protocol and Redis Protocol connect internal data stores.",
+   "usability": "Fraud Analysts are supported via Case Management Ingress Router and Case Management API with RBAC. However, the architecture defines only backend APIs without detailing the frontend web application interface used by analysts.",
+   "reliability": "High availability is supported via Multi-AZ ElastiCache, SQS DLQs, and Feature Aggregator Component timeout fallbacks. However, an explicit circuit-breaker or fail-open mechanism ensuring payments are unblocked within 1 minute (R-07) is missing.",
+   "security": "Security thoroughly addresses PCI-DSS L1: API Handler Component performs PAN tokenization, Audit Sink leverages S3 Object Lock, Auth & RBAC Middleware secures sessions, and ALB enforces TLS 1.3, mTLS, and AWS WAF inspection.",
+   "maintainability": "Modular design separates concerns between Fraud Scoring Engine and Case Management API. Zero-downtime hot-swapping in Scoring Executor Component and managed AWS services ensure low operational overhead for a 3-engineer team.",
+   "portability": "Targeted specifically to AWS eu-west-1 using containerized services (Go/Node.js on ECS). However, tight integration with AWS-native services (SQS, S3 Object Lock, AWS WAF, ALB) limits portability to other cloud environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "While Go, in-memory channels, and local WASM execution minimize processing overhead, the Fraud Scoring Engine writes directly to PostgreSQL on the synchronous path, creating a substantial latency bottleneck that jeopardizes the 50 ms P99 SLA at 3,000 TPS.",
+    "elements": [
+     "AWS ALB (Ingress / API Gateway)",
+     "Fraud Scoring Engine",
+     "Redis Feature Store",
+     "Transactional & Audit Data Store"
+    ],
+    "sensitivity_points": [
+     "Direct synchronous database writes during transaction scoring under peak throughput",
+     "Redis network round-trip time for sliding-window velocity counters"
+    ],
+    "tradeoffs": [
+     "Immediate relational persistence vs. sub-50 ms decision latency under peak load"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Complete path and workload separation is enforced at the ALB. Analyst traffic is routed to a dedicated Case Management API and isolated RDS read replica, ensuring heavy analyst queries never contend with scoring engine resources.",
+    "elements": [
+     "AWS ALB (Ingress / API Gateway)",
+     "Case Management API",
+     "Fraud Scoring Engine",
+     "Transactional & Audit Data Store"
+    ],
+    "sensitivity_points": [
+     "Isolation of analyst query execution on the RDS Read Replica"
+    ],
+    "tradeoffs": [
+     "Replication lag on read replicas vs. eliminating contention on the primary database"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture lacks a stand-in or fallback decision mechanism if the scoring engine crashes. While Redis features have local fallbacks, total container failure leaves no automated bypass or rule-based stand-in at the ingress layer.",
+    "elements": [
+     "AWS ALB (Ingress / API Gateway)",
+     "Fraud Scoring Engine",
+     "Payment Gateway / Acquirer"
+    ],
+    "sensitivity_points": [
+     "Absence of edge or load-balancer fallback rules when scoring targets are unhealthy"
+    ],
+    "tradeoffs": [
+     "Strict screening enforcement vs. rapid fail-open or stand-in payment authorization"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Audit logging is fully decoupled from the critical path using an asynchronous Audit Dispatcher pushing to Amazon SQS. SQS buffers audit events, and a Dead-Letter Queue handles retries if downstream audit sinks degrade.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Asynchronous Messaging",
+     "Audit Sink"
+    ],
+    "sensitivity_points": [
+     "SQS queue capacity and retention buffer during extended audit sink outages"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of audit trails vs. zero latency impact on authorization decisions"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The scoring engine leverages local WASM binaries cached in memory and dynamic rule stores in Redis. The In-Memory Model Cache atomically hot-swaps cryptographically verified models without container restarts, enabling immediate rollbacks.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Redis Feature Store"
+    ],
+    "sensitivity_points": [
+     "Atomic pointer swapping for WASM binaries in the in-memory cache"
+    ],
+    "tradeoffs": [
+     "In-memory model execution limits model complexity vs. providing sub-millisecond execution and instant swaps"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Rules are fetched dynamically from the Redis Rule & Model Cache and evaluated in the Scoring Executor. Decisions explicitly capture applied rule IDs, and updates take effect dynamically across scoring instances without redeployment.",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Redis Feature Store",
+     "Asynchronous Messaging"
+    ],
+    "sensitivity_points": [
+     "Polling interval or pub/sub latency for Redis rule cache synchronization"
+    ],
+    "tradeoffs": [
+     "Dynamic rule parsing overhead vs. zero-downtime hot reloading"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The API Handler sanitizes and tokenizes PANs at ingress, preventing plain-text card storage in case repositories. However, the architecture specifies no automated anomaly detection, SIEM integration, or behavioral alerting to detect compromised accounts within 15 minutes.",
+    "elements": [
+     "Case Management API",
+     "Fraud Scoring Engine",
+     "Transactional & Audit Data Store"
+    ],
+    "sensitivity_points": [
+     "Completeness of PAN tokenization at ingress before data reaches case storage"
+    ],
+    "tradeoffs": [
+     "Tokenization security vs. analyst investigation capability without seeing raw PANs"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "A 7-year retention strategy is explicitly addressed via pg_partman automated partitioning and archival to S3 Glacier Vault and S3 Object Lock. Immutable audit logs store decision inputs, model versions, and HMAC signatures, meeting the retrieval timeline.",
+    "elements": [
+     "Transactional & Audit Data Store",
+     "Audit Sink",
+     "Asynchronous Messaging"
+    ],
+    "sensitivity_points": [
+     "S3 Object Lock retention policy and Glacier retrieval turnaround time"
+    ],
+    "tradeoffs": [
+     "Cold storage retrieval latency vs. low-cost compliance over a 7-year lifecycle"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "none",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "none"
+  },
+  "coverage": 0.5909090909090909,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "API Handler Component",
+     "Web Application Firewall (WAF) Inspector",
+     "Path-Based Routing and TLS Controller",
+     "Secrets Manager"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Partition Manager",
+     "Audit Sink",
+     "Audit Log Subsystem",
+     "S3 Glacier Vault"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring Engine",
+     "Scoring Executor Component",
+     "Payment Gateway Ingress Router",
+     "API Handler Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management API",
+     "Case Service",
+     "Case Management Repository",
+     "Case Management Ingress Router",
+     "Fraud Analysts"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "In-Memory Model Cache Component",
+     "Rule & Model Cache"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Path-Based Routing and TLS Controller",
+     "Web Application Firewall (WAF) Inspector",
+     "Feature Aggregator Component",
+     "Scoring Executor Component",
+     "Feature Data Engine",
+     "Redis Feature Store"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "API Handler Component",
+     "Path-Based Routing and TLS Controller",
+     "Secrets Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Audit Sink",
+     "Audit Log Subsystem",
+     "Audit Dispatcher Component",
+     "Audit & Compliance Logger",
+     "Audit Event Ingestion Queue",
+     "Audit Dispatcher Worker"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

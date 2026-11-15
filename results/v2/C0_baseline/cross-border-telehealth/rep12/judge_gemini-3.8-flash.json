@@ -1,0 +1,353 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Video Consultation Service handles consultations (R-01), Core Telehealth & E-Prescription drives prescriptions (R-02), AI Symptom Checker provides triage urgency (R-03), and Consent Management Service allows purpose-based consent management (R-04).",
+   "performance_efficiency": "Cloud Run and GKE ensure elastic scaling. Low latency is supported by Redis Cache, while Cloud Pub/Sub enables asynchronous event processing. Dynamic codec step-down in SFU Media Router optimizes video transmission bandwidth.",
+   "compatibility": "Prescription Dispatcher Adapter supports HL7 FHIR and national standards for US Pharmacy Networks and EU National E-Prescription Gateways (R-08). External Identity Providers (eIDAS, Login.gov) integrate seamlessly via OIDC/SAML in Patient Onboarding & Identity.",
+   "usability": "Patients and Licensed Clinicians are served by cross-platform Web/Mobile Client Applications. Offline Caching Module supports rural users during connection drops, and Compliance Officers/Auditors are served via the Clinical Insights Dashboard and BigQuery analytics.",
+   "reliability": "R-06 is directly satisfied by Network Diagnostics Agent and SFU Media Router enabling degraded mode under 300 kbit/s. Fault tolerance is bolstered by Dead-Letter Queues (DLQs) in Cloud Pub/Sub and Circuit Breaker Sidecars.",
+   "security": "Strict data residency (R-05) is enforced via Data Residency Router and regional KMS/PostgreSQL instances. mTLS, CMEK, Consent Enforcement Interceptor, and WORM-configured BigQuery audit logging thoroughly cover GDPR, HIPAA, and MDR traceability.",
+   "maintainability": "The architecture exhibits high modularity with clear separation of concerns across GKE and Cloud Run services. Pluggable components like LLM/Inference Adapter, Prescription Dispatcher Adapter, and Channel Adapters promote loose coupling and testability.",
+   "portability": "Containerized workloads (GKE, Cloud Run) and Flutter clients align well with target GCP regions (europe-west3, us-central1). However, high coupling to proprietary services like BigQuery and Cloud KMS limits seamless multi-cloud or on-premise portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "LiveKit SFU on GKE with Cloud Load Balancing scales media routing and session signaling for concurrent sessions. However, 5,000 simultaneous WebRTC streams require extensive node pool autoscaling and careful edge egress bandwidth provisioning to guarantee sub-10 s joins under peak load.",
+    "elements": [
+     "Cloud Load Balancing / API Gateway",
+     "Video Consultation Service",
+     "SFU Media Router",
+     "Session Signaling Controller",
+     "WebRTC Video Module"
+    ],
+    "sensitivity_points": [
+     "Signaling latency and SFU pod scheduling times under sudden EU-wide traffic spikes."
+    ],
+    "tradeoffs": [
+     "Pre-warming GKE SFU nodes ensures sub-10 s joins but increases idle operational costs."
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Cloud Run horizontally autoscales the API and Triage Orchestrator, while async Pub/Sub offloads audit logging. However, meeting a 3 s SLA at 95% depends heavily on LLM inference latency through Vertex AI, which can suffer long tail delays during peak load.",
+    "elements": [
+     "AI Symptom Checker",
+     "API Router",
+     "Triage Orchestrator",
+     "LLM/Inference Adapter",
+     "Cloud Pub/Sub"
+    ],
+    "sensitivity_points": [
+     "Vertex AI inference latency and concurrency limits for real-time triage responses."
+    ],
+    "tradeoffs": [
+     "Offloading audit logging asynchronously preserves low latency but risks message queue delays."
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The architecture explicitly provides dynamic codec step-down via the SFU Media Router, client-side bitrate adaptation in the WebRTC Video Module, and offline caching via WatermelonDB/Hive to preserve call state and clinical notes during severe bandwidth drops.",
+    "elements": [
+     "Video Consultation Service",
+     "SFU Media Router",
+     "Network Diagnostics Agent",
+     "WebRTC Video Module",
+     "Offline Caching Module"
+    ],
+    "sensitivity_points": [
+     "Real-time accuracy of Network Diagnostics Agent detecting packet drops and throttling."
+    ],
+    "tradeoffs": [
+     "Stepping down video resolution preserves call stability but compromises visual examination quality."
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Target cloud configuration specifies only one US region (us-central1). Data residency constraints strictly forbid failing US patient traffic over to the EU (europe-west3). Without a defined secondary US region or automated cross-region backup topology in the US, service restoration within 1 hour is not guaranteed.",
+    "elements": [
+     "Cloud Load Balancing / API Gateway",
+     "Data Residency Router & Regional Data Store Gateway",
+     "Regional PostgreSQL Instances",
+     "Security & Secret Management"
+    ],
+    "sensitivity_points": [
+     "Total dependency on a single US cloud region without documented intra-country secondary failover."
+    ],
+    "tradeoffs": [
+     "Strict regional data confinement prevents cross-continent failover, increasing outage risks during regional failures."
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Core Telehealth container contains a dedicated Prescription Dispatcher Adapter that connects to EU National E-Prescription Gateways via REST and HL7 FHIR. Adding a new country format is modularly confined to extending or configuring this adapter without affecting core workflows.",
+    "elements": [
+     "Core Telehealth & E-Prescription",
+     "Prescription Dispatcher Adapter",
+     "EU National E-Prescription Gateways"
+    ],
+    "sensitivity_points": [
+     "Uniformity of internal e-prescription domain models across varying EU national standards."
+    ],
+    "tradeoffs": [
+     "Abstracting varied national protocols behind a single adapter interface may complicate national edge-case handling."
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The AI Symptom Checker publishes triage audit logs with model version metadata asynchronously to regional Pub/Sub topics and BigQuery, satisfying traceability under EU MDR. However, the architecture does not specify canary or dynamic version routing mechanisms to handle seamless runtime rollbacks.",
+    "elements": [
+     "AI Symptom Checker",
+     "LLM/Inference Adapter",
+     "Audit & Traceability Logger",
+     "Cloud Pub/Sub",
+     "Cloud Logging & BigQuery"
+    ],
+    "sensitivity_points": [
+     "Consistent propagation of model version identifiers from Vertex AI to BigQuery audit records."
+    ],
+    "tradeoffs": [
+     "Immutable audit logging ensures regulatory traceability but increases persistent BigQuery storage growth."
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Access is mediated by the Consent Enforcement Interceptor using JIT validation against the Consent Policy Engine. Requests without valid cross-border patient consent are denied, geo-partitioning is enforced by the Data Residency Router, and access attempts are logged to BigQuery.",
+    "elements": [
+     "Core Telehealth & E-Prescription",
+     "Consent Enforcement Interceptor",
+     "Consent Management Service",
+     "Consent Policy Engine",
+     "Audit & Compliance Logger"
+    ],
+    "sensitivity_points": [
+     "Zero-trust validation enforced on every inter-regional clinical access request."
+    ],
+    "tradeoffs": [
+     "Mandatory JIT consent evaluation adds gRPC latency to cross-region record lookups."
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Patients manage consent through the Consent REST Controller, which triggers instant revocation via the Consent Policy Engine, Pub/Sub cache invalidation, and audit logging. Downstream research analytics views mask patient records; however, purging already replicated research data is not detailed.",
+    "elements": [
+     "Consent Management Service",
+     "Consent Policy Engine",
+     "Consent REST Controller",
+     "Redis Cache",
+     "Analytics & BI Exporter"
+    ],
+    "sensitivity_points": [
+     "Pub/Sub latency and Redis cache eviction speed across distributed regional policy caches."
+    ],
+    "tradeoffs": [
+     "Immediate cache invalidation ensures privacy compliance but temporarily increases database evaluation load."
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent Management Service",
+     "Consent Policy Engine",
+     "Audit & Compliance Logger",
+     "Security & Secret Management",
+     "Regional KMS Adapter",
+     "Cloud Logging & BigQuery"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Data Residency Router & Regional Data Store Gateway",
+     "Regional PostgreSQL Instances",
+     "EU Pub/Sub Regional Topic",
+     "US Pub/Sub Regional Topics",
+     "Regional KMS Adapter",
+     "Audit & Compliance Data Store"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker",
+     "Audit & Traceability Logger",
+     "LLM/Inference Adapter",
+     "EU Pub/Sub Regional Topic",
+     "Audit & Compliance Logger"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Web/Mobile Client Applications",
+     "Offline Caching Module",
+     "WebRTC Video Module",
+     "Video Consultation Service",
+     "SFU Media Router",
+     "Network Diagnostics Agent"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patients",
+     "Licensed Clinicians",
+     "Web/Mobile Client Applications",
+     "WebRTC Video Module",
+     "Video Consultation Service",
+     "SFU Media Router",
+     "Session Signaling Controller"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Core Telehealth & E-Prescription",
+     "E-Prescription Engine",
+     "Prescription Dispatcher Adapter",
+     "EU National E-Prescription Gateways",
+     "US Pharmacy Networks",
+     "Pharmacies"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker",
+     "Triage Orchestrator",
+     "LLM/Inference Adapter",
+     "Clinical Handoff Dispatcher"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Consent Management Service",
+     "Consent REST Controller",
+     "Consent Policy Engine",
+     "Consent Persistence Adapter"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Data Residency Router & Regional Data Store Gateway",
+     "Consent Management Service",
+     "Consent Policy Engine",
+     "Consent Enforcement Interceptor",
+     "Regional PostgreSQL Instances",
+     "Audit & Compliance Data Store"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Video Consultation Service",
+     "SFU Media Router",
+     "Network Diagnostics Agent",
+     "WebRTC Video Module"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker",
+     "Audit & Traceability Logger",
+     "LLM/Inference Adapter",
+     "EU Pub/Sub Regional Topic",
+     "Cloud Logging & BigQuery"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Core Telehealth & E-Prescription",
+     "Prescription Dispatcher Adapter",
+     "EU National E-Prescription Gateways",
+     "US Pharmacy Networks"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

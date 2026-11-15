@@ -1,0 +1,315 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively supported: R-01 via 'Customer Portal', R-02 through 'Adjuster Workspace', and R-03 through the 'Migration Router' routing claim types incrementally to either 'Claims Core API' or legacy mediation paths.",
+   "performance_efficiency": "Requirement R-05 is directly addressed by 'Adjuster Workspace', which uses 'Local Cache & Read Model' (Redis) and asynchronous 'Sync Consumer' updates, allowing adjuster screens to bypass slow 5-second mainframe responses and render under 2 seconds.",
+   "compatibility": "Interoperability with the legacy mainframe is thoroughly handled by 'Integration Gateway & Sync Worker' using direct DB2/batch protocols and SOAP mediation. Coexistence and translation are explicitly safeguarded by 'ACL Mapper' and 'Legacy Anti-Corruption Layer (ACL)'.",
+   "usability": "Distinct interfaces serve both personas: 'Customer Portal' with 'Local Session Cache' for customer/broker draft submission, and 'Adjuster Workspace' with dedicated presentation views for adjusters. However, specific operational controls for managing switchbacks lack a dedicated interface.",
+   "reliability": "R-04 consistency constraints are satisfied via 'Outbox Processor Component', transactional persistence in 'Claim Repository', message queues in 'Azure Service Bus', and fault-tolerant handling via 'Circuit Breaker & Fallback Handler Component' and 'Audit & Failover Logger'.",
+   "security": "R-07 is fulfilled by integrating 'Adjuster Workspace' and 'Authentication Handler' with enterprise 'Active Directory' using SAML/OIDC. However, authenticating external 'Customers & Brokers' against the internal Active Directory without an external identity provider is a minor architectural flaw.",
+   "maintainability": "R-06 switchbacks are cleanly enabled by 'Feature Flag Manager' and 'Migration Router'. However, high technology sprawl (Java/Spring, C# Functions, Node.js BFF, Vue/React) increases cognitive load for a team noted to have little cloud experience.",
+   "portability": "The hybrid topology across Azure West Europe and on-premises is well respected using standard containerization ('Azure Container Apps'). Reliance on Azure-specific PaaS services (Azure Functions, Azure Service Bus) introduces minor vendor lock-in, which is acceptable for the brief."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 3,
+   "SEC-01": 2,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.71875,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 5.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The Adjuster Workspace integrates an in-memory Local Cache & Read Model (Redis) populated asynchronously by a Sync Consumer via Azure Service Bus, allowing screen loads in under 2 seconds without waiting for 5-second mainframe responses.",
+    "elements": [
+     "Adjuster Workspace",
+     "Local Cache & Read Model",
+     "Sync Consumer",
+     "Claims Presentation Service",
+     "Azure Service Bus"
+    ],
+    "sensitivity_points": [
+     "Cache invalidation latency and consistency between Redis and mainframe updates"
+    ],
+    "tradeoffs": [
+     "Eventual consistency in UI data display traded for sub-second read performance"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "justification": "The Customer Portal and Migration Router rely on synchronous HTTPS/REST calls without an immediate asynchronous ingress queue to buffer traffic spikes, risking direct forwarding of peak unmigrated claim traffic to the mainframe during the nightly batch window.",
+    "elements": [
+     "Customer Portal",
+     "Migration Router",
+     "Integration Gateway & Sync Worker",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "Direct synchronous request forwarding to legacy mainframe during high portal submission volumes"
+    ],
+    "tradeoffs": [
+     "Immediate synchronous submission feedback to users traded against risk of mainframe batch overload"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "While Azure Durable Functions and Circuit Breakers are present, submission ingestion via Migration Router is synchronous REST/SOAP; lack of an explicit queue-based front buffer leaves submissions vulnerable to failure when the mainframe is offline during batch windows.",
+    "elements": [
+     "Migration Router",
+     "Integration Gateway & Sync Worker",
+     "Circuit Breaker & Fallback Handler Component",
+     "Sync Orchestrator Component"
+    ],
+    "sensitivity_points": [
+     "Synchronous coupling between Migration Router and Integration Gateway when legacy endpoints are paused"
+    ],
+    "tradeoffs": [
+     "Simpler synchronous routing interfaces traded against availability and resilient deferred ingestion"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Consistency is supported by Outbox Processor and Azure Durable Functions Sync Orchestrator for batch reconciliation, paired with Claim Domain Service transactional persistence (Azure SQL), preventing duplicate processing or data loss during transient sync disruptions.",
+    "elements": [
+     "Sync Orchestrator Component",
+     "Outbox Processor Component",
+     "Claim Domain Service",
+     "Claim Repository",
+     "Azure Service Bus"
+    ],
+    "sensitivity_points": [
+     "Idempotency enforcement across hybrid sync boundaries in Durable Functions"
+    ],
+    "tradeoffs": [
+     "Higher orchestration complexity in Durable Functions traded for guaranteed state reconciliation"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Migration Router incorporates a Routing Controller and Redis-backed Feature Flag Manager specifically designed to toggle claim types instantly and support one-day rollbacks, while the ACL Mapper translates payloads to minimize mainframe interface modifications.",
+    "elements": [
+     "Migration Router",
+     "Routing Controller",
+     "Feature Flag Manager",
+     "ACL Mapper",
+     "Claims Core API"
+    ],
+    "sensitivity_points": [
+     "Centralized routing rule consistency in the Redis Feature Flag Manager"
+    ],
+    "tradeoffs": [
+     "Extra network hop via Migration Router traded for instant zero-downtime routing switch-backs"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The Strangler Fig design isolates both Customer Portal and Adjuster Workspace behind the Migration Router and Claims Core API. Retiring the mainframe requires updating routing configurations and decommissioning the Integration Gateway without altering frontends.",
+    "elements": [
+     "Migration Router",
+     "Claims Core API",
+     "Customer Portal",
+     "Adjuster Workspace",
+     "Integration Gateway & Sync Worker"
+    ],
+    "sensitivity_points": [
+     "Strict decoupling of frontend interfaces from legacy backend data schemas"
+    ],
+    "tradeoffs": [
+     "Intermediate facade overhead during migration traded for seamless eventual legacy decommissioning"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "justification": "Customer Portal uses Active Directory for broker authentication, but the architecture omits object-level authorization (ABAC/RBAC) or broker-to-claim ownership boundary verification mechanisms in either the portal components or the Claims Core API domain services.",
+    "elements": [
+     "Customer Portal",
+     "Authentication Handler",
+     "Claims Core API",
+     "Claim Domain Service",
+     "Active Directory"
+    ],
+    "sensitivity_points": [
+     "Lack of fine-grained multi-tenant or broker-specific authorization validation rules"
+    ],
+    "tradeoffs": [
+     "Delegating identity handling solely to generic OIDC token validation traded against authorization granularity"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Adjuster access is mediated entirely through Active Directory SSO integrated directly into the Adjuster Workspace. Revoking the account in Active Directory invalidates token issuance and active sessions, blocking access to all claims systems as adjusters lack direct mainframe access.",
+    "elements": [
+     "Adjuster Workspace",
+     "Active Directory",
+     "UI Controller / BFF Router"
+    ],
+    "sensitivity_points": [
+     "Session token TTL and immediate token revocation enforcement across the BFF layer"
+    ],
+    "tradeoffs": [
+     "Centralized AD dependency traded for immediate company-wide offboarding and access revocation"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Integration Gateway & Sync Worker",
+     "Sync Orchestrator Component"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Sync Orchestrator Component",
+     "Integration Gateway & Sync Worker"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "ACL Mapper",
+     "Legacy Anti-Corruption Layer (ACL)",
+     "Mainframe Adapter Component",
+     "Integration Gateway & Sync Worker"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers & Brokers",
+     "Customer Portal",
+     "Claim Submission UI",
+     "API Client"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Adjuster Workspace",
+     "Claims Presentation Service",
+     "UI Controller / BFF Router"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Migration Router",
+     "Routing Controller",
+     "Claims Core API"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Claim Domain Service",
+     "Claim Repository",
+     "Outbox Processor Component",
+     "Audit & Failover Logger",
+     "Azure Service Bus"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Local Cache & Read Model",
+     "Sync Consumer",
+     "Adjuster Workspace"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Feature Flag Manager",
+     "Routing Controller",
+     "Migration Router"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Active Directory",
+     "Adjuster Workspace",
+     "Authentication Handler"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

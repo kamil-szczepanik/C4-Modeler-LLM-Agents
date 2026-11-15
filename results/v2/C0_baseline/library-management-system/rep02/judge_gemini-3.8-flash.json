@@ -1,0 +1,255 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies all requirements: R-01 is addressed by Catalogue Service managing physical and digital items, while Circulation Management and Self-Service Portal comprehensively support circulation and self-service patron workflows.",
+   "performance_efficiency": "Requirement R-05 (<800ms search) is directly addressed by the dedicated Search Engine (Elasticsearch Cluster, Query Processor), Redis Cache Layer, gRPC/HTTP2 communication, and asynchronous indexing via Kafka and Search Synchronizer.",
+   "compatibility": "Standard protocols (OAuth2/OIDC, mTLS, HTTPS/REST) ensure clean integration with EU Identity Provider, EU Payment Gateway, and EU Notification Service, though specific library interoperability protocols (e.g., MARC21 or Z39.50) are not defined.",
+   "usability": "Distinct interfaces serve all user groups: Self-Service Portal provides patrons with WCAG 2.1 AA accessible catalogue exploration and loan management, while Staff Management Console provides librarians with optimized cataloguing and circulation workflows.",
+   "reliability": "Decoupled messaging via Event Broker (Kafka) with cross-AZ replication, asynchronous processing in Notification Worker with fallback dispatch, and caching enhance fault tolerance, though transactional database failover is not detailed.",
+   "security": "Strict EU data residency is enforced in Audit Storage (EU KMS) and PostgreSQL. Robust controls include OAuth2/OIDC token validation in API Gateway, mTLS, WAF, PII scrubbing via Fluentbit, and immutable TimescaleDB WORM audit logging.",
+   "maintainability": "Excellent modular decomposition separates concerns into distinct containers (Catalogue Service, Circulation Management, Search Engine). Decoupling via Kafka and clean internal component packaging (Spring Boot, Go, React) ensure high testability and maintainability.",
+   "portability": "Components use standard, portable runtimes (Go, Java/Spring Boot, React/Nginx, PostgreSQL, Elasticsearch) adaptable to EU cloud or on-premise infrastructure, though specific container orchestration abstraction is not explicitly defined."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 3,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.6875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 2.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The dedicated Elasticsearch Cluster queried via gRPC and API Gateway proxying, combined with Redis caching, directly targets sub-800ms execution. However, explicit details on horizontal cluster scaling and capacity tuning under 2,000 concurrent requests are not detailed.",
+    "elements": [
+     "API Gateway",
+     "Routing and Proxy Engine",
+     "Search Engine",
+     "Query Processor",
+     "Elasticsearch Cluster",
+     "Cache Layer"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch cluster sizing and index replica distribution under peak concurrency",
+     "Redis cache hit ratio for repetitive catalogue queries"
+    ],
+    "tradeoffs": [
+     "In-memory Redis caching increases infrastructure cost to maintain low latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Decoupling catalog writes from indexing via Kafka and the asynchronous Data Synchronizer prevents database updates from degrading Query Processor throughput. Event-driven CDC synchronization to the Elasticsearch cluster comfortably indexes changes within 5 minutes while maintaining sub-800ms query performance.",
+    "elements": [
+     "Catalogue Service",
+     "Search Synchronizer Component",
+     "Audit Logging/Kafka",
+     "Search Engine",
+     "Data Synchronizer",
+     "Index Manager",
+     "Query Processor"
+    ],
+    "sensitivity_points": [
+     "Kafka consumer lag and message throughput during peak ingestion periods",
+     "Bulk indexing refresh intervals within Elasticsearch"
+    ],
+    "tradeoffs": [
+     "Eventual consistency allows stale search results for up to 5 minutes"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Circulation Management uses a dedicated PostgreSQL store decoupled from Search Engine, ensuring search failures never compromise active loan transactions. Elasticsearch runs across EU availability zones, providing index replica failover, though automatic node failover semantics are not deeply specified.",
+    "elements": [
+     "Search Engine",
+     "Elasticsearch Cluster",
+     "Circulation Management",
+     "Circulation Data Access Component",
+     "Checkout Engine Component"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch shard replication factor across multi-zone deployments",
+     "Decoupled persistence isolating circulation transactions from search failures"
+    ],
+    "tradeoffs": [
+     "Multi-zone Elasticsearch shard replication adds operational overhead and storage cost"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "The Self-Service Portal is a stateless React/Nginx SPA and transactions persist in backend databases. However, the architecture omits an upstream load balancer or DNS failover layer in front of the Self-Service Portal instances to seamlessly handle portal node failure within 1 minute.",
+    "elements": [
+     "Self-Service Portal",
+     "API Gateway",
+     "Circulation Management",
+     "Routing & Layout Core Component"
+    ],
+    "sensitivity_points": [
+     "Upstream client traffic rerouting mechanism during Nginx instance failure",
+     "Stateless token management preventing session drops"
+    ],
+    "tradeoffs": [
+     "Redundant SPA instances increase host resource usage without documented load balancer"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "The Catalogue Service lacks an extensible adapter framework or provider plugin interface. Integrating a new external e-book provider requires modifying the core Item Domain Model, Data Access Repository, and Catalogue API Controller rather than isolating changes to a single dedicated integration component.",
+    "elements": [
+     "Catalogue Service",
+     "Catalogue API Controller",
+     "Item Domain Model & Business Logic Component",
+     "Data Access Repository"
+    ],
+    "sensitivity_points": [
+     "Tight coupling of item models within core Catalogue Service domain logic",
+     "Absence of pluggable ingestion interfaces for third-party catalog sources"
+    ],
+    "tradeoffs": [
+     "Monolithic domain modeling avoids abstraction layers but increases integration maintenance cost"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The Checkout Engine component in Circulation Management encapsulates circulation business rules directly in Spring Boot code. Without an externalized rules engine, policy service, or dynamic configuration store, altering loan rules between library types requires code changes and a service redeployment.",
+    "elements": [
+     "Circulation Management",
+     "Checkout Engine Component",
+     "Circulation Data Access Component"
+    ],
+    "sensitivity_points": [
+     "Hardcoded circulation business logic within the Java backend service",
+     "Absence of runtime rule configuration or policy engine"
+    ],
+    "tradeoffs": [
+     "Direct code logic improves runtime execution speed but eliminates runtime reconfigurability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "EU data residency is enforced across the architecture: Circulation Data Access explicitly enforces EU-region storage, Search Engine and Kafka brokers are EU-hosted, Audit Storage uses EU KMS, and all external identity, payment, and notification systems are constrained to EU providers.",
+    "elements": [
+     "Circulation Data Access Component",
+     "Elasticsearch Cluster",
+     "Event Broker",
+     "Audit Storage",
+     "EU Identity Provider",
+     "EU Payment Gateway",
+     "EU Notification Service"
+    ],
+    "sensitivity_points": [
+     "Exclusivity of third-party integrations to EU-compliant providers",
+     "Strict geographic binding of data persistence and KMS encryption keys"
+    ],
+    "tradeoffs": [
+     "Restricting vendor and infrastructure choices exclusively to EU regions limits provider options"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The API Gateway validates OIDC tokens and enforces role-based authorization, while the Patron Account Manager guards user records. Any unauthorized access attempts are caught, blocked, and forwarded through Observability Agents and Kafka to immutable TimescaleDB WORM audit storage with hash-chaining.",
+    "elements": [
+     "API Gateway",
+     "Authentication and Authorization Middleware",
+     "Observability and Security Agent",
+     "Circulation Management",
+     "Patron Account Manager Component",
+     "Audit Logging",
+     "Audit Storage"
+    ],
+    "sensitivity_points": [
+     "Scope and subject validation on incoming JWT tokens in API Gateway",
+     "Tamper-proof hash-chained audit logging of unauthorized security events"
+    ],
+    "tradeoffs": [
+     "Synchronous token validation and detailed audit generation introduce minor processing latency"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Library Management System",
+     "Circulation Data Access Component",
+     "Elasticsearch Cluster",
+     "Event Broker",
+     "Audit Storage"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalogue Service",
+     "Catalogue API Controller",
+     "Item Domain Model & Business Logic Component",
+     "Data Access Repository",
+     "Cataloguing & Circulation Module"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Engine",
+     "Query Processor",
+     "Elasticsearch Cluster",
+     "Search Query Client"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

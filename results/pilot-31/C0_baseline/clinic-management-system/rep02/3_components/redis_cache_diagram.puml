@@ -1,0 +1,21 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+System_Ext(EMR_Services, "EMR/Scheduling Services", "Java/Spring Boot services managing core clinical logic")
+System_Ext(PostgreSQL_Cluster, "PostgreSQL Cluster", "The primary system of record")
+
+Container_Boundary(Redis_Cache, "Redis Cache") {
+    Component(Redis_Cluster, "Redis Cluster", "In-memory Data Store", "High-availability active-active cross-zone replication store for sub-second EMR retrieval.")
+    Component(Redis_ACLs, "Redis ACLs", "Security Policy", "Enforces granular control to restrict key access and disable dangerous administrative commands.")
+    Component(Envoy_Sidecar_Proxy, "Envoy Sidecar Proxy", "Envoy Proxy", "Manages mTLS termination, connection pooling, and circuit breaking for Redis access.")
+    Component(Debezium_CDC, "Debezium CDC", "Change Data Capture", "Captures PostgreSQL changes to trigger real-time cache invalidation.")
+}
+
+Rel(EMR_Services, Redis_Cluster, "Retrieves and updates EMR data", "TCP/TLS 1.3")
+Rel(Envoy_Sidecar_Proxy, Redis_Cluster, "Manages mTLS-authenticated connections and circuit breaking", "mTLS")
+Rel(PostgreSQL_Cluster, Debezium_CDC, "Streams data changes for cache synchronization", "CDC")
+Rel(Debezium_CDC, Redis_Cluster, "Pub/Sub mechanism for real-time cache invalidation", "Pub/Sub")
+
+@enduml

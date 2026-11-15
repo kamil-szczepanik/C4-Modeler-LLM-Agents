@@ -1,0 +1,347 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.375,
+  "justifications": {
+   "functional_suitability": "All requirements are met: Video Media Server handles consultations (R-01), Integration Service routes e-prescriptions (R-02), AI Inference Wrapper provides triage urgency (R-03), and Consent Enforcement Engine alongside JWT Validation Filter enforces consent per purpose (R-04).",
+   "performance_efficiency": "Asynchronous Pub/Sub ingestion decouples audit traffic, while the ABR Controller in Video Media Server dynamically adjusts video streaming. Geo-Routing Policy Engine optimizes regional routing, though explicit caching mechanisms for repetitive queries are omitted.",
+   "compatibility": "The Integration Service provides dedicated EU Adapter and US Adapter components conforming to EU national standards and US HL7 FHIR with Surescripts. Identity & Consent Provider integrates via standard OAuth2/OIDC.",
+   "usability": "Both Patients and Clinicians are identified as users accessing the platform via WebRTC and HTTPS. However, frontend web or mobile client containers are missing from the container diagram, leaving client-side usability mechanisms unmodeled.",
+   "reliability": "The ABR Controller and Coturn TURN/STUN Relay Module directly address degraded network operation below 300 kbit/s. Regional separation in europe-west3 and us-central1 isolates regional outages, although inter-region disaster recovery failover is not explicitly specified.",
+   "security": "GDPR and HIPAA requirements are thoroughly addressed by Regional Data Sanitizer, Data Residency Guard Component, Consent & Encryption Key Store (Cloud KMS), and BigQuery WORM policies in Audit & Traceability Ledger with mTLS.",
+   "maintainability": "The architecture exhibits high modularity with decoupled containers (Core Telehealth Service, Video Media Server, Integration Service). Adapters cleanly isolate country-specific prescription logic, facilitating independent testing and modifications.",
+   "portability": "Target GCP regions (europe-west3, us-central1) are explicitly targeted using GKE containers. However, heavy reliance on GCP-proprietary services (Vertex AI, BigQuery Storage API, Apigee) limits portability outside of Google Cloud Platform."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 5,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.78125,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The architecture separates WebRTC signaling and media routing across Envoy and GKE-hosted SFU nodes with adaptive bitrate streaming. It handles scale via GKE horizontal scaling, though explicit auto-scaling policies and media relay scaling limits under 5,000 concurrent sessions are not detailed.",
+    "elements": [
+     "Geo-Routing Policy Engine",
+     "WebRTC Signaling Router",
+     "SFU Core Router",
+     "Video Media Server",
+     "Consultation Session Manager"
+    ],
+    "sensitivity_points": [
+     "SFU connection limits and Coturn relay bandwidth on GKE during peak concurrent calls"
+    ],
+    "tradeoffs": [
+     "Dedicated SFU routing improves latency but increases GKE cluster resource consumption"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "50,000 requests per hour equates to approximately 14 requests per second. The Vertex AI wrapper, FastAPI controller, and asynchronous Pub/Sub logging interceptor comfortably achieve sub-3 second response times for this load profile without blocking inference execution.",
+    "elements": [
+     "API Gateway & Routing Layer",
+     "Symptom Checker Orchestrator",
+     "AI Inference Wrapper",
+     "Inference Controller",
+     "Model Execution Engine",
+     "Audit & Logging Interceptor"
+    ],
+    "sensitivity_points": [
+     "Asynchronous event offloading ensures inference throughput is not bottlenecked by audit logging"
+    ],
+    "tradeoffs": [
+     "Async audit dispatch provides high throughput but risks slight telemetry latency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Video Media Server explicitly includes an ABR Controller component and Pion WebRTC SFU that dynamically adjusts bitrate down to degraded modes on low-bandwidth connections. Core session coordination remains isolated via Go services, preventing dropped calls or clinical data loss.",
+    "elements": [
+     "Video Media Server",
+     "SFU Core Router",
+     "ABR Controller",
+     "Consultation Session Manager",
+     "Core Telehealth Service"
+    ],
+    "sensitivity_points": [
+     "ABR threshold responsiveness when dropping below 300 kbit/s to maintain audio stream integrity"
+    ],
+    "tradeoffs": [
+     "Degrading video stream resolution preserves call continuity and audio clarity under extreme packet constraints"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Only us-central1 and europe-west3 are provisioned. Under strict residency rules, US data cannot failover to europe-west3. Without an automated secondary US region or detailed multi-zone recovery and backup mechanisms described, restoring service within one hour during an outage presents severe unaddressed risk.",
+    "elements": [
+     "API Gateway & Routing Layer",
+     "Geo-Routing Policy Engine",
+     "Datastores",
+     "Primary Operational DB"
+    ],
+    "sensitivity_points": [
+     "Absence of secondary regional cloud footprint within the United States"
+    ],
+    "tradeoffs": [
+     "Strict regional residency prevents cross-region disaster failover to available European infrastructure"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Integration Service decouples routing logic, residency verification, and endpoint communication into isolated adapters. Changes for national standards are encapsulated within EU adapter logic without affecting Core Telehealth, though further decomposition into per-country plugins is not fully realized.",
+    "elements": [
+     "Integration Service",
+     "E-Prescription Router Component",
+     "Data Residency Guard Component",
+     "EU Adapter Component"
+    ],
+    "sensitivity_points": [
+     "Decoupling of national serialization protocols within the EU Adapter component"
+    ],
+    "tradeoffs": [
+     "Centralized EU adapter simplifies gateway routing but requires updating when adding national protocols"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The architecture incorporates an external AI Model Registry and an Audit & Logging Interceptor that captures model versions, inputs, and inference outputs to BigQuery. Version decoupling enables rolling updates and rollbacks while ensuring strict MDR traceability.",
+    "elements": [
+     "AI Model Registry",
+     "AI Inference Wrapper",
+     "Model Execution Engine",
+     "Audit & Logging Interceptor",
+     "Audit & Traceability Ledger",
+     "AI Audit Store"
+    ],
+    "sensitivity_points": [
+     "Atomic recording of model metadata IDs alongside inference outputs in the audit ledger"
+    ],
+    "tradeoffs": [
+     "Strict model lineage logging increases ingestion overhead but satisfies medical device compliance"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Cross-region access is blocked by multiple defense layers: Apigee JWT & Consent Enforcement Filter at the gateway, localized Consent Enforcement Engine in the Core Service, Data Residency Guard in Integration, and regionalized Cloud SQL and KMS instances.",
+    "elements": [
+     "JWT Validation & Consent Enforcement Filter",
+     "Consent Enforcement Engine",
+     "Data Residency Guard Component",
+     "Identity & Consent Provider",
+     "Consent & Encryption Key Store",
+     "Telemetry & Audit Interceptor"
+    ],
+    "sensitivity_points": [
+     "Pre-routing verification of cross-border consent policies within JWT and localized policy engines"
+    ],
+    "tradeoffs": [
+     "Multi-layer residency validation increases request processing overhead to guarantee regulatory compliance"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Revocation flags are recorded via Identity & Consent Provider and verified in the Consent & Encryption Key Store. However, the architecture lacks explicit research data pipelines, anonymization workflows, or downstream purging mechanisms to prove research sharing ceases within 24 hours.",
+    "elements": [
+     "Identity & Consent Provider",
+     "Consent Enforcement Engine",
+     "Consent & Encryption Key Store",
+     "Primary Operational DB",
+     "Audit & Traceability Ledger"
+    ],
+    "sensitivity_points": [
+     "Propagation latency of revocation flags across regional caching layers and datastores"
+    ],
+    "tradeoffs": [
+     "Synchronous consent revocation checking guarantees data privacy at the cost of database query overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9166666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Regional Data Sanitizer",
+     "Consent Enforcement Engine",
+     "Compliance & Residency Enforcer",
+     "Consent & Encryption Key Store",
+     "Audit & Traceability Ledger"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Geo-Routing Policy Engine",
+     "Data Residency Guard Component",
+     "Compliance & Residency Enforcer",
+     "Primary Operational DB",
+     "Datastores"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Audit & Traceability Ledger",
+     "Audit & Logging Interceptor",
+     "AI Audit Store",
+     "Ledger Storage Adapter"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Video Media Server",
+     "ABR Controller",
+     "TURN/STUN Relay Module"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Video Media Server",
+     "Consultation Session Manager",
+     "SFU Core Router",
+     "WebRTC Signaling Router"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Integration Service",
+     "Prescription Coordinator",
+     "E-Prescription Router Component",
+     "EU Adapter Component",
+     "US Adapter Component",
+     "EU National E-Prescription Gateways",
+     "US Surescripts / Pharmacy Clearinghouses"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Inference Wrapper",
+     "Symptom Checker Orchestrator",
+     "Inference Controller",
+     "Model Execution Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Identity & Consent Provider",
+     "JWT Validation & Consent Enforcement Filter",
+     "Consent Enforcement Engine",
+     "Consent & Encryption Key Store"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Geo-Routing Policy Engine",
+     "Consent Enforcement Engine",
+     "Data Residency Guard Component",
+     "Compliance & Residency Enforcer",
+     "Primary Operational DB"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Video Media Server",
+     "ABR Controller"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "AI Inference Wrapper",
+     "Audit & Logging Interceptor",
+     "AI Model Registry",
+     "Audit & Traceability Ledger",
+     "AI Audit Store"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Service",
+     "EU Adapter Component",
+     "US Adapter Component",
+     "EU National E-Prescription Gateways",
+     "US Surescripts / Pharmacy Clearinghouses"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

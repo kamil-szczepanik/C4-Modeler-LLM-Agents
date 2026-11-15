@@ -1,0 +1,34 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Mainframe Data Ingestion Worker container
+
+System_Ext(LegacyMainframe, "Legacy Mainframe", "SFTP Server / DB2")
+System_Ext(NotificationDocumentStore, "Notification & Document Store", "Azure Blob Storage")
+System_Ext(CoreRatingUnderwritingEngine, "Core Rating & Underwriting Engine", "External system")
+System_Ext(ClaimsDatabase, "Claims Database", "Azure SQL Database")
+System_Ext(IntegrationSyncService, "Integration & Sync Service", "Azure Container Apps")
+
+Container_Boundary(MainframeDataIngestionWorker, "Mainframe Data Ingestion Worker") {
+    Component(MainframeBatchPoller, "Mainframe Batch Poller", "Azure Timer Trigger Function", "Initiates automated data extraction securely on a schedule.")
+    Component(SequentialFileParser, "Sequential File Parser", "Python / Node.js", "Parses fixed-width EBCDIC flat files efficiently.")
+    Component(DataTransformationMappingEngine, "Data Transformation & Mapping Engine", "Azure Function / Custom Code", "Transforms and maps raw mainframe records into normalized claims data.")
+    Component(IngestionDispatcher, "Ingestion Dispatcher", "Azure Function / Custom Code", "Dispatches normalized events to downstream integration services.")
+    Component(IdempotencyCheckpointManager, "Idempotency & Checkpoint Manager", "Azure SQL / Custom Code", "Verifies record uniqueness and persists processing checkpoints.")
+    Component(BatchOrchestrationController, "Batch Orchestration Controller", "Azure Durable Functions", "Coordinates parallel chunk processing within the rigid batch window.")
+    Component(IngestionErrorHandler, "Ingestion Error Handler", "Azure Function / Custom Code", "Captures and handles malformed records and processing errors.")
+    Component(MainframeVaultCredentialProvider, "Mainframe Vault Credential Provider", "Azure Key Vault Client", "Retrieves secrets securely via Azure Managed Identity.")
+}
+
+Rel(MainframeBatchPoller, LegacyMainframe, "Fetches daily batch extracts", "SFTP")
+Rel(MainframeBatchPoller, MainframeVaultCredentialProvider, "Retrieves secrets", "Azure Managed Identity / HTTPS")
+Rel(BatchOrchestrationController, SequentialFileParser, "Orchestrates parallel processing", "Internal Binding")
+Rel(SequentialFileParser, IngestionErrorHandler, "Forwards malformed records", "Internal Queue")
+Rel(IngestionErrorHandler, NotificationDocumentStore, "Persists poison messages", "Azure Blob Storage")
+Rel(DataTransformationMappingEngine, CoreRatingUnderwritingEngine, "Enriches claims data", "REST/HTTPS")
+Rel(DataTransformationMappingEngine, IdempotencyCheckpointManager, "Verifies record uniqueness", "DB Query")
+Rel(IdempotencyCheckpointManager, ClaimsDatabase, "Persists checkpoints", "ADO.NET/HTTPS")
+Rel(IngestionDispatcher, IntegrationSyncService, "Publishes normalized events", "Azure Service Bus")
+
+@enduml

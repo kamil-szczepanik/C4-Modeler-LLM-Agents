@@ -1,0 +1,334 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All functional requirements are comprehensively addressed: Mediasoup SFU enables video consultations (R-01), E-Prescription Adapter handles pharmacy dispatches (R-02), AI Triage Service provides triage recommendations (R-03), and Consent Manager handles granular, purpose-based consent policies (R-04).",
+   "performance_efficiency": "Performance under constrained conditions is supported by Mediasoup SFU's Simulcast & Adaptation Controller, Resilience & Batching Middleware in BFF, and asynchronous queuing via Outbox Processor in the E-Prescription Adapter.",
+   "compatibility": "E-Prescription Adapter's Gateway Client explicitly implements HL7 FHIR for US pharmacies and national REST/SOAP standards for EU pharmacies (R-08). External Identity Providers are integrated via standard OAuth 2.0 and OIDC protocols.",
+   "usability": "Both Patients and Licensed Clinicians are provided unified GraphQL interfaces via Backend-for-Frontend (BFF). Graceful network degradation preserves usability over unstable rural connections, though dedicated patient consent UX mechanisms are only modeled at the backend layer.",
+   "reliability": "Sub-300 kbit/s degradation is handled by Mediasoup SFU's Simulcast & Adaptation Controller (R-06). Fault tolerance is reinforced by Fallback & Circuit Breaker Manager, Fallback Policy Cache in Consent Manager, and Outbox Processor.",
+   "security": "Security is thoroughly designed with Ext_Authz Authorization Filter, OPA Engine for GDPR/HIPAA enforcement, DTLS-SRTP, mTLS via Istio, regional CMEK encryption, and Audit & Cryptographic Signer writing immutable logs to Regional WORM Storage.",
+   "maintainability": "Decomposition follows clear domain microservice boundaries with low coupling over gRPC and well-structured internal components (e.g., Prescription Router, Outbox Processor, Inference Orchestrator, and OpenTelemetry instrumentation in Telemetry & Audit Interceptor).",
+   "portability": "Containerized microservices easily target GCP regions europe-west3 and us-central1. However, Regional WORM Storage relies heavily on proprietary GCP Storage and KMS APIs, creating moderate cloud lock-in."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 5,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.5,
+   "Modifiability": 4.5,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Mediasoup SFU with dedicated C++ worker pools and Envoy ingress accommodates concurrent WebRTC signaling and media streaming. However, explicit multi-node SFU horizontal auto-scaling and clustering mechanisms are not detailed.",
+    "elements": [
+     "Envoy Ingress Proxy",
+     "Traffic Management Router",
+     "Mediasoup SFU",
+     "Worker Pool",
+     "Room & Signaling Manager",
+     "Backend-for-Frontend (BFF)"
+    ],
+    "sensitivity_points": [
+     "SFU worker process CPU saturation during simultaneous room negotiation"
+    ],
+    "tradeoffs": [
+     "Offloading media through SFU preserves low latency but complicates multi-node session clustering"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Handling ~14 requests/second is well within capacity. However, synchronous OPA evaluation, model inference, and inline cryptographic signing to GCP Cloud Storage could create tail-latency bottlenecks under load.",
+    "elements": [
+     "AI Triage Service",
+     "API Controller",
+     "Consent & Policy Enforcer",
+     "Inference Orchestrator",
+     "Audit & Cryptographic Signer",
+     "Regional WORM Storage"
+    ],
+    "sensitivity_points": [
+     "Latency of synchronous cryptographic signing and direct WORM storage writes"
+    ],
+    "tradeoffs": [
+     "Immediate tamper-proof WORM persistence increases auditability but risks violating the 3-second p95 latency target"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The architecture directly addresses this via Mediasoup Simulcast & Adaptation Controller designed for sub-300 kbit/s conditions, complemented by BFF Resilience & Batching Middleware providing optimistic mutations for note-taking.",
+    "elements": [
+     "Mediasoup SFU",
+     "Simulcast & Adaptation Controller",
+     "Backend-for-Frontend (BFF)",
+     "Resilience & Batching Middleware"
+    ],
+    "sensitivity_points": [
+     "WebRTC simulcast degradation thresholds and audio stream prioritization"
+    ],
+    "tradeoffs": [
+     "Dropping video to preserve audio fidelity maintains call continuity at lower fidelity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Only us-central1 is configured for US workloads. Total regional outage cannot be recovered without a secondary US cloud region, as data residency constraints strictly prohibit failover to europe-west3.",
+    "elements": [
+     "Istio Service Mesh & API Gateway",
+     "Traffic Management Router",
+     "Regional WORM Storage"
+    ],
+    "sensitivity_points": [
+     "Single US target cloud region without defined intra-region or secondary US DR target"
+    ],
+    "tradeoffs": [
+     "Enforcing zero cross-region replication prevents compliance breach but limits failover availability"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The E-Prescription Adapter cleanly isolates national standard integrations from core services. Its Gateway Client, Prescription Router, and Outbox Processor decouple national schema and transport specifics from the platform.",
+    "elements": [
+     "E-Prescription Adapter",
+     "Prescription Router",
+     "Outbox Processor",
+     "Gateway Client"
+    ],
+    "sensitivity_points": [
+     "Modularity and protocol extensibility of the Gateway Client implementation"
+    ],
+    "tradeoffs": [
+     "Centralizing protocol translation in an adapter adds a network hop but confines changes"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The architecture records model inputs and inference events via Audit & Cryptographic Signer to Regional WORM Storage. Model versioning and rollback workflows within Inference Orchestrator are implied rather than explicitly designed.",
+    "elements": [
+     "AI Triage Service",
+     "Inference Orchestrator",
+     "Audit & Cryptographic Signer",
+     "Regional WORM Storage",
+     "Telemetry & Audit Interceptor"
+    ],
+    "sensitivity_points": [
+     "Inference metadata completeness in the cryptographic audit payload"
+    ],
+    "tradeoffs": [
+     "Immutable WORM audit logs guarantee EU MDR traceability but increase storage retention costs"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Strict cross-border access control is enforced at multiple layers: Envoy Ingress Proxy with Ext_Authz, Consent Manager with real-time OPA engine, Break-Glass Mediator, and immutable audit logs in Regional WORM Storage.",
+    "elements": [
+     "Istio Service Mesh & API Gateway",
+     "Envoy Ingress Proxy",
+     "Ext_Authz Authorization Filter",
+     "Consent Manager",
+     "OPA Engine",
+     "Break-Glass Mediator",
+     "Regional WORM Storage"
+    ],
+    "sensitivity_points": [
+     "Real-time evaluation latency and accuracy of cross-border OPA policies"
+    ],
+    "tradeoffs": [
+     "Strict synchronous authorization checks prevent unauthorized cross-border leakage but increase inter-service latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "Consent Manager and OPA evaluate real-time policy revocations successfully. However, the architecture defines no dedicated research pipeline, batch data export mechanism, or downstream data purge coordination to verify sharing cessation.",
+    "elements": [
+     "Consent Manager",
+     "Consent API Router",
+     "OPA Engine",
+     "Regional WORM Storage",
+     "Access Control & Policy Enforcer"
+    ],
+    "sensitivity_points": [
+     "Propagation time of consent changes to cached states and external data consumers"
+    ],
+    "tradeoffs": [
+     "WORM storage immutability ensures auditability but complicates physical deletion upon consent withdrawal"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.9166666666666666,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Consent Manager",
+     "OPA Engine",
+     "Regional WORM Storage"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Regional WORM Storage",
+     "Istio Service Mesh & API Gateway",
+     "Envoy Ingress Proxy",
+     "Traffic Management Router"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Triage Service",
+     "Audit & Cryptographic Signer",
+     "Telemetry & Audit Interceptor",
+     "Regional WORM Storage"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Mediasoup SFU",
+     "Simulcast & Adaptation Controller",
+     "Resilience & Batching Middleware",
+     "Fallback Policy Cache",
+     "Fallback & Circuit Breaker Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Mediasoup SFU",
+     "Room & Signaling Manager",
+     "Worker Pool"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "E-Prescription Adapter",
+     "Prescription Router",
+     "Outbox Processor",
+     "Gateway Client",
+     "Local Pharmacies"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Triage Service",
+     "Inference Orchestrator"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Consent Manager",
+     "Consent API Router",
+     "OPA Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Istio Service Mesh & API Gateway",
+     "Ext_Authz Authorization Filter",
+     "Consent Manager",
+     "Regional WORM Storage"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Mediasoup SFU",
+     "Simulcast & Adaptation Controller"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "AI Triage Service",
+     "Audit & Cryptographic Signer",
+     "Regional WORM Storage"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "E-Prescription Adapter",
+     "Gateway Client",
+     "Local Pharmacies"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

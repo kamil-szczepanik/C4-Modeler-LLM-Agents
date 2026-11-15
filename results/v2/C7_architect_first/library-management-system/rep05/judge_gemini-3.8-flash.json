@@ -1,0 +1,250 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "The architecture satisfies R-01 and the brief thoroughly. Cataloguing of physical/digital items is handled by Core Catalog Service (supporting MARC21/Dublin Core), while Circulation & Search Service and Web Frontend provide dedicated circulation workflows and self-service portals.",
+   "performance_efficiency": "Search latency (<800ms) is directly targeted by dedicating Elasticsearch within Circulation & Search Service, asynchronous event-driven synchronization via Outbox Poller and RabbitMQ, and client-side caching via TanStack Query in Catalogue & Search UI.",
+   "compatibility": "Interoperability is strongly addressed through standard protocols: OIDC/OAuth 2.0 with External Identity Provider, REST/mTLS with EU-Compliant Payment Gateway, and adherence to bibliographic standards (MARC21/Dublin Core) in CatalogService.",
+   "usability": "All distinct user roles from the brief (Library Patron, Academic Researcher, Librarian, Library Manager) are explicitly accommodated with specialized components like Circulation & Self-Service Portal, Catalogue & Search UI, and Admin Dashboard in Web Frontend.",
+   "reliability": "High fault tolerance is achieved with Circuit Breaker & Fallback in API Gateway, transactional outbox pattern via Outbox Poller, RabbitMQ dead-letter queues, and Redis-backed task idempotency in Worker Service.",
+   "security": "Security thoroughly enforces EU data residency on PostgreSQL Database and Elasticsearch. It features OAuth2/OIDC token validation in API Gateway, mTLS via Istio with SPIFFE/SPIRE, AES-256 encryption at rest, and PostgreSQL Row-Level Security.",
+   "maintainability": "Microservice decomposition exhibits high modularity and low coupling. Domain boundaries are cleanly separated between Core Catalog Service, Circulation & Search Service, and Worker Service, communicating asynchronously via RabbitMQ and synchronously via gRPC.",
+   "portability": "Components use standard, highly portable technologies (Docker-friendly Spring Boot, FastAPI, React, PostgreSQL, Elasticsearch). However, a dedicated deployment diagram detailing multi-cloud or container orchestration portability is omitted."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 3.5,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The dedicated Elasticsearch datastore and FastAPI Search API Handler decouple read traffic from transactional databases, enabling efficient caching and indexing to meet the sub-800ms target under peak concurrency.",
+    "elements": [
+     "API Gateway",
+     "Circulation & Search Service",
+     "Search API Handler",
+     "Elasticsearch"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch index sharding and sizing to absorb concurrent query spikes",
+     "API Gateway routing and connection pooling latency"
+    ],
+    "tradeoffs": [
+     "Allocating dedicated search infrastructure increases operational cost for better read latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Asynchronous search synchronization using the transactional outbox pattern and RabbitMQ decouples catalog writes from Elasticsearch indexing, keeping query latencies intact and indexing updates well within 5 minutes.",
+    "elements": [
+     "Core Catalog Service",
+     "Outbox Poller",
+     "RabbitMQ",
+     "Catalog Indexer Worker",
+     "Elasticsearch",
+     "Search API Handler"
+    ],
+    "sensitivity_points": [
+     "Outbox polling frequency and RabbitMQ queue consumption throughput",
+     "Elasticsearch index refresh intervals during bulk updates"
+    ],
+    "tradeoffs": [
+     "Eventual consistency in search indexing accepted to guarantee low query response time"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "Elasticsearch clustering provides search resiliency, and circulation workflows write to PostgreSQL via Core Catalog Service. However, co-locating search and circulation within one container risks partial blast-radius coupling if indexing exhausts node resources.",
+    "elements": [
+     "Circulation & Search Service",
+     "Elasticsearch",
+     "Circulation Engine",
+     "Circulation State Manager",
+     "Core Catalog Service",
+     "PostgreSQL Database"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch replica count and automated shard failover timing",
+     "Container resource isolation between FastAPI search threads and circulation logic"
+    ],
+    "tradeoffs": [
+     "Co-locating circulation and search lowers deployment footprint but couples availability risks"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The stateless React/Nginx frontend architecture behind the API Gateway enables rapid load-balancer failover to healthy frontend instances in seconds without losing active session state managed via OIDC and tokens.",
+    "elements": [
+     "Web Frontend",
+     "API Gateway",
+     "Authentication & Authorization",
+     "Circulation & Search Service"
+    ],
+    "sensitivity_points": [
+     "Health check interval and gateway rerouting detection time",
+     "Client-side retry logic and token expiration policies"
+    ],
+    "tradeoffs": [
+     "Client-side state management offloads servers but requires token renewals across instance restarts"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "CatalogService already contains dynamic schema adapters and Dublin Core/MARC21 support, while Worker Service provides data ingestion channels. Integration is largely modular, though dedicated external connector abstraction is only partially elaborated.",
+    "elements": [
+     "Core Catalog Service",
+     "CatalogService",
+     "Worker Service",
+     "Data Sync Component"
+    ],
+    "sensitivity_points": [
+     "Extensibility of schema adapter interfaces in CatalogService",
+     "Connector isolation in worker ingestion pipelines"
+    ],
+    "tradeoffs": [
+     "Generic ingestion interfaces reduce schema coupling at the cost of adapter complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "The Admin Dashboard and Circulation Engine handle workflows and configurations, but no dedicated dynamic rules engine or configuration repository is detailed to support modifying complex institution-specific lending policies purely at runtime without code deployment.",
+    "elements": [
+     "Circulation & Search Service",
+     "Circulation Engine",
+     "Admin Dashboard",
+     "Core Catalog Service"
+    ],
+    "sensitivity_points": [
+     "Flexibility of circulation policy definitions and rule evaluation pipelines",
+     "Tenant-level rule storage and runtime hot-reloading mechanisms"
+    ],
+    "tradeoffs": [
+     "Hardcoded domain rules simplify implementation but hinder multi-tenant operational flexibility"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The design enforces EU-localized volumes on Elasticsearch, EU data residency in PostgreSQL, and an EU-Compliant Payment Gateway. However, residency controls for the Third-Party Notification Service are unspecified, representing a potential cross-border egress risk.",
+    "elements": [
+     "PostgreSQL Database",
+     "Elasticsearch",
+     "EU-Compliant Payment Gateway",
+     "Third-Party Notification Service",
+     "Worker Service"
+    ],
+    "sensitivity_points": [
+     "Geographic routing and data processing location of notification providers",
+     "Strict boundary controls preventing cross-region cloud failover"
+    ],
+    "tradeoffs": [
+     "Restricting providers to EU-only options limits vendor choice and increases operational constraints"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Access is protected through multi-layered defense: API Gateway token validation, Circulation Engine RBAC, PostgreSQL Row-Level Security (RLS), and comprehensive Telemetry & Logging that captures unauthorized access attempts.",
+    "elements": [
+     "API Gateway",
+     "Authentication & Authorization",
+     "Telemetry & Logging",
+     "Circulation & Search Service",
+     "Circulation Engine",
+     "PostgreSQL Database"
+    ],
+    "sensitivity_points": [
+     "Correct implementation of patron ID tenant isolation in RLS policies",
+     "Log forwarding fidelity and audit event immutability"
+    ],
+    "tradeoffs": [
+     "Enforcing RLS on every database read slightly increases query execution overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "full",
+   "R-05": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Library Management System",
+     "EU-Compliant Payment Gateway",
+     "PostgreSQL Database",
+     "Elasticsearch"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Core Catalog Service",
+     "CatalogService",
+     "CatalogController",
+     "CatalogRepository",
+     "Catalogue & Search UI"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Circulation & Search Service",
+     "Search API Handler",
+     "Elasticsearch",
+     "Catalogue & Search UI"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

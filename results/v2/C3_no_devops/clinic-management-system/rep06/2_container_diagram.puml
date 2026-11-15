@@ -1,0 +1,56 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(ClinicReceptionist, "Clinic Receptionist", "Handles patient admissions, registration, and front-desk scheduling.")
+Person(Physician, "Physician", "Accesses and updates electronic medical records and manages patient care.")
+Person(BillingSpecialist, "Billing Specialist", "Manages billing, claims, and payment processing.")
+Person(Administrator, "Administrator", "Manages administrative settings, roles, and overall clinic operations.")
+Person(Patient, "Patient", "Interacts with the clinic for appointments, records, and payments.")
+
+System_Ext(EnterpriseIdP, "Enterprise IdP", "Provides authentication, rate limiting, and MFA termination.")
+System_Ext(ExternalLabImagingSystems, "External Lab & Imaging Systems", "External systems for diagnostic laboratory and imaging data exchange.")
+System_Ext(PaymentGateway, "Payment Gateway", "Handles real-time insurance claims and financial transactions.")
+System_Ext(AuditArchivalSIEMSystem, "Audit Archival / SIEM System", "Receives encrypted audit logs and handles WORM-compliant data retention.")
+
+System_Boundary(ClinicManagementSystem, "Clinic Management System") {
+    Container(APIGateway, "API Gateway", "Kong / Node.js", "Handles rate limiting, MFA termination, and routing.")
+    Container(PatientPortalBFF, "Patient Portal BFF", "Node.js / GraphQL", "Provides secure, consumer-grade user interfaces and BFF capabilities for patients.")
+    Container(BillingOperationsUIContainer, "Billing Operations UI Container", "React / Nginx", "Provides the frontend interface for billing operations and administration.")
+    Container(PatientSchedulingService, "Patient & Scheduling Service", "Go", "Manages patient admissions, registration, and appointment scheduling.")
+    Container(EMRCoreService, "EMR Core Service", "Spring Boot", "Core service managing Electronic Medical Records and PHI storage.")
+    Container(BillingIntegrationService, "Billing & Integration Service", "FastAPI", "Handles billing operations and integration with external lab, imaging, and payment systems.")
+    ContainerDb(PostgreSQL, "PostgreSQL", "PostgreSQL (AES-256)", "Encrypted data store for PHI and relational data.")
+    Container(RabbitMQ, "RabbitMQ", "RabbitMQ", "Message broker for offline-resilient queuing and asynchronous processing.")
+}
+
+Rel(ClinicReceptionist, APIGateway, "Accesses system features", "HTTPS/REST with JWT")
+Rel(Physician, APIGateway, "Accesses EMR and clinical features", "HTTPS/REST with JWT")
+Rel(BillingSpecialist, APIGateway, "Accesses billing operations", "HTTPS/REST with JWT")
+Rel(Administrator, APIGateway, "Manages system configurations", "HTTPS/REST with JWT")
+Rel(Patient, PatientPortalBFF, "Views personal health records and schedule", "HTTPS/REST")
+
+Rel(APIGateway, PatientPortalBFF, "Routes patient portal requests", "HTTPS")
+Rel(APIGateway, BillingOperationsUIContainer, "Routes billing operations UI traffic", "HTTPS")
+Rel(APIGateway, PatientSchedulingService, "Routes core scheduling requests", "gRPC over mTLS")
+Rel(APIGateway, EMRCoreService, "Routes EMR requests", "gRPC over mTLS")
+Rel(APIGateway, BillingIntegrationService, "Routes billing requests", "gRPC over mTLS")
+
+Rel(PatientPortalBFF, PatientSchedulingService, "Fetches patient and scheduling data", "gRPC over mTLS")
+Rel(BillingOperationsUIContainer, BillingIntegrationService, "Communicates for billing operations", "HTTPS/REST with JWT")
+
+Rel(PatientSchedulingService, PostgreSQL, "Reads and writes patient data", "SQL / AES-256")
+Rel(EMRCoreService, PostgreSQL, "Reads and writes EMR data", "SQL / AES-256")
+Rel(BillingIntegrationService, PostgreSQL, "Reads and writes billing data", "SQL / AES-256")
+
+Rel(BillingIntegrationService, ExternalLabImagingSystems, "Exchanges clinical and diagnostic data", "HL7 FHIR APIs")
+Rel(BillingIntegrationService, PaymentGateway, "Processes financial transactions and claims", "HTTPS/REST")
+Rel(EMRCoreService, AuditArchivalSIEMSystem, "Sends asynchronous append-only logs", "Asynchronous Syslog/HTTPS")
+
+Rel(EMRCoreService, RabbitMQ, "Publishes asynchronous events", "AMQP")
+Rel(PatientSchedulingService, RabbitMQ, "Publishes and consumes queued messages", "AMQP")
+Rel(BillingIntegrationService, RabbitMQ, "Publishes and consumes billing events", "AMQP")
+
+@enduml

@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Data Tier container
+
+System_Ext(EMR_Core_Service, "EMR Core Service", "External service interacting with the Data Tier")
+System_Ext(Billing_Integration_Service, "Billing Integration Service", "External service interacting with the Data Tier")
+System_Ext(Audit_Compliance_Daemon, "Audit & Compliance Daemon", "External service interacting with the Data Tier")
+
+Container_Boundary(Data_Tier, "Data Tier") {
+    Component(Primary_Relational_Store, "Primary Relational Store", "PostgreSQL with Patroni and Citus sharding", "Primary relational database providing ACID compliance, Row-Level Security, and automated high availability.")
+    Component(Read_Replica_Cluster, "Read Replica Cluster", "PostgreSQL Read Replicas", "Handles read-heavy workloads to ensure fast EMR load times and support data export operations.")
+    Component(Audit_Compliance_WORM_Store, "Audit & Compliance WORM Store", "AWS S3 Object Lock / MinIO", "WORM storage implementation for immutable audit logs and 10-year archival retention complying with HIPAA and GDPR.")
+    Component(Cold_Data_Archival_Engine, "Cold Data Archival Engine", "Archival Engine", "Manages long-term cold data storage and archival retention.")
+    Component(PgBouncer_Connection_Pooling_Proxy, "PgBouncer Connection Pooling Proxy", "PgBouncer", "Connection pooling to handle heavy hospital shift traffic spikes.")
+    Component(Data_Export_Worker_Component, "Data Export Worker Component", "Data Export Worker", "Generates GDPR data portability bundles using the read replica cluster and cold archival engine.")
+}
+
+Rel(EMR_Core_Service, Primary_Relational_Store, "Reads and writes clinical data", "SQL over TLS 1.3 with mTLS")
+Rel(Billing_Integration_Service, Primary_Relational_Store, "Reads and writes billing data", "SQL over TLS 1.3 with mTLS")
+Rel(Audit_Compliance_Daemon, Audit_Compliance_WORM_Store, "Records immutable audit logs", "WORM Storage protocols")
+Rel(Data_Export_Worker_Component, Read_Replica_Cluster, "Generates GDPR data portability bundles", "Internal API / SQL")
+Rel(Data_Export_Worker_Component, Cold_Data_Archival_Engine, "Accesses archived data for GDPR bundles", "Internal API / SQL")
+
+@enduml

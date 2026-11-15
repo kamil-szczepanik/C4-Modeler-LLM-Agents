@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Modern Claims Platform
+
+Person(CustomersAndBrokers, "Customers and Brokers", "End users who submit claims online and interact with the regional insurer.")
+Person(ClaimsAdjusters, "Claims Adjusters", "Internal staff who manage and process claims workflows.")
+
+System_Ext(LegacyMainframe, "Legacy Mainframe", "30-year-old on-premises COBOL/DB2 system serving as the system of record.")
+System_Ext(InsurersActiveDirectory, "Insurer's Active Directory", "Identity management system satisfying single sign-on and MFA requirements.")
+System_Ext(CorePaymentGateway, "Core Payment Gateway", "External system used for processing insurance payments.")
+
+System_Boundary(ModernClaimsPlatform, "Modern Claims Platform") {
+    Container(WebPortalSPA, "Web Portal (SPA)", "React, TypeScript, Azure Static Web Apps", "Online claims submission interface for customers and brokers.")
+    Container(AdjusterWorkspace, "Adjuster Workspace", "Node.js, React, Azure App Service", "Backend-for-Frontend (BFF) and user interface for claims adjusters.")
+    Container(ClaimsCoreAPI, "Claims Core API", "Spring Boot, Java, Azure Kubernetes Service (AKS)", "Microservices handling core domain logic for claims management.")
+    Container(IntegrationSyncEngine, "Integration & Sync Engine", "Azure Event Hubs (Kafka interface)", "Asynchronous integration engine with transactional outbox for reliable event streaming.")
+    Container(IdentityAccessProxy, "Identity & Access Proxy", "Azure API Management, OAuth2, OIDC", "Centralized credentials and Zero-Trust access proxy federating with on-premise Active Directory.")
+    ContainerDb(ClaimsReadModelCache, "Claims Read Model & Cache", "Azure Cosmos DB (SQL API)", "Low-latency materialized views for sub-2 second reads.")
+    Container(SecurityInfrastructureServices, "Security & Infrastructure Services", "Azure Key Vault, CSI secret store drivers, Azure Monitor, Azure ExpressRoute", "Provides secrets management, monitoring, and secure hybrid connectivity.")
+}
+
+Rel(CustomersAndBrokers, IdentityAccessProxy, "Authenticates and submits claims via web portal", "HTTPS/OIDC")
+Rel(ClaimsAdjusters, IdentityAccessProxy, "Authenticates and accesses adjuster workspace", "HTTPS/OIDC")
+Rel(IdentityAccessProxy, WebPortalSPA, "Routes authenticated traffic to web portal", "HTTPS")
+Rel(IdentityAccessProxy, AdjusterWorkspace, "Routes authenticated traffic to adjuster workspace", "HTTPS")
+Rel(WebPortalSPA, ClaimsCoreAPI, "Submits online claims", "gRPC/HTTPS")
+Rel(AdjusterWorkspace, ClaimsCoreAPI, "Processes claims and executes core logic", "gRPC/HTTPS")
+Rel(AdjusterWorkspace, ClaimsReadModelCache, "Queries claims read model and cache", "HTTPS/SQL API")
+Rel(ClaimsCoreAPI, IntegrationSyncEngine, "Publishes claims events for synchronization", "Kafka native protocol over mTLS")
+Rel(IntegrationSyncEngine, LegacyMainframe, "Syncs data to on-premise mainframe", "Azure ExpressRoute")
+Rel(IdentityAccessProxy, InsurersActiveDirectory, "Federates user identity and validates credentials", "OIDC/OAuth2")
+
+@enduml

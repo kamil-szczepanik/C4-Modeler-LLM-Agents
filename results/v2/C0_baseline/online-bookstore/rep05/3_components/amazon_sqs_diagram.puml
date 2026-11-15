@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Amazon SQS container
+
+Container_Boundary(amazon_sqs, "Amazon SQS") {
+    Component(OrderQueue, "OrderQueue", "Amazon SQS FIFO", "Buffers checkout events and prevents duplicate fulfillment.")
+    Component(NotificationQueue, "NotificationQueue", "Amazon SQS Standard", "Buffers asynchronous email and alert dispatches.")
+    Component(AnalyticsQueue, "AnalyticsQueue", "Amazon SQS Standard", "Buffers clickstream and inventory events.")
+    Component(OrderDLQ, "OrderDLQ", "Amazon SQS FIFO", "Captures poisoned messages from OrderQueue exceeding maxReceiveCount.")
+    Component(NotificationDLQ, "NotificationDLQ", "Amazon SQS Standard", "Captures poisoned messages from NotificationQueue exceeding maxReceiveCount.")
+    Component(AnalyticsDLQ, "AnalyticsDLQ", "Amazon SQS Standard", "Captures poisoned messages from AnalyticsQueue exceeding maxReceiveCount.")
+}
+
+System_Ext(Core_Services, "Core Services", "External system sending messages to OrderQueue")
+System_Ext(Notification_Worker, "Notification Worker", "External system polling NotificationQueue")
+System_Ext(Analytics_Ingestion_Container, "Analytics Ingestion Container", "External system polling AnalyticsQueue")
+
+Rel(Core_Services, OrderQueue, "Sends messages to", "AWS SDK (HTTPS/TLS 1.3)")
+Rel(Notification_Worker, NotificationQueue, "Polls via Long Polling", "HTTPS/TLS 1.3")
+Rel(Analytics_Ingestion_Container, AnalyticsQueue, "Polls via Long Polling", "HTTPS/TLS 1.3")
+Rel(OrderQueue, OrderDLQ, "Routes failed messages exceeding maxReceiveCount", "")
+Rel(NotificationQueue, NotificationDLQ, "Routes failed messages exceeding maxReceiveCount", "")
+Rel(AnalyticsQueue, AnalyticsDLQ, "Routes failed messages exceeding maxReceiveCount", "")
+
+@enduml

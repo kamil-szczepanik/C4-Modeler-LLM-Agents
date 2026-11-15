@@ -1,0 +1,255 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 5
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "Cataloguing of physical and digital items (R-01) is explicitly supported by 'Catalog Component', 'Digital Content Providers', and 'Search Service'. Circulation and self-service needs are covered by 'Circulation Engine' and 'Web Application'.",
+   "performance_efficiency": "The <800ms search SLA (R-05) is addressed via dedicated 'Search Service', 'Elasticsearch' index, and multi-tier caching across 'SearchCacheManager', 'Redis', and 'Caches & Segment Buffer', combined with asynchronous indexing via 'RabbitMQ'.",
+   "compatibility": "'Integration Service' incorporates dedicated adapters such as 'ILS Sync Worker' for legacy Z39.50/HTTPS systems and 'Payment Gateway Adapter' with 'Webhook Handler' for external payment gateways, ensuring robust interoperability.",
+   "usability": "All specified users ('Patron', 'Librarian', 'Library Administrator') access dedicated functionality through 'Web Application', which includes an accessible 'UI Component Library', 'Localization Component' (react-i18next), and client-side error handling.",
+   "reliability": "Fault tolerance is addressed through 'Circuit Breaker & Fallback Component', 'Circuit Breaker & Retry Manager', 'Dead Letter Exchange & Retry Router', 'Patroni' failover replication, and Redis Sentinel health management.",
+   "security": "EU data residency and security are enforced with 'Security & GDPR Context Filter Component', 'pgAudit', mTLS/TLS 1.3 across services, and 'Authentication & Authorization Component' validating OAuth2 tokens.",
+   "maintainability": "Clear modular separation exists across 'Core Domain Service', 'Search Service', and 'Integration Service'. However, over-decomposing standard third-party infrastructure (e.g., Lucene engine inside Elasticsearch) adds conceptual overhead to system boundaries.",
+   "portability": "Services leverage portable containerized stacks (FastAPI, Spring Boot, Express) with data stores bound to explicit regional configurations ('EU Memory-Bound Storage Engine', EU-Central S3 backups), satisfying EU-only residency constraints."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 5.0,
+   "Modifiability": 3.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Dedicated Search Service with Elasticsearch, combined with two-tier caching in API Gateway and Redis, easily satisfies sub-800ms P99 latency for 2,000 concurrent searches.",
+    "elements": [
+     "API Gateway",
+     "Caching Component",
+     "Search Service",
+     "SearchCacheManager",
+     "Elasticsearch",
+     "Redis"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios in Redis and API Gateway",
+     "Elasticsearch shard configuration and cluster sizing"
+    ],
+    "tradeoffs": [
+     "Memory overhead for high-capacity caching versus sub-second response times"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Catalog mutations update PostgreSQL and asynchronously emit domain events through RabbitMQ to the IndexSyncConsumer. Search queries hit Elasticsearch directly without database write lock contention, easily indexing within 5 minutes.",
+    "elements": [
+     "Catalog Component",
+     "Domain Event Publisher Component",
+     "RabbitMQ",
+     "IndexSyncConsumer",
+     "Search Service",
+     "Elasticsearch"
+    ],
+    "sensitivity_points": [
+     "RabbitMQ queue ingestion throughput and consumer lag under heavy write loads"
+    ],
+    "tradeoffs": [
+     "Eventual consistency between relational records and search index versus search performance isolation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Elasticsearch replication and cluster coordination handle node failure automatically, while the Search Service CircuitBreaker falls back to Redis cache. Circulation is completely isolated in the Core Domain Service with transactional PostgreSQL.",
+    "elements": [
+     "Elasticsearch",
+     "Cluster Coordination & Replication Manager",
+     "Search Service",
+     "CircuitBreaker",
+     "Core Domain Service",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Elasticsearch replica shard count and cluster failover promotion speed"
+    ],
+    "tradeoffs": [
+     "Resource overhead of cluster replicas versus uninterrupted search availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Web Application is a decoupled SPA distributed via CDN, and client sessions are centralized in Redis. If a web or gateway instance fails, alternative nodes serve requests without losing in-flight state or transactions.",
+    "elements": [
+     "Web Application",
+     "API Gateway",
+     "Routing Filter Component",
+     "Redis",
+     "Session Store Component",
+     "Core Domain Service"
+    ],
+    "sensitivity_points": [
+     "Gateway health-check intervals and Redis session store availability"
+    ],
+    "tradeoffs": [
+     "Network hop to shared Redis session store versus stateless container redundancy"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Integration Service isolates third-party protocols via adapters and data transformers. Adding an e-book provider requires an adapter within this container, though catalog schema updates in Core Domain Service may be required.",
+    "elements": [
+     "Integration Service",
+     "Data Mapper & Transformer",
+     "Integration Router / Controller",
+     "Catalog Component"
+    ],
+    "sensitivity_points": [
+     "Standardization of domain models across diverse external digital provider APIs"
+    ],
+    "tradeoffs": [
+     "Adapter translation layer maintenance versus domain model stability"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "Circulation Engine is implemented in Spring/Java within Core Domain Service without an externalized rules engine or dynamic policy configuration mechanism, requiring code changes and deployment to adjust institutional loan policies.",
+    "elements": [
+     "Core Domain Service",
+     "Circulation Engine",
+     "Domain Model Validators"
+    ],
+    "sensitivity_points": [
+     "Absence of externalized rule configuration or policy engine abstractions"
+    ],
+    "tradeoffs": [
+     "Simpler compiled domain logic versus runtime operational adaptability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Data residency is enforced by design across all tiers: EU CDN, PostgreSQL EU-Central replication with pgBackRest EU storage, Redis EU memory-bound engine, and a dedicated Security & GDPR Context Filter.",
+    "elements": [
+     "Security & GDPR Context Filter Component",
+     "PostgreSQL",
+     "Replication Manager",
+     "Backup & Archival Agent",
+     "Redis",
+     "EU Memory-Bound Storage Engine"
+    ],
+    "sensitivity_points": [
+     "Cloud regional deployment pinning and strict egress boundary controls"
+    ],
+    "tradeoffs": [
+     "Geographic vendor lock-in versus strict adherence to EU residency mandates"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "API Gateway verifies tokens while the Security & GDPR Context Filter in Core Domain Service enforces patron authorization. Access violations are blocked and audited using pgAudit and the Audit & Compliance Logger.",
+    "elements": [
+     "API Gateway",
+     "Authentication & Authorization Component",
+     "Security & GDPR Context Filter Component",
+     "Audit & Compliance Logger",
+     "pgAudit"
+    ],
+    "sensitivity_points": [
+     "User context validation and identity propagation between gateway and core domain"
+    ],
+    "tradeoffs": [
+     "Fine-grained context filtering latency versus strict data privacy and non-repudiation"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "PostgreSQL",
+     "Elasticsearch",
+     "Redis",
+     "RabbitMQ",
+     "EU Memory-Bound Storage Engine",
+     "Backup & Archival Agent",
+     "Replication Manager",
+     "Security & GDPR Context Filter Component",
+     "Message Queues"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Catalog Component",
+     "Core Domain Service",
+     "Search & Catalog View Component",
+     "Digital Content Providers",
+     "Legacy ILS"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Search Service",
+     "Elasticsearch",
+     "SearchCacheManager",
+     "SearchRepository",
+     "Caches & Segment Buffer",
+     "Catalog Cache Component",
+     "Caching Component",
+     "Search & Catalog View Component"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

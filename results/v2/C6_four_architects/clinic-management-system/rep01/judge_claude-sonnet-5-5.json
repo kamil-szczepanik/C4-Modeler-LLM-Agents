@@ -1,0 +1,362 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 3,
+   "portability": 4
+  },
+  "mean": 3.875,
+  "justifications": {
+   "functional_suitability": "Core Services Container (Patient Registration, Scheduling Engine with Drools, Billing & Claims) and EMR Service with Audit Trail Interceptor cover R-01 to R-04. Gaps: inconsistent L1/L2 container decomposition, EMR controller described as handling scheduling, and no explicit resource clash mechanism.",
+   "performance_efficiency": "Caching Layer (Redis/Dragonfly) in EMR Service, TanStack Query cache in Web Frontend, PgBouncer, Kafka async decoupling and Temporal address the <1s P95 target. Minor gaps: no autoscaling shown, no explicit load targets, and the Query Optimizer is vague.",
+   "compatibility": "Integration Worker (Camel) with FHIR Transformer and Connector Client, plus HAPI FHIR adapters, serve lab/imaging FHIR; Insurance Gateway via REST, IdP via OIDC/SAML. Gaps: FHIR logic duplicated across three containers and the SOAP adapter is unclear.",
+   "usability": "Web Frontend with Feature Modules serves Patients, Clinicians and Administrators, and Notification Gateway helps. Gaps: no role-specific interfaces, no accessibility, localization or mobile channels, and a patient portal is only mentioned. Usability is largely unaddressed beyond the single web UI.",
+   "reliability": "Global Load Balancer (Route 53, Health Check Prober), multi-master Database Layer with Patroni failover, Kafka MirrorMaker 2, DLQ handlers, Temporal and S3 Glacier backups match the 99.99% active-active target. Gaps: contradictory Patroni vs. multi-master design, and no explicit RTO/RPO or per-service redundancy.",
+   "security": "IdP MFA, mTLS gRPC, TLS 1.3, KMS with HSM and key rotation, envelope AES-256 encryption, Spring Security RBAC, immutable hash-chained Audit Log Store, Kafka ACLs, and PHI redaction in the Observability Collector explicitly cover HIPAA/GDPR needs, MFA and audit.",
+   "maintainability": "Container modularity, database-per-service, Kafka decoupling and fine-grained components are good. Weaknesses: inconsistent L1 vs L2 decomposition, polyglot sprawl (Java, Go, Node, .NET, Python), KMS wired to every container, and duplicated FHIR and audit logic reduce clarity.",
+   "portability": "Kubernetes-oriented, hybrid on-prem and eu-central-1 design with Kafka MirrorMaker 2, Vault/AWS KMS dual support, an External KMS Interoperability Adapter and open-source components. Gaps: reliance on AWS Route 53 and S3 Glacier, and no explicit container/IaC deployment definitions."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 3,
+   "MOD-01": 3,
+   "MOD-02": 3,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.5,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 3.0,
+   "Modifiability": 3.0,
+   "Security": 3.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "Web Frontend",
+     "Local State & Cache Manager",
+     "EMR Service",
+     "Caching Layer",
+     "PgBouncer",
+     "Database Layer"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio for hot patient records",
+     "Per-field PII decryption cost",
+     "Cache invalidation vs. current data"
+    ],
+    "tradeoffs": [
+     "Caching speed vs. freshness",
+     "Encryption overhead vs. latency"
+    ],
+    "justification": "Redis cache, pooling and client caching support sub-second loads, but there is no autoscaling, load model or cache-invalidation mechanism. The 500 concurrent users are plausible but unproven, and the P95 target is only asserted."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Integration Worker",
+     "Event Broker",
+     "FHIR Transformer",
+     "DLQ Handler",
+     "EMR Service",
+     "Database Layer"
+    ],
+    "sensitivity_points": [
+     "Kafka partitioning and consumer parallelism",
+     "DB write contention with EMR reads"
+    ],
+    "tradeoffs": [
+     "Async ingestion vs. visibility delay",
+     "Isolation of ingest vs. shared database"
+    ],
+    "justification": "Async Kafka decoupling with a DLQ suits the burst, and 10k results in 10 minutes is modest. However, ingestion into the EMR is unclear (the worker doesn't write to EMR), and shared DB contention and read isolation are unaddressed."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "elements": [
+     "Global Load Balancer",
+     "API Gateway",
+     "Database Layer",
+     "Logical Replication Manager",
+     "Event Broker",
+     "Kafka MirrorMaker 2"
+    ],
+    "sensitivity_points": [
+     "Replication lag determines potential data loss",
+     "DNS TTL and failover detection time"
+    ],
+    "tradeoffs": [
+     "Async replication vs. zero data loss",
+     "Active-active conflicts vs. consistency"
+    ],
+    "justification": "Geo-DNS, health probes, multi-master and MirrorMaker give a failover path. But asynchronous logical replication cannot guarantee no data loss, conflict resolution is unspecified, and DNS-based failover within 1 minute is questionable."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Database Layer",
+     "Patroni Failover & Health Monitor",
+     "Billing & Claims Component",
+     "Background Job Scheduler",
+     "PgBouncer"
+    ],
+    "sensitivity_points": [
+     "Failover time against the 30 s target",
+     "Idempotency keys for claim submission"
+    ],
+    "tradeoffs": [
+     "Retry safety vs. duplicate risk",
+     "Patroni leader election vs. multi-master"
+    ],
+    "justification": "Patroni failover and Temporal workflows allow durable retries, but the claims component calls the Insurance Gateway directly. No explicit idempotency or deduplication is shown, and Patroni mixed with BDR is ambiguous."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "elements": [
+     "Billing & Claims Component",
+     "Core Services Container",
+     "Integration Worker",
+     "Connector Client",
+     "Insurance Gateway"
+    ],
+    "sensitivity_points": [
+     "Claims logic embedded in the Core Services monolith",
+     "No insurer adapter abstraction"
+    ],
+    "tradeoffs": [
+     "Monolithic core simplicity vs. change isolation"
+    ],
+    "justification": "EMR is separate, so it stays unchanged. But claims are in the Core Services container, which also holds patient and scheduling logic, with a direct gateway call and no pluggable adapter. Changes touch the core service, not one integration component."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "elements": [
+     "Patient Registration Component",
+     "Feature Modules",
+     "Audit Interceptor Component",
+     "Database Layer",
+     "Core Services Container"
+    ],
+    "sensitivity_points": [
+     "Schema migration across multi-master nodes",
+     "Audit interceptor capturing the new field automatically"
+    ],
+    "tradeoffs": [
+     "Automatic AOP auditing vs. explicit field-level audit control"
+    ],
+    "justification": "A new field touches the registration component, the UI feature module and the DB schema, with AOP auditing likely automatic, so about three components. But the patient data is split between Core Services and EMR, and there is no schema management approach or data model."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "Identity Provider (IdP)",
+     "API Gateway",
+     "Auth & Session Module",
+     "Security Context & Policy Enforcer",
+     "Observability & Monitoring Collector"
+    ],
+    "sensitivity_points": [
+     "IdP enforces MFA policy",
+     "Alerting rules and latency for failed logins"
+    ],
+    "tradeoffs": [
+     "Security strictness vs. clinician usability"
+    ],
+    "justification": "IdP with OIDC/SAML MFA and gateway JWT validation deny access without the second factor. However, the IdP is connected only from Core Services, and no component records failed attempts or raises a security alert within 1 minute."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "elements": [
+     "EMR Service",
+     "Audit Trail Interceptor",
+     "Audit Log Store",
+     "Immutable Storage Engine",
+     "Integrity Verifier",
+     "Cloud Backup (AWS S3 Glacier)",
+     "Security Context & Policy Enforcer"
+    ],
+    "sensitivity_points": [
+     "Audit coverage of all EMR reads",
+     "Policy check for treating-relationship in EMR"
+    ],
+    "tradeoffs": [
+     "Audit overhead vs. EMR read latency",
+     "Immutability vs. GDPR erasure"
+    ],
+    "justification": "A hash-chained append-only audit store with an integrity verifier and Glacier archive meets tamper evidence and 10-year retention. But the RBAC enforcer is in Core Services, not the EMR; there is no treating-relationship policy check, and read-audit completeness is not guaranteed."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9545454545454546,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit Interceptor Component",
+     "Audit Log Store",
+     "Data Redaction Processor",
+     "Key Management Service (KMS)",
+     "Traffic Routing Policy Engine",
+     "Encryption & Masking Engine",
+     "Security Context & Policy Enforcer",
+     "Temporal Crypt Interceptor"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Global Load Balancer",
+     "Failover & Health Monitor",
+     "PostgreSQL Primary/Active-Active Nodes",
+     "Kafka MirrorMaker 2",
+     "Health Check Prober",
+     "Health & Readiness Probe Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Audit Log Store",
+     "Cloud Backup (AWS S3 Glacier)",
+     "Archival Worker",
+     "Backup & Archival Agent",
+     "Immutable Storage Engine"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Registration Component",
+     "Core Services Container",
+     "Web Frontend",
+     "Feature Modules"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Scheduling Engine Component",
+     "Core Services Container",
+     "Distributed Lock Manager"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "CDR Manager",
+     "Audit Trail Interceptor",
+     "Audit Log Store",
+     "Immutable Storage Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Component",
+     "Insurance Gateway",
+     "Core Services Container",
+     "Background Job Scheduler"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Key Management Service (KMS)",
+     "Data Encryption & Key Handler",
+     "Auth & Session Module",
+     "API Gateway",
+     "Security Context & Policy Enforcer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Global Load Balancer",
+     "Geo-DNS Resolver",
+     "PostgreSQL Primary/Active-Active Nodes",
+     "Logical Replication Manager",
+     "Kafka MirrorMaker 2",
+     "Failover & Health Monitor"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Caching Layer",
+     "Local State & Cache Manager",
+     "PgBouncer",
+     "EMR Service"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Worker",
+     "FHIR Transformer",
+     "FHIR Translation Adapter",
+     "FHIR Transformation Engine",
+     "External Lab & Imaging Systems",
+     "Connector Client"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

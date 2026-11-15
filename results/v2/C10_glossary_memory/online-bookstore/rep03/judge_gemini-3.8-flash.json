@@ -1,0 +1,317 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "Catalog, checkout, reviews, multi-currency, and shipping integrations are modeled. However, R-04 ('Customers also bought' recommendations) is completely omitted with no dedicated recommendation engine, algorithm, or data pipeline present in any container or component.",
+   "performance_efficiency": "Performance is supported by PgBouncer, Spring Data Redis, Amazon OpenSearch, and asynchronous processing via Amazon SQS. However, CloudFront caching is explicitly attached only to the Admin Dashboard rather than the customer Single Page App to guarantee <2s load times on 3G.",
+   "compatibility": "External integration is thoroughly addressed with dedicated components: Fulfillment Integration Component for shipping webhooks, Payment Integration Component for multi-currency gateways, and OIDC/JWT integration with external Identity Providers like AWS Cognito/Auth0.",
+   "usability": "Both user groups are well served: Customers via the Single Page App / Mobile App with dedicated navigation and localized cart components, and Store Administrators via the Admin Dashboard Container covering catalog, fulfillment, and GDPR compliance.",
+   "reliability": "High availability (99.95%) is supported by Amazon Aurora Global PostgreSQL cross-region replication, asynchronous SQS event processing, and a Spring State Machine Saga for distributed order resilience. Regional failover routing logic at the edge is not fully detailed.",
+   "security": "Security is thoroughly addressed via Security & Policy Enforcement Component (WAF), internal mTLS, OpenID Connect authentication, TLS 1.3/PCI-DSS payment handling, Audit Logging Middleware, and dedicated GDPR/CCPA workflows in the Compliance & Audit Component.",
+   "maintainability": "The system exhibits clean microservice separation and clear domain boundaries across catalog, order, and notification containers. Some component diagrams redundantly list parent containers and external systems as internal components, slightly muddying structural decomposition.",
+   "portability": "Architecture targets the required AWS regions using standard runtimes (Node.js, Go, Java) and Amazon Aurora Global Database. Multi-region deployment topology and infrastructure configuration across us-east-1, eu-west-1, and ap-southeast-1 are not explicitly detailed."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 3,
+   "MOD-01": 5,
+   "MOD-02": 1,
+   "PERF-01": 3,
+   "PERF-02": 1,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.53125,
+  "by_quality_attribute": {
+   "Performance": 2.0,
+   "Availability": 3.5,
+   "Modifiability": 3.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "OpenSearch and connection pooling aid query throughput, but lack of edge CDN caching for catalog assets creates a high risk of exceeding 2 s latency over 3G networks during 10x traffic surges.",
+    "elements": [
+     "API Gateway / BFF Container",
+     "Catalog & Search Container",
+     "Search API Controller",
+     "Amazon OpenSearch Service",
+     "Database Connection Pooler"
+    ],
+    "sensitivity_points": [
+     "Responsiveness depends on edge caching and network payload optimization over 3G links"
+    ],
+    "tradeoffs": [
+     "Dynamic query execution via OpenSearch ensures fresh catalog data but increases compute load"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 1,
+    "justification": "The architecture omits recommendation components entirely despite functional requirement R-04. With no asynchronous batch pipeline or isolation mechanism defined for recommendations, the response cannot be achieved as designed.",
+    "elements": [
+     "Catalog & Search Container",
+     "Single Page App / Mobile App"
+    ],
+    "sensitivity_points": [
+     "Absence of a distinct recommendation engine couples compute-heavy batch processing to core APIs"
+    ],
+    "tradeoffs": [
+     "Omitting a dedicated analytics subsystem simplifies the design but compromises functional capabilities"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The Checkout container employs a Saga orchestrator with Spring State Machine, allowing order persistence and deferred or retried fulfillment without failing the customer checkout when external logistics APIs are unreachable.",
+    "elements": [
+     "Checkout & Order Container",
+     "Order Orchestrator Component",
+     "Fulfillment Integration Component",
+     "Shipping / Fulfillment Provider"
+    ],
+    "sensitivity_points": [
+     "Order durability depends on Saga state persistence before external shipping calls"
+    ],
+    "tradeoffs": [
+     "Asynchronous fulfillment resilience introduces eventual consistency in physical shipping confirmations"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "Amazon Aurora Global PostgreSQL handles cross-region data replication, but global traffic steering, DNS failover (Route 53), and multi-region synchronization for OpenSearch and Redis caches are not explicitly articulated.",
+    "elements": [
+     "Database Containers",
+     "Amazon Aurora Global PostgreSQL",
+     "API Gateway / BFF Container",
+     "Cart Component"
+    ],
+    "sensitivity_points": [
+     "Failover speed relies on Aurora Global DB replication lag and endpoint redirection"
+    ],
+    "tradeoffs": [
+     "Cross-region replication guarantees disaster recovery at the cost of cross-region network latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Currency resolution and payments are cleanly isolated within the dedicated Pricing & Currency Resolver component and Payment Integration Component, allowing new currencies like JPY to be introduced with minimal, localized changes.",
+    "elements": [
+     "Pricing & Currency Resolver",
+     "Catalog & Search Container",
+     "Payment Integration Component",
+     "Checkout & Order Container",
+     "Checkout & Cart View Component"
+    ],
+    "sensitivity_points": [
+     "Currency extensibility is sensitive to encapsulation within the Pricing Resolver"
+    ],
+    "tradeoffs": [
+     "Decoupled currency conversion modules require synchronization with payment gateway accepted currency lists"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 1,
+    "justification": "No recommendation component or interface exists in the C4 model. Modifying or replacing an algorithm requires adding architectural containers and components from scratch rather than replacing an isolated unit.",
+    "elements": [
+     "Catalog & Search Container"
+    ],
+    "sensitivity_points": [
+     "Modifiability is blocked by the total lack of recommendation architectural constructs"
+    ],
+    "tradeoffs": [
+     "Not implementing a dedicated recommendation service prevents independent algorithmic evolution"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The Security & Policy Enforcement Component (WAF/Lua plugin) at the edge intercepts injection threats, while OpenSearch queries, schema segregation, and Audit Logging Middleware provide defense-in-depth and auditing.",
+    "elements": [
+     "API Gateway / BFF Container",
+     "Security & Policy Enforcement Component",
+     "Audit Logging Middleware",
+     "Review Service",
+     "Amazon OpenSearch Service"
+    ],
+    "sensitivity_points": [
+     "Threat mitigation effectiveness relies on edge WAF inspection rules and input sanitization"
+    ],
+    "tradeoffs": [
+     "Deep payload inspection at the gateway improves security but introduces request latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "The Admin Dashboard provides a dedicated Compliance & Audit Component specifically for GDPR/CCPA export and deletion workflows. However, automated cross-service deletion coordination across isolated schemas is not fully specified.",
+    "elements": [
+     "Admin Dashboard Container",
+     "Compliance & Audit Component",
+     "Admin BFF Router Component",
+     "Database Containers",
+     "Order & Checkout Database Schema",
+     "Review & Notification Database Schema"
+    ],
+    "sensitivity_points": [
+     "Compliance compliance depends on complete schema traversal across all decoupled data stores"
+    ],
+    "tradeoffs": [
+     "Manual or semi-automated administrative deletion workflows reduce system coupling but risk operational delay"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "none",
+   "R-05": "partial",
+   "R-06": "partial",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.7272727272727273,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Store Administrator",
+     "Admin Dashboard Container",
+     "Compliance & Audit Component",
+     "Audit Logging Middleware"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Payment Gateway",
+     "Pricing & Currency Resolver",
+     "Checkout & Cart View Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping / Fulfillment Provider",
+     "Checkout & Order Container",
+     "Fulfillment Integration Component",
+     "Order Fulfillment Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Container",
+     "Search API Controller",
+     "Query Parser & Facet Engine",
+     "Catalog Management Service",
+     "Search Indexer Client",
+     "Catalog & Search View Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Checkout & Order Container",
+     "Cart Component",
+     "Order Orchestrator Component",
+     "Payment Integration Component",
+     "Checkout & Cart View Component",
+     "Payment Gateway",
+     "Order & Checkout Database Schema"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Notification & Review Container",
+     "Review Controller",
+     "Review Service",
+     "Review & Rating Component",
+     "Review & Notification Database Schema"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Database Connection Pooler",
+     "Cart Component",
+     "Database Containers",
+     "Notification Event Consumer"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "State Management Component",
+     "Routing & Edge Proxy Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Database Containers"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Security & Policy Enforcement Component",
+     "Routing & Edge Proxy Component",
+     "Identity Provider",
+     "Audit Logging Middleware"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

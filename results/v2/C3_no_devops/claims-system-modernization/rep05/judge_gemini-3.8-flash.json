@@ -1,0 +1,322 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements (R-01, R-02, R-03) are fully met. Online submission and handling are supported via Web Application, while phased migration is controlled through the Claim Type Routing Registry, Migration Control Service, and Anti-Corruption Layer.",
+   "performance_efficiency": "The sub-2s target (R-05) is addressed via State & Cache Manager optimistic UI caching, BFF Aggregator Service (GraphQL), and asynchronous queuing with Azure Service Bus. However, explicit mechanisms to protect the fixed 23:00-05:00 batch window are minimally detailed.",
+   "compatibility": "Interoperability is thoroughly established. The Anti-Corruption Layer integrates with the legacy COBOL/DB2 mainframe using IBM MQ/TCP over ExpressRoute, and the Authentication Manager integrates with Active Directory using OIDC/OAuth2.",
+   "usability": "User groups (Customers, Brokers, Claims Adjusters) are served through the Next.js Frontend UI, and operators are provided with an Admin Web Frontend. However, bundling distinct external and internal personas into a single Web Application creates interface overlap.",
+   "reliability": "Requirement R-04 is thoroughly satisfied using the Idempotency & Deduplication Filter, Dead-Letter Queues, and ACL Reconciliation Worker. Polly-based Circuit Breakers and Azure SQL Geo-Replication ensure fault tolerance and data recovery.",
+   "security": "R-07 is directly addressed with Azure AD SSO and MSAL. Security is reinforced via Azure Key Vault, Managed Identities, Private Endpoints, RBAC, mTLS, and Temporal Audit Tables for end-to-end accountability and confidentiality.",
+   "maintainability": "R-06 is handled via the Claim Type Routing Registry and Migration Control Service to revert claim types within one day. However, managing high architectural complexity (Kafka/Service Bus, Yarp, HotChocolate) challenges the team's limited cloud experience.",
+   "portability": "The design matches the hybrid cloud brief with components targeted for Azure West Europe and an on-premises VM for the ACL. However, heavy reliance on proprietary Azure PaaS limits cloud-agnostic portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "While the frontend uses optimistic updates and GraphQL BFF aggregation, the architecture lacks an explicit read-model cache for mainframe-resident data, risking direct exposure to 5-second legacy response times.",
+    "elements": [
+     "Web Application",
+     "Next.js Frontend UI",
+     "State & Cache Manager",
+     "BFF Aggregator Service",
+     "Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Read caching strategy for legacy mainframe entities",
+     "GraphQL aggregation timeout settings"
+    ],
+    "tradeoffs": [
+     "Client optimistic rendering vs data freshness on initial screen load"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Peak submission bursts are buffered asynchronously via Azure Service Bus and processed by scalable Container Apps, decoupling ingestion from the mainframe and preventing batch window contention.",
+    "elements": [
+     "Claims Processing Service",
+     "Azure Service Bus / Apache Kafka",
+     "Anti-Corruption Layer (ACL)",
+     "Claim Events Topic"
+    ],
+    "sensitivity_points": [
+     "Service Bus queue buffering capacity",
+     "Rate limiting on mainframe outbound adapter"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission decoupling vs eventual consistency with mainframe DB2"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Azure Service Bus topics buffer claim events durably during the mainframe nightly batch window. Submissions remain available online and the ACL sync worker drains messages once the batch window completes.",
+    "elements": [
+     "Azure Service Bus / Apache Kafka",
+     "ACL Sync Subscription",
+     "Anti-Corruption Layer (ACL)",
+     "Translation Engine"
+    ],
+    "sensitivity_points": [
+     "Message retention duration on Service Bus subscriptions",
+     "Dead-letter handling during extended legacy outages"
+    ],
+    "tradeoffs": [
+     "High availability during batch window vs delayed mainframe synchronization"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The architecture incorporates an Idempotency & Deduplication Filter, Service Bus DLQs, and a dedicated ACL Reconciliation Worker with temporal audit tables to detect, isolate, and recover incomplete state transfers.",
+    "elements": [
+     "Idempotency & Deduplication Filter",
+     "Reconciliation Worker",
+     "Dead-Letter Queues (DLQ)",
+     "Temporal Audit Tables",
+     "ACL Data Store"
+    ],
+    "sensitivity_points": [
+     "Idempotency key TTL and storage reliability",
+     "Reconciliation worker execution interval"
+    ],
+    "tradeoffs": [
+     "Thorough transactional deduplication overhead vs end-to-end processing latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Claim Type Routing Registry and Policy Engine allow routing reconfiguration per claim type. The Migration Control Service and ACL isolate changes, enabling rapid cutover and rollback within hours without mainframe redevelopment.",
+    "elements": [
+     "Claim Type Routing Registry",
+     "Claim Type Policy Engine",
+     "Migration Control Service",
+     "Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Dynamic routing table cache invalidation",
+     "Bi-directional schema compatibility in ACL"
+    ],
+    "tradeoffs": [
+     "Configurable dynamic routing complexity vs migration flexibility and rapid rollback"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Clients communicate solely through the API Gateway and BFF layer. Decommissioning the mainframe simply involves turning off the ACL adapter and routing all traffic permanently to modern Azure SQL storage without UI rework.",
+    "elements": [
+     "Claims API Gateway / Backend-for-Frontend",
+     "BFF Aggregator Service",
+     "Anti-Corruption Layer (ACL)",
+     "Azure SQL Database"
+    ],
+    "sensitivity_points": [
+     "Complete decoupling of frontend contracts from legacy data schemas",
+     "Clean retirement of ACL integration endpoints"
+    ],
+    "tradeoffs": [
+     "BFF and ACL abstraction layers vs direct endpoint invocation"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Azure AD and API Gateway provide authentication and broad RBAC, but the model lacks explicit fine-grained authorization (ABAC) or tenant-level claim ownership verification to prevent cross-broker data access.",
+    "elements": [
+     "Authentication Manager",
+     "Azure Active Directory",
+     "Claims API Gateway / Backend-for-Frontend",
+     "Claims Processing Service"
+    ],
+    "sensitivity_points": [
+     "Fine-grained broker ownership enforcement in API Gateway and domain logic",
+     "Audit logging on unauthorized access attempts"
+    ],
+    "tradeoffs": [
+     "Granular relationship-based policy checks vs request processing overhead"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Centralized SSO via Azure AD ensures immediate account deactivation for the web platform. However, session token lifetime and OAuth token revocation handling are not explicitly described to guarantee the 15-minute boundary.",
+    "elements": [
+     "Azure Active Directory",
+     "Authentication Manager",
+     "Web Application",
+     "Operations BFF & Admin Portal"
+    ],
+    "sensitivity_points": [
+     "OAuth access token expiration TTL",
+     "Continuous Access Evaluation (CAE) support in Azure AD"
+    ],
+    "tradeoffs": [
+     "Short-lived access tokens vs increased authentication roundtrips to Azure AD"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "COBOL/DB2 Legacy Mainframe",
+     "Anti-Corruption Layer (ACL)",
+     "Mainframe Sync Adapter",
+     "Reconciliation Worker",
+     "Translation Engine"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none"
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Anti-Corruption Layer (ACL)",
+     "Translation Engine"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none"
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers",
+     "Brokers",
+     "Web Application",
+     "Next.js Frontend UI",
+     "Claims API Gateway / Backend-for-Frontend",
+     "Claims Processing Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Web Application",
+     "Next.js Frontend UI",
+     "Claims API Gateway / Backend-for-Frontend",
+     "Claims Processing Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Claim Type Routing Registry",
+     "API Router & Orchestrator",
+     "Operations BFF & Admin Portal",
+     "Migration Control Service",
+     "Claim Type Policy Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Idempotency & Deduplication Filter",
+     "Reconciliation Worker",
+     "Dead-Letter Queues (DLQ)",
+     "Azure Service Bus / Apache Kafka"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "State & Cache Manager",
+     "BFF Aggregator Service",
+     "Next.js Frontend UI"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Claim Type Routing Registry",
+     "Migration Control Service",
+     "Operations BFF & Admin Portal",
+     "Claims Schema",
+     "Reconciliation Worker"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Azure Active Directory",
+     "Authentication Manager",
+     "Web Application"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

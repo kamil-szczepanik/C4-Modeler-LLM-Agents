@@ -1,0 +1,42 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Core Services Container container
+
+System_Ext(api_gateway, "API Gateway", "Kong/Envoy")
+System_Ext(database_layer, "Database Layer", "PostgreSQL")
+System_Ext(event_broker, "Event Broker", "Apache Kafka")
+System_Ext(background_job_scheduler, "Background Job Scheduler", "Temporal.io")
+System_Ext(insurance_gateway, "Insurance Gateway", "External")
+System_Ext(global_load_balancer, "Global Load Balancer", "Kubernetes Ingress / Load Balancer")
+
+Container_Boundary(core_services_container, "Core Services Container") {
+    Component(patient_registration_component, "Patient Registration Component", "Java/Spring Data JPA", "Manages patient admissions and registration data.")
+    Component(scheduling_engine_component, "Scheduling Engine Component", "Java / Drools", "Handles clinical scheduling logic and rules.")
+    Component(billing_claims_component, "Billing & Claims Component", "Java/Spring Integration", "Manages billing operations and claims processing.")
+    Component(audit_interceptor_component, "Audit Interceptor Component", "Spring AOP", "Provides HIPAA-compliant automated audit logging via method interception.")
+    Component(security_context_policy_enforcer, "Security Context & Policy Enforcer", "Spring Security / OAuth2", "Enforces zero-trust role-based access control (RBAC).")
+    Component(fhir_translation_adapter, "FHIR Translation Adapter", "Java / HAPI FHIR", "Translates data for HL7 FHIR clinical interoperability standards.")
+    Component(health_readiness_probe_component, "Health & Readiness Probe Component", "Spring Boot Actuator", "Exposes health and readiness metrics for Kubernetes and load balancers.")
+}
+
+Rel(api_gateway, patient_registration_component, "gRPC over mTLS")
+Rel(api_gateway, scheduling_engine_component, "gRPC over mTLS")
+Rel(api_gateway, billing_claims_component, "gRPC over mTLS")
+Rel(api_gateway, fhir_translation_adapter, "gRPC over mTLS")
+
+Rel(patient_registration_component, database_layer, "Encrypted PostgreSQL wire protocol")
+Rel(scheduling_engine_component, database_layer, "Encrypted PostgreSQL wire protocol")
+
+Rel(patient_registration_component, audit_interceptor_component, "In-process method interception")
+Rel(scheduling_engine_component, audit_interceptor_component, "In-process method interception")
+Rel(billing_claims_component, audit_interceptor_component, "In-process method interception")
+
+Rel(audit_interceptor_component, event_broker, "Kafka over TLS")
+
+Rel(scheduling_engine_component, background_job_scheduler, "gRPC over mTLS")
+Rel(billing_claims_component, insurance_gateway, "HTTPS/REST")
+Rel(global_load_balancer, health_readiness_probe_component, "HTTP/GET over TLS")
+
+@enduml

@@ -1,0 +1,19 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container_Boundary(scoring_engine, "Scoring Engine") {
+    Component(IngressCoordinator, "Ingress Coordinator", "Rust, tonic, axum", "Evaluates card-not-present payment authorizations for fraud under strict latency constraints before approval.")
+    Component(FeatureAssembler, "Feature Assembler", "redis-rs, Amazon ElastiCache Redis, Amazon DynamoDB", "Performs low-latency feature lookups and feature assembly for transactions.")
+    Component(ModelExecutor, "Model Executor", "Wasmtime sandbox, WebAssembly", "Executes scoring models securely with zero-downtime hot-reloading.")
+    Component(AuditDispatcher, "Audit Dispatcher", "aws-sdk-rust, Amazon Kinesis Data Streams, Amazon Kinesis Firehose", "Emits decision payloads and streaming audit data.")
+    Component(ModelRegistryClient, "Model Registry Client", "AWS KMS, Amazon S3", "Fetches signed Wasm binaries from model storage securely.")
+    Component(ContainerInfrastructure, "Container Infrastructure", "Amazon ECS Fargate, AWS API Gateway, Internal ALB", "Provides managed container runtime and routes screening requests.")
+}
+
+Rel(IngressCoordinator, FeatureAssembler, "Performs low-latency feature lookups", "TCP/TLS with mTLS")
+Rel(IngressCoordinator, ModelExecutor, "Invokes WebAssembly scoring models", "In-process")
+Rel(ModelExecutor, AuditDispatcher, "Emits decision payloads after evaluation", "In-process / AWS SDK")
+Rel(ModelRegistryClient, ModelExecutor, "Supplies signed Wasm binaries", "HTTPS / TLS 1.3")
+
+@enduml

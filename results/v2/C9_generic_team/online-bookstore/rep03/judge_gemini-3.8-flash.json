@@ -1,0 +1,334 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 3,
+   "portability": 4
+  },
+  "mean": 4.25,
+  "justifications": {
+   "functional_suitability": "All requirements (R-01 to R-04) and constraints are represented via Catalog Browser Component, Amazon OpenSearch, Secure Checkout Component, Shipping Providers, and Currency Exchange Rate Provider. However, domain logic for catalog, reviews, and checkout is awkwardly coalesced into a single Order Service component.",
+   "performance_efficiency": "Target latencies and 1M MAU scalability are well-supported by Amazon CloudFront, Redis Cache Engine with cache-aside and stale-while-revalidate patterns, Amazon OpenSearch for search queries, Debezium/AWS DMS CDC offloading, and asynchronous task execution via AWS SQS/SNS.",
+   "compatibility": "External integration needs are thoroughly covered with concrete adapters and standard protocols, including Payment Gateways, Shipping Providers via Integration Gateway, Currency Exchange Rate Provider, Tax Calculation Service, and federated Identity Providers over OAuth2/OIDC.",
+   "usability": "Customer journeys are supported via the Storefront Frontend (SPA) components. However, while Content Moderators and Customer Support Agents are identified as actors in the context diagram, no operational interfaces, consoles, or internal tooling components are provided for them.",
+   "reliability": "Achieving 99.95% uptime is reinforced by multi-AZ Redis Cache Engine, Amazon RDS Read Replicas, Event Queue with Dead Letter Queue (DLQ), rate limiting via API Gateway, and Automated Synthetic Canaries operating across all three required AWS regions.",
+   "security": "OWASP Top-10 mitigations and regulatory constraints are addressed using Web Application Firewall (WAF) managed rules, Edge Request Inspector, AWS KMS encryption, OAuth2/OIDC authentication, SIEM / Compliance Logging SaaS streaming, and GDPR anonymization routines executed by Task Execution Engine.",
+   "maintainability": "While container-level segregation is clean, the Core Domain Services component decomposition exhibits high coupling and poor cohesion: Order Service inappropriately bundles catalog browsing, reviews, and order logic into a single monolithic component.",
+   "portability": "The architecture excels at deploying into the specified AWS regions (us-east-1, eu-west-1, ap-southeast-1) through managed services. However, tight coupling to proprietary AWS-specific primitives (CloudFront, API Gateway, KMS, SQS/SNS) limits portability and component replaceability across environments."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.0,
+   "Modifiability": 3.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Edge caching via CloudFront, ElastiCache Redis, OpenSearch, and RDS read replicas adequately decouple the core database under 10x traffic spikes.",
+    "elements": [
+     "Storefront Frontend (SPA)",
+     "Edge Security & WAF",
+     "Caching Layer",
+     "Persistence Layer",
+     "API Gateway / BFF"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratios at CloudFront and ElastiCache Redis under high concurrency",
+     "OpenSearch search cluster indexing and query provisioning"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of read replicas versus immediate freshness of product inventory"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Recommendations and search queries run on Amazon OpenSearch and ElastiCache, decoupled from transactional RDS via asynchronous CDC and background execution.",
+    "elements": [
+     "Persistence Layer",
+     "Caching Layer",
+     "Background Workers",
+     "Core Domain Services"
+    ],
+    "sensitivity_points": [
+     "Resource isolation between OpenSearch search queries and background recommendation recomputations",
+     "CDC pipeline replication lag during bulk updates"
+    ],
+    "tradeoffs": [
+     "Offloading computation to OpenSearch and Redis spares RDS at the cost of eventual data consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Order checkout publishes asynchronous events to SQS/SNS with DLQs, while background workers manage retries and downstream integration with shipping APIs asynchronously.",
+    "elements": [
+     "Core Domain Services",
+     "Asynchronous Message Broker",
+     "Background Workers",
+     "Shipping Providers"
+    ],
+    "sensitivity_points": [
+     "Queue capacity, retry backoff, and DLQ alerting policies during extended provider outages",
+     "Idempotency in the background integration worker"
+    ],
+    "tradeoffs": [
+     "Asynchronous fulfillment improves checkout availability but delays immediate shipping confirmation to customers"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "justification": "While multi-region edge routing, canaries, and multi-region RDS scaling are stated, cross-region replication lag poses data-loss risks (RPO > 0) during an unexpected us-east-1 outage.",
+    "elements": [
+     "CDN & Geo-DNS",
+     "Persistence Layer",
+     "Observability & Synthetic Monitoring",
+     "API Gateway / BFF"
+    ],
+    "sensitivity_points": [
+     "Cross-region database replication latency and failover automation without split-brain",
+     "DNS TTL expiration speed during edge failover"
+    ],
+    "tradeoffs": [
+     "Asynchronous cross-region replication avoids cross-continent write latency but risks lost orders on sudden failure"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Multi-currency is decoupled via an external exchange rate provider and caching layer, though non-decimal currencies like JPY require changes across Order Service and frontend formatting.",
+    "elements": [
+     "Currency Exchange Rate Provider",
+     "Caching Layer",
+     "Core Domain Services",
+     "Storefront Frontend (SPA)"
+    ],
+    "sensitivity_points": [
+     "Exchange rate caching TTLs and currency formatting logic in UI and backend",
+     "External payment gateway currency support"
+    ],
+    "tradeoffs": [
+     "Caching exchange rates reduces third-party API calls but risks minor rate slippage during checkout"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "Recommendations are bundled inside the Order Service and generic Core Domain Services rather than an isolated microservice, requiring shared service updates and testing.",
+    "elements": [
+     "Core Domain Services",
+     "Persistence Layer",
+     "Storefront Frontend (SPA)"
+    ],
+    "sensitivity_points": [
+     "Tight coupling between order processing logic and recommendation queries in Order Service",
+     "OpenSearch recommendation query schema dependencies"
+    ],
+    "tradeoffs": [
+     "Consolidating domain services simplifies operational deployment but reduces independent modifiability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "AWS WAF managed rules, Edge Request Inspector, and centralized SIEM/CloudWatch logging block and audit OWASP Top 10 threats before they reach domain services.",
+    "elements": [
+     "Edge Security & WAF",
+     "API Gateway / BFF",
+     "SIEM / Compliance Logging SaaS",
+     "Observability & Synthetic Monitoring"
+    ],
+    "sensitivity_points": [
+     "Regular updates and precision of AWS WAF managed rule groups",
+     "Low false-positive rate for search and review text inputs"
+    ],
+    "tradeoffs": [
+     "Strict edge inspection increases request latency slightly while providing deep protection against injection"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Background workers explicitly include GDPR anonymization routines, coordinating deletion across RDS, OpenSearch, and Glacier data archives.",
+    "elements": [
+     "Background Workers",
+     "Persistence Layer",
+     "Asynchronous Message Broker"
+    ],
+    "sensitivity_points": [
+     "Cascading deletion and anonymization across search indexes, transactional DBs, and immutable archives",
+     "Audit trail preservation without retaining PII"
+    ],
+    "tradeoffs": [
+     "Asynchronous deletion minimizes database locks but requires complex status tracking across stores"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Background Workers",
+     "Task Execution Engine",
+     "Amazon S3 Glacier",
+     "SIEM / Compliance Logging SaaS"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Currency Exchange Rate Provider",
+     "Caching Layer"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Shipping Providers",
+     "Background Workers",
+     "Integration Gateway"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Catalog Browser Component",
+     "Core Domain Services",
+     "Amazon OpenSearch",
+     "Amazon RDS Read Replicas",
+     "Caching Layer"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Shopping Cart Component",
+     "Secure Checkout Component",
+     "Order Controller",
+     "Order Service",
+     "Payment Gateways",
+     "Amazon RDS"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Reviews and Recommendations Component",
+     "Order Service",
+     "Amazon RDS Read Replicas",
+     "Content Moderators"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Reviews and Recommendations Component",
+     "Core Domain Services",
+     "Amazon OpenSearch",
+     "Caching Layer"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Storefront Frontend (SPA)",
+     "API Gateway / BFF",
+     "Core Domain Services",
+     "Caching Layer",
+     "Persistence Layer",
+     "Background Workers",
+     "Asynchronous Message Broker"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "CDN & Geo-DNS",
+     "Storefront Frontend (SPA)",
+     "Caching Layer",
+     "Amazon OpenSearch"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Observability & Synthetic Monitoring Container",
+     "Automated Synthetic Canaries & Out-of-Band Probes",
+     "Routing and Rate Limiting Router",
+     "Redis Cache Engine",
+     "Amazon RDS",
+     "Asynchronous Message Broker"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Edge Security & WAF",
+     "Web Application Firewall (WAF)",
+     "Edge Request Inspector",
+     "AWS KMS"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "4833b04b3677fb18da352a0c88031dcdfe9434860d0999276bca5532a0c3770f",
+  "scenarios_sha256": "a5d70a9bcaae5707ac87652c00bac3b191b3c60858803cd35dc0329fd02975d6"
+ }
+}

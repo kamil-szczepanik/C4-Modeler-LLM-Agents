@@ -1,0 +1,46 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(Patient, "Patient", "Uses the system for self-service scheduling and billing.")
+Person(Clinician, "Clinician", "Manages patient admissions and electronic medical records.")
+Person(Receptionist_Admin, "Receptionist/Admin", "Manages scheduling, admissions, and administrative tasks.")
+Person(Billing_Specialist, "Billing Specialist", "Manages claims, payments, and billing processes.")
+Person(Compliance_Auditor, "Compliance Auditor", "Monitors strict HIPAA/GDPR compliance and system security.")
+
+System_Ext(Patient_Portal_App, "Patient Portal App", "Client application for patient self-service scheduling and billing.")
+System_Ext(Identity_Provider_IdP, "Identity Provider (IdP)", "Handles authentication, MFA, and SSO using OIDC/SAML 2.0.")
+System_Ext(External_Lab___Imaging_Systems, "External Lab & Imaging Systems", "External medical systems interacting via HL7 FHIR over mTLS.")
+System_Ext(Payment_Gateway___Insurance_Clearinghouse, "Payment Gateway / Insurance Clearinghouse", "Processes payments and insurance claims asynchronously.")
+
+System_Boundary(Clinic_Management_System, "Clinic Management System") {
+    Container(API_Gateway, "API Gateway", "NGINX / Kong, HTTPS/REST/gRPC", "Handles rate limiting, JWT validation, TLS termination, and canary deployments.")
+    Container(EMR_Service, "EMR Service", "Node.js / Go, HTTPS/gRPC", "Manages electronic medical records with sub-second response times.")
+    Container(Appointment_Service, "Appointment Service", "Node.js / Go, HTTPS/gRPC", "Manages clinic scheduling and patient admissions.")
+    Container(Billing_Container, "Billing Container", "Node.js / Go / TLS 1.3", "Handles billing, payments, and insurance integration.")
+    Container(Audit___Compliance_Container, "Audit & Compliance Container", "Node.js / Go, Apache Kafka", "Monitors and logs activity for strict HIPAA/GDPR compliance.")
+    Container(HL7_FHIR_Interoperability_Service, "HL7 FHIR Interoperability Service", "Python / FastAPI, HL7 FHIR APIs", "Connects to external lab and imaging systems using HL7 FHIR.")
+    ContainerDb(PostgreSQL, "PostgreSQL", "PostgreSQL with Redis caching and AES-256 envelope encryption", "Primary database for persisting core clinic and patient data.")
+    ContainerDb(Apache_Kafka, "Apache Kafka", "Apache Kafka", "Asynchronous event streaming bus for decoupling services.")
+}
+
+Rel(Patient, API_Gateway, "Interacts for scheduling and billing", "HTTPS / REST / gRPC")
+Rel(Clinician, API_Gateway, "Accesses EMR and appointments", "HTTPS / REST / gRPC")
+Rel(Receptionist_Admin, API_Gateway, "Manages administrative tasks and admissions", "HTTPS / REST / gRPC")
+Rel(Billing_Specialist, API_Gateway, "Manages billing and claims", "HTTPS / REST / gRPC")
+Rel(Compliance_Auditor, API_Gateway, "Audits system access and logs", "HTTPS / REST / gRPC")
+Rel(Patient_Portal_App, API_Gateway, "Integrates via API", "HTTPS / REST / gRPC")
+Rel(API_Gateway, EMR_Service, "Routes requests to EMR Service", "HTTPS / gRPC with mTLS")
+Rel(API_Gateway, Appointment_Service, "Routes requests to Appointment Service", "HTTPS / gRPC with mTLS")
+Rel(API_Gateway, Billing_Container, "Routes billing requests", "HTTPS / gRPC with mTLS")
+Rel(EMR_Service, PostgreSQL, "Reads and writes patient records", "PostgreSQL with Redis caching")
+Rel(Appointment_Service, PostgreSQL, "Reads and writes appointment data", "PostgreSQL")
+Rel(EMR_Service, Apache_Kafka, "Publishes EMR events asynchronously", "Apache Kafka")
+Rel(Apache_Kafka, Audit___Compliance_Container, "Streams events for auditing", "Apache Kafka")
+Rel(Apache_Kafka, HL7_FHIR_Interoperability_Service, "Streams data for interoperability", "Apache Kafka")
+Rel(HL7_FHIR_Interoperability_Service, External_Lab___Imaging_Systems, "Exchanges clinical data", "HL7 FHIR APIs over mTLS")
+Rel(Billing_Container, Payment_Gateway___Insurance_Clearinghouse, "Processes payments and insurance claims", "TLS 1.3")
+
+@enduml

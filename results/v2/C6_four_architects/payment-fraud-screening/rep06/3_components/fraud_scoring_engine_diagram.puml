@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Container_Boundary("Fraud Scoring Engine", "Fraud Scoring Engine") {
+    Component(gRPC Interface Controller, "gRPC Interface Controller", "Go gRPC server", "Screens payment authorizations and exposes the gRPC interface.")
+    Component(Tokenization Filter, "Tokenization Filter", "Go middleware utility", "Sanitizes inbound payment payloads.")
+    Component(Feature Aggregator, "Feature Aggregator", "Go goroutines and channels", "Aggregates features for real-time evaluations.")
+    Component(Scoring Evaluator, "Scoring Evaluator", "Go with embedded WebAssembly / Starlark", "Evaluates scoring rules using embedded WebAssembly or Starlark.")
+    Component(Model Hot-Swapper, "Model Hot-Swapper", "Go background worker", "Updates active model references via background worker.")
+    Component(Audit Event Publisher, "Audit Event Publisher", "Go buffered channel worker pool", "Emits decision payloads and metadata to audit streams.")
+}
+
+System_Ext(Amazon ElastiCache (Redis), "Amazon ElastiCache (Redis)", "Redis", "Provides fast in-memory feature data retrieval.")
+System_Ext(Amazon SQS / SNS, "Amazon SQS / SNS", "AWS SDK / HTTPS", "Handles asynchronous, decoupled audit event publishing.")
+
+Rel(gRPC Interface Controller, Tokenization Filter, "Sanitizes inbound payment payload", "In-process Function Call")
+Rel(Tokenization Filter, Feature Aggregator, "Forwards tokenized request context", "In-process Function Call")
+Rel(gRPC Interface Controller, Scoring Evaluator, "Passes features for scoring", "In-process Function Call")
+Rel(Feature Aggregator, Amazon ElastiCache (Redis), "Queries feature data", "TCP/TLS")
+Rel(Model Hot-Swapper, Scoring Evaluator, "Updates active model reference", "Thread-safe atomic pointer swap")
+Rel(Scoring Evaluator, Audit Event Publisher, "Emits decision payload and metadata", "Buffered Go Channel")
+Rel(Audit Event Publisher, Amazon SQS / SNS, "Publishes audit events", "AWS SDK / HTTPS")
+
+@enduml

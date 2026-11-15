@@ -1,0 +1,254 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 3,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.625,
+  "justifications": {
+   "functional_suitability": "Catalog & Search Service and Catalog Management Controller address R-01 cataloging, alongside Circulation & Payments Service for circulation and Patron Web App for self-service. However, explicit mechanisms specifically differentiating physical versus digital item handling (e.g., access control or streaming/downloads) are minimal.",
+   "performance_efficiency": "The dedicated Elasticsearch container, Elasticsearch Client, and Catalog Data Synchronizer decouple search from transactional loads. Read Replica and Query Caching Layer offload queries, while Envoy rate limiting protects system throughput, ensuring the 99th-percentile search response stays under 800 ms.",
+   "compatibility": "The system integrates seamlessly with external systems, connecting to EU Identity Provider via OIDC/PKCE, EU Payment Gateway via HTTPS/REST, and EU-hosted Log & Telemetry Aggregator via Syslog and TLS, adhering to standard protocols like gRPC and Kafka.",
+   "usability": "Patron Web App provides Search & Discovery UI and Localization & Accessibility Engine for patrons. However, Librarian / Staff and Library Administrator interact directly with the API Gateway without distinct frontend UI containers designed for their workflows.",
+   "reliability": "High availability is ensured via CloudNativePG Operator with automated failover (<30s RTO) and multi-AZ deployments for Primary Database and Elasticsearch. Resilience4j in Payment Processing Component and the Transactional Outbox Publisher provide fault tolerance.",
+   "security": "EU data residency constraints are enforced across EU-hosted PostgreSQL, Elasticsearch, and Redis. The Edge TLS Terminator, JWT Authentication & RBAC Filter Component, column-level PII encryption, and pgaudit Extension provide robust encryption, authorization, and audit trails.",
+   "maintainability": "The architecture exhibits high modularity across microservices like Catalog & Search Service and Admin & Reporting Service. Loose coupling is reinforced via gRPC, Transactional Outbox Publisher with Kafka, and clean separation of concerns within component layers.",
+   "portability": "Containerized elements running standard runtimes (Spring Boot, FastAPI, React) alongside CloudNativePG Operator facilitate deployment across any EU cloud infrastructure or Kubernetes environment, with MinIO / AWS S3 EU-Central offering storage flexibility."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 2,
+   "MOD-02": 2,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.5,
+   "Modifiability": 2.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Dedicated Elasticsearch cluster with multi-AZ node coordination and separate query path via Catalog & Search Service easily sustains high concurrency and meets the sub-800ms P99 latency target.",
+    "elements": [
+     "API Gateway",
+     "Catalog & Search Service",
+     "Elasticsearch",
+     "Search Controller",
+     "Search Service",
+     "Elasticsearch Client",
+     "Query DSL & Search Engine"
+    ],
+    "sensitivity_points": [
+     "Sizing and sharding configuration of the Elasticsearch index",
+     "Envoy connection pooling and concurrency limits under peak traffic"
+    ],
+    "tradeoffs": [
+     "Eventual consistency between relational storage and search indexes vs lower search latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Asynchronous indexing via CDC isolates write transactions in PostgreSQL from search workloads in Elasticsearch, ensuring searches stay under 800 ms while propagating catalog updates well within 5 minutes.",
+    "elements": [
+     "Catalog Management Controller",
+     "PostgreSQL",
+     "Catalog Data Synchronizer",
+     "Elasticsearch Client",
+     "Elasticsearch",
+     "Search Service"
+    ],
+    "sensitivity_points": [
+     "CDC indexing pipeline lag under heavy database write traffic"
+    ],
+    "tradeoffs": [
+     "Near real-time visibility traded for transactional write performance and query isolation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The 3-AZ Elasticsearch cluster automatically routes around failed nodes to replicas without downtime, while circulation transactions run independently against PostgreSQL, ensuring zero lost transactions and continuous operation.",
+    "elements": [
+     "Elasticsearch",
+     "Cluster Coordination & Node Management",
+     "Circulation & Payments Service",
+     "PostgreSQL",
+     "CloudNativePG Operator"
+    ],
+    "sensitivity_points": [
+     "Replica shard distribution across availability zones in Elasticsearch"
+    ],
+    "tradeoffs": [
+     "Higher infrastructure cost for multi-AZ clusters vs continuous search availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "The API Gateway can route traffic away from a failed portal instance to healthy replicas with minimal downtime, while loan state resides safely in PostgreSQL, though BFF session persistence details remain partially implicit.",
+    "elements": [
+     "API Gateway",
+     "Edge TLS Terminator & Router Component",
+     "Patron Web App",
+     "BFF Security & Session Manager",
+     "Circulation & Payments Service",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Session state persistence across BFF instances during unexpected node failures"
+    ],
+    "tradeoffs": [
+     "Server-side state isolation security vs seamless failover without shared session store"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "The architecture lacks an explicit ingestion adapter or provider integration module in the Catalog & Search Service, forcing external provider integration logic into the generic Catalog Management Controller.",
+    "elements": [
+     "Catalog & Search Service",
+     "Catalog Management Controller",
+     "PostgreSQL"
+    ],
+    "sensitivity_points": [
+     "Coupling between core catalog domain models and external provider schemas"
+    ],
+    "tradeoffs": [
+     "Simpler monolithic controller vs extensible plugin architecture"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The Circulation Engine encapsulates circulation business logic directly within Spring Boot components without an externalized policy engine, rule repository, or dynamic configuration mechanism required for runtime rule modifications without code changes.",
+    "elements": [
+     "Circulation & Payments Service",
+     "Circulation Engine Component"
+    ],
+    "sensitivity_points": [
+     "Hardcoded loan rules within compiled service components"
+    ],
+    "tradeoffs": [
+     "High execution speed of in-memory Java logic vs runtime policy configurability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "All persistence stores, external providers (IdP, Payment), object storage, and logging aggregators are explicitly constrained and deployed within EU boundaries by design, preventing cross-border data leakage.",
+    "elements": [
+     "API Gateway",
+     "PostgreSQL",
+     "Elasticsearch",
+     "Admin & Reporting Service",
+     "EU Identity Provider",
+     "EU Payment Gateway",
+     "EU-hosted Log & Telemetry Aggregator"
+    ],
+    "sensitivity_points": [
+     "Third-party services maintaining verifiable EU-only data residency guarantees"
+    ],
+    "tradeoffs": [
+     "Restricting vendor ecosystem to EU-compliant providers vs broader service availability"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "The API Gateway enforces JWT validation and RBAC while logging to an EU telemetry aggregator. However, resource-level authorization (preventing cross-patron record access) is left implicit within the Circulation Engine rather than explicitly modeled.",
+    "elements": [
+     "API Gateway",
+     "JWT Authentication & RBAC Filter Component",
+     "Patron Web App",
+     "BFF Security & Session Manager",
+     "Circulation REST Controller Component",
+     "Circulation Engine Component",
+     "EU-hosted Log & Telemetry Aggregator"
+    ],
+    "sensitivity_points": [
+     "Consistent enforcement of data-ownership checks at the service level"
+    ],
+    "tradeoffs": [
+     "Centralized perimeter RBAC verification vs granular domain-level ABAC complexity"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "R-01": "partial",
+   "R-05": "full"
+  },
+  "coverage": 0.8333333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "EU Identity Provider",
+     "EU Payment Gateway",
+     "EU-hosted Log & Telemetry Aggregator",
+     "PostgreSQL",
+     "Rate Limiting Filter Component",
+     "EU-hosted Object Storage",
+     "CloudNativePG Operator",
+     "Cluster Coordination & Node Management"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Catalog & Search Service",
+     "Catalog Management Controller",
+     "Catalog Data Synchronizer",
+     "PostgreSQL",
+     "Primary Database"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Catalog & Search Service",
+     "Search Controller",
+     "Search Service",
+     "Elasticsearch Client",
+     "Elasticsearch",
+     "Query DSL & Search Engine",
+     "Index & Storage Engine"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "c575200b3c33c89ab5c6854f1792e9d381f428e563a3e65bb046fe5e4a47536c",
+  "scenarios_sha256": "9ec2a01e13e1ecd60d761355b8db890e6486306e59b51e4801c2cc29ced023a2"
+ }
+}

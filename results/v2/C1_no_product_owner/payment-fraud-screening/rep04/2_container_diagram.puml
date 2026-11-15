@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalyst, "Fraud Analyst", "Reviews cases and manages fraud investigations.")
+System_Ext(PaymentGatewayCoreLedger, "Payment Gateway / Core Ledger", "Sends payment authorizations for real-time fraud evaluation.")
+System_Ext(CardSchemesIdentityProviders, "Card Schemes / Identity Providers", "External services called via REST APIs for additional verification.")
+System_Ext(ComplianceAuditor, "Compliance / Auditor", "Reviews tamper-evident audit logs for regulatory compliance.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(APIGatewayAWSAAPIGatewayALB, "API Gateway (AWS API Gateway / ALB)", "AWS API Gateway / ALB", "Ingests payment authorizations and routes incoming traffic.")
+    Container(ScoringEngine, "Scoring Engine", "Go", "Evaluates card-not-present payment authorizations with strict sub-50ms latency.")
+    Container(CaseManagement, "Case Management", "Node.js / Spring Boot", "Provides case management capabilities for fraud analysts.")
+    Container(ModelRegistry, "Model Registry", "Python / MLflow / Amazon S3", "Stores and manages machine learning models used for scoring.")
+    Container(EnvoySidecarProxy, "Envoy Sidecar Proxy", "Envoy", "Enforces mTLS and provides circuit breaking.")
+    ContainerDb(RedisAmazonElastiCache, "Redis / Amazon ElastiCache", "Redis / Amazon ElastiCache", "Provides low-latency data storage for feature lookups.")
+    ContainerDb(AuroraPostgreSQL, "Aurora PostgreSQL", "Amazon Aurora PostgreSQL", "Stores tamper-evident, encrypted audit logs with long-term retention.")
+    Container(AmazonMSKKafka, "Amazon MSK / Kafka", "Amazon MSK / Kafka", "Decouples high-throughput ingestion from audit writes.")
+}
+
+Rel(FraudAnalyst, CaseManagement, "Interacts with Case Management for investigations", "HTTPS/REST")
+Rel(PaymentGatewayCoreLedger, APIGatewayAWSAAPIGatewayALB, "Sends payment authorizations for real-time fraud evaluation", "HTTPS/REST (3,000 TPS)")
+Rel(APIGatewayAWSAAPIGatewayALB, ScoringEngine, "Routes payment authorization requests", "gRPC over HTTP/2 with mTLS")
+Rel(ScoringEngine, RedisAmazonElastiCache, "Performs feature lookups", "TCP")
+Rel(ScoringEngine, AuroraPostgreSQL, "Writes audit logs", "TCP")
+Rel(ScoringEngine, ModelRegistry, "Consumes models", "Amazon S3")
+
+@enduml

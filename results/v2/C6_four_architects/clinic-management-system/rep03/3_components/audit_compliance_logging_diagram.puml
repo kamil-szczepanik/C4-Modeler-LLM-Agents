@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Audit & Compliance Logging container
+
+System_Ext(upstream_containers, "Upstream Containers", "Upstream system containers generating log streams.")
+System_Ext(cloud_backup_archive, "Cloud Backup Archive", "Hybrid cloud storage targeting >= 10-year retention via S3 API / HTTPS.")
+
+Container_Boundary(audit_compliance_logging, "Audit & Compliance Logging") {
+    Component(log_collector_component, "Log Collector Component", "FluentBit", "Gathers and sanitizes OTLP streams from all upstream containers, dropping plaintext PHI/PII.")
+    Component(log_forwarder_buffer_component, "Log Forwarder / Buffer Component", "FluentBit local buffer", "Persistent local disk buffer preventing log loss during network partitions.")
+    Component(log_indexer_search_engine, "Log Indexer & Search Engine", "OpenSearch", "Indexes structured audit events with WORM policies.")
+    Component(compliance_reporter_component, "Compliance Reporter Component", "Go service", "Generates automated HIPAA/GDPR audit reports.")
+    Component(audit_integrity_verifier, "Audit Integrity Verifier", "Go daemon", "Computes SHA-256 cryptographic hashes for tamper-evidence.")
+}
+
+Rel(upstream_containers, log_collector_component, "Buffered log push", "OTLP/gRPC over TLS 1.3")
+Rel(log_collector_component, log_indexer_search_engine, "Bulk indexing", "HTTPS/REST via mTLS")
+Rel(compliance_reporter_component, log_indexer_search_engine, "Audit queries", "HTTPS/REST via mTLS")
+Rel(audit_integrity_verifier, log_indexer_search_engine, "Read audit blocks", "HTTPS/REST via mTLS")
+Rel(log_indexer_search_engine, cloud_backup_archive, "Cold storage tiering and cryptographic proofs", "S3 API / HTTPS")
+Rel(audit_integrity_verifier, cloud_backup_archive, "Cold storage tiering and cryptographic proofs", "S3 API / HTTPS")
+
+@enduml

@@ -1,0 +1,318 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 3,
+   "usability": 3,
+   "reliability": 4,
+   "security": 4,
+   "maintainability": 3,
+   "portability": 4
+  },
+  "mean": 3.75,
+  "justifications": {
+   "functional_suitability": "All requirements are supported: 'WebRTC Media Server Containers (SFUs)' handles video consultations (R-01), 'Clinician Dashboard & Handoff Container' dispatches e-prescriptions (R-02), 'AI Symptom Checker Container' handles triage urgency (R-03), and 'Granular Consent Manager' governs data sharing purposes (R-04).",
+   "performance_efficiency": "'SFU Core Engine' employs simulcast and dynamic bitrate scaling for constrained networks (<300 kbit/s). 'Session Manager' utilizes Redis for low-latency session persistence, and 'Async Queue & Retry Manager' offloads background operations to GCP Pub/Sub, though AI inference scaling mechanisms are not detailed.",
+   "compatibility": "Level 1 specifies HL7 FHIR and national standards for 'External Pharmacies'. However, components in 'Clinician Dashboard & Handoff Container' and 'Notification & Dispatch Controller' lack explicit translation adapters or gateways distinguishing US FHIR profiles from varying EU national prescription protocols.",
+   "usability": "'Clinician Dashboard & Handoff Container' provides a clear interface for clinicians, but patient user interfaces (web/mobile app) are omitted as distinct containers, leaving 'Patients (EU & US)' connecting directly to low-level infrastructure like SFUs.",
+   "reliability": "'SFU Core Engine' explicitly provides dynamic bitrate scaling to sustain calls under 300 kbit/s. 'Async Queue & Retry Manager' employs Dead Letter Queues for message resilience over unstable connections across regional GKE clusters.",
+   "security": "'Regional Data Residency Enforcer' (VPC Service Controls) isolates US/EU data. 'Crypto-Shredding Manager' (Cloud KMS) and 'Granular Consent Manager' ensure GDPR/HIPAA compliance. Istio enforces mTLS, and 'Fluent Bit' strips PII, though model versioning details in 'Audit Logger' remain abstract.",
+   "maintainability": "Responsibilities are divided into specialized microservices. However, structural modeling is inconsistent: 'Clinician Dashboard' component diagram improperly models external systems, containers ('Regional GKE Clusters', 'AI Symptom Checker Container'), and human roles ('Licensed Clinicians') as internal components.",
+   "portability": "'Regional GKE Clusters' leverage standard Kubernetes and Istio across the specified regions (europe-west3, us-central1). While container workloads are portable, architecture components exhibit moderate vendor lock-in to proprietary GCP services like Cloud KMS, VPC Service Controls, and Cloud Pub/Sub."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 4,
+   "AVAIL-02": 2,
+   "MOD-01": 2,
+   "MOD-02": 3,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.65625,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 3.0,
+   "Modifiability": 2.5,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "Regional GKE Clusters and SFU Core Engines handle WebRTC distribution, but explicit autoscaling, turn infrastructure, and edge capacity planning for 5,000 concurrent media streams are not specified.",
+    "elements": [
+     "Regional GKE Clusters",
+     "WebRTC Media Server Containers (SFUs)",
+     "SFU Core Engine",
+     "Istio Service Mesh & Envoy Gateways"
+    ],
+    "sensitivity_points": [
+     "SFU pod horizontal autoscaling and bandwidth limits during flu season surges"
+    ],
+    "tradeoffs": [
+     "High compute and bandwidth allocation versus operational infrastructure cost"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Handling ~14 requests/second (50,000/hour) is well supported by the containerized Triage Controller with Redis session caching, Envoy gateway routing, and gRPC communication.",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Triage Controller",
+     "Session Manager",
+     "Istio Service Mesh & Envoy Gateways"
+    ],
+    "sensitivity_points": [
+     "In-memory Redis session state latency under peak triage traffic"
+    ],
+    "tradeoffs": [
+     "Fast response latency versus comprehensive upfront ML inference complexity"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 4,
+    "justification": "The SFU Core Engine explicitly implements simulcast and dynamic bitrate scaling down to below 300 kbit/s. However, synchronization and offline persistence mechanisms for clinician notes are unaddressed.",
+    "elements": [
+     "WebRTC Media Server Containers (SFUs)",
+     "SFU Core Engine",
+     "Clinician Dashboard & Handoff Container"
+    ],
+    "sensitivity_points": [
+     "Simulcast adaptation sensitivity to sudden packet drops below 200 kbit/s"
+    ],
+    "tradeoffs": [
+     "Dropping video quality to preserve audio and call connectivity"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "Only us-central1 is configured for the US. Without a secondary US failover region or an explicit regional disaster recovery mechanism, recovering US services without cross-border transit is undefined.",
+    "elements": [
+     "Regional GKE Clusters",
+     "Regional Data Residency Enforcer"
+    ],
+    "sensitivity_points": [
+     "Availability of secondary intra-US cold or warm failover clusters"
+    ],
+    "tradeoffs": [
+     "Strict regional residency prevents active-active cross-border failover to the EU"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 2,
+    "justification": "The architecture lacks an explicit pharmacy integration adapter layer. Dispatches occur directly from the Clinician Dashboard or Notification Gateway without modular country-specific prescription abstraction components.",
+    "elements": [
+     "Clinician Dashboard & Handoff Container",
+     "Patient Engagement & Notification Gateway Container",
+     "External Pharmacies"
+    ],
+    "sensitivity_points": [
+     "Direct coupling to external pharmacy APIs without integration adapters"
+    ],
+    "tradeoffs": [
+     "Simpler notification pipeline versus increased modification effort per national format"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "Audit Logger and Fluent Bit record AI inputs and outputs for MDR traceability, but dynamic model version routing, canary deployments, and automated rollback mechanisms are absent.",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Audit Logger",
+     "Fluent Bit & Google Cloud Logging"
+    ],
+    "sensitivity_points": [
+     "Logging schema must strictly bind model version IDs to output logs"
+    ],
+    "tradeoffs": [
+     "Immutable audit trails versus operational speed of runtime model rollbacks"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "The Regional Data Residency Enforcer and Granular Consent Manager enforce regional data isolation, evaluate consent policies across mesh gateways, and log authorization checks before granting access.",
+    "elements": [
+     "Localization & Regulatory Service",
+     "Regional Data Residency Enforcer",
+     "Granular Consent Manager",
+     "Istio Service Mesh & Envoy Gateways"
+    ],
+    "sensitivity_points": [
+     "Enforcement points in Istio and VPC Service Controls validating consent tokens"
+    ],
+    "tradeoffs": [
+     "Strict access controls and latency versus rapid clinician record retrieval"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Granular Consent Manager processes withdrawal, the Crypto-Shredding Manager revokes patient-specific KMS keys making data unreadable immediately, and the Audit Traceability Worker exports verifiable logs.",
+    "elements": [
+     "Granular Consent Manager",
+     "Crypto-Shredding Manager",
+     "Audit Traceability Worker",
+     "Localization & Regulatory Service"
+    ],
+    "sensitivity_points": [
+     "Per-patient envelope encryption key invalidation latency in Cloud KMS"
+    ],
+    "tradeoffs": [
+     "Immediate crypto-shredding guarantees compliance but permanently revokes data access"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "partial"
+  },
+  "coverage": 0.875,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Regional GKE Clusters",
+     "Localization & Regulatory Service",
+     "Regional Data Residency Enforcer",
+     "Crypto-Shredding Manager"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Regional GKE Clusters",
+     "Localization & Regulatory Service",
+     "Regional Data Residency Enforcer"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Audit Logger",
+     "Fluent Bit & Google Cloud Logging",
+     "Audit Traceability Worker"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "SFU Core Engine",
+     "WebRTC Media Server Containers (SFUs)",
+     "Istio Service Mesh & Envoy Gateways",
+     "Async Queue & Retry Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patients (EU & US)",
+     "Licensed Clinicians",
+     "WebRTC Media Server Containers (SFUs)",
+     "SFU Core Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Clinician Dashboard & Handoff Container",
+     "Patient Engagement & Notification Gateway Container",
+     "External Pharmacies (EU & US)"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Triage Controller",
+     "Clinician Dashboard & Handoff Container"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Granular Consent Manager",
+     "Localization & Regulatory Service"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Regional Data Residency Enforcer",
+     "Granular Consent Manager",
+     "Regional GKE Clusters",
+     "Localization & Regulatory Service"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "WebRTC Media Server Containers (SFUs)",
+     "SFU Core Engine"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Audit Logger",
+     "Fluent Bit & Google Cloud Logging",
+     "AI Symptom Checker Container"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "partial",
+    "elements": [
+     "Pharmacies (EU & US)",
+     "Clinician Dashboard & Handoff Container"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

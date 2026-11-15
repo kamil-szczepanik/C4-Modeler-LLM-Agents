@@ -1,0 +1,40 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Library Management System
+
+Person(LibraryPatronsandStaff, "Library Patrons and Staff", "Users who interact with the library system via frontend SPA or mobile apps to catalogue items, manage circulation, and use self-service portals.")
+
+System_Ext(StripeEU, "Stripe EU", "External payment gateway used for handling transactions.")
+System_Ext(AWSS3EUCentral, "AWS S3 EU-Central", "External cloud storage for securing digital catalog asset storage within EU boundaries.")
+
+System_Boundary(LibraryManagementSystem, "Library Management System") {
+    Container(WebApplicationSPA, "Web Application (SPA)", "React/TypeScript", "Powers the frontend SPA hosted on an EU-Central CDN.")
+    Container(APIGateway, "API Gateway", "Nginx / Envoy", "Routes and manages incoming requests to internal services.")
+    Container(CoreServicesContainer, "Core Services Container", "Spring Boot / Java", "Provides scalable business logic for core catalogue and circulation.")
+    Container(SearchContainer, "Search Container", "Elasticsearch Cluster", "Optimizes indexing and queries to meet the < 800ms 99th-percentile search SLA.")
+    Container(IntegrationService, "Integration Service", "Node.js / Python", "Handles integrations with external services like Stripe EU.")
+    Container(AsyncWorkerContainer, "Async Worker Container", "Python / Celery or Java / Spring Batch", "Processes background tasks and asynchronous event handling.")
+    Container(MessageBroker, "Message Broker", "Managed RabbitMQ", "Enables decoupled asynchronous event handling and webhooks.")
+    ContainerDb(Database, "Database", "PostgreSQL Managed RDS", "Ensures transactional consistency for core records.")
+    ContainerDb(CacheSessionStore, "Cache / Session Store", "Managed AWS Redis", "Delivers sub-millisecond session validation and hot caching.")
+    Container(FileStorageContainer, "File Storage Container", "AWS S3 EU-Central", "Secures digital assets and documents within the EU boundary.")
+}
+
+Rel(LibraryPatronsandStaff, WebApplicationSPA, "Interacts via browser", "HTTPS")
+Rel(WebApplicationSPA, APIGateway, "Sends requests to backend services", "HTTPS/REST")
+Rel(APIGateway, CoreServicesContainer, "Routes core business logic requests", "gRPC / internal REST")
+Rel(APIGateway, SearchContainer, "Routes search queries", "gRPC / internal REST")
+Rel(APIGateway, CacheSessionStore, "Validates sessions and accesses cache", "RESP over TLS")
+Rel(CoreServicesContainer, CacheSessionStore, "Accesses hot cache and session state", "RESP over TLS")
+Rel(CoreServicesContainer, Database, "Reads and writes transactional data", "JDBC over TLS")
+Rel(CoreServicesContainer, MessageBroker, "Publishes events and messages", "AMQP/TLS")
+Rel(MessageBroker, AsyncWorkerContainer, "Consumes asynchronous jobs and events", "AMQP/TLS")
+Rel(IntegrationService, StripeEU, "Processes payments and external integrations", "HTTPS/REST")
+Rel(AsyncWorkerContainer, StripeEU, "Handles background payment or external tasks", "HTTPS/REST")
+Rel(IntegrationService, FileStorageContainer, "Manages digital assets", "HTTPS/REST")
+Rel(AsyncWorkerContainer, FileStorageContainer, "Processes and retrieves files", "HTTPS/REST")
+Rel(Database, SearchContainer, "Syncs search index data", "Debezium CDC via internal TCP/TLS")
+
+@enduml

@@ -1,0 +1,310 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 4,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are met: online submissions via Web Portal (SPA) and Claim Submission REST API (R-01), adjuster processing via Adjuster Workspace (R-02), and phased migration via API Gateway / Router and Feature Flag Router Component (R-03).",
+   "performance_efficiency": "To beat the 5s mainframe latency (R-05), Claim Processing Dashboard uses TanStack Query caching and optimistic updates, while asynchronous decoupling via Integration & Sync Engine and local reads from Azure SQL Database ensure sub-2s response times.",
+   "compatibility": "Interoperability with Identity Provider and Legacy Mainframe is addressed via Anti-Corruption Layer (ACL) and mTLS/ExpressRoute. However, explicit mechanisms to avoid conflicting with the strict 23:00-05:00 mainframe nightly batch window are not fully detailed.",
+   "usability": "Customers and brokers are served by Web Portal (SPA) with local form persistence (Dexie.js), while Claims Adjusters receive the dedicated Adjuster Workspace featuring optimistic dashboard updates and offline draft management.",
+   "reliability": "Strict consistency (R-04) is enforced by Idempotency & Reconciliation Worker, persistent transaction tracking in Azure SQL Database, Azure Service Bus dead-lettering, and Circuit Breaker & Fallback Handler in API Gateway / Router.",
+   "security": "Meets R-07 via Token Validation Middleware and Identity Provider integration. PII Protection Enclave, Azure Key Vault tokenization, mTLS, and an append-only Audit & Activity Trail Service provide robust data security and auditability.",
+   "maintainability": "Dynamic Route Dispatcher and Feature Flag Router Component enable one-day rollbacks (R-06). Clear separation exists across services, though using disparate stacks (YARP, Kafka, Azure Service Bus, Cosmos DB) poses challenges for a team with little cloud experience.",
+   "portability": "Deployments span hybrid on-premises and Azure West Europe as required, but deep coupling to proprietary Azure platform services (Azure Container Apps, Azure Service Bus, Azure Cosmos DB, Azure Static Web Apps) limits portability outside Azure."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 3,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "TanStack Query and optimistic caching in the Adjuster Workspace help mask latency on subsequent interactions, but the architecture lacks an explicit read-through cache or read-model synchronization in Claims Core Service to guarantee cold loads under 2 seconds when reading 5-second mainframe data.",
+    "elements": [
+     "Adjuster Workspace",
+     "Claim Processing Dashboard",
+     "API Gateway / Router",
+     "Claims Core Service",
+     "Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Client-side caching sensitivity during cold loads of unmigrated hybrid records",
+     "Synchronous calls across the hybrid interconnect directly impact page render latency"
+    ],
+    "tradeoffs": [
+     "Optimistic UI updates improve perceived responsiveness at the cost of eventual consistency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Submissions are decoupled asynchronously via Azure Container Apps, Azure SQL, and Azure Service Bus/Kafka in the Integration & Sync Engine. The Anti-Corruption Layer buffers traffic, fully insulating the legacy mainframe batch processing window from online traffic spikes.",
+    "elements": [
+     "Web Portal (SPA)",
+     "API Gateway / Router",
+     "Claims Core Service",
+     "Integration & Sync Engine",
+     "Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Message broker queue buffering capacity during sustained peak submission periods"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission ingestion increases throughput while deferring mainframe consistency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Online claims are captured in Azure SQL and held reliably in Azure Service Bus Premium topics within the Integration & Sync Engine while the mainframe is offline during batch windows. Events are forwarded via the ACL once connectivity resumes.",
+    "elements": [
+     "Claims Core Service",
+     "Integration & Sync Engine",
+     "Message Broker Interface",
+     "Anti-Corruption Layer (ACL)",
+     "Azure SQL Database"
+    ],
+    "sensitivity_points": [
+     "Durability and partition limits of Azure Service Bus Premium during batch windows"
+    ],
+    "tradeoffs": [
+     "Decoupled availability trades immediate mainframe acknowledgment for continuous customer ingestion"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "The Integration & Sync Engine contains a dedicated Idempotency & Reconciliation Worker with state tracking in Azure SQL and DLQ monitoring, ensuring deduplication, transaction hashing, and state reconciliation across failed or partial synchronization events without duplicate processing.",
+    "elements": [
+     "Integration & Sync Engine",
+     "Idempotency & Reconciliation Worker",
+     "Business-Facing DLQ Dashboard & Metrics",
+     "Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Precision of idempotency hash generation across partial payload sync retries"
+    ],
+    "tradeoffs": [
+     "Strict idempotency checks add database lookup overhead to every synchronization payload"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "YARP dynamic route dispatching combined with Spring Cloud Feature Management enables claim-type-based routing between modern services and the legacy mainframe. Reverting a migration involves toggling a feature flag or route config within minutes without code redeployments.",
+    "elements": [
+     "API Gateway / Router",
+     "Dynamic Route Dispatcher",
+     "Claims Core Service",
+     "Feature Flag Router Component",
+     "Anti-Corruption Layer (ACL)"
+    ],
+    "sensitivity_points": [
+     "Feature flag state consistency between API Gateway and Claims Core Service"
+    ],
+    "tradeoffs": [
+     "Dynamic dual-routing adds operational complexity to the gateway layer"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "User interfaces interact purely with the modern API Gateway and frontend workspace shell. Decommissioning the mainframe only requires updating router dispatching and retiring the ACL sync engine; client applications require no changes or rewrites.",
+    "elements": [
+     "Web Portal (SPA)",
+     "Adjuster Workspace",
+     "API Gateway / Router",
+     "Claims Core Service",
+     "Azure SQL Database"
+    ],
+    "sensitivity_points": [
+     "Abstraction purity of the API Gateway contracts shielding clients from backend changes"
+    ],
+    "tradeoffs": [
+     "Facade layers introduce slight routing overhead to preserve client UI stability"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "The API Gateway verifies OIDC/OAuth tokens and Claims Core enforces domain rules, while Audit & Activity Trail Service captures cryptographic audit logs. However, explicit multi-tenant broker-to-customer ownership validation logic is not detailed at the component level.",
+    "elements": [
+     "API Gateway / Router",
+     "Token Validation Middleware",
+     "Claims Core Service",
+     "Audit & Activity Trail Service",
+     "Audit Persistence Manager"
+    ],
+    "sensitivity_points": [
+     "Granular broker-customer authorization claims validation inside service handlers"
+    ],
+    "tradeoffs": [
+     "Detailed real-time authorization checks slightly increase submission processing latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Centralized authentication through Azure Active Directory allows immediate access revocation via token invalidation across SPA and Adjuster workspaces. However, propagating access removal to the legacy mainframe within 15 minutes depends on external AD synchronization not detailed in the architecture.",
+    "elements": [
+     "Identity Provider",
+     "API Gateway / Router",
+     "Token Validation Middleware",
+     "Adjuster Workspace",
+     "Legacy Mainframe"
+    ],
+    "sensitivity_points": [
+     "OAuth token lifetime and revocation propagation speed across hybrid identity providers"
+    ],
+    "tradeoffs": [
+     "Short-lived access tokens improve revocation speed but increase token refresh traffic"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe",
+     "Anti-Corruption Layer (ACL)",
+     "Integration & Sync Engine"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Anti-Corruption Layer (ACL)"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customers and Brokers",
+     "Web Portal (SPA)",
+     "Claim Submission REST API"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Adjuster Workspace",
+     "Claim Processing Dashboard"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "API Gateway / Router",
+     "Dynamic Route Dispatcher",
+     "Feature Flag Router Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Integration & Sync Engine",
+     "Idempotency & Reconciliation Worker",
+     "Message Broker Interface"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Adjuster Workspace",
+     "Claim Processing Dashboard",
+     "State & Offline Manager Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "API Gateway / Router",
+     "Dynamic Route Dispatcher",
+     "Feature Flag Router Component"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Identity Provider",
+     "Token Validation Middleware",
+     "Web Portal (SPA)",
+     "Adjuster Workspace"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

@@ -1,0 +1,332 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 3,
+   "usability": 2,
+   "reliability": 3,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.125,
+  "justifications": {
+   "functional_suitability": "Video (Video Streaming Gateway Containers), e-prescriptions (FHIR/National Adapter Containers), AI checker (AI Inference & Audit Proxy) and consent (Consent Enforcement Middleware) are covered. Gaps: the AI service is modeled as external, consent management has no patient UI or store, and clinician licensing is absent.",
+   "performance_efficiency": "Adaptive bitrate WebRTC in Video Streaming Gateway, Store-and-Forward Cache Agent, Local Async Event Bus and Rate Limiting middleware help. Gaps: no autoscaling, no capacity or latency targets, no data-access optimization, and synchronous audit logging adds latency.",
+   "compatibility": "FHIR Translation Adapter (US) and National E-Prescription Adapter (EU) cover R-08 with concrete modules, and OIDC is used for identity. Gaps: no per-country EU adapters, the Notification service has no relationships, and the FHIR scope is limited to prescriptions.",
+   "usability": "Patients and Clinicians are a single undifferentiated person with HTTPS/WebRTC access. Adaptive streaming helps rural users, but there are no client apps, consent management UI, separate clinician or pharmacist interfaces, or accessibility and language provisions.",
+   "reliability": "Store-and-Forward Cache Agent, Local Async Event Bus with durable SQLite/RocksDB storage and the Local File Buffer give degraded-mode resilience for R-06. Gaps: no multi-zone failover, health checks, backups or recovery design, and no explicit fallback to audio-only.",
+   "security": "ExtAuthz Filter default-deny consent, mTLS, Secret Manager sidecar, KMS encryption, PII/PHI Stripping Filter and AI audit logging of inputs/model version address most needs. Gaps: the audit buffer is asynchronous in the component view (contradicting the synchronous claim), and residency enforcement and data stores are not explicit.",
+   "maintainability": "Clear decomposition: separate Stateless Core, Consent Middleware, AI Audit Proxy, adapters, sidecars and observability. Responsibilities are distinct with low coupling. Minor issues: combined US/EU adapter container, an overloaded core service, and a Telemetry Exporter that is partly redundant.",
+   "portability": "Containerized microservices, Envoy, OpenTelemetry and MQTT are portable, and the two GCP regions are targeted. But GCP Secret Manager, KMS and Persistent Disk create lock-in, and there are no IaC, regional deployment or Kubernetes definitions."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 2,
+   "PERF-02": 2,
+   "SEC-01": 3,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.40625,
+  "by_quality_attribute": {
+   "Performance": 2.0,
+   "Availability": 2.5,
+   "Modifiability": 3.5,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "elements": [
+     "Video Streaming Gateway Containers with Local Storage/Caching Agents",
+     "WebRTC Streaming Router",
+     "API Gateway / Ingress Controller Containers"
+    ],
+    "sensitivity_points": [
+     "No autoscaling or capacity mechanism for TURN/STUN and media routing",
+     "No SFU/media server scaling described"
+    ],
+    "tradeoffs": [
+     "Store-and-forward caching adds I/O overhead versus join latency"
+    ],
+    "justification": "WebRTC gateway exists, but nothing addresses scaling to 5,000 concurrent sessions or join-time targets. No autoscaling, SFU or load distribution is described. Join under 10 s is unsupported."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "elements": [
+     "AI Inference & Audit Proxy Containers",
+     "AI Symptom Checker Service",
+     "Stateless Core Application Containers"
+    ],
+    "sensitivity_points": [
+     "Synchronous audit logging sits in the latency path",
+     "External AI service capacity unspecified; no scaling or caching"
+    ],
+    "tradeoffs": [
+     "Synchronous traceability logging versus 3 s p95 latency"
+    ],
+    "justification": "A gRPC inference proxy exists, but the AI service is external with no stated capacity or autoscaling for about 14 requests/s. Synchronous logging adds latency. The 3 s p95 target is unsupported by any mechanism."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "elements": [
+     "Video Streaming Gateway Containers with Local Storage/Caching Agents",
+     "Store-and-Forward Cache Agent",
+     "Local Async Event Bus / Queue Containers",
+     "WebRTC Streaming Router"
+    ],
+    "sensitivity_points": [
+     "Cache and queue are server-side, not on client device",
+     "Clinical notes persistence path undefined"
+    ],
+    "tradeoffs": [
+     "Local buffering improves resilience but delays data sync and adds PHI storage risk"
+    ],
+    "justification": "Adaptive bitrate WebRTC and store-and-forward address low bandwidth. But caches sit on server containers, not client devices. Clinical note preservation and session reconnection are unspecified, so no-loss guarantees are unproven."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "elements": [
+     "Global Traffic Director / API Gateway",
+     "Regional Audit and Compliance Logging Subsystem",
+     "Configuration and Secrets Management Sidecars"
+    ],
+    "sensitivity_points": [
+     "No disaster recovery or in-region failover for us-central1",
+     "Single region per jurisdiction"
+    ],
+    "tradeoffs": [
+     "Strict residency prevents failover to EU, limiting redundancy options"
+    ],
+    "justification": "Regional stacks and a traffic director exist, and residency is respected by not moving data to the EU. But no multi-zone deployment, backup, replication or recovery procedure is described for a 1-hour restoration."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "elements": [
+     "FHIR Translation Adapter Container (US) and National E-Prescription Adapter Container (EU)",
+     "EU National E-Prescription Module",
+     "Consultation and Prescription Service"
+    ],
+    "sensitivity_points": [
+     "One EU module may cover all countries",
+     "Adapter interface contract not defined"
+    ],
+    "tradeoffs": [
+     "Adapter isolation versus a shared container coupling deployment"
+    ],
+    "justification": "Separate US and EU adapter modules isolate standards from core logic, supporting changes confined to an adapter. However, a single EU module for all countries and no explicit adapter interface or per-country plugin mean some risk."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "elements": [
+     "AI Inference & Audit Proxy Containers",
+     "AI Symptom Checker Client",
+     "Audit Logging Buffer",
+     "AI Symptom Checker Service"
+    ],
+    "sensitivity_points": [
+     "Model versioning and rollback mechanism not described",
+     "Audit buffer is asynchronous, contradicting the synchronous logging claim"
+    ],
+    "tradeoffs": [
+     "Async buffered audit improves latency but risks traceability gaps"
+    ],
+    "justification": "Proxy logs inputs, model version and outputs, and decouples the model service. But there is no model registry, version routing or rollback mechanism. The async audit buffer in the component view conflicts with the synchronous container description."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "Consent Enforcement Middleware/Proxy Containers",
+     "ExtAuthz Filter",
+     "Metadata Enrichment Agent",
+     "External Identity and Consent Provider",
+     "Regional Audit and Compliance Logging Subsystem"
+    ],
+    "sensitivity_points": [
+     "Consent store lives in an external provider with unspecified residency",
+     "Cross-region request routing and denial logging not explicit"
+    ],
+    "tradeoffs": [
+     "Default-deny strictness versus clinician access in emergencies"
+    ],
+    "justification": "Default-deny ExtAuthz with consent and residency headers is a strong mechanism. But no cross-region data path or denial logging is modeled, and the consent provider's location is unspecified. Enforcement is plausible but incomplete."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "elements": [
+     "Consent Enforcement Middleware/Proxy Containers",
+     "External Identity and Consent Provider",
+     "ExtAuthz Filter"
+    ],
+    "sensitivity_points": [
+     "No propagation of consent revocation to downstream sharing or caches",
+     "No research-sharing component or verification"
+    ],
+    "tradeoffs": [
+     "Real-time consent checks add latency versus eventual propagation"
+    ],
+    "justification": "Per-request consent checks could stop sharing quickly, but no research-sharing flow, revocation propagation, cache invalidation or verifiable evidence of the 24-hour stop is modeled. Purpose-based consent is only implied via headers."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "partial",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.7083333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Consent Enforcement Middleware/Proxy Containers",
+     "Observability & Telemetry Exporter Sidecars with PII/PHI Stripping",
+     "Regional Audit and Compliance Logging Subsystem",
+     "Configuration and Secrets Management Sidecars"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Global Traffic Director / API Gateway",
+     "API Gateway / Ingress Controller Containers",
+     "Metadata Enrichment Agent",
+     "Regional Audit and Compliance Logging Subsystem"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "AI Inference & Audit Proxy Containers",
+     "Audit Logging Buffer",
+     "Regional Audit and Compliance Logging Subsystem"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Video Streaming Gateway Containers with Local Storage/Caching Agents",
+     "Store-and-Forward Cache Agent",
+     "Local Async Event Bus / Queue Containers",
+     "MQTT Message Broker",
+     "Local Durable Storage Engine"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Video Streaming Gateway Containers with Local Storage/Caching Agents",
+     "WebRTC Streaming Router",
+     "Consultation and Prescription Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "FHIR Translation Adapter Container (US) and National E-Prescription Adapter Container (EU)",
+     "National E-Prescription Gateways and Pharmacy Networks",
+     "Consultation and Prescription Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Inference & Audit Proxy Containers",
+     "AI Symptom Checker Service",
+     "AI Symptom Checker Orchestrator",
+     "AI Symptom Checker Client"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Consent Enforcement Middleware/Proxy Containers",
+     "ExtAuthz Filter",
+     "External Identity and Consent Provider"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Global Traffic Director / API Gateway",
+     "Consent Enforcement Middleware/Proxy Containers",
+     "Metadata Enrichment Agent",
+     "ExtAuthz Filter"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Video Streaming Gateway Containers with Local Storage/Caching Agents",
+     "WebRTC Streaming Router",
+     "Store-and-Forward Cache Agent",
+     "Local Async Event Bus / Queue Containers"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "AI Inference & Audit Proxy Containers",
+     "Audit Logging Buffer",
+     "Regional Audit and Compliance Logging Subsystem"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "FHIR Translation Adapter Container (US) and National E-Prescription Adapter Container (EU)",
+     "US FHIR Translation Module",
+     "EU National E-Prescription Module"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

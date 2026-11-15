@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Search Aggregator container
+
+System_Ext(mobile_api_gateway, "Mobile API Gateway", "External gateway routing client requests.")
+System_Ext(core_circulation_service, "Core Circulation & Catalog Service", "Internal microservice for catalog and circulation management.")
+System_Ext(elasticsearch, "Elasticsearch / OpenSearch Cluster", "Search index for catalog items and multi-segment filtering.")
+System_Ext(async_worker, "Asynchronous Notification Worker", "Worker for handling background tasks and asynchronous processing.")
+
+Container_Boundary(search_aggregator, "Search Aggregator") {
+    Component(graphql_resolver_layer, "GraphQL Resolver Layer", "Apollo Server, Node.js", "Component for query parsing, schema federation, rate-limiting, and RBAC.")
+    Component(query_planner, "Query Planner & Fan-Out Engine", "Node.js", "Component for parallel execution and circuit-breaking.")
+    Component(search_result_cacher, "Search Result Cacher", "Redis Cache Tier", "Component for rapid retrieval of frequent queries.")
+    Component(facet_engine, "Facet & Weighting Engine", "Node.js", "Component for dynamic multi-segment filtering.")
+    Component(telemetry_streamer, "Telemetry Streamer", "OpenTelemetry, Prometheus", "Component for offloading search interaction metrics.")
+}
+
+Rel(mobile_api_gateway, graphql_resolver_layer, "gRPC over TLS", "gRPC over TLS")
+Rel(graphql_resolver_layer, query_planner, "Invokes parallel query execution", "")
+Rel(query_planner, core_circulation_service, "gRPC over TLS", "gRPC over TLS")
+Rel(query_planner, elasticsearch, "Queries catalog search index", "REST APIs, HTTPS")
+Rel(query_planner, search_result_cacher, "Caches search results", "Redis protocol, mTLS, AES-256")
+Rel(facet_engine, elasticsearch, "Multi-segment filtering queries", "REST APIs, HTTPS")
+Rel(telemetry_streamer, async_worker, "Offloads telemetry", "Internal message queues")
+
+@enduml

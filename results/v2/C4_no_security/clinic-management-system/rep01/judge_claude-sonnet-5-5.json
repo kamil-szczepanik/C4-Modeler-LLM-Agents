@@ -1,0 +1,362 @@
+{
+ "model": "claude-sonnet-5-5",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "All four functional requirements map to elements: Patient & Scheduling Service (registration, scheduling), EMR Service with Audit Interceptor, Billing & Claims Service with Claims Engine. Gaps: clash-check logic is not explicit, and the Scheduling Engine does not specify resource conflict detection.",
+   "performance_efficiency": "Redis Enterprise and Local EMR Cache Manager (read-through/write-behind), PgBouncer pooling, read replicas, async Kafka audit and Outbox Dispatcher support the <1s P95 EMR target. Gaps: no explicit autoscaling or latency budget, and the cache is not tied to the 1s figure.",
+   "compatibility": "Integration Service with FHIR Adapter, Apache Camel, and API Gateway FHIR Request Validator addresses HL7 FHIR for lab and imaging. OIDC/SAML IdP and clearinghouse REST/SFTP are covered. Gaps: the FHIR Gateway is only a context-level component, and the Level 3 Integration Service mixes in unrelated elements.",
+   "usability": "A single SPA/Mobile Client serves all five user groups, with EMR Workspace, Notification & Alert UI, RBAC Context Provider and Offline Sync Engine. Gaps: no role-specific interfaces for receptionist, billing or patient, and no accessibility or UX mechanisms.",
+   "reliability": "Active-active PostgreSQL, etcd/Raft fencing, Kubernetes Operator, WAL Archiver, Redis CRDT Sync, Resilience & Policy Engine circuit breaking, DLQ Manager and Outbox Dispatcher address 99.99%. Gaps: the multi-region failover design is unclear and the primary/replica description conflicts with active-active.",
+   "security": "IdP MFA via OIDC, JWT Validation Plugin, mTLS Service Mesh, AES-256 PostgreSQL and Redis, RBAC Context Provider, immutable Audit Interceptor, Audit & Compliance Service with S3 WORM Object Lock, Report Generator & Redactor, and Cache Purge Controller for GDPR cover the brief thoroughly.",
+   "maintainability": "Clear service decomposition with separate Patient & Scheduling, EMR, Billing, Integration and Audit containers. A service mesh and API Gateway decouple concerns, and components are well scoped. Gaps: mixed technology options (Java/Node, Python/Go) and inconsistent L3 diagrams embedding containers and external systems as components.",
+   "portability": "Kubernetes, the CloudNativePG operator, Istio, and the Redis hybrid VPN tunnel manager fit on-prem plus eu-central-1. Containerized open technologies limit lock-in. Gaps: AWS S3 Object Lock is a specific dependency and no explicit deployment or IaC definition exists."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 3,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 3,
+   "PERF-02": 3,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.5625,
+  "by_quality_attribute": {
+   "Performance": 3.0,
+   "Availability": 3.0,
+   "Modifiability": 3.5,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "elements": [
+     "EMR Service",
+     "Local EMR Cache Manager",
+     "Redis Enterprise",
+     "PgBouncer",
+     "SPA / Mobile Client"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio determines P95 latency",
+     "Write-behind may serve stale EMR data"
+    ],
+    "tradeoffs": [
+     "Caching speed vs. data currency",
+     "Audit and mTLS hops add latency"
+    ],
+    "justification": "Read-through Redis cache, pooling and read replicas support sub-second loads. However, no explicit autoscaling, load figures or freshness guarantees are given, and write-behind risks stale data, so the P95 target is unproven."
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 3,
+    "elements": [
+     "Integration Service",
+     "Message Routing & Transformation Engine",
+     "FHIR Adapter Component",
+     "Dead Letter Queue (DLQ) Manager",
+     "EMR Service",
+     "PostgreSQL Clusters"
+    ],
+    "sensitivity_points": [
+     "Ingestion throughput against shared PostgreSQL",
+     "No inbound lab-to-EMR path is modeled"
+    ],
+    "tradeoffs": [
+     "Async ingestion vs. EMR visibility delay",
+     "Shared database couples ingestion and EMR reads"
+    ],
+    "justification": "Camel/Spring Integration with a DLQ can handle bursts, and replicas isolate reads. But the flow into the EMR is not modeled, there is no ingest queue or scaling, and the shared database is a contention risk."
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "elements": [
+     "On-Premises Kubernetes Cluster",
+     "AWS EU-Central-1",
+     "PostgreSQL Clusters",
+     "Distributed Consensus / Fencing Manager",
+     "Redis Enterprise",
+     "Hybrid VPN"
+    ],
+    "sensitivity_points": [
+     "Cross-region replication is asynchronous, so data loss is possible",
+     "No global traffic failover mechanism is shown"
+    ],
+    "tradeoffs": [
+     "Async replication performance vs. zero data loss",
+     "Active-active complexity vs. consistency"
+    ],
+    "justification": "A hybrid topology, Raft failover and Redis CRDTs help. But the cross-region replica is asynchronous, which conflicts with no data loss, and DNS/global load balancing for the 1-minute switchover is missing."
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 3,
+    "elements": [
+     "Billing & Claims Service",
+     "Outbox Dispatcher",
+     "PostgreSQL Clusters",
+     "Distributed Consensus / Fencing Manager",
+     "Kubernetes Operator",
+     "PgBouncer"
+    ],
+    "sensitivity_points": [
+     "Idempotency of claim submission to the clearinghouse",
+     "Failover time within 30 s"
+    ],
+    "tradeoffs": [
+     "Outbox gives reliability at the cost of delivery latency",
+     "Synchronous replication vs. write latency"
+    ],
+    "justification": "Outbox pattern, Raft leader election and a synchronous on-prem replica support safe retry and fast failover. No explicit idempotency keys or deduplication against the clearinghouse are shown, so duplicates remain a risk."
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "elements": [
+     "Billing & Claims Service",
+     "Claims Engine",
+     "Payment Gateway Integration",
+     "Outbox Dispatcher",
+     "Insurance Clearinghouse APIs"
+    ],
+    "sensitivity_points": [
+     "Claims Engine may be coupled to the clearinghouse protocol",
+     "No adapter abstraction is shown"
+    ],
+    "tradeoffs": [
+     "Service-level isolation vs. no dedicated adapter layer"
+    ],
+    "justification": "Claims are isolated in Billing & Claims Service, so the EMR is unaffected. The change likely touches the Claims Engine, and there is no explicit clearinghouse adapter interface, but it is still confined to one container."
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "elements": [
+     "Patient & Scheduling Service",
+     "PostgreSQL Clusters",
+     "SPA / Mobile Client",
+     "Audit Interceptor",
+     "Audit & Compliance Service"
+    ],
+    "sensitivity_points": [
+     "Shared schema and migration process",
+     "Audit capture is not tied to the demographic fields"
+    ],
+    "tradeoffs": [
+     "Shared database eases consistency but couples changes",
+     "Generic audit hashing reduces change but weakens field-level audit"
+    ],
+    "justification": "The change touches the UI, patient service, database schema and possibly audit rules, which is about three or more components. No schema-migration or field-level audit configuration is described, so the one-sprint target is a risk."
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "elements": [
+     "Identity Provider (IdP)",
+     "JWT Validation Plugin",
+     "Authentication & Session Manager",
+     "Compliance Policy Evaluator",
+     "SMS/Email Notification Gateway",
+     "Audit & Compliance Service"
+    ],
+    "sensitivity_points": [
+     "MFA is enforced only at the IdP",
+     "Failed-login events are not routed to the Audit Service"
+    ],
+    "tradeoffs": [
+     "External IdP delegation vs. dependence on the vendor"
+    ],
+    "justification": "The IdP enforces MFA and the gateway validates JWTs, so no access without the second factor is plausible. But failed login attempts reach the audit and alerting pipeline only implicitly, so the 1-minute alert is not demonstrated."
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "elements": [
+     "Audit Interceptor",
+     "EMR Service",
+     "Audit & Compliance Service",
+     "Apache Kafka",
+     "Object Storage (S3 / WORM)",
+     "Retention Management Worker",
+     "Feature Flag & RBAC Context Provider"
+    ],
+    "sensitivity_points": [
+     "Async audit dispatch may drop events",
+     "Policy check on treating relationship is not explicit"
+    ],
+    "tradeoffs": [
+     "Async auditing preserves latency but risks gaps",
+     "WORM retention vs. GDPR erasure"
+    ],
+    "justification": "Audit interceptor with hashes, Kafka buffering, hot PostgreSQL storage and S3 Object Lock WORM give tamper-evident 10-year retention. Gaps: asynchronous dispatch can lose events, and server-side patient-relationship policy checks are only client RBAC."
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "partial",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Service",
+     "Audit Interceptor",
+     "Object Storage (S3 / WORM)",
+     "Encryption & Security Module",
+     "Service Mesh",
+     "Identity Provider (IdP)",
+     "Report Generator & Redactor",
+     "Compliance Policy Evaluator"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "PostgreSQL Clusters",
+     "Distributed Consensus / Fencing Manager",
+     "Kubernetes Operator",
+     "Active-Active CRDT Sync Engine",
+     "Redis Enterprise",
+     "Resilience & Policy Engine",
+     "On-Premises Kubernetes Cluster",
+     "AWS EU-Central-1 Cloud Services"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Retention Management Worker",
+     "Object Storage (S3 / WORM)",
+     "WAL Archiver",
+     "Audit & Compliance Service"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Patient Management Component",
+     "Patient Registration Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "partial",
+    "elements": [
+     "Patient & Scheduling Service",
+     "Scheduling Engine",
+     "Appointment Scheduling Service"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "Clinical Record Manager",
+     "Audit Interceptor",
+     "Audit & Compliance Service",
+     "Object Storage (S3 / WORM)"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing & Claims Service",
+     "Claims Engine",
+     "Invoice Management",
+     "Outbox Dispatcher",
+     "Insurance Clearinghouse APIs"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "JWT Validation Plugin",
+     "PostgreSQL Clusters",
+     "Encryption & Security Module",
+     "Authentication & Session Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "PostgreSQL Clusters",
+     "Redis Enterprise",
+     "Active-Active CRDT Sync Engine",
+     "Distributed Consensus / Fencing Manager",
+     "Hybrid VPN / Direct Connect",
+     "Kubernetes Operator"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "Redis Enterprise",
+     "Local EMR Cache Manager",
+     "PgBouncer",
+     "Offline Sync Engine"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Service",
+     "FHIR Adapter Component",
+     "FHIR Request Validator",
+     "HL7 FHIR API Gateway",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

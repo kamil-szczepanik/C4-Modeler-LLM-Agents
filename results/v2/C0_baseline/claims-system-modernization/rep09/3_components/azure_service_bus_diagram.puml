@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Azure Service Bus container
+
+System_Ext(backend_apis, "Backend APIs", "External system interacting with the service bus.")
+System_Ext(migration_engine, "Migration & Sync Engine", "External system interacting with the service bus.")
+System_Ext(integration_workers, "Integration Workers", "External system interacting with the service bus.")
+System_Ext(migration_operators, "Migration Operators", "External system interacting with the service bus.")
+
+Container_Boundary(azure_service_bus, "Azure Service Bus") {
+    Component(azure_service_bus_premium_namespace, "Azure Service Bus Premium Namespace", "Azure Service Bus Premium Tier", "Serves as the asynchronous messaging backbone providing guaranteed resource isolation, throughput, and disaster recovery.")
+    Component(claim_events_topic, "Claim Events Topic", "Azure Service Bus Topic with SQL-filter rules", "Routes domain events and commands with SQL-filter rules per claim type.")
+    Component(legacy_sync_queue, "Legacy Sync Queue", "Azure Service Bus Queue with FIFO Sessions", "Manages legacy synchronization using FIFO Session IDs mapping to Claim IDs.")
+    Component(system_dead_letter_sub_system, "System Dead-Letter Sub-system", "Azure Service Bus DLQ with auto-forwarding", "Handles poisoned messages and processing failures with DLQs and auto-forwarding.")
+    Component(private_endpoints_and_vnet_integration, "Private Endpoints and VNet Integration", "Azure Private Link & Private Endpoints", "Secures network traffic across the hybrid boundary, blocking public internet access.")
+}
+
+Rel(backend_apis, claim_events_topic, "Publishes domain events and commands", "AMQP 1.0 over TLS 1.3")
+Rel(migration_engine, legacy_sync_queue, "Publishes and consumes sync events", "AMQP 1.0 over TLS 1.3")
+Rel(integration_workers, legacy_sync_queue, "Consumes FIFO claim messages via sessions", "AMQP 1.0 over TLS 1.3")
+Rel(migration_operators, system_dead_letter_sub_system, "Tries, purges, and resubmits poisoned messages", "Azure Portal / CLI")
+
+@enduml

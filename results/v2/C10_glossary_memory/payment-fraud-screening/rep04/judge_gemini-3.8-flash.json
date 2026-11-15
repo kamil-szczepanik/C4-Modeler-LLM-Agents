@@ -1,0 +1,310 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 2,
+   "security": 3,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 3.375,
+  "justifications": {
+   "functional_suitability": "Fraud Scoring API and Case Management UI satisfy R-01 and R-02. However, R-03 (updating rules and scoring models without downtime) lacks an explicit dynamic update or deployment mechanism in the Inference Engine or API Router.",
+   "performance_efficiency": "Using Go with an in-process Embedded ONNX Runtime and an asynchronous Audit Dispatcher to an AWS NLB enables low-latency scoring under 50 ms at 3,000 rps. However, Feature Assembler data sources and caching are unspecified.",
+   "compatibility": "Integration with Payment Gateway / Processor Core is handled via standard gRPC and mTLS. Case Management UI integrates cleanly with external Identity Provider (IdP) over OIDC and HTTPS.",
+   "usability": "The Fraud Analyst is well supported by Dashboard & Queue View and Case Detail & Explainability View. However, Risk Operations Manager / Data Scientist has no dedicated interface or tooling for managing rules and models.",
+   "reliability": "The architecture omits any fallback, timeout, or fail-open mechanism to satisfy R-07 (ensuring payments are not blocked for over 1 minute if scoring becomes unavailable), creating an unmitigated single point of failure.",
+   "security": "Achieves audit immutability with S3 Glacier Object Lock and pg_audit. However, explicit mechanisms for card data tokenization, field-level encryption, and masking PAN from analysts (R-05, PCI-DSS) are missing from the components.",
+   "maintainability": "System decomposition into decoupled containers (Fraud Scoring API, Case Management Backend, Audit & Event Store) with clear component responsibilities supports modular maintenance by a small three-engineer team.",
+   "portability": "Core logic resides in containerized Go and Node.js components suitable for AWS eu-west-1. Dependencies on proprietary services like S3 Glacier Object Lock and Aurora PostgreSQL are well-aligned with target constraints."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 2,
+   "AVAIL-02": 2,
+   "MOD-01": 3,
+   "MOD-02": 2,
+   "PERF-01": 4,
+   "PERF-02": 4,
+   "SEC-01": 2,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.5,
+  "by_quality_attribute": {
+   "Performance": 4.0,
+   "Availability": 2.0,
+   "Modifiability": 2.5,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "Embedded ONNX runtime and an in-process Go pipeline easily achieve sub-50ms P99 at 3,000 RPS. Async audit dispatch prevents write bottlenecks. However, feature assembly data sources are not detailed.",
+    "elements": [
+     "Fraud Scoring API",
+     "API Router & Validator",
+     "Feature Assembler",
+     "Inference Engine",
+     "Audit Dispatcher"
+    ],
+    "sensitivity_points": [
+     "In-process ONNX runtime eliminates network hops for ML scoring"
+    ],
+    "tradeoffs": [
+     "Local feature assembly avoids cache latency but limits cross-transaction state"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Scoring and case management execute in decoupled containers, keeping scoring latency isolated from analyst traffic. However, both rely on Aurora PostgreSQL without explicit read replicas for reporting queries.",
+    "elements": [
+     "Fraud Scoring API",
+     "Case Management Backend",
+     "Case Management UI",
+     "Audit & Event Store",
+     "Relational Ledger Store"
+    ],
+    "sensitivity_points": [
+     "Independent scaling of scoring and case management containers"
+    ],
+    "tradeoffs": [
+     "Shared Aurora instance between analytics and audit ingestion risks resource contention"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 2,
+    "justification": "The architecture lacks a defined fallback or fail-open mechanism if Fraud Scoring API instances crash. While container orchestrators might restart tasks, no local fallback rule engine or gateway fallback path is modeled.",
+    "elements": [
+     "Fraud Scoring API",
+     "Payment Gateway / Processor Core"
+    ],
+    "sensitivity_points": [
+     "Absence of fail-open or fallback scoring component in the architecture"
+    ],
+    "tradeoffs": [
+     "Failing safe versus failing open when scoring services crash"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The Audit Dispatcher uses an in-memory Go channel. If Aurora or Event Ingestion Service degrades, in-memory buffers will fill, causing either dropped audit events or backpressure on scoring latency.",
+    "elements": [
+     "Fraud Scoring API",
+     "Audit Dispatcher",
+     "Event Ingestion Service",
+     "Relational Ledger Store"
+    ],
+    "sensitivity_points": [
+     "In-memory Go channels for audit dispatch without durable messaging"
+    ],
+    "tradeoffs": [
+     "Low latency via async dispatch versus durable delivery during downstream outages"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 3,
+    "justification": "Model versioning is recorded in audit logs, but no dynamic model distribution or hot-reloading mechanism is modeled in the container. Model updates rely on external container redeployments without explicit rollback orchestration.",
+    "elements": [
+     "Inference Engine",
+     "Audit Dispatcher",
+     "Risk Operations Manager / Data Scientist"
+    ],
+    "sensitivity_points": [
+     "Hot-reloading versus rolling container deployments for ONNX models"
+    ],
+    "tradeoffs": [
+     "Immutable container deployments enhance stability but slow down rollback times"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 2,
+    "justification": "The scoring API only contains an ONNX ML Inference Engine and lacks a dynamic business rules engine. Furthermore, adding velocity checks requires stateful historical lookups, which are entirely absent from the Feature Assembler.",
+    "elements": [
+     "Fraud Scoring API",
+     "Feature Assembler",
+     "Inference Engine"
+    ],
+    "sensitivity_points": [
+     "Absence of a rule engine or velocity state store"
+    ],
+    "tradeoffs": [
+     "Relying purely on ONNX inference versus combining dynamic rule execution with ML"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "justification": "Although authentication uses OIDC, there is no tokenization service, PAN masking component, or anomaly detection system to alert on abnormal analyst access within 15 minutes as required.",
+    "elements": [
+     "Case Management Backend",
+     "Case Management UI",
+     "Authentication Wrapper Component",
+     "Identity Provider (IdP)"
+    ],
+    "sensitivity_points": [
+     "Missing tokenization/masking proxy and security monitoring integration"
+    ],
+    "tradeoffs": [
+     "Offloading authentication to IdP without internal behavioral anomaly detection"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "The combination of capturing explanations and model versions via Audit Dispatcher, archiving to S3 Glacier with Object Lock, and 7-year WORM retention directly and completely satisfies the regulatory retrieval requirement.",
+    "elements": [
+     "Audit & Event Store",
+     "Archival Worker",
+     "S3 Glacier Object Lock Bucket",
+     "Relational Ledger Store",
+     "Audit Dispatcher"
+    ],
+    "sensitivity_points": [
+     "Immutable WORM compliance via S3 Glacier Object Lock for 7 years"
+    ],
+    "tradeoffs": [
+     "Archival retrieval latency from Glacier versus long-term storage costs"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "full",
+   "C-03": "none",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "partial",
+   "R-04": "partial",
+   "R-05": "none",
+   "R-06": "full",
+   "R-07": "none"
+  },
+  "coverage": 0.5454545454545454,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Audit & Event Store",
+     "AWS Secrets Manager / IAM",
+     "Event Ingestion Service"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Inference Engine",
+     "Audit Dispatcher",
+     "Audit & Event Store",
+     "Event Ingestion Service",
+     "Relational Ledger Store",
+     "Archival Worker",
+     "S3 Glacier Object Lock Bucket",
+     "Case Detail & Explainability View Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "none",
+    "elements": []
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Event Ingestion Service",
+     "Relational Ledger Store",
+     "Archival Worker",
+     "S3 Glacier Object Lock Bucket"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Fraud Scoring API",
+     "API Router & Validator",
+     "Feature Assembler",
+     "Inference Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Case Management Backend",
+     "Case Management UI",
+     "API Router / Controller",
+     "Case Service",
+     "Dashboard & Queue View Component",
+     "Case Detail & Explainability View Component",
+     "Action & Audit Logger Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "partial",
+    "elements": [
+     "Risk Operations Manager / Data Scientist",
+     "Inference Engine"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "partial",
+    "elements": [
+     "Fraud Scoring API",
+     "Inference Engine",
+     "Audit Dispatcher"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "none",
+    "elements": []
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Audit Dispatcher",
+     "Audit & Event Store",
+     "Event Ingestion Service",
+     "Relational Ledger Store",
+     "S3 Glacier Object Lock Bucket"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "none",
+    "elements": []
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "9498f8b9d40d6a8acb03078883613de5ea28dcd2609978529cb4015cd892afbb",
+  "scenarios_sha256": "5bb56ea1ca50e8b055ca0291fae5beb556b54e7cd3eeafa74c4ccfd3e07c87e1"
+ }
+}

@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the API Gateway container
+
+Person_Ext(PatronWebApplication, "Patron Web Application", "Patrons interacting with the library system")
+Person_Ext(StaffAdministrationPortal, "Staff Administration Portal", "Staff managing the library system")
+
+System_Ext(CoreDomainServices, "Core Domain Services", "Upstream microservices handling business logic")
+System_Ext(IdentityProviderSSO, "Identity Provider / SSO", "External identity provider for authentication")
+System_Ext(RedisEURegion, "Redis (EU region)", "Distributed cache in the EU region")
+System_Ext(LoggingAPM, "Logging & APM", "Observability platform for metrics and traces")
+
+Container_Boundary(ApiGateway, "API Gateway") {
+    Component(RoutingFilterRouteLocator, "Routing Filter / Route Locator", "Spring Cloud Gateway", "Directs traffic and prioritizes low-latency search paths.")
+    Component(JWTValidationFilter, "JWT Validation Filter", "Spring Cloud Gateway Filter", "Validates tokens locally using cached public keys with Redis-backed revocation blacklisting.")
+    Component(RateLimitingFilter, "Rate Limiting Filter", "Spring Cloud Gateway Filter / Redis", "Enforces quotas using a distributed Redis cache co-located in the EU.")
+    Component(RBACEnforcementFilter, "RBAC Enforcement Filter", "Spring Cloud Gateway Filter", "Evaluates route-level permissions to block unauthorized access.")
+    Component(TracingInterceptor, "Tracing Interceptor", "Spring Cloud Gateway Interceptor", "Injects W3C traceparent headers for distributed tracing.")
+    Component(ContextPropagationInterceptor, "Context Propagation Interceptor", "Spring Cloud Gateway Interceptor", "Propagates X-User-Id and X-User-Roles headers.")
+}
+
+Rel(PatronWebApplication, ApiGateway, "Sends API requests", "HTTPS/REST")
+Rel(StaffAdministrationPortal, ApiGateway, "Sends API requests", "HTTPS")
+Rel(ApiGateway, CoreDomainServices, "Routes requests and propagates trace headers", "mTLS")
+Rel(ApiGateway, IdentityProviderSSO, "Fetches JWT validation keys", "HTTPS/REST")
+Rel(ApiGateway, RedisEURegion, "Checks rate limits and token revocation", "RESP/TCP")
+Rel(ApiGateway, LoggingAPM, "Exports metrics and traces", "OTLP/gRPC")
+
+@enduml

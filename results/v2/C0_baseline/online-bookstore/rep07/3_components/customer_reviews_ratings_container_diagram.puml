@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Customer Reviews & Ratings Container
+
+Container_Boundary(reviews_container, "Customer Reviews & Ratings Container") {
+    Component(ReviewAPIRouter, "Review API Router", "FastAPI, Pydantic, JWT", "Handles HTTP/gRPC requests, JWT validation, and Pydantic input sanitization.")
+    Component(ModerationService, "Moderation Service", "Python, AWS Comprehend, NLP", "Automated NLP pipeline for profanity and sentiment filtering.")
+    Component(VoteProcessor, "Vote Processor", "Python", "Isolated component handling atomic helpful votes and anti-sybil checks.")
+    Component(RatingAggregator, "Rating Aggregator", "AWS SQS, Python", "Asynchronous background worker using AWS SQS.")
+    Component(ReviewDataAccessLayer, "Review Data Access Layer", "Boto3, Amazon DynamoDB, Amazon ElastiCache (Redis)", "Interfaces with Amazon DynamoDB and Amazon ElastiCache for data persistence and read-through caching.")
+    Component(ReadCachingLayer, "Read Caching Layer", "Amazon ElastiCache (Redis)", "In-memory caching cluster for aggregated ratings to maintain low-latency page loads.")
+}
+
+System_Ext(ApiGateway, "API Gateway", "External API Gateway routing traffic.")
+System_Ext(AmazonDynamoDB, "Amazon DynamoDB", "NoSQL database for persistence.")
+System_Ext(AmazonSQS, "AWS SQS", "Asynchronous message queue.")
+System_Ext(AmazonElastiCache, "Amazon ElastiCache (Redis)", "In-memory caching layer.")
+
+Rel(ApiGateway, ReviewAPIRouter, "Routes requests via gRPC over mTLS", "gRPC / mTLS")
+Rel(ReviewAPIRouter, ModerationService, "Internal in-memory calls", "In-Memory")
+Rel(ReviewAPIRouter, VoteProcessor, "Internal in-memory calls", "In-Memory")
+Rel(VoteProcessor, AmazonDynamoDB, "TCP over AWS PrivateLink with KMS encryption", "TCP / PrivateLink")
+Rel(ReviewDataAccessLayer, AmazonDynamoDB, "TCP over AWS PrivateLink with KMS encryption", "TCP / PrivateLink")
+Rel(RatingAggregator, AmazonSQS, "Asynchronous messaging", "AWS SQS")
+Rel(ReviewDataAccessLayer, AmazonElastiCache, "Read-through caching over TLS", "TLS")
+
+@enduml

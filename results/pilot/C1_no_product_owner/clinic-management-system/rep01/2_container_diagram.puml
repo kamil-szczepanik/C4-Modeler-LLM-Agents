@@ -1,0 +1,36 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Clinic Management System
+
+Person(PatientsClinicStaff, "Patients & Clinic Staff", "Users who interact with the clinic management system for admissions, EMRs, scheduling, and clinical operations.")
+
+System_Ext(ExternalLabsImagingSystemsThirdPartyInsuranceGateways, "External Labs, Imaging Systems, & Third-Party Insurance Gateways", "External systems that integrate with the CMS to provide laboratory and medical imaging data, as well as process billing and claim submissions.")
+
+System_Boundary(ClinicManagementSystem, "Clinic Management System") {
+    Container(APIGateway, "API Gateway", "NGINX/Kong", "Edge routing, rate-limiting, and TLS termination for incoming requests.")
+    Container(IdentityService, "Identity Service", "Keycloak", "Manages user authentication, authorization, OAuth2/OIDC, and identity federation.")
+    Container(PatientEMRService, "Patient & EMR Service", "Spring Boot container", "Manages patient records, admissions, and electronic medical records.")
+    Container(AppointmentService, "Appointment Service", "Spring Boot container", "Handles scheduling and management of clinical appointments.")
+    Container(BillingService, "Billing Service", "Spring Boot container", "Manages billing, invoicing, and interactions with insurance gateways.")
+    Container(HL7FHIRIntegrationEngine, "HL7 FHIR Integration Engine", "Apache Camel", "Integrates with external labs and imaging systems using HL7 FHIR APIs.")
+    Container(EventBroker, "Event Broker", "Apache Kafka", "Facilitates asynchronous event-driven messaging across microservices.")
+    ContainerDb(PrimaryDatabaseTieredStorage, "Primary Database & Tiered Storage", "PostgreSQL & S3-compatible WORM storage", "Provides primary data persistence and secure, compliant long-term storage.")
+    Container(AuditLoggingService, "Audit Logging Service", "Java / Spring Boot", "Captures and stores audit logs for compliance and security monitoring.")
+}
+
+Rel(PatientsClinicStaff, APIGateway, "Accesses system features and application endpoints", "HTTPS/TLS 1.3")
+Rel(APIGateway, PatientEMRService, "Routes client requests to microservices", "HTTPS / mTLS (Istio)")
+Rel(APIGateway, AppointmentService, "Routes scheduling requests", "HTTPS / mTLS (Istio)")
+Rel(APIGateway, BillingService, "Routes billing requests", "HTTPS / mTLS (Istio)")
+Rel(PatientEMRService, IdentityService, "Authenticates and authorizes requests", "OAuth2/OIDC and mTLS (Istio)")
+Rel(AppointmentService, IdentityService, "Authenticates and authorizes requests", "OAuth2/OIDC and mTLS (Istio)")
+Rel(BillingService, IdentityService, "Authenticates and authorizes requests", "OAuth2/OIDC and mTLS (Istio)")
+Rel(PatientEMRService, EventBroker, "Publishes and consumes asynchronous clinical events", "SASL/SCRAM")
+Rel(HL7FHIRIntegrationEngine, ExternalLabsImagingSystemsThirdPartyInsuranceGateways, "Exchanges clinical data with external systems", "HL7 FHIR APIs")
+Rel(BillingService, ExternalLabsImagingSystemsThirdPartyInsuranceGateways, "Submits billing claims and insurance transactions", "HTTPS")
+Rel(PatientEMRService, PrimaryDatabaseTieredStorage, "Reads and writes clinical data", "PostgreSQL / Patroni / S3")
+Rel(BillingService, PrimaryDatabaseTieredStorage, "Reads and writes billing data", "PostgreSQL / S3")
+
+@enduml

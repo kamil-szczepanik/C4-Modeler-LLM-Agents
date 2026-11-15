@@ -1,0 +1,329 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 4,
+   "security": 3,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 3.875,
+  "justifications": {
+   "functional_suitability": "While video consultations, e-prescriptions, and AI triage are supported via dedicated services, R-04 (consent management per purpose) is missing entirely from the components. Traceable logging of AI model inputs and versions (R-07) is also omitted from the AI Symptom Checker.",
+   "performance_efficiency": "Performance is addressed well through asynchronous execution in the Triage Engine, Envoy rate limiting, Next.js SSR/SSG, and WebRTC streaming. However, intermediate caching tiers (such as Redis) and read/write scaling strategies for databases are omitted.",
+   "compatibility": "Compatibility is thoroughly addressed: the EU Gateway Client and US Pharmacy Client implement HL7 FHIR and mTLS for Surescripts and national gateways, and the Authentication Client integrates seamlessly with eIDAS and OAuth2/OIDC providers.",
+   "usability": "Patients and clinicians are well served by the Web UI Router and Telehealth Video Interface. However, Compliance Officers and Auditors, though identified at Level 1 and Level 2, lack a dedicated interface or component to access audit logs.",
+   "reliability": "R-06 is directly satisfied by the Adaptive Bitrate Controller for degraded connectivity below 300 kbit/s. The Resilience Handler provides circuit breaking and retries for external e-prescription calls, though database disaster recovery across regions is underspecified.",
+   "security": "DTLS-SRTP, mTLS, and CMEK Encryption Manager address transport and rest security. However, strict EU/US data residency enforcement is vaguely labeled as 'multi-region relational persistence', cross-border consent checks are missing, and AI audit log immutability is unaddressed.",
+   "maintainability": "The architecture exhibits high modularity and clear separation of concerns across microservices (Core Services Container, AI Symptom Checker Container, E-Prescription Integration Container) communicating over well-defined gRPC and REST interfaces.",
+   "portability": "The design effectively leverages the target GCP platform using Cloud SQL, Cloud KMS, and Vertex AI across regions. It relies on standard containerized runtimes, though regional multi-project topology across europe-west3 and us-central1 is not explicitly illustrated."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 3,
+   "PERF-01": 3,
+   "PERF-02": 4,
+   "SEC-01": 2,
+   "SEC-02": 1
+  },
+  "responsiveness_index": 0.5,
+  "by_quality_attribute": {
+   "Performance": 3.5,
+   "Availability": 3.5,
+   "Modifiability": 3.5,
+   "Security": 1.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 3,
+    "justification": "Media Relay uses Janus SFU and Core Services orchestrate sessions, but no clustering, auto-scaling, or TURN relay infrastructure is defined to handle 5,000 concurrent WebRTC streams.",
+    "elements": [
+     "Web Application Container",
+     "API Gateway Container",
+     "Core Services Container",
+     "Media Relay Container",
+     "SFU Core Engine"
+    ],
+    "sensitivity_points": [
+     "SFU network throughput and CPU usage per concurrent media stream"
+    ],
+    "tradeoffs": [
+     "Using SFU media routing preserves client bandwidth at the cost of server resource consumption"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "AI Symptom Checker uses FastAPI, asynchronous processing, and managed Vertex AI over Private Service Connect to achieve low latency, though explicit inference caching or queuing mechanisms are omitted.",
+    "elements": [
+     "API Gateway Container",
+     "AI Symptom Checker Container",
+     "Symptom Router",
+     "Triage Engine",
+     "Vertex AI Integration Client"
+    ],
+    "sensitivity_points": [
+     "Inference latency and API quota limits of GCP Vertex AI endpoints"
+    ],
+    "tradeoffs": [
+     "Delegating inference to Vertex AI offloads scaling complexity but introduces external service latency"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Media Relay Container explicitly includes an Adaptive Bitrate Controller plugin designed for degraded network modes below 300 kbit/s, while clinical notes are stored separately via transactional Core Services.",
+    "elements": [
+     "Web Application Container",
+     "Telehealth Video Interface",
+     "Media Relay Container",
+     "Adaptive Bitrate Controller",
+     "SFU Core Engine",
+     "Core Services Container",
+     "Databases"
+    ],
+    "sensitivity_points": [
+     "Accuracy and speed of real-time RTCP bandwidth estimation"
+    ],
+    "tradeoffs": [
+     "Sacrificing video resolution to ensure audio continuity and prevent connection drops"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The architecture shows a single logical database component with multi-region replication, lacking a dedicated US disaster recovery failover mechanism that keeps data strictly within US boundaries.",
+    "elements": [
+     "API Gateway Container",
+     "Geo-Router Component",
+     "Databases",
+     "PostgreSQL Database Engine"
+    ],
+    "sensitivity_points": [
+     "Cross-region database replication boundaries versus regional data residency isolation"
+    ],
+    "tradeoffs": [
+     "Isolated regional deployments enhance residency compliance but complicate regional disaster recovery"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "E-Prescription Integration Container isolates prescription business logic from external protocols using dedicated clients and Resilience4j, though adding national formats may require modifying both the orchestrator and adding adapters.",
+    "elements": [
+     "E-Prescription Integration Container",
+     "Prescription Orchestrator Service",
+     "EU Gateway Client",
+     "Resilience Handler"
+    ],
+    "sensitivity_points": [
+     "Standardization of internal prescription data schemas across divergent EU national formats"
+    ],
+    "tradeoffs": [
+     "Maintaining unified abstractions across disparate EU e-prescription APIs adds adapter complexity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 3,
+    "justification": "The container mentions versioned recommendations and Vertex AI, but no explicit audit log component, database entity, or deployment mechanism is modeled to log inputs with model versions.",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Triage Engine",
+     "Vertex AI Integration Client",
+     "Databases"
+    ],
+    "sensitivity_points": [
+     "Persistence of immutable input parameters alongside model endpoint metadata"
+    ],
+    "tradeoffs": [
+     "Logging full symptom inputs with model versions ensures auditability but increases storage requirements"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 2,
+    "justification": "Auth token inspection and geo-routing exist at the gateway, but there is no consent management service or policy enforcement point to evaluate cross-region access consent before querying data.",
+    "elements": [
+     "API Gateway Container",
+     "Auth & Token Introspection Component",
+     "Geo-Router Component",
+     "Core Services Container",
+     "Data Access Repository"
+    ],
+    "sensitivity_points": [
+     "Dynamic consent policy evaluation on cross-border record retrieval requests"
+    ],
+    "tradeoffs": [
+     "Strict consent verification on cross-border reads prevents unauthorized access but adds query latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 1,
+    "justification": "The model completely lacks a consent management engine, consent revocation mechanisms, and secondary research data pipeline abstractions to stop or verify data sharing.",
+    "elements": [
+     "Core Services Container",
+     "Databases",
+     "Data Access Repository"
+    ],
+    "sensitivity_points": [
+     "Propagation delay of consent revocation across downstream operational and analytical stores"
+    ],
+    "tradeoffs": [
+     "Immediate cross-system consent synchronization increases transactional overhead across data stores"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "partial",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "none",
+   "R-05": "partial",
+   "R-06": "full",
+   "R-07": "partial",
+   "R-08": "full"
+  },
+  "coverage": 0.7083333333333334,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "partial",
+    "elements": [
+     "Geo-Router Component",
+     "Auth & Token Introspection Component",
+     "DTLS-SRTP Security Module",
+     "CMEK Encryption Manager"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Geo-Router Component",
+     "Databases",
+     "PostgreSQL Database Engine"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Triage Engine"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Media Relay Container",
+     "SFU Core Engine",
+     "Adaptive Bitrate Controller",
+     "Telehealth Video Interface"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Telehealth Video Interface",
+     "Appointment & Consultation Service",
+     "Media Relay Container",
+     "SFU Core Engine"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Prescription Orchestrator",
+     "E-Prescription Integration Container",
+     "Prescription Gateway Controller",
+     "Prescription Orchestrator Service",
+     "EU Gateway Client",
+     "US Pharmacy Client",
+     "EU National E-Prescription Gateways",
+     "US Pharmacy Networks (Surescripts)"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Symptom Router",
+     "Triage Engine",
+     "Vertex AI Integration Client"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "none"
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "partial",
+    "elements": [
+     "Geo-Router Component",
+     "Databases"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Adaptive Bitrate Controller",
+     "SFU Core Engine",
+     "Media Relay Container"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "partial",
+    "elements": [
+     "AI Symptom Checker Container",
+     "Triage Engine"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "EU Gateway Client",
+     "US Pharmacy Client",
+     "EU National E-Prescription Gateways",
+     "US Pharmacy Networks (Surescripts)",
+     "E-Prescription Integration Container"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

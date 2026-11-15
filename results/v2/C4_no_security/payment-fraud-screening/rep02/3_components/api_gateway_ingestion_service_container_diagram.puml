@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the API Gateway / Ingestion Service Container container
+
+System_Ext(Payment_Gateway_Core_Processing_System, "Payment Gateway / Core Processing System", "External system sending payment authorizations")
+System_Ext(Real_Time_Scoring_Engine_Container, "Real-Time Scoring Engine Container", "Downstream system for fraud scoring")
+System_Ext(AWS_Kinesis_Data_Firehose, "AWS Kinesis Data Firehose", "Receives asynchronously streamed usage metadata")
+
+Container_Boundary(API_Gateway_Ingestion_Service_Container, "API Gateway / Ingestion Service Container") {
+    Component(Edge_Router_TLS_Terminator, "Edge Router & TLS Terminator", "Go", "Ingests payment authorizations and terminates TLS 1.3 connections.")
+    Component(Tokenization_Payload_Scrubber, "Tokenization & Payload Scrubber", "Go", "Tokenizes and scrubs raw incoming payloads for PCI-DSS compliance.")
+    Component(Local_Rate_Limiter_Throttle, "Local Rate Limiter & Throttle", "Go (sync.Map)", "Enforces local per-merchant rate limiting and throttling.")
+    Component(Ingestion_API_Handler_Circuit_Breaker, "Ingestion API Handler & Circuit Breaker", "Go", "Handles validated requests and protects downstream systems with a circuit breaker.")
+    Component(Usage_Metering_Emitter, "Usage Metering Emitter", "Go", "Asynchronously streams usage metadata for billing and SLA tracking.")
+    Component(AWS_Distro_for_OpenTelemetry_ADOT_Sidecar, "AWS Distro for OpenTelemetry (ADOT) Sidecar", "AWS ADOT", "Provides scraper-less metrics and trace export to Amazon CloudWatch.")
+}
+
+Rel(Payment_Gateway_Core_Processing_System, Edge_Router_TLS_Terminator, "Sends payment authorizations", "gRPC/REST over TLS 1.3")
+Rel(Edge_Router_TLS_Terminator, Tokenization_Payload_Scrubber, "Forwards raw incoming payloads", "In-memory Go channels")
+Rel(Tokenization_Payload_Scrubber, Local_Rate_Limiter_Throttle, "Passes scrubbed payloads", "In-memory Go channels")
+Rel(Local_Rate_Limiter_Throttle, Ingestion_API_Handler_Circuit_Breaker, "Forwards validated requests", "In-memory Go channels")
+Rel(Ingestion_API_Handler_Circuit_Breaker, Real_Time_Scoring_Engine_Container, "Dispatches requests for fraud scoring", "gRPC over TLS with Circuit Breaker")
+Rel(Usage_Metering_Emitter, AWS_Kinesis_Data_Firehose, "Asynchronously streams usage metadata for billing and SLA tracking", "HTTPS")
+
+@enduml

@@ -1,0 +1,323 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: R-01 via Core API Service, R-02 via Distributed Locking Component in Redis, R-03 via EMR Engine with Audit Logging Sidecar, and R-04 through Billing Worker, Insurance Claim Formatter, and Payment Gateway Client.",
+   "performance_efficiency": "EMR sub-second latency (< 1 s P95) is well supported by Redis JSON & RediSearch Module, PgBouncer connection pooling, and Fastify. Heavy financial processing is decoupled asynchronously via Apache Kafka and Celery in Billing Worker.",
+   "compatibility": "External interoperability is explicitly addressed by HL7 FHIR Transformer (HAPI FHIR) for External Laboratory & Imaging Systems, while Insurance Claim Formatter and Payment Gateway Client interface smoothly with Third-Party Clearinghouses via mTLS.",
+   "usability": "All actor roles (Patients, Physicians, Receptionists, Billing Specialists, Administrators) are represented accessing the system via Web Application Gateway. However, dedicated clinician or staff user interface containers are omitted in Level 2, showing only the backend gateway entry point.",
+   "reliability": "While Patroni, synchronous standbys, and buffer queues offer strong local fault tolerance, the brief explicitly mandates an active-active 99.99% architecture across hybrid regions (on-prem and eu-central-1), which is contradicted by a single Primary Database Node.",
+   "security": "Security thoroughly aligns with HIPAA/GDPR constraints: MFA at Web Application Gateway, LUKS/AES-256 database encryption at rest, ABAC enforcement in Clinical Record Service, and immutable audit logs shipped to WORM Object Storage with Object Lock.",
+   "maintainability": "The system exhibits high maintainability through modular segregation into Core API Service, EMR Engine, and Billing Worker. Separation of concerns is upheld with dedicated components like Audit Dispatcher Component and Data Access Repository Layer.",
+   "portability": "Services are containerized using standard runtime technologies (Kubernetes, Spring Boot, Node.js, Python), allowing execution across on-prem-k8s and AWS eu-central-1. However, specific configurations managing state synchronization across hybrid infrastructure boundaries are left unspecified."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 4,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 5.0,
+   "Security": 4.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture incorporates Redis JSON/RediSearch, PgBouncer connection pooling, read replicas, and reactive endpoints, easily supporting 500 concurrent reads under 1 second.",
+    "elements": [
+     "Web Application Gateway",
+     "Core API Service",
+     "EMR Engine",
+     "Redis",
+     "PostgreSQL Cluster"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio in Redis JSON",
+     "PgBouncer read-replica connection pool sizing"
+    ],
+    "tradeoffs": [
+     "Caching hot EMR data introduces potential eventual consistency during rapid updates"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "HAPI FHIR with Spring WebFlux handles high-volume parsing while Kafka buffers processing. However, direct FHIR transformation without explicit backpressure limits could burden EMR persistence.",
+    "elements": [
+     "Core API Service",
+     "Interoperability Adapter Component",
+     "HL7 FHIR Transformer",
+     "EMR Engine",
+     "Kafka",
+     "PostgreSQL Cluster"
+    ],
+    "sensitivity_points": [
+     "Throughput of HAPI FHIR reactive serialization",
+     "Database write IOPS during ingestion bursts"
+    ],
+    "tradeoffs": [
+     "Asynchronous ingestion guarantees EMR UI responsiveness but delays immediate record visibility"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Patroni provides local failover, but synchronous replication across hybrid on-prem and AWS eu-central-1 introduces high WAN latency and lack of detailed multi-region ingress orchestration.",
+    "elements": [
+     "Web Application Gateway",
+     "Service Mesh",
+     "PostgreSQL Cluster",
+     "Primary Database Node",
+     "Synchronous Standby Nodes"
+    ],
+    "sensitivity_points": [
+     "Cross-site WAN latency between on-premises and eu-central-1",
+     "Patroni etcd consensus across hybrid boundaries"
+    ],
+    "tradeoffs": [
+     "Strict zero data loss (RPO=0) cross-cloud reduces transaction write throughput significantly"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Patroni with etcd enables sub-30s failover. Kafka buffering, distributed Redis state locking, and Tenacity retries ensure submitted claims are processed idempotently without loss.",
+    "elements": [
+     "Billing Worker",
+     "Payment Gateway Client",
+     "Task Consumer (Celery Worker)",
+     "PostgreSQL Cluster",
+     "Kafka",
+     "Redis"
+    ],
+    "sensitivity_points": [
+     "Patroni failover timeout settings",
+     "Idempotency token validation in PostgreSQL"
+    ],
+    "tradeoffs": [
+     "Synchronous standbys increase commit latency but prevent lost or duplicated financial claims"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The modular architecture decouples billing via Kafka. Integrating a new clearinghouse requires modifications strictly within the Payment Gateway Client and Insurance Claim Formatter, leaving EMR untouched.",
+    "elements": [
+     "Billing Worker",
+     "Payment Gateway Client",
+     "Insurance Claim Formatter",
+     "Kafka"
+    ],
+    "sensitivity_points": [
+     "Decoupling of financial data schemas via internal message models"
+    ],
+    "tradeoffs": [
+     "Maintaining dedicated formatting layers adds initial development overhead for clean domain separation"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Updating demographics is confined to Core API (Domain Orchestration and Prisma ORM) and the PostgreSQL schema. Audit logging is transparently captured via sidecars without schema alterations.",
+    "elements": [
+     "Core API Service",
+     "Data Access Repository Layer",
+     "Domain Orchestration Service",
+     "PostgreSQL Cluster",
+     "Audit Logging Sidecar"
+    ],
+    "sensitivity_points": [
+     "Prisma ORM automated migration reliability"
+    ],
+    "tradeoffs": [
+     "Schema migrations must maintain backward compatibility across hybrid rolling deployments"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "Enforced MFA at the API Gateway/Identity Provider blocks password-only compromises. Rate Limiter/WAF forwards security telemetry to the audit sidecar, though explicit automated alerting is unspecified.",
+    "elements": [
+     "Identity Provider",
+     "Web Application Gateway",
+     "Rate Limiter & WAF Module",
+     "JWT Validation Filter",
+     "Audit Logging Sidecar"
+    ],
+    "sensitivity_points": [
+     "Mandatory MFA enforcement policies on external Identity Provider",
+     "Telemetry ingestion latency to the Audit Logging Sidecar"
+    ],
+    "tradeoffs": [
+     "Strict multi-factor authentication increases clinician login friction during emergency workflows"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Clinical Record Service enforces ABAC on record access, while the Audit Interceptor and Sidecar guarantee non-repudiation and immutable 10+ year persistence via S3 Object Lock.",
+    "elements": [
+     "EMR Engine",
+     "Clinical Record Service",
+     "Audit Interceptor",
+     "Audit Logging Sidecar",
+     "WORM Storage Exporter"
+    ],
+    "sensitivity_points": [
+     "ABAC rule evaluation latency on EMR reads",
+     "S3 Object Lock retention policy configuration"
+    ],
+    "tradeoffs": [
+     "Logging 100% of read access introduces storage volume growth and slight processing overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "partial",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit Logging Sidecar",
+     "Audit Interceptor",
+     "Clinical Record Service",
+     "PostgreSQL Cluster",
+     "Rate Limiter & WAF Module"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Synchronous Standby Nodes",
+     "Broker Node Engine",
+     "Redis In-Memory Cache"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "WORM Object Storage",
+     "WORM Storage Exporter",
+     "Partition Log Manager"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "partial",
+    "elements": [
+     "Core API Service",
+     "Domain Orchestration Service",
+     "Patient Portal"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Service",
+     "Distributed Locking Component",
+     "Redis In-Memory Cache"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Service",
+     "EMR Engine",
+     "Clinical Record Service",
+     "Audit Interceptor",
+     "Audit Logging Sidecar"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service",
+     "Billing Worker",
+     "Insurance Claim Formatter",
+     "Payment Gateway Client",
+     "Third-Party Payment Gateways/Clearinghouses"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "Identity Provider",
+     "PostgreSQL Cluster",
+     "Security Interceptor"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Synchronous Standby Nodes",
+     "Broker Node Engine",
+     "Redis In-Memory Cache"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Redis JSON & RediSearch Module",
+     "Redis In-Memory Cache",
+     "PgBouncer",
+     "API Gateway Controller Layer"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "External Laboratory & Imaging Systems",
+     "HL7 FHIR Transformer",
+     "Interoperability Adapter Component"
+    ]
+   }
+  }
+ }
+}

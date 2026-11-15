@@ -1,0 +1,26 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Administrative & Analytics Service container
+
+Person(HospitalAdministrator, "Hospital Administrator", "Hospital Administrator")
+System_Ext(Identity_Provider_IdP, "Identity Provider (IdP)", "OpenID Connect (OIDC) / OAuth2 over HTTPS")
+System_Ext(API_Gateway_Reverse_Proxy, "API Gateway / Reverse Proxy", "API Gateway / Reverse Proxy")
+ContainerDb(Clinical_Core_Database, "Clinical Core Database", "Encrypted SQL read-only replicas", "Clinical Core Database")
+
+Container_Boundary(Administrative___Analytics_Service, "Administrative & Analytics Service") {
+    Component(API_Controller, "API Controller", "FastAPI", "Exposes REST endpoints for administrative dashboards and report generation with low overhead.")
+    Component(Query___Reporting_Engine, "Query & Reporting Engine", "Python / SQLAlchemy", "Executes optimized read-only analytical queries against database replicas.")
+    Component(Compliance___Audit_Worker, "Compliance & Audit Worker", "Celery", "Handles asynchronous, long-running tasks for HIPAA/GDPR audit trail generation and data retention archiving.")
+    Component(Analytics_Data_Store, "Analytics Data Store", "Encrypted Document/Columnar Store", "Caches aggregated metric summaries locally to meet P95 load NFRs.")
+}
+
+Rel(HospitalAdministrator, API_Controller, "HTTPS (TLS 1.3) via WAF with risk-based adaptive MFA")
+Rel(API_Gateway_Reverse_Proxy, API_Controller, "HTTPS / mTLS")
+Rel(API_Controller, Identity_Provider_IdP, "OpenID Connect (OIDC) / OAuth2 over HTTPS")
+Rel(API_Controller, Query___Reporting_Engine, "In-process / Python Function Calls")
+Rel(Query___Reporting_Engine, Analytics_Data_Store, "In-process / SQLAlchemy")
+Rel(Compliance___Audit_Worker, Clinical_Core_Database, "Read-only replicas via encrypted SQL over mTLS")
+
+@enduml

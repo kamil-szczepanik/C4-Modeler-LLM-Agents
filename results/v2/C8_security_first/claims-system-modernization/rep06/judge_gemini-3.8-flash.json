@@ -1,0 +1,308 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 4,
+   "performance_efficiency": 4,
+   "compatibility": 4,
+   "usability": 3,
+   "reliability": 4,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.0,
+  "justifications": {
+   "functional_suitability": "Requirements R-01 to R-03 are addressed via API Gateway, Claims Web Application, and the Legacy Sync Bridge. However, no dedicated UI container is provided for Policyholders and Brokers to submit claims directly, assuming external API integration.",
+   "performance_efficiency": "Decouples slow 5s mainframe latency to achieve sub-2s screen loads using CQRS with Read-Model Projection Engine, Read-Model DB, Transformation & Caching Component, and client-side Local State & Sync Manager. Mainframe batch window impact is unaddressed.",
+   "compatibility": "Coexists effectively with the legacy COBOL/DB2 mainframe using Legacy Sync Bridge & Mainframe Adapter over ExpressRoute/VPN and MQ/AMQP. Seamlessly integrates with Insurer Active Directory / Entra ID for authentication.",
+   "usability": "Claims Adjusters are well served by Claim Workspace UI featuring WCAG 2.1 AA compliance and local caching. However, Policyholders and Brokers lack a dedicated user portal container and interface directly with the API Gateway.",
+   "reliability": "R-04 consistency is enforced via Event Store Repository, Outbox Publisher Worker, Saga & Compensation Coordinator, and Azure Service Bus DLQs. Circuit Breaker Policy Engine prevents cascading failures during mainframe degradation.",
+   "security": "Satisfies R-07 via Entra ID SSO using OpenID Connect/OAuth 2.0. Strongly supported by Authentication & WAF Component, mTLS over ExpressRoute/VPN for mainframe communications, and Web Crypto API client-side payload encryption.",
+   "maintainability": "R-06 one-day rollback is supported by the Routing Configuration Loader using Azure App Configuration. High architectural complexity (CQRS, Event Sourcing, mixed Node/.NET runtimes) somewhat contradicts the team's lack of cloud experience.",
+   "portability": "Accurately targets the hybrid on-premise mainframe and Azure West Europe environments using Azure Container Apps, App Services, and ExpressRoute, though it is tightly coupled to proprietary Azure PaaS services."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 4,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 3,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.5,
+   "Modifiability": 5.0,
+   "Security": 3.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The CQRS architecture decouples reads from mainframe latency. The Read-Model Projection Engine continuously updates read models, and the API Gateway caches responses, allowing adjuster screens to render within 2 seconds without waiting for 5-second mainframe responses.",
+    "elements": [
+     "Claims Web Application",
+     "API Gateway",
+     "Transformation & Caching Component",
+     "Read-Model Projection Engine",
+     "Integration/Sync Service & Read-Model Sync Worker"
+    ],
+    "sensitivity_points": [
+     "Freshness and projection latency of denormalized read-models versus screen rendering speed"
+    ],
+    "tradeoffs": [
+     "Accepting eventual consistency for legacy data to achieve sub-two-second query latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "Submissions are captured asynchronously into Cosmos DB and Azure Service Bus queues via the outbox pattern. This isolates submission intake from mainframe batch processing, though explicit rate-limiting or queuing throttles for the batch window are not fully detailed.",
+    "elements": [
+     "API Gateway",
+     "Claims Core Service",
+     "Event Store Repository",
+     "Outbox Publisher Worker",
+     "Legacy Sync Bridge & Mainframe Adapter"
+    ],
+    "sensitivity_points": [
+     "Queue depth growth during surges and throttling controls facing the mainframe batch window"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission ingestion increases eventual sync lag to protect legacy batch constraints"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The Event Store Repository and Outbox Publisher Worker store incoming claims locally in Cosmos DB, decoupling ingestion from legacy availability. Synchronization events stay queued in Azure Service Bus and dispatch automatically once the mainframe batch window completes.",
+    "elements": [
+     "Claims Core Service",
+     "Event Store Repository",
+     "Outbox Publisher Worker",
+     "Azure Service Bus",
+     "Legacy Sync Bridge & Mainframe Adapter"
+    ],
+    "sensitivity_points": [
+     "Message retention duration and dead-letter handling across long legacy maintenance windows"
+    ],
+    "tradeoffs": [
+     "Temporary cloud-mainframe state disparity traded for continuous customer intake availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 4,
+    "justification": "Dual-run consistency is supported by the Saga & Compensation Coordinator, Outbox Publisher, and Service Bus dead-letter queues. However, automated conflict resolution and compensating transactions against non-transactional legacy DB2/COBOL interfaces present residual risks that require manual intervention paths.",
+    "elements": [
+     "Saga & Compensation Coordinator",
+     "Outbox Publisher Worker",
+     "Legacy Sync Bridge & Mainframe Adapter",
+     "Azure Service Bus (DLQ)"
+    ],
+    "sensitivity_points": [
+     "Idempotent processing and deduplication key enforcement across legacy synchronization boundaries"
+    ],
+    "tradeoffs": [
+     "Saga-driven eventual consistency complexity traded against unsupported distributed two-phase locking"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "The Routing Configuration Loader in the API Gateway uses versioned routing rules from Azure App Configuration to dynamically direct claim types. This enables instant traffic switching and one-day rollbacks to the mainframe without code redeployments.",
+    "elements": [
+     "API Gateway",
+     "Routing Configuration Loader",
+     "Circuit Breaker Policy Engine",
+     "Legacy Sync Bridge & Mainframe Adapter"
+    ],
+    "sensitivity_points": [
+     "Granularity of routing rule definitions based on claim type identifiers"
+    ],
+    "tradeoffs": [
+     "Routing policy engine complexity traded for instant zero-downtime traffic cutover and rollback"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "The UIs communicate exclusively with modern APIs hosted behind the API Gateway and BFF components. Mainframe connectivity is entirely encapsulated within the Legacy Sync Bridge, allowing the mainframe to be decommissioned without requiring frontend refactoring.",
+    "elements": [
+     "Claims Web Application",
+     "BFF Routing & Session Controller",
+     "API Gateway",
+     "Claims Core Service",
+     "Legacy Sync Bridge & Mainframe Adapter"
+    ],
+    "sensitivity_points": [
+     "Strict boundary enforcement between UI view models and legacy mainframe data schemas"
+    ],
+    "tradeoffs": [
+     "BFF abstraction layer maintenance traded for total client decoupling during legacy retirement"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "The API Gateway includes perimeter authentication and WAF policies, but fine-grained, object-level authorization (ensuring brokers only access their designated customer claims) is not explicitly defined in the components or validation engine.",
+    "elements": [
+     "API Gateway",
+     "Authentication & WAF Component",
+     "Command Router & Validation Component",
+     "Audit Trail Logger Component"
+    ],
+    "sensitivity_points": [
+     "Enforcement of tenant-scoped claim ownership attributes inside the business logic layer"
+    ],
+    "tradeoffs": [
+     "Centralized gateway authentication simplicity traded against missing domain-level authorization models"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Internal adjuster applications federate directly with Entra ID using OIDC/OAuth 2.0. Disabling the user in Active Directory stops new token issuance, though revoking active session tokens within 15 minutes depends on token lifetime and explicit revocation mechanisms.",
+    "elements": [
+     "Insurer Active Directory / Entra ID",
+     "Claims Web Application",
+     "BFF Routing & Session Controller",
+     "Authentication & WAF Component"
+    ],
+    "sensitivity_points": [
+     "Access token maximum lifetime and back-channel session revocation coordination in BFF"
+    ],
+    "tradeoffs": [
+     "Stateless token validation performance traded against immediate centralized session revocation"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "none",
+   "C-03": "partial",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe System of Record",
+     "Legacy Sync Bridge & Mainframe Adapter",
+     "Claims Core Service"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "none",
+    "elements": []
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Legacy Sync Bridge & Mainframe Adapter"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Claims Web Application"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Policyholders and Brokers",
+     "API Gateway",
+     "Claims Core Service"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Claims Web Application",
+     "Claim Workspace UI"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "API Gateway",
+     "Routing Configuration Loader",
+     "Claims Core Service"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Event Store Repository",
+     "Outbox Publisher Worker",
+     "Saga & Compensation Coordinator",
+     "Inbound Event Router"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Read-Model Projection Engine",
+     "Transformation & Caching Component",
+     "Local State & Sync Manager"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Routing Configuration Loader",
+     "Circuit Breaker Policy Engine",
+     "API Gateway"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Insurer Active Directory / Entra ID",
+     "Claims Web Application",
+     "Audit & Reporting Dashboard"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

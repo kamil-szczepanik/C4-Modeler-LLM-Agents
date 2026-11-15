@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Async Message Broker container
+
+Container(patient_scheduling_service, "Patient & Scheduling Service", "Enterprise Service", "External system producing and consuming domain events and validating schemas.")
+Container(emr_service, "EMR Service", "Enterprise Service", "External system producing and consuming domain events.")
+Container(billing_claims_service, "Billing & Claims Service", "Enterprise Service", "External system producing and consuming domain events.")
+Container(fhir_integration_broker, "FHIR Integration Broker", "Integration Service", "Subscribes to clinical event streams.")
+ContainerDb(audit_data_store, "Audit Data Store", "AWS S3 / MinIO WORM", "Provides immutable storage for archived immutable event logs.")
+Container(observability_stack, "Observability Stack", "Prometheus", "Scrapes internal metrics for monitoring broker health.")
+
+System_Boundary(async_message_broker, "Async Message Broker") {
+    Component(schema_registry, "Schema Registry", "Confluent Schema Registry", "Validates event schemas to maintain cross-service compatibility for clinical data.")
+    Component(event_router_topic_manager, "Event Router / Topic Manager", "Kafka Broker Core", "Manages Kafka broker core routing and topic management.")
+    Component(access_control_encryption_module, "Access Control & Encryption Module", "TLS 1.3 and mTLS", "Enforces mTLS and ACL-based topic authorization and encrypted data transmission.")
+    Component(partition_replica_manager, "Partition Replica Manager", "Apache Kafka", "Handles partition-based replication, guaranteed ordering, and event production/consumption.")
+    Component(data_masking_retention_component, "Data Masking & Retention Component", "Internal Memory/Pipeline", "Applies redaction rules to event streams to satisfy compliance mandates.")
+    Component(consumer_group_coordinator, "Consumer Group Coordinator", "Apache Kafka Protocol", "Coordinates offset commits for consumer groups.")
+    Component(broker_telemetry_metrics_exporter, "Broker Telemetry & Metrics Exporter", "Prometheus Format", "Scrapes and exports internal broker health metrics.")
+}
+
+Rel(patient_scheduling_service, partition_replica_manager, "Produces and consumes domain events", "Kafka Protocol over TCP")
+Rel(emr_service, partition_replica_manager, "Produces and consumes domain events", "Kafka Protocol over TCP")
+Rel(billing_claims_service, partition_replica_manager, "Produces and consumes domain events", "Kafka Protocol over TCP")
+Rel(patient_scheduling_service, schema_registry, "Validates event schemas", "HTTP/REST")
+Rel(access_control_encryption_module, partition_replica_manager, "Enforces mTLS and ACL-based topic authorization", "Internal TCP interceptor")
+Rel(data_masking_retention_component, event_router_topic_manager, "Applies redaction rules to event streams", "Internal Memory/Pipeline")
+Rel(partition_replica_manager, audit_data_store, "Exports immutable event logs for archiving", "HTTPS/S3 API")
+Rel(consumer_group_coordinator, partition_replica_manager, "Coordinates offset commits", "Kafka Protocol over TCP")
+Rel(fhir_integration_broker, consumer_group_coordinator, "Subscribes to clinical event streams", "Kafka Protocol over TCP")
+Rel(broker_telemetry_metrics_exporter, observability_stack, "Scrapes internal metrics", "HTTP/Prometheus format")
+
+@enduml

@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title Component diagram for the Search Microservice container
+
+System_Ext(api_gateway, "API Gateway", "External system routing requests.")
+System_Ext(elasticsearch, "Elasticsearch", "Search Engine & Data Store", "Dedicated search engine ensuring sub-800ms search responses.")
+System_Ext(postgresql, "PostgreSQL", "Primary Relational Database", "Stores primary relational data for index synchronization.")
+System_Ext(message_broker, "Message Broker", "RabbitMQ", "Asynchronous message broker for reliable index synchronization.")
+System_Ext(secure_vault, "Secure Vault", "HashiCorp Vault", "Provides secure credential management using short-lived tokens.")
+
+Container_Boundary(search_microservice, "Search Microservice") {
+    Component(search_api_controller, "Search API Controller", "Java 17, Spring Boot", "Exposes the Search API endpoints for catalogue and item retrieval.")
+    Component(search_query_engine, "Search Query Engine", "Java 17, Spring Boot, Elasticsearch High-Level REST Client", "Executes search queries against Elasticsearch and interacts with the cache manager.")
+    Component(index_synchronizer, "Index Synchronizer", "Java 17, Spring Boot, RabbitMQ Consumer", "Synchronizes index data between PostgreSQL and Elasticsearch via RabbitMQ.")
+    Component(search_cache_manager, "Search Cache Manager", "Java 17, Spring Boot, Redis", "Manages in-memory caching for frequent search queries to reduce database and engine load.")
+}
+
+Rel(api_gateway, search_api_controller, "mTLS, REST/JSON")
+Rel(search_api_controller, secure_vault, "HTTPS/Token")
+Rel(search_query_engine, search_cache_manager, "In-Memory/TCP")
+Rel(search_query_engine, elasticsearch, "TLS/mTLS, TCP/Transport")
+Rel(index_synchronizer, message_broker, "AMQP")
+Rel(index_synchronizer, postgresql, "JDBC")
+Rel(index_synchronizer, elasticsearch, "TLS/mTLS, TCP/Transport")
+Rel(search_cache_manager, secure_vault, "HTTPS/Token")
+
+@enduml

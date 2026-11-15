@@ -1,0 +1,335 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 3,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.5,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled by dedicated elements: Patient Admission & Demographics Component (R-01), Booking Engine Component with clash checks (R-02), EMR Management Component with Audit & Compliance Log Service (R-03), and Claim Management Component with Payment Processing Component in Billing Service (R-04).",
+   "performance_efficiency": "Sub-second screen loads and scalability are achieved using In-Memory Cache (Redis), Local Persistence Manager (IndexedDB), PgBouncer connection pooling, Go runtime concurrency in Clinical Service, and asynchronous stream decoupling via Kafka Broker Cluster.",
+   "compatibility": "Interoperability requirement R-08 is addressed through the dedicated Integration Service / FHIR Facade, featuring FHIR API Gateway / Router and Resource Mapper & Validator interfacing directly with External Lab & Imaging Systems, alongside Payment Gateway & Insurance Clearinghouse integrations.",
+   "usability": "The Frontend Container caters to all personas (Patient, Clinician, Receptionist, Billing Specialist, Auditor, Executive) via Role-Based Router & Shell and Clinical EMR View Component. However, specific accessibility guidelines or differentiated patient mobile channels are not explicitly detailed.",
+   "reliability": "Resilience4j circuit breakers, DLQ & Retry Router, and Patroni provide fault tolerance. However, Primary OLTP Store uses active-passive standby, conflicting with the explicit 99.99% active-active requirement across hybrid regions (on-prem-k8s and eu-central-1) without multi-region replication mechanisms.",
+   "security": "Security is thoroughly addressed: Edge Container Authentication Component enforces OAuth2/MFA, Encryption & Key Management enforces AES-256, Audit & Compliance Log Service writes to WORM-compliant Object Storage for 10-year retention, and mTLS secures inter-service communications.",
+   "maintainability": "The architecture exhibits high modularity with domain-bounded containers (Clinical Service, Scheduling Service, Billing Service). Event Bus uses Schema Registry for loose contract governance, and transactional outbox patterns prevent tight data coupling.",
+   "portability": "Containers utilize platform-agnostic technologies (Go, Node.js, Spring Boot, Nginx, PostgreSQL, Kafka) and S3-compatible Object Storage, enabling deployment on on-prem-k8s and eu-central-1. However, specific multi-cluster Kubernetes deployment topology and data synchronization mechanisms across hybrid targets are omitted."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.875,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 4.0,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture incorporates Redis in-memory caching and Go-based clinical services, designed specifically for sub-second retrieval of EMR records under concurrent load.",
+    "elements": [
+     "Frontend Container",
+     "Edge Container",
+     "Clinical Service",
+     "EMR Management Component",
+     "Clinical Data Access Repository",
+     "In-Memory Cache"
+    ],
+    "sensitivity_points": [
+     "Redis cache hit ratio for active clinician patient lists",
+     "PostgreSQL read replica connection pool capacity via PgBouncer"
+    ],
+    "tradeoffs": [
+     "Cache memory consumption versus sub-second response latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "The FHIR facade decouples high-throughput ingest using Apache Kafka message streaming, isolating transactional workloads and preventing degradation of EMR screen queries.",
+    "elements": [
+     "Integration Service / FHIR Facade",
+     "FHIR API Gateway / Router",
+     "Resource Mapper & Validator",
+     "Event Bus",
+     "Kafka Broker Cluster"
+    ],
+    "sensitivity_points": [
+     "Kafka broker partition throughput and consumer group ingestion lag",
+     "Validation and parsing overhead in FHIR resource mapper"
+    ],
+    "tradeoffs": [
+     "Eventual consistency of lab results versus immediate read performance"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "While a hybrid cloud deployment is targeted, the database uses active-passive Patroni clustering. Automated multi-site traffic routing and zero-RPO cross-region replication are insufficiently detailed.",
+    "elements": [
+     "Primary OLTP Store",
+     "Edge Container",
+     "Databases"
+    ],
+    "sensitivity_points": [
+     "WAN replication latency between on-prem and eu-central-1",
+     "Automated health checking and failover convergence time of Patroni"
+    ],
+    "tradeoffs": [
+     "Synchronous hybrid replication preventing data loss versus write latency"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Patroni provides rapid failover, while HikariCP and the Transactional Outbox pattern on Kafka ensure claim transactions are safely resumed without duplicate submissions.",
+    "elements": [
+     "Billing Service",
+     "Claim Management Component",
+     "Payment Processing Component",
+     "Primary OLTP Store",
+     "Kafka Broker Cluster"
+    ],
+    "sensitivity_points": [
+     "Database failover detection timeout threshold in Patroni",
+     "Idempotency enforcement across billing service and external clearinghouse"
+    ],
+    "tradeoffs": [
+     "Strict transactional outbox consistency versus end-to-end claim submission latency"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Clear microservice boundaries isolate insurance clearinghouse interactions to the Payment Processing Component in the Billing Service, leaving clinical and EMR systems untouched.",
+    "elements": [
+     "Billing Service",
+     "Payment Processing Component",
+     "Payment Gateway & Insurance Clearinghouse"
+    ],
+    "sensitivity_points": [
+     "Abstraction level of clearinghouse adapter interfaces"
+    ],
+    "tradeoffs": [
+     "Generic claim adapter overhead versus provider-specific optimizations"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "Changes are localized to the frontend demographic view, the Patient Admission component, and Schema Registry/PostgreSQL models, with audit capture decoupled via event streaming.",
+    "elements": [
+     "Frontend Container",
+     "Patient Admission & Demographics Component",
+     "Clinical Data Access Repository",
+     "Schema Registry"
+    ],
+    "sensitivity_points": [
+     "Backward compatibility of Avro schemas during schema evolution"
+    ],
+    "tradeoffs": [
+     "Schema versioning complexity versus seamless multi-version service deployment"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Multi-factor authentication is enforced at the IdP and API gateway, while authentication events are forwarded to the anomaly engine to trigger alerts within seconds.",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Edge Container",
+     "Authentication Component",
+     "Audit & Compliance Log Service",
+     "Anomaly Detection & Alerting Engine"
+    ],
+    "sensitivity_points": [
+     "Latency of security event forwarding via Kafka to anomaly engine",
+     "MFA enforcement policies at the edge API gateway"
+    ],
+    "tradeoffs": [
+     "Strict MFA enforcement versus clinician login friction during emergencies"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "WORM object storage enforces 10-year retention, but the clinical data repository is explicitly documented to trigger events only on data modifications, leaving read audits unspecified.",
+    "elements": [
+     "Clinical Service",
+     "Clinical Data Access Repository",
+     "Audit & Compliance Log Service",
+     "Object Storage",
+     "Lifecycle & Tiering Engine"
+    ],
+    "sensitivity_points": [
+     "Audit pipeline throughput when logging every individual EMR read operation",
+     "Attribute-based access control policy evaluation overhead"
+    ],
+    "tradeoffs": [
+     "Storage volume and I/O overhead of read auditing versus compliance guarantee"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "partial",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 0.9090909090909091,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Audit & Compliance Log Service",
+     "Compliance API Handler",
+     "Audit & Compliance Guardrail",
+     "EMR Management Component",
+     "Cryptographic Vault Manager"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Primary OLTP Store",
+     "Edge Container",
+     "Payment Processing Component",
+     "Availability Cache Component"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Object Storage",
+     "Retention & Archival Worker",
+     "Lifecycle & Tiering Engine",
+     "Audit & Compliance Guardrail",
+     "Primary OLTP Store",
+     "Document Store"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Admission & Demographics Component",
+     "Clinical Service",
+     "Receptionist / Admin",
+     "Clinical Data Access Repository"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Service",
+     "Booking Engine Component",
+     "Availability Cache Component"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Clinical Service",
+     "EMR Management Component",
+     "Audit & Event Publisher Component",
+     "Audit & Compliance Log Service",
+     "Document Store"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service",
+     "Claim Management Component",
+     "Payment Processing Component",
+     "Payment Gateway & Insurance Clearinghouse"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Identity Provider (IdP)",
+     "Authentication & Session Manager",
+     "Authentication Component",
+     "MongoDB",
+     "Encryption & Key Management"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "partial",
+    "elements": [
+     "Primary OLTP Store",
+     "Edge Container"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Clinical EMR View Component",
+     "EMR Management Component",
+     "Clinical Data Access Repository",
+     "In-Memory Cache",
+     "Local Persistence Manager"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "Integration Service / FHIR Facade",
+     "FHIR API Gateway / Router",
+     "Resource Mapper & Validator",
+     "External Lab & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Container diagram for Real-Time Payment Fraud Screening System
+
+Person(FraudAnalysts, "Fraud Analysts", "Users who review suspicious payments via the case management interface.")
+Person(ComplianceAuditOfficer, "Compliance & Audit Officer", "Users who verify tamper-evident audit logs and system decisions.")
+
+System_Ext(PaymentGateway, "Payment Gateway", "External platform sending payment authorization requests for real-time screening.")
+System_Ext(CorporateIdP, "Corporate IdP", "Handles authentication and identity federation for analysts and officers.")
+
+System_Boundary(RealTimePaymentFraudScreeningSystem, "Real-Time Payment Fraud Screening System") {
+    Container(EnvoyProxy, "Envoy Proxy", "Envoy Proxy", "Ingress container handling external TLS 1.3 termination and gRPC routing.")
+    Container(ScoringEngineContainer, "Scoring Engine Container", "Go", "Stateless microservice executing real-time fraud models with a local heuristic fallback engine.")
+    Container(CaseManagementAPIContainer, "Case Management API Container", "Node.js with NestJS", "Handles analyst workflows and review queues.")
+    Container(AuditComplianceLedgerContainer, "Audit & Compliance Ledger Container", "Containerized Service", "Captures immutable decision payloads, inputs, and model versions.")
+    Container(AmazonElastiCacheSQS, "Amazon ElastiCache / SQS", "Amazon ElastiCache / SQS", "Buffers audit data and decouples real-time payment ingestion.")
+    ContainerDb(AmazonAuroraPostgreSQL, "Amazon Aurora PostgreSQL", "Amazon Aurora PostgreSQL", "Managed database for operational data.")
+    ContainerDb(AWSQLDB, "AWS QLDB", "AWS QLDB", "Managed database for tamper-evident audit trails.")
+}
+
+Rel(PaymentGateway, EnvoyProxy, "Real-time payment authorization screening", "TLS 1.3")
+Rel(EnvoyProxy, ScoringEngineContainer, "Routes authorization requests", "Internal gRPC over mTLS")
+Rel(ScoringEngineContainer, AmazonElastiCacheSQS, "Publishes asynchronous audit events", "Queue API")
+Rel(AmazonElastiCacheSQS, AuditComplianceLedgerContainer, "Consumes audit events from queue", "Queue Protocol")
+Rel(AuditComplianceLedgerContainer, AWSQLDB, "Writes tamper-evident records", "Database API")
+Rel(FraudAnalysts, CaseManagementAPIContainer, "Review flagged transactions", "Corporate IdP Authentication / HTTPS")
+Rel(CaseManagementAPIContainer, AmazonAuroraPostgreSQL, "Reads and writes operational state", "TLS")
+
+@enduml

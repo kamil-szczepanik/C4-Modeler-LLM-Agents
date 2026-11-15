@@ -1,0 +1,312 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 3,
+   "performance_efficiency": 3,
+   "compatibility": 3,
+   "usability": 4,
+   "reliability": 2,
+   "security": 4,
+   "maintainability": 4,
+   "portability": 3
+  },
+  "mean": 3.25,
+  "justifications": {
+   "functional_suitability": "Addresses R-01 and R-02 via Claim Management Controller and portal. Migration & Rollback Router supports per-claim-type routing (R-03). However, batch synchronization during the 23:00-05:00 window while the mainframe remains system of record is omitted in Level 2/3 designs.",
+   "performance_efficiency": "Level 1 mentions Managed Redis Cache, and Container Apps uses Autoscaling Coordinator to prevent cold starts. However, Redis is completely absent from Level 2 and Level 3, leaving the mechanism for meeting the <2 s UI load time against a 5 s mainframe unintegrated.",
+   "compatibility": "Legacy Integration Adapter connects to COBOL/DB2 Mainframe via hybrid VPN and mTLS. However, it relies on gRPC/REST without detailing how the legacy mainframe exposes this or addressing the constraint of at most one small mainframe interface change per quarter.",
+   "usability": "Serves all key users (Policyholders, Insurance Brokers, Claims Adjusters, Operations Managers) with distinct entry channels through Azure API Gateway & WAF and Azure Container Apps / App Service, handling external and internal interaction personas well.",
+   "reliability": "R-04 mandates no claim loss or duplicate processing. The architecture lacks asynchronous queuing, transactional outboxes, idempotency mechanisms, or two-way reconciliation logic. Level 2 even shows Azure API Gateway writing directly to Azure SQL Database, bypassing application consistency.",
+   "security": "Comprehensive security elements: Azure Key Vault with Private Endpoints and Managed Identities, Token Validation Validator, WAF with OWASP filtering, and Azure Active Directory / Entra ID supporting SSO (R-07) and MFA.",
+   "maintainability": "Migration & Rollback Router directly provides switching capabilities between the cloud and legacy systems within one day (R-06). Clear separation between edge routing, business logic controller, and integration adapter facilitates modular maintenance.",
+   "portability": "Targets hybrid deployment across on-premises mainframe and Azure West Europe. However, components inside Azure-managed services (like Key Vault and Entra ID) are modeled as internal components, and the model relies heavily on proprietary Azure PaaS with limited portability."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 2,
+   "PERF-02": 2,
+   "SEC-01": 3,
+   "SEC-02": 2
+  },
+  "responsiveness_index": 0.4375,
+  "by_quality_attribute": {
+   "Performance": 2.0,
+   "Availability": 2.5,
+   "Modifiability": 4.0,
+   "Security": 2.5
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 2,
+    "justification": "While Redis is noted in Level 1, it is missing from container and component layers. The architecture routes mainframe data synchronously through the Legacy Integration Adapter without prefetching or read-model replication, risking response times up to 5 s.",
+    "elements": [
+     "Claim Management Controller",
+     "Legacy Integration Adapter",
+     "COBOL/DB2 Mainframe",
+     "Managed Redis Cache"
+    ],
+    "sensitivity_points": [
+     "Mainframe round-trip latency directly dictates web screen render times",
+     "Absence of asynchronous read caching or replica synchronization"
+    ],
+    "tradeoffs": [
+     "Direct mainframe querying avoids stale data but degrades interactive screen latency"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 2,
+    "justification": "Autoscaling Coordinator scales web ingress, but there is no queue or event broker to buffer spikes. Submissions write directly to Azure SQL or mainframe integration, risking batch payload growth that violates the fixed 6-hour batch window.",
+    "elements": [
+     "Autoscaling Coordinator",
+     "Azure SQL Database",
+     "Legacy Integration Adapter",
+     "COBOL/DB2 Mainframe"
+    ],
+    "sensitivity_points": [
+     "Lack of ingress message buffering upstream of batch integration",
+     "Nightly batch volume directly tied to daily submission peaks"
+    ],
+    "tradeoffs": [
+     "Direct persistence reduces architectural complexity but risks mainframe batch window overruns"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "Azure SQL Database stores incoming claims during mainframe batch windows, but no reliable store-and-forward mechanism, outbox pattern, or message queue is designed to orchestrate deferred forwarding to the mainframe once the window closes.",
+    "elements": [
+     "Claim Management Controller",
+     "Azure SQL Database",
+     "Legacy Integration Adapter",
+     "COBOL/DB2 Mainframe"
+    ],
+    "sensitivity_points": [
+     "Store-and-forward scheduling logic inside container apps",
+     "Mainframe batch window availability constraints"
+    ],
+    "tradeoffs": [
+     "Relying on database polling instead of a message queue simplifies cloud components but complicates retry handling"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The architecture lacks explicit transactional outboxes, deduplication keys, two-phase commits, or reconciliation jobs between Azure SQL and DB2. Mid-flight synchronization failures risk duplicate processing or uncoordinated claim states.",
+    "elements": [
+     "Legacy Integration Adapter",
+     "Migration & Rollback Router",
+     "Azure SQL Database",
+     "COBOL/DB2 Mainframe"
+    ],
+    "sensitivity_points": [
+     "Idempotency guarantees across hybrid cloud-mainframe boundaries",
+     "Automated reconciliation mechanism when network or hybrid VPN drops"
+    ],
+    "tradeoffs": [
+     "Eventual consistency without distributed transactions lowers complexity but demands custom compensation jobs"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "The Migration & Rollback Router explicitly isolates traffic splitting and rollback logic per claim type, and the Legacy Integration Adapter encapsulates mainframe calls, satisfying single-day rollback and bounded interface changes.",
+    "elements": [
+     "Migration & Rollback Router",
+     "Legacy Integration Adapter",
+     "COBOL/DB2 Mainframe"
+    ],
+    "sensitivity_points": [
+     "Claim-type routing rules within the Migration & Rollback Router",
+     "Decoupling of migration switching logic from business controllers"
+    ],
+    "tradeoffs": [
+     "Maintaining dual routing paths introduces routing configuration overhead"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Customer and adjuster UIs communicate with the Claim Management Controller through the API Gateway. Retiring the mainframe only requires removing the Legacy Integration Adapter and routing rules; front-end contracts remain intact.",
+    "elements": [
+     "Azure API Gateway & WAF",
+     "Claim Management Controller",
+     "Migration & Rollback Router",
+     "Legacy Integration Adapter"
+    ],
+    "sensitivity_points": [
+     "Isolation of mainframe interfaces behind internal routing components",
+     "UI abstraction through cloud API Gateway"
+    ],
+    "tradeoffs": [
+     "Indirection layers add hop latency but ensure zero UI changes at legacy retirement"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 3,
+    "justification": "Entra ID and the Token Validation Validator handle authentication and role validation, while Application Insights logs access. However, fine-grained multi-tenant broker-to-claim ownership authorization is not explicitly defined in the Claim Management Controller.",
+    "elements": [
+     "Token Validation Validator",
+     "Authentication & Identity Provider Service",
+     "Claim Management Controller",
+     "Central Telemetry Collector"
+    ],
+    "sensitivity_points": [
+     "Data-level authorization logic inside Claim Management Controller",
+     "Token claims structure representing broker boundaries"
+    ],
+    "tradeoffs": [
+     "Gateway token validation offloads auth checks but cannot enforce domain data tenancy rules"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 2,
+    "justification": "Revoking credentials in Entra ID disables cloud web app access immediately. However, the architecture fails to define how identity revocation propagates to on-premise Active Directory and mainframe RACF/security within 15 minutes.",
+    "elements": [
+     "Azure Active Directory / Entra ID",
+     "Authentication & Identity Provider Service",
+     "COBOL/DB2 Mainframe"
+    ],
+    "sensitivity_points": [
+     "Hybrid directory synchronization latency between Entra ID and on-prem AD/RACF",
+     "Token lifetime and revocation propagation speed"
+    ],
+    "tradeoffs": [
+     "Decoupled cloud and on-prem identity providers improve resilience but delay unified access revocation"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "partial",
+   "C-04": "partial",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "none",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.7727272727272727,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "COBOL/DB2 Mainframe",
+     "Legacy Integration Adapter",
+     "Azure App Service"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Azure App Service",
+     "COBOL/DB2 Mainframe"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "partial",
+    "elements": [
+     "Legacy Integration Adapter"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "partial",
+    "elements": [
+     "Azure App Service",
+     "Azure Container Apps / App Service",
+     "Azure SQL Database"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Policyholders",
+     "Insurance Brokers",
+     "Azure API Gateway & WAF",
+     "Azure Container Apps / App Service",
+     "Claim Management Controller"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjusters",
+     "Azure App Service",
+     "Azure Container Apps / App Service",
+     "Claim Management Controller"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Migration & Rollback Router",
+     "Claim Management Controller"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "none"
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Managed Redis Cache",
+     "Azure SQL Database",
+     "Autoscaling Coordinator"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Migration & Rollback Router",
+     "Legacy Integration Adapter",
+     "Operations Managers"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "On-Premise Active Directory / Entra ID",
+     "Azure Active Directory / Entra ID",
+     "Token Validation Validator",
+     "Authentication & Identity Provider Service"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

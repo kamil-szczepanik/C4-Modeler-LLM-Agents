@@ -1,0 +1,334 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 4,
+   "portability": 4
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "R-01 and R-02 are satisfied by Web Portal and Adjuster Workspace. Migration by claim type (R-03) is directly handled by Claim Routing Service via its Feature Flag Evaluator and Claims Processing Service using Migration Strategy Router.",
+   "performance_efficiency": "Sub-2s adjuster response (R-05) is achieved by querying the denormalized Claim Read Model Store directly from Adjuster Workspace. The Claim Interaction Controller & Caching & Synchronization Client uses client-side caching to mask 5s mainframe latencies.",
+   "compatibility": "Mainframe Integration Adapter enables coexistence with Legacy Mainframe via IBM MQ, AMQP, and Camel EBCDIC-to-JSON conversion. Single sign-on compatibility is fully addressed via Insurer's Active Directory (Azure AD / Entra ID) integration in API Management Proxy.",
+   "usability": "All target personas are addressed with dedicated interfaces: Web Portal hosts the Customer and Broker UI, while Adjuster Workspace offers an optimized workspace with a Conflict Resolution UI Handler specifically for adjuster operations.",
+   "reliability": "Consistency requirements (R-04) are satisfied by Outbox Event Publisher, Reconciliation Engine Component with idempotency keys, Dead Letter & Audit Handler, and an independent Audit and Reconciliation Service that cross-references ledgers with Primary Datastore.",
+   "security": "SSO (R-07) is implemented end-to-end via Insurer's Active Directory, MSAL.js in Workspace Shell Component, and JWT Validation Component in API Management Proxy. Data integrity and confidentiality are reinforced by Row-Level Security Manager and mTLS.",
+   "maintainability": "One-day rollback (R-06) is enabled by Feature Flag Evaluator and Mainframe Fallback Dispatcher. However, excessive tech diversity (Camel, Drools, Spring, .NET, Cosmos DB, Azure SQL) imposes significant maintenance friction on a team with little cloud experience.",
+   "portability": "The hybrid requirement across on-premises and Azure West Europe is well partitioned using Mainframe Integration Adapter and Container Apps. However, heavy dependence on Azure-specific PaaS (APIM policies, Cosmos DB Change Feed, Temporal Tables) impedes platform independence."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 5,
+   "MOD-01": 5,
+   "MOD-02": 5,
+   "PERF-01": 5,
+   "PERF-02": 5,
+   "SEC-01": 4,
+   "SEC-02": 4
+  },
+  "responsiveness_index": 0.9375,
+  "by_quality_attribute": {
+   "Performance": 5.0,
+   "Availability": 5.0,
+   "Modifiability": 5.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "The architecture decouples UI reads from mainframe latency by querying the Claim Read Model Store (Cosmos DB/Redis) directly and using indexed local client-side caching in the Adjuster Workspace.",
+    "elements": [
+     "Adjuster Workspace",
+     "Claim Read Model Store",
+     "Claim Interaction Controller & Caching & Synchronization Client",
+     "Claim Projection Container"
+    ],
+    "sensitivity_points": [
+     "Projection update latency determines data freshness on adjuster screens"
+    ],
+    "tradeoffs": [
+     "Eventual consistency in read projections traded for sub-second UI response time"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "Peak submission bursts are absorbed by Azure Container Apps, persisted in Azure SQL, and asynchronously queued via Azure Service Bus and IBM MQ, completely isolating the mainframe's fixed batch window.",
+    "elements": [
+     "Claims Processing Service",
+     "Primary Datastore",
+     "Claim Routing Service",
+     "Mainframe Integration Adapter",
+     "Outbox Event Publisher"
+    ],
+    "sensitivity_points": [
+     "Queue depth and message retention capacity during sustained peak traffic bursts"
+    ],
+    "tradeoffs": [
+     "Asynchronous submission processing traded for immediate mainframe confirmation"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "Submissions persist locally in Primary Datastore using Transactional Outbox. Azure Service Bus and IBM MQ buffer synchronization events until the mainframe finishes its batch window and resumes message ingestion.",
+    "elements": [
+     "Claims Processing Service",
+     "Primary Datastore",
+     "Outbox Event Publisher",
+     "Claim Routing Service",
+     "Mainframe Integration Adapter"
+    ],
+    "sensitivity_points": [
+     "Buffer storage capacity across message queues during the six-hour batch window"
+    ],
+    "tradeoffs": [
+     "Storage overhead of queuing outbox messages traded for uninterrupted 24/7 ingestion availability"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "Reconciliation Engine uses idempotency keys and transactional outbox. Failed messages route to dead-letter queues, while Audit and Reconciliation Service runs ledger comparisons against daily dumps to remediate state.",
+    "elements": [
+     "Data Sync Worker",
+     "Reconciliation Engine Component",
+     "Dead Letter & Exception Router Component",
+     "Audit and Reconciliation Service",
+     "Ledger Comparison Engine"
+    ],
+    "sensitivity_points": [
+     "Strict uniqueness and determinism of idempotency keys across heterogeneous environments"
+    ],
+    "tradeoffs": [
+     "Processing latency added by idempotency validation traded for exactly-once processing guarantees"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 5,
+    "justification": "Migration Strategy Router, APIM routing policies, and Claim Routing Service evaluate feature flags dynamically, allowing instant traffic redirection to modern pipelines and sub-day rollback to legacy fallbacks without code changes.",
+    "elements": [
+     "API Management Proxy",
+     "Claim Routing Evaluator",
+     "Migration Strategy Router",
+     "Claim Routing Service",
+     "Feature Flag Evaluator",
+     "Mainframe Fallback Dispatcher"
+    ],
+    "sensitivity_points": [
+     "Dynamic routing rule propagation latency across distributed feature flag caches"
+    ],
+    "tradeoffs": [
+     "Routing evaluation overhead on every request traded for instant runtime rollback capabilities"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 5,
+    "justification": "User interfaces interact strictly with APIM and read projections. Mainframe interactions are isolated behind Claims Processing Service and adapters, allowing complete mainframe decommission without any client frontend modifications.",
+    "elements": [
+     "Web Portal",
+     "Adjuster Workspace",
+     "API Management Proxy",
+     "Claims Processing Service",
+     "Primary Datastore"
+    ],
+    "sensitivity_points": [
+     "Completeness of data migration into Primary Datastore before legacy cut-off"
+    ],
+    "tradeoffs": [
+     "Maintaining dual-write abstraction layers during migration traded for zero frontend rework later"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 4,
+    "justification": "APIM validates tokens and Primary Datastore enforces Row-Level Security (RLS) to isolate tenant claims, with violations logged via Audit Trail. However, broker-level authorization rules in read models lack explicit definition.",
+    "elements": [
+     "API Management Proxy",
+     "JWT Validation Component",
+     "Claims Security & Context Facade",
+     "Primary Datastore",
+     "Row-Level Security (RLS) & Partitioning Manager",
+     "Audit Trail Log Table"
+    ],
+    "sensitivity_points": [
+     "Consistent enforcement of row-level tenancy filters across relational and read stores"
+    ],
+    "tradeoffs": [
+     "Database evaluation overhead of row-level security policies traded for robust multi-tenant isolation"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 4,
+    "justification": "Central authentication relies on Azure AD SSO via OIDC/JWT, validated at APIM. Revocation takes effect upon token expiration, but Continuous Access Evaluation (CAE) is not explicitly configured to guarantee 15-minute cut-off.",
+    "elements": [
+     "Insurer's Active Directory (Azure AD / Entra ID)",
+     "API Management Proxy",
+     "JWT Validation Component",
+     "Workspace Shell Component & Security Context Component"
+    ],
+    "sensitivity_points": [
+     "Token lifetime duration and adoption of Continuous Access Evaluation protocols"
+    ],
+    "tradeoffs": [
+     "Shorter token lifetimes increase identity provider traffic but improve access revocation speed"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "partial",
+   "C-03": "full",
+   "C-04": "none",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full"
+  },
+  "coverage": 0.8636363636363636,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Legacy Mainframe (On-Premises)",
+     "Mainframe Integration Adapter",
+     "Data Sync Worker",
+     "Audit and Reconciliation Service",
+     "Ledger Comparison Engine"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "partial",
+    "elements": [
+     "Mainframe Integration Adapter",
+     "MQ Message Listener Component",
+     "Data Sync Worker",
+     "Reconciliation Job Scheduler"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Mainframe Integration Adapter",
+     "Data Transformation Component",
+     "Schema Validation Sub-component",
+     "Payload Sanitization & Transformation Policy"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "none",
+    "elements": []
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Customer & Broker",
+     "Web Portal",
+     "Customer and Broker UI",
+     "Claim Submission Controller"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Claims Adjuster",
+     "Adjuster Workspace",
+     "Workspace Shell Component & Security Context Component",
+     "Claim Interaction Controller & Caching & Synchronization Client"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "Claim Routing Evaluator",
+     "Migration Strategy Router",
+     "Claim Routing Service",
+     "Routing Rules Engine",
+     "Feature Flag Evaluator",
+     "Modern Platform Dispatcher",
+     "Mainframe Fallback Dispatcher"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Outbox Event Publisher",
+     "Reconciliation Engine Component",
+     "Outbox Dispatcher Component",
+     "Dead Letter & Audit Handler",
+     "Audit and Reconciliation Service",
+     "Ledger Comparison Engine"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Claim Read Model Store",
+     "Claim Projection Container",
+     "Adjuster Workspace",
+     "Claim Interaction Controller & Caching & Synchronization Client"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Feature Flag Evaluator",
+     "Mainframe Fallback Dispatcher",
+     "Migration Strategy Router",
+     "Claim Routing Evaluator",
+     "Mainframe-Compatibility Schema Adapter"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Insurer's Active Directory (Azure AD / Entra ID)",
+     "API Management Proxy",
+     "JWT Validation Component",
+     "Workspace Shell Component & Security Context Component",
+     "Customer and Broker UI",
+     "Claims Security & Context Facade"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "ca182ad558cc6817e969c0ccbbc80485508f7cd7f32eff9e5bb35daea967c983",
+  "scenarios_sha256": "cbe7101f3b8a3e30ee503a82d2a460cbaa0f2d43426740055ce285b1e4366d33"
+ }
+}

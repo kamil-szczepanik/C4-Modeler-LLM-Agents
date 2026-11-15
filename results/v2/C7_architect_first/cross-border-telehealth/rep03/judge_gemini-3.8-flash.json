@@ -1,0 +1,346 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 4,
+   "compatibility": 5,
+   "usability": 4,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 5
+  },
+  "mean": 4.75,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: Video Consultation Module and SFU Media Router address R-01, E-Prescription & Interoperability Service addresses R-02, AI Symptom Checker Service handles R-03, and Patient Consent Dashboard Component with Consent & Audit Engine manages granular consent for R-04.",
+   "performance_efficiency": "The architecture incorporates Bandwidth Adaptator Component for dynamic track downscaling, Google Cloud Pub/Sub for asynchronous event handling, and PgBouncer for database connection pooling. However, caching mechanisms at the API Gateway or data layer are not explicitly specified.",
+   "compatibility": "Interoperability is thoroughly addressed: the US FHIR Adapter Component interfaces with external pharmacies via HL7 FHIR over mTLS, the EU National Gateway Adapter Component handles European national standards, and the Auth Component integrates with external Identity Providers via OIDC/JWKS.",
+   "usability": "Patients and Clinicians are served by Web & Mobile Frontend Applications containing the Video Consultation Module, AI Symptom Checker UI Component, and Patient Consent Dashboard Component. Dedicated UI components specifically tailored to clinician prescribing workflows are not distinctly delineated.",
+   "reliability": "R-06 is handled by the Bandwidth Adaptator Component and SFU Media Router to maintain degraded-mode calls below 300 kbit/s. Fault tolerance against external pharmacy outages is implemented using Resilience4j circuit breakers within the adapter components.",
+   "security": "Data residency is enforced via EU Data Store, US Data Store, and Data Access Proxy with Row-Level Security. R-07 and GDPR/HIPAA compliance are achieved via Audit & Compliance Logger Component, Cloud Storage WORM, GCP KMS envelope encryption, and mTLS.",
+   "maintainability": "Containers exhibit high cohesion and loose coupling. Regional variations in e-prescribing are cleanly decoupled into the US FHIR Adapter Component and EU National Gateway Adapter Component, allowing localized protocol maintenance without impacting core orchestration logic.",
+   "portability": "The architecture is purposefully aligned with the GCP target, explicitly deploying isolated regional environments across europe-west3 (EU Data Store) and us-central1 (US Data Store) using managed services like Cloud SQL, Cloud Storage, and Google Cloud Pub/Sub."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 5,
+   "AVAIL-02": 2,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 4,
+   "PERF-02": 5,
+   "SEC-01": 5,
+   "SEC-02": 3
+  },
+  "responsiveness_index": 0.75,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 3.5,
+   "Modifiability": 4.0,
+   "Security": 4.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 4,
+    "justification": "The architecture incorporates Go-based WebSockets signaling, Pion WebRTC SFUs, and PgBouncer connection pooling to handle high concurrency. However, auto-scaling mechanisms and media server clustering to guarantee 5,000 concurrent streams remain implicit.",
+    "elements": [
+     "Edge Router and Load Shedder",
+     "Signaling Component",
+     "SFU Media Router",
+     "PgBouncer",
+     "EU Data Store"
+    ],
+    "sensitivity_points": [
+     "SFU media routing throughput and network bandwidth saturation under peak load",
+     "WebSocket signaling connection pooling capacity during simultaneous join spikes"
+    ],
+    "tradeoffs": [
+     "Selective forwarding SFU lowers client bandwidth but increases central server compute demand"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 5,
+    "justification": "A throughput of 50,000 requests/hour (~14 req/s) is modest. The FastAPI service decouples audit logging via asynchronous Pub/Sub, ensuring inference responses and disclaimer generation comfortably execute within 3 seconds.",
+    "elements": [
+     "Edge Router and Load Shedder",
+     "API Controller Component",
+     "Inference Orchestrator Component",
+     "Audit & Compliance Logger Component",
+     "Response Formatting & Disclaimer Engine Component"
+    ],
+    "sensitivity_points": [
+     "AI inference execution latency on the underlying inference runtime",
+     "Asynchronous pub/sub decoupling of immutable audit log generation"
+    ],
+    "tradeoffs": [
+     "Asynchronous audit logging improves response times but risks slight delay in log persistence"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 5,
+    "justification": "The design explicitly incorporates client-side adaptive bitrate control in the Video Consultation Module and a dedicated Bandwidth Adaptator Component in the Consultation Service that dynamically throttles media tracks to preserve degraded sessions.",
+    "elements": [
+     "Video Consultation Module",
+     "Bandwidth Adaptator Component",
+     "SFU Media Router",
+     "Session Management Component"
+    ],
+    "sensitivity_points": [
+     "Dynamic detection threshold for packet loss and low throughput below 300 kbit/s",
+     "Graceful audio prioritization over video downscaling in the SFU"
+    ],
+    "tradeoffs": [
+     "Dropping video resolution preserves voice stream connectivity during severe bandwidth degradation"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 2,
+    "justification": "The target cloud specifies only us-central1 for US data. Total failure of the US region leaves no secondary US failover region defined, making recovery within 1 hour without moving data to the EU unachievable.",
+    "elements": [
+     "US Data Store",
+     "Data Access Proxy",
+     "Edge Router and Load Shedder"
+    ],
+    "sensitivity_points": [
+     "Absence of secondary US regional redundancy for disaster recovery",
+     "Strict prohibition against cross-region failover to EU storage"
+    ],
+    "tradeoffs": [
+     "Strict data residency guarantees limit cross-border automated disaster recovery failovers"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Prescription orchestration delegates transformation through Java interfaces. However, the architecture defines a single 'EU National Gateway Adapter Component' rather than distinct pluggable country adapters, requiring modification of that shared component.",
+    "elements": [
+     "Prescription Orchestrator Component",
+     "EU National Gateway Adapter Component",
+     "External Pharmacies"
+    ],
+    "sensitivity_points": [
+     "Coupling of multi-country translation logic within a single EU gateway adapter component",
+     "Interface abstraction between orchestrator and regional gateway adapters"
+    ],
+    "tradeoffs": [
+     "Consolidated EU adapter simplifies deployment but increases blast radius across countries"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "The Inference Orchestrator interfaces with a model registry, and the Audit & Compliance Logger records model versions and inputs to immutable storage. Dynamic blue/green runtime switching and automated rollback mechanisms are not explicitly detailed.",
+    "elements": [
+     "Inference Orchestrator Component",
+     "Audit & Compliance Logger Component",
+     "Clinical Database",
+     "Blob Storage Repository"
+    ],
+    "sensitivity_points": [
+     "Model version tagging in every logged audit event for MDR compliance",
+     "Runtime capability of Inference Orchestrator to switch or rollback model artifacts"
+    ],
+    "tradeoffs": [
+     "Immutable audit writes ensure strict regulatory compliance at the cost of additional storage overhead"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Cross-region access is mediated by the Data Access Proxy, Consent & Audit Engine, and Row-Level Security in the Clinical Database, blocking unauthorized requests and recording tamper-resistant audit trails.",
+    "elements": [
+     "Data Access Proxy",
+     "Consent & Audit Engine",
+     "Clinical Database",
+     "Prescription Status & Audit Component"
+    ],
+    "sensitivity_points": [
+     "Injection of verified regional context and consent validation by Data Access Proxy",
+     "Row-Level Security policy enforcement on cross-border clinical records"
+    ],
+    "tradeoffs": [
+     "Inline proxy validation guarantees data residency enforcement at the cost of slight query latency"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 3,
+    "justification": "While the Consent Dashboard submits preferences and the Consent & Audit Engine tracks states, the architecture lacks specific mechanisms for downstream research datasets, batch export revocations, or verifying propagation within 24 hours.",
+    "elements": [
+     "Patient Consent Dashboard Component",
+     "Consent & Audit Engine",
+     "Data Access Proxy",
+     "Clinical Database"
+    ],
+    "sensitivity_points": [
+     "Propagation latency of revoked consent to secondary or analytical consumers",
+     "Auditability of consent state revocation across distributed components"
+    ],
+    "tradeoffs": [
+     "Transactional consent updates in operational database don't automatically purge already-exported analytics caches"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "C-04": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Patient Consent Dashboard Component",
+     "Session Management Component",
+     "Consent & Audit Engine",
+     "Audit & Compliance Logger Component",
+     "Prescription Status & Audit Component",
+     "EU Data Store",
+     "US Data Store"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "Data Storage Layer",
+     "EU Data Store",
+     "US Data Store",
+     "Data Access Proxy"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker UI Component",
+     "AI Symptom Checker Service",
+     "Inference Orchestrator Component",
+     "Audit & Compliance Logger Component",
+     "Response Formatting & Disclaimer Engine Component"
+    ]
+   },
+   "C-04": {
+    "id": "C-04",
+    "status": "full",
+    "elements": [
+     "Video Consultation Module",
+     "SFU Media Router",
+     "Bandwidth Adaptator Component"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Consultation Service",
+     "Video Consultation Module",
+     "Signaling Component",
+     "SFU Media Router",
+     "Session Management Component"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "E-Prescription & Interoperability Service",
+     "Prescription Orchestrator Component",
+     "US FHIR Adapter Component",
+     "EU National Gateway Adapter Component",
+     "External Pharmacies"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "AI Symptom Checker Service",
+     "AI Symptom Checker UI Component",
+     "Inference Orchestrator Component",
+     "Response Formatting & Disclaimer Engine Component"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Patient Consent Dashboard Component",
+     "Consent & Audit Engine",
+     "Session Management Component"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Data Storage Layer",
+     "EU Data Store",
+     "US Data Store",
+     "Data Access Proxy",
+     "Consent & Audit Engine",
+     "Session Management Component"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "Bandwidth Adaptator Component",
+     "SFU Media Router",
+     "Video Consultation Module"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "Inference Orchestrator Component",
+     "Audit & Compliance Logger Component",
+     "Data Access Proxy",
+     "Data Storage Layer"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "E-Prescription & Interoperability Service",
+     "US FHIR Adapter Component",
+     "EU National Gateway Adapter Component",
+     "External Pharmacies"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "8518cfa3798569eddf61e2a0f0c8958f6dc18be72d0bbcd72d8490a9c992d83f",
+  "scenarios_sha256": "8b9cca8d64094f914236ab71b2bfa3ebe956abf51748d3df1a10269e2bb003db"
+ }
+}

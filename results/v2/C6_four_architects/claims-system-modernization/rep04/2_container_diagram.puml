@@ -1,0 +1,38 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+Person(Customers, "Customers", "End users submitting insurance claims.")
+Person(Brokers, "Brokers", "Intermediaries assisting with insurance claims and submissions.")
+Person(ClaimsAdjusters, "Claims Adjusters", "Internal staff reviewing and processing insurance claims.")
+
+System_Ext(LegacyMainframe, "Legacy Mainframe", "On-premise COBOL/DB2 System of Record.")
+System_Ext(AzureActiveDirectoryEntraID, "Azure Active Directory / Entra ID", "Cloud identity provider for authentication and SSO.")
+System_Ext(DocumentManagementSystem, "Document Management System", "On-premise archive for document storage.")
+System_Ext(CoreBankingPayoutSystem, "Core Banking / Payout System", "On-premise ledger for handling financial payouts.")
+System_Ext(NotificationService, "Notification Service", "Cloud SaaS for sending notifications.")
+
+System_Boundary(NewInsuranceClaimsPlatform, "New Insurance Claims Platform") {
+    Container(Frontend, "Frontend", "React, Azure Static Web Apps", "Modern user interface hosted for customers, brokers, and adjusters.")
+    Container(EdgeTier, "Edge Tier", "Azure API Management, Node.js/TypeScript", "Request orchestration, BFF pattern, and security.")
+    Container(ApplicationTier, "Application Tier", "Java/Spring Boot, Python/C# Azure Functions, Azure Container Apps", "Modern Claims Service, Routing Service / ACL, and document/notification workers.")
+    ContainerDb(DataTier, "Data Tier", "Azure Database for PostgreSQL", "Transactional storage and CQRS read models.")
+    Container(IntegrationTier, "Integration Tier", "Azure Service Bus, Azure Relay", "Asynchronous messaging and hybrid connectivity.")
+    Container(HybridBridge, "Hybrid Bridge", "Spring Boot Mainframe Adapter, IBM DB2/COBOL Mainframe", "On-premise bridge connecting Azure to the legacy mainframe system of record.")
+}
+
+Rel(Customers, Frontend, "Uses the system via browser", "HTTPS")
+Rel(Brokers, Frontend, "Uses the system via browser", "HTTPS")
+Rel(ClaimsAdjusters, Frontend, "Uses the system via browser", "HTTPS")
+Rel(Frontend, EdgeTier, "Sends API requests and authenticates", "HTTPS / OIDC (Entra ID for SSO)")
+Rel(EdgeTier, ApplicationTier, "Routes requests to backend services", "gRPC and HTTPS/REST")
+Rel(ApplicationTier, DataTier, "Reads and writes transactional data and CQRS models", "PostgreSQL Protocol")
+Rel(ApplicationTier, IntegrationTier, "Publishes and consumes asynchronous messages", "AMQP via Azure Service Bus")
+Rel(IntegrationTier, HybridBridge, "Bridges cloud messaging to on-premise adapter", "Azure Relay / VPN Gateway")
+Rel(HybridBridge, LegacyMainframe, "Executes queries and interacts with legacy system", "IBM MQ and DB2 queries")
+Rel(Frontend, AzureActiveDirectoryEntraID, "Authenticates users", "OAuth2 / OIDC")
+Rel(ApplicationTier, DocumentManagementSystem, "Archives and retrieves documents", "HTTPS")
+Rel(ApplicationTier, CoreBankingPayoutSystem, "Initiates payouts", "HTTPS")
+Rel(ApplicationTier, NotificationService, "Triggers user notifications", "HTTPS / REST")
+
+@enduml

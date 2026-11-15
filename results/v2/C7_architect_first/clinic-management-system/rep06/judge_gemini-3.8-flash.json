@@ -1,0 +1,332 @@
+{
+ "model": "gemini-3.8-flash",
+ "iso": {
+  "scores": {
+   "functional_suitability": 5,
+   "performance_efficiency": 5,
+   "compatibility": 5,
+   "usability": 5,
+   "reliability": 5,
+   "security": 5,
+   "maintainability": 5,
+   "portability": 4
+  },
+  "mean": 4.875,
+  "justifications": {
+   "functional_suitability": "All requirements are fulfilled: Patient Management Component (R-01), Scheduling Engine Component with Redis Redlock for clash checks (R-02), EMR Core Component with WORM Audit Store (R-03), and Billing Service Component integrating with Insurance Clearinghouse (R-04).",
+   "performance_efficiency": "EMR Read-Through Cache in Redis, CockroachDB Distributed Leaseholder optimization, and in-memory caching directly support the <1s P95 EMR load target. Asynchronous Kafka consumers, KEDA workers, and offline sync in Mobile Frontend further boost efficiency.",
+   "compatibility": "HL7 FHIR Integration Engine includes HAPI FHIR Validator, Apache Camel mapping, and FHIR API Gateway for lab and imaging systems. Integration with external Insurance Clearinghouse via secure EDI/HTTPS is explicitly modeled.",
+   "usability": "All brief user groups (Medical Staff, Administrators, Patients, Billing Specialists) are served across Web Frontend (React SPA) and Mobile Frontend (React Native/Flutter), featuring dedicated views (EMR View Controller, Scheduling Workspace) and offline synchronization.",
+   "reliability": "Achieves 99.99% active-active availability via multi-region CockroachDB with Raft consensus, Redis Enterprise Cluster, circuit breakers (Resilience4j/Envoy), DLQs, and transactional outbox pattern to guarantee audit log delivery.",
+   "security": "Enforces MFA, OIDC, OPA RBAC/ABAC at API Gateway, mTLS via Istio, client-side RASP, HashiCorp Vault KMS envelope encryption, AES-256 at rest (CockroachDB/Redis), and immutable WORM Audit Store for HIPAA/GDPR.",
+   "maintainability": "High modularity with clean domain separation across microservices (Patient, Scheduling, EMR, Billing, Compliance). Standard protocols (gRPC, mTLS, REST), well-defined component boundaries, and event-driven integration via Kafka ensure low coupling and ease of maintenance.",
+   "portability": "Cloud-native containers (Kubernetes, Envoy, Istio) and distributed CockroachDB suit hybrid on-prem-k8s and eu-central-1 deployments. However, hybrid data-plane synchronization details between on-prem k8s and AWS eu-central-1 are not explicitly detailed."
+  }
+ },
+ "atam": {
+  "scores": {
+   "AVAIL-01": 3,
+   "AVAIL-02": 5,
+   "MOD-01": 4,
+   "MOD-02": 4,
+   "PERF-01": 5,
+   "PERF-02": 4,
+   "SEC-01": 5,
+   "SEC-02": 5
+  },
+  "responsiveness_index": 0.84375,
+  "by_quality_attribute": {
+   "Performance": 4.5,
+   "Availability": 4.0,
+   "Modifiability": 4.0,
+   "Security": 5.0
+  },
+  "details": {
+   "PERF-01": {
+    "id": "PERF-01",
+    "score": 5,
+    "justification": "Redis EMR Read-Through Cache and CockroachDB leaseholder coordination offload high-concurrency morning read spikes, keeping P95 well below one second.",
+    "elements": [
+     "EMR View Controller",
+     "API Gateway",
+     "EMR Core Component",
+     "EMR Read-Through Cache",
+     "Distributed Leaseholder & Multi-Region Coordinator"
+    ],
+    "sensitivity_points": [
+     "Cache hit ratio and eviction policy under concurrent morning clinical logins",
+     "Leaseholder co-location with read requests"
+    ],
+    "tradeoffs": [
+     "In-memory caching improves read latency at the cost of eventual consistency risks"
+    ]
+   },
+   "PERF-02": {
+    "id": "PERF-02",
+    "score": 4,
+    "justification": "The Camel integration engine, validation service, and outbound dispatchers buffer bursts effectively, though clear downstream ingestion pipelines to EMR Core require careful throttling.",
+    "elements": [
+     "HL7 FHIR Integration Engine",
+     "FHIR API Gateway / Router",
+     "Outbound Dispatcher",
+     "Validation & Compliance Service",
+     "Core Business Services"
+    ],
+    "sensitivity_points": [
+     "Queue depth and backpressure management during peak external ingestion bursts",
+     "HAPI FHIR validation processing overhead"
+    ],
+    "tradeoffs": [
+     "Throttled asynchronous ingestion guarantees UI responsiveness at the expense of real-time result visibility"
+    ]
+   },
+   "AVAIL-01": {
+    "id": "AVAIL-01",
+    "score": 3,
+    "justification": "CockroachDB uses Raft consensus, but spanning only two regions (on-prem and eu-central-1) risks split-brain or loss of quorum without a third witness node.",
+    "elements": [
+     "CockroachDB",
+     "Raft Consensus Module",
+     "Edge Router & Reverse Proxy",
+     "API Gateway"
+    ],
+    "sensitivity_points": [
+     "Odd-node Raft quorum distribution across hybrid physical regions",
+     "Cross-site DNS and routing failover latency"
+    ],
+    "tradeoffs": [
+     "Active-active multi-region resiliency requires strict consensus latency across hybrid network links"
+    ]
+   },
+   "AVAIL-02": {
+    "id": "AVAIL-02",
+    "score": 5,
+    "justification": "CockroachDB distributed transactions automatically survive single-node crashes, while the API Gateway idempotency module ensures retried claims are neither lost nor duplicated.",
+    "elements": [
+     "Request Deduplication & Idempotency Module",
+     "Billing Service Component",
+     "Transaction Engine",
+     "Raft Consensus Module",
+     "CockroachDB"
+    ],
+    "sensitivity_points": [
+     "Idempotency key TTL configuration in Redis during retries",
+     "Raft leader election timeout duration"
+    ],
+    "tradeoffs": [
+     "Idempotency tracking and distributed locking introduce processing overhead for insurance claims"
+    ]
+   },
+   "MOD-01": {
+    "id": "MOD-01",
+    "score": 4,
+    "justification": "Modifications are isolated within the Billing Service Component while EMR remains untouched, although a dedicated clearinghouse integration adapter is not explicitly factored.",
+    "elements": [
+     "Billing Service Component",
+     "Insurance Clearinghouse",
+     "Core Business Services"
+    ],
+    "sensitivity_points": [
+     "Clearinghouse protocol interface decoupling within Billing Service Component"
+    ],
+    "tradeoffs": [
+     "Co-locating billing rules with clearinghouse integration simplifies deployment but lowers modularity"
+    ]
+   },
+   "MOD-02": {
+    "id": "MOD-02",
+    "score": 4,
+    "justification": "Changes are confined to the Patient Management Component, the Web Frontend, and the database schema, with audit trail tracking automatically captured via established pipelines.",
+    "elements": [
+     "Web Frontend",
+     "Patient Management Component",
+     "CockroachDB",
+     "Audit Log Processor"
+    ],
+    "sensitivity_points": [
+     "Coupling between frontend form schemas, backend entities, and relational table schemas"
+    ],
+    "tradeoffs": [
+     "Rigid relational schema migrations guarantee ACID compliance but require structured deployment sprints"
+    ]
+   },
+   "SEC-01": {
+    "id": "SEC-01",
+    "score": 5,
+    "justification": "Perimeter MFA and OAuth2/OIDC token verification block unauthorized access immediately, and failure events route directly to the audit log processor for rapid alerting.",
+    "elements": [
+     "Authentication & Authorization Filter",
+     "Authentication Module",
+     "Audit Log Processor",
+     "Compliance Dashboard API"
+    ],
+    "sensitivity_points": [
+     "Perimeter validation of MFA tokens before downstream payload dispatch",
+     "Real-time alerting latency from failed authentication logs"
+    ],
+    "tradeoffs": [
+     "Strict MFA gating increases user login friction in urgent clinical environments"
+    ]
+   },
+   "SEC-02": {
+    "id": "SEC-02",
+    "score": 5,
+    "justification": "Perimeter ABAC/OPA validates clinician context, EMR Core uses transactional outbox to log every read, and the Data Retention Enforcer ensures immutable 10-year storage.",
+    "elements": [
+     "Authentication & Authorization Filter",
+     "EMR Core Component",
+     "WORM Audit Store",
+     "Data Retention Enforcer",
+     "Audit Log Processor"
+    ],
+    "sensitivity_points": [
+     "Fine-grained ABAC attribute evaluation latency on patient record access",
+     "Transactional outbox reliability ensuring read-event non-repudiation"
+    ],
+    "tradeoffs": [
+     "Auditing 100% of read accesses incurs substantial storage and network I/O overhead"
+    ]
+   }
+  }
+ },
+ "requirements": {
+  "status": {
+   "C-01": "full",
+   "C-02": "full",
+   "C-03": "full",
+   "R-01": "full",
+   "R-02": "full",
+   "R-03": "full",
+   "R-04": "full",
+   "R-05": "full",
+   "R-06": "full",
+   "R-07": "full",
+   "R-08": "full"
+  },
+  "coverage": 1.0,
+  "details": {
+   "C-01": {
+    "id": "C-01",
+    "status": "full",
+    "elements": [
+     "Compliance & Reporting Service",
+     "Consent & Preference Manager Component",
+     "Security & RASP Enclave",
+     "Validation & Compliance Service",
+     "Persistence & Encryption Engine",
+     "WORM Audit Store"
+    ]
+   },
+   "C-02": {
+    "id": "C-02",
+    "status": "full",
+    "elements": [
+     "CockroachDB",
+     "Raft Consensus Module",
+     "Redis Enterprise Cluster Engine",
+     "Rate Limiter & Circuit Breaker"
+    ]
+   },
+   "C-03": {
+    "id": "C-03",
+    "status": "full",
+    "elements": [
+     "Data Retention Enforcer",
+     "WORM Audit Store"
+    ]
+   },
+   "R-01": {
+    "id": "R-01",
+    "status": "full",
+    "elements": [
+     "Patient Management Component",
+     "Web Frontend",
+     "Mobile Frontend"
+    ]
+   },
+   "R-02": {
+    "id": "R-02",
+    "status": "full",
+    "elements": [
+     "Scheduling Engine Component",
+     "Distributed Lock Manager",
+     "Scheduling Workspace",
+     "EMR & Scheduling View Module"
+    ]
+   },
+   "R-03": {
+    "id": "R-03",
+    "status": "full",
+    "elements": [
+     "EMR Core Component",
+     "WORM Audit Store",
+     "Audit Log Processor",
+     "EMR View Controller"
+    ]
+   },
+   "R-04": {
+    "id": "R-04",
+    "status": "full",
+    "elements": [
+     "Billing Service Component",
+     "Insurance Clearinghouse",
+     "Core Business Services"
+    ]
+   },
+   "R-05": {
+    "id": "R-05",
+    "status": "full",
+    "elements": [
+     "Authentication Module",
+     "Authentication & Authorization Filter",
+     "External KMS (HashiCorp Vault)",
+     "Storage Engine / RocksDB",
+     "Persistence & Encryption Engine",
+     "API Client & Offline Sync Engine"
+    ]
+   },
+   "R-06": {
+    "id": "R-06",
+    "status": "full",
+    "elements": [
+     "CockroachDB",
+     "Raft Consensus Module",
+     "Redis Enterprise Cluster Engine",
+     "Rate Limiter & Circuit Breaker"
+    ]
+   },
+   "R-07": {
+    "id": "R-07",
+    "status": "full",
+    "elements": [
+     "EMR Read-Through Cache",
+     "Distributed Leaseholder & Multi-Region Coordinator",
+     "EMR View Controller"
+    ]
+   },
+   "R-08": {
+    "id": "R-08",
+    "status": "full",
+    "elements": [
+     "HL7 FHIR Integration Engine",
+     "FHIR API Gateway / Router",
+     "Transformation & Mapping Engine",
+     "Validation & Compliance Service",
+     "Outbound Dispatcher",
+     "External Labs & Imaging Systems"
+    ]
+   }
+  }
+ },
+ "provenance": {
+  "judge_prompts": {
+   "JUDGE_SYSTEM_PROMPT": "559536b740ff",
+   "ISO_TASK_PROMPT": "68ca0a2841fb",
+   "ATAM_TASK_PROMPT": "abf1846ff709",
+   "REQUIREMENTS_TASK_PROMPT": "35ab1391305f",
+   "ISO_CHARACTERISTICS": "c92ef0e9965c"
+  },
+  "brief_sha256": "3ca54a8daf6438555e4bcd55f5d4d60082d5dabbf086e8cd861d309db16bcf92",
+  "scenarios_sha256": "7f58494036fb9c989bb28532a92f68e30549c412002060ab77af3559b14aa13a"
+ }
+}

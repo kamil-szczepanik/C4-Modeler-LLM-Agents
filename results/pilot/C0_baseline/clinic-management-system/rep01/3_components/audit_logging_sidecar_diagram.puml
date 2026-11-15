@@ -1,0 +1,20 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+Person(Compliance_Officers, "Compliance Officers", "Users querying audit logs")
+System_Ext(Immutable_S3_Bucket_with_Object_Lock, "Immutable S3 Bucket with Object Lock", "External Storage for immutable logs")
+
+Container_Boundary(Audit_Logging_Sidecar, "Audit Logging Sidecar") {
+    Component(HTTP_Log_Interceptor, "HTTP Log Interceptor", "Go / Envoy Filter", "Captures operational events across hybrid cloud deployments without impacting clinical performance.")
+    Component(Asynchronous_Buffer_Queue, "Asynchronous Buffer Queue", "Golang channel-based ring buffer with local disk caching", "Buffers operational events to ensure zero data loss and fault tolerance during network partitions or cloud outages.")
+    Component(WORM_Storage_Exporter, "WORM Storage Exporter", "Go", "Exports audit logs securely to immutable storage.")
+    Component(Indexer_and_Query_Agent, "Indexer and Query Agent", "Go with embedded SQLite/Bleve search index", "Provides query and search capabilities over audit logs for compliance officers.")
+}
+
+Rel(HTTP_Log_Interceptor, Asynchronous_Buffer_Queue, "Pushes captured log events to", "")
+Rel(Asynchronous_Buffer_Queue, WORM_Storage_Exporter, "Feeds buffered events to", "")
+Rel(WORM_Storage_Exporter, Immutable_S3_Bucket_with_Object_Lock, "Sends cryptographically signed logs via HTTPS (TLS 1.3) with Object Lock to", "HTTPS (TLS 1.3)")
+Rel(Compliance_Officers, Indexer_and_Query_Agent, "Queries audit logs via secure gRPC management API with token-based auth and RBAC", "gRPC")
+
+@enduml
