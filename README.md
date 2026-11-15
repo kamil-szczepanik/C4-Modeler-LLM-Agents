@@ -15,7 +15,8 @@ and an LLM judge (ISO/IEC 25010, ATAM scenarios, requirement coverage).
 
 This repository contains the code, prompts, briefs, scenarios, configurations and analysis scripts
 of the study, and in `results/` the raw outputs of all runs (transcripts, reports, YAML models,
-diagrams, scores and the judge's justifications). Each release is archived on Zenodo: DOI to be added.
+diagrams, scores and the judge's justifications). Each release is archived on Zenodo, [doi:10.5281/zenodo.24246056](https://doi.org/10.5281/zenodo.24246056)
+(all versions); the version used in the article is v2.0, [doi:10.5281/zenodo.24246057](https://doi.org/10.5281/zenodo.24246057).
 
 ## Contents
 
